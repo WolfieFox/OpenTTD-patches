@@ -65,6 +65,7 @@
 #include "../settings_func.h"
 #include "../animated_tile.h"
 #include "../company_func.h"
+#include "../infrastructure_func.h"
 
 
 #include "saveload_internal.h"
@@ -936,6 +937,10 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeatureMissing(XSLFI_REALISTIC_TRAIN_BRAKING)) {
 		_settings_game.vehicle.train_braking_model = TBM_ORIGINAL;
+	}
+
+	if (SlXvIsFeatureMissing(XSLFI_TRAIN_SPEED_ADAPTATION)) {
+		_settings_game.vehicle.train_speed_adaptation = false;
 	}
 
 	AfterLoadEngines();
@@ -3904,6 +3909,10 @@ bool AfterLoadGame()
 		}
 	}
 
+	if (!SlXvIsFeaturePresent(XSLFI_REALISTIC_TRAIN_BRAKING, 3) && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
+		UpdateAllBlockSignals();
+	}
+
 	if (SlXvIsFeatureMissing(XSLFI_INFLATION_FIXED_DATES)) {
 		_settings_game.economy.inflation_fixed_dates = !IsSavegameVersionBefore(SLV_GS_INDUSTRY_CONTROL);
 	}
@@ -3955,7 +3964,7 @@ bool AfterLoadGame()
 
 	AfterLoadTraceRestrict();
 	AfterLoadTemplateVehiclesUpdate();
-	if (SlXvIsFeaturePresent(XSLFI_TEMPLATE_REPLACEMENT, 1, 5)) {
+	if (SlXvIsFeaturePresent(XSLFI_TEMPLATE_REPLACEMENT, 1, 7)) {
 		AfterLoadTemplateVehiclesUpdateProperties();
 	}
 

@@ -439,6 +439,9 @@ static void ShutdownGame()
 	FreeSignalPrograms();
 	FreeSignalDependencies();
 
+	extern void ClearAllSignalSpeedRestrictions();
+	ClearAllSignalSpeedRestrictions();
+
 	ClearZoningCaches();
 	ClearOrderDestinationRefcountMap();
 
@@ -461,6 +464,7 @@ static void ShutdownGame()
 	_game_load_date_fract = 0;
 	_game_load_tick_skip_counter = 0;
 	_game_load_time = 0;
+	_extra_station_names_used = 0;
 	_loadgame_DBGL_data.clear();
 	_loadgame_DBGC_data.clear();
 }
@@ -728,7 +732,7 @@ int openttd_main(int argc, char *argv[])
 			videodriver = "dedicated";
 			blitter = "null";
 			dedicated = true;
-			SetDebugString("net=6");
+			SetDebugString("net=3");
 			if (mgo.opt != nullptr) {
 				const char *port = nullptr;
 				ParseConnectionString(&port, mgo.opt);
@@ -1247,7 +1251,11 @@ void SwitchToMode(SwitchMode new_mode)
 				}
 				/* Update the local company for a loaded game. It is either always
 				 * a company or in the case of a dedicated server a spectator */
-				SetLocalCompany(_network_dedicated ? COMPANY_SPECTATOR : GetDefaultLocalCompany());
+				if (_network_server && !_network_dedicated) {
+					NetworkServerDoMove(CLIENT_ID_SERVER, GetDefaultLocalCompany());
+				} else {
+					SetLocalCompany(_network_dedicated ? COMPANY_SPECTATOR : GetDefaultLocalCompany());
+				}
 				if (_ctrl_pressed && !_network_dedicated) {
 					DoCommandP(0, PM_PAUSED_NORMAL, 1, CMD_PAUSE);
 				}
@@ -1692,7 +1700,8 @@ void CheckCaches(bool force_check, std::function<void(const char *)> log)
 		}
 		UpdateStationDockingTiles(st);
 		if (ta.tile != st->docking_station.tile || ta.w != st->docking_station.w || ta.h != st->docking_station.h) {
-			CCLOG("station docking mismatch: station %i, company %i", st->index, (int)st->owner);
+			CCLOG("station docking mismatch: station %i, company %i, prev: (%X, %u, %u), recalc: (%X, %u, %u)",
+					st->index, (int)st->owner, ta.tile, ta.w, ta.h, st->docking_station.tile, st->docking_station.w, st->docking_station.h);
 		}
 		TILE_AREA_LOOP(tile, ta) {
 			if (docking_tiles[tile] != IsDockingTile(tile)) {
@@ -1950,6 +1959,8 @@ void GameLoop()
 
 	/* Check for UDP stuff */
 	if (_network_available) NetworkBackgroundLoop();
+
+	DebugSendRemoteMessages();
 
 	if (_networking && !HasModalProgress()) {
 		/* Multiplayer */

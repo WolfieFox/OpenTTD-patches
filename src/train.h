@@ -147,6 +147,7 @@ struct Train FINAL : public GroundVehicle<Train, VEH_TRAIN> {
 	uint16 reverse_distance;
 	uint16 tunnel_bridge_signal_num;
 	uint16 speed_restriction;
+	uint16 signal_speed_restriction;
 
 	/** We don't want GCC to zero our struct! It already is zeroed and has an index! */
 	Train() : GroundVehicleBase() {}
@@ -491,5 +492,8 @@ inline int GetTrainStopLocation(StationID station_id, TileIndex tile, Train *v, 
 {
 	return GetTrainStopLocation(station_id, tile, v, update_train_state, station_ahead, station_length, v->x_pos, v->y_pos);
 }
+
+int GetTrainRealisticAccelerationAtSpeed(const int speed, const int mass, const uint32 cached_power, const uint32 max_te, const uint32 air_drag, const RailType railtype);
+int GetTrainEstimatedMaxAchievableSpeed(const Train *train, const int mass, const int speed_cap);
 
 #endif /* TRAIN_H */

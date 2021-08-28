@@ -2417,6 +2417,7 @@ void VehicleEnterDepot(Vehicle *v)
 			ClrBit(t->flags, VRF_TOGGLE_REVERSE);
 			t->ConsistChanged(CCF_ARRANGE);
 			t->reverse_distance = 0;
+			t->signal_speed_restriction = 0;
 			t->lookahead.reset();
 			if (!(t->vehstatus & VS_CRASHED)) {
 				t->crash_anim_pos = 0;
@@ -2472,6 +2473,13 @@ void VehicleEnterDepot(Vehicle *v)
 		 * Note: The target depot for nearest-/manual-depot-orders is only updated on junctions, but we want to accept every depot. */
 		if ((v->current_order.GetDepotOrderType() & ODTFB_PART_OF_ORDERS) &&
 				real_order != nullptr && !(real_order->GetDepotActionType() & ODATFB_NEAREST_DEPOT) &&
+				(v->type == VEH_AIRCRAFT ? v->current_order.GetDestination() != GetStationIndex(v->tile) : v->dest_tile != v->tile)) {
+			/* We are heading for another depot, keep driving. */
+			return;
+		}
+
+		/* Test whether we are heading for this depot. If not, do nothing. */
+		if ((v->current_order.GetDepotExtraFlags() & ODEFB_SPECIFIC) &&
 				(v->type == VEH_AIRCRAFT ? v->current_order.GetDestination() != GetStationIndex(v->tile) : v->dest_tile != v->tile)) {
 			/* We are heading for another depot, keep driving. */
 			return;
@@ -3573,6 +3581,10 @@ CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, Tile
 				IsInfraTileUsageAllowed(this->type, this->owner, specific_depot))) {
 			return_cmd_error(no_depot[this->type]);
 		}
+		if ((this->type == VEH_ROAD && (GetPresentRoadTypes(tile) & RoadVehicle::From(this)->compatible_roadtypes) == 0) ||
+				(this->type == VEH_TRAIN && !HasBit(Train::From(this)->compatible_railtypes, GetRailType(tile)))) {
+			return_cmd_error(no_depot[this->type]);
+		}
 		location = specific_depot;
 		destination = (this->type == VEH_AIRCRAFT) ? GetStationIndex(specific_depot) : GetDepotIndex(specific_depot);
 		reverse = false;
@@ -3594,6 +3606,9 @@ CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, Tile
 			this->current_order.SetDepotActionType(ODATFB_HALT | ODATFB_SELL);
 		} else if (!(command & DEPOT_SERVICE)) {
 			this->current_order.SetDepotActionType(ODATFB_HALT);
+		}
+		if (command & DEPOT_SPECIFIC) {
+			this->current_order.SetDepotExtraFlags(ODEFB_SPECIFIC);
 		}
 		SetWindowWidgetDirty(WC_VEHICLE_VIEW, this->index, WID_VV_START_STOP);
 
@@ -4309,4 +4324,7 @@ void ShiftVehicleDates(int interval)
 	for (Vehicle *v : Vehicle::Iterate()) {
 		v->date_of_last_service += interval;
 	}
+
+	extern void AdjustAllSignalSpeedRestrictionTickValues(DateTicksScaled delta);
+	AdjustAllSignalSpeedRestrictionTickValues(interval * DAY_TICKS * _settings_game.economy.day_length_factor);
 }

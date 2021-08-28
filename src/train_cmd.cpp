@@ -44,6 +44,7 @@
 #include "scope.h"
 #include "core/checksum_func.hpp"
 #include "debug_settings.h"
+#include "train_speed_adaptation.h"
 
 #include "table/strings.h"
 #include "table/train_cmd.h"
@@ -76,6 +77,8 @@ enum ChooseTrainTrackFlags {
 };
 DECLARE_ENUM_AS_BIT_SET(ChooseTrainTrackFlags)
 
+std::unordered_map<SignalSpeedKey, SignalSpeedValue, SignalSpeedKeyHashFunc> _signal_speeds(1 << 16);
+
 static void TryLongReserveChooseTrainTrackFromReservationEnd(Train *v, bool no_reserve_vehicle_tile = false);
 static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, TrackBits tracks, ChooseTrainTrackFlags flags, bool *p_got_reservation, ChooseTrainTrackLookAheadState lookahead_state = {});
 static bool TrainApproachingLineEnd(Train *v, bool signal, bool reverse);
@@ -91,6 +94,52 @@ extern TileIndex VehiclePosTraceRestrictPreviousSignalCallback(const Train *v, c
 static void TrainEnterStation(Train *v, StationID station);
 static void UnreserveBridgeTunnelTile(TileIndex tile);
 static bool CheckTrainStayInWormHolePathReserve(Train *t, TileIndex tile);
+
+/** Return the scaled date ticks by which the speed restriction
+ *  at the current position of the train is going to be invalid */
+static DateTicksScaled GetSpeedRestrictionTimeout(const Train *t)
+{
+	const int64 velocity = std::max<int64>(25, t->cur_speed);
+	const int64 look_ahead_distance = Clamp(t->cur_speed / 8, 4, 16); // In tiles, varying between 4 and 16 depending on current speed
+
+	// This assumes travel along the X or Y map axis, not diagonally. See GetAdvanceDistance, GetAdvanceSpeed.
+	const int64 ticks_per_tile = (192 * 16 * 4 / 3) / velocity;
+
+	const int64 ticks = ticks_per_tile * look_ahead_distance;
+
+	return _scaled_date_ticks + ticks;
+}
+
+/** Checks if the timeout of the specified signal speed restriction value has passed */
+static bool IsOutOfDate(const SignalSpeedValue& value)
+{
+	return _scaled_date_ticks > value.time_stamp;
+}
+
+/** Removes all speed restrictions from all signals */
+void ClearAllSignalSpeedRestrictions()
+{
+	_signal_speeds.clear();
+}
+
+void AdjustAllSignalSpeedRestrictionTickValues(DateTicksScaled delta)
+{
+	for (auto &it : _signal_speeds) {
+		it.second.time_stamp += delta;
+	}
+}
+
+/** Removes all speed restrictions which have passed their timeout from all signals */
+void ClearOutOfDateSignalSpeedRestrictions()
+{
+	for(auto key_value_pair = _signal_speeds.begin(); key_value_pair != _signal_speeds.end(); ) {
+		if (IsOutOfDate(key_value_pair->second)) {
+			key_value_pair = _signal_speeds.erase(key_value_pair);
+		} else {
+			++key_value_pair;
+		}
+	}
+}
 
 inline void ClearLookAheadIfInvalid(Train *v)
 {
@@ -365,15 +414,12 @@ void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 	/* recalculate cached weights and power too (we do this *after* the rest, so it is known which wagons are powered and need extra weight added) */
 	this->CargoChanged();
 
+	this->UpdateAcceleration();
 	if (this->IsFrontEngine()) {
-		this->UpdateAcceleration();
 		if (!HasBit(this->subtype, GVSF_VIRTUAL)) SetWindowDirty(WC_VEHICLE_DETAILS, this->index);
 		InvalidateWindowData(WC_VEHICLE_REFIT, this->index, VIWD_CONSIST_CHANGED);
 		InvalidateWindowData(WC_VEHICLE_ORDERS, this->index, VIWD_CONSIST_CHANGED);
 		InvalidateNewGRFInspectWindow(GSF_TRAINS, this->index);
-	} else {
-		this->tcache.cached_deceleration = 0;
-		this->tcache.cached_uncapped_decel = 0;
 	}
 	if (allowed_changes & CCF_LENGTH) {
 		for (Train *u = this->Next(); u != nullptr; u = u->Next()) {
@@ -1045,6 +1091,9 @@ Train::MaxSpeedInfo Train::GetCurrentMaxSpeedInfoInternal(bool update_state) con
 	if (this->speed_restriction != 0) {
 		advisory_max_speed = std::min<int>(advisory_max_speed, this->speed_restriction);
 	}
+	if (this->signal_speed_restriction != 0 && _settings_game.vehicle.train_speed_adaptation) {
+		advisory_max_speed = std::min<int>(advisory_max_speed, this->signal_speed_restriction);
+	}
 	if (this->reverse_distance > 1) {
 		advisory_max_speed = std::min<int>(advisory_max_speed, ReversingDistanceTargetSpeed(this));
 	}
@@ -1094,7 +1143,7 @@ void Train::UpdateAcceleration()
 	assert(weight != 0);
 	this->acceleration = Clamp(power / weight * 4, 1, 255);
 
-	if (_settings_game.vehicle.train_braking_model == TBM_REALISTIC && !HasBit(GetRailTypeInfo(this->railtype)->ctrl_flags, RTCF_NOREALISTICBRAKING)) {
+	if (_settings_game.vehicle.train_braking_model == TBM_REALISTIC && !HasBit(GetRailTypeInfo(this->railtype)->ctrl_flags, RTCF_NOREALISTICBRAKING) && this->IsFrontEngine()) {
 		this->tcache.cached_tflags |= TCF_RL_BRAKING;
 		switch (_settings_game.vehicle.train_acceleration_model) {
 			default: NOT_REACHED();
@@ -1349,6 +1398,7 @@ static CommandCost CmdBuildRailWagon(TileIndex tile, DoCommandFlag flags, const 
 		v->vehstatus = VS_HIDDEN | VS_DEFPAL;
 		v->reverse_distance = 0;
 		v->speed_restriction = 0;
+		v->signal_speed_restriction = 0;
 
 		v->SetWagon();
 
@@ -2711,6 +2761,16 @@ void ReverseTrainDirection(Train *v)
 		if (order != nullptr && order->IsType(OT_GOTO_STATION) && order->GetDestination() == v->last_station_visited) {
 			v->IncrementImplicitOrderIndex();
 		}
+	} else if (v->current_order.IsAnyLoadingType()) {
+		const Vehicle *last = v;
+		while (last->Next() != nullptr) last = last->Next();
+
+		/* not a station || different station --> leave the station */
+		if (!IsTileType(last->tile, MP_STATION) || !IsTileType(v->tile, MP_STATION) ||
+				GetStationIndex(last->tile) != GetStationIndex(v->tile) ||
+				HasBit(v->flags, VRF_BEYOND_PLATFORM_END)) {
+			v->LeaveStation();
+		}
 	}
 
 	for (Train *u = v; u != nullptr; u = u->Next()) {
@@ -4028,10 +4088,10 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 		if (track != INVALID_TRACK && HasPbsSignalOnTrackdir(tile, TrackEnterdirToTrackdir(track, enterdir))) {
 			if (IsRestrictedSignal(tile) && v->force_proceed != TFP_SIGNAL) {
 				const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(tile, track);
-				if (prog && prog->actions_used_flags & (TRPAUF_WAIT_AT_PBS | TRPAUF_SLOT_ACQUIRE | TRPAUF_TRAIN_NOT_STUCK)) {
+				if (prog && prog->actions_used_flags & (TRPAUF_WAIT_AT_PBS | TRPAUF_SLOT_ACQUIRE | TRPAUF_SLOT_ACQUIRE_ON_RES | TRPAUF_TRAIN_NOT_STUCK)) {
 					TraceRestrictProgramResult out;
 					TraceRestrictProgramInput input(tile, TrackEnterdirToTrackdir(track, enterdir), nullptr, nullptr);
-					input.permitted_slot_operations = TRPISP_ACQUIRE;
+					input.permitted_slot_operations = TRPISP_ACQUIRE | TRPISP_ACQUIRE_ON_RES;
 					prog->Execute(v, input, out);
 					if (out.flags & TRPRF_TRAIN_NOT_STUCK) {
 						v->wait_counter = 0;
@@ -4465,6 +4525,7 @@ static void TrainEnterStation(Train *v, StationID station)
 		v->current_order.MakeWaiting();
 		v->current_order.SetNonStopType(ONSF_NO_STOP_AT_ANY_STATION);
 		v->cur_speed = 0;
+		v->signal_speed_restriction = 0;
 		return;
 	}
 
@@ -5521,7 +5582,33 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 		}
 
 		if (update_signals_crossing) {
+
 			if (v->IsFrontEngine()) {
+				if (_settings_game.vehicle.train_speed_adaptation && IsTileType(gp.old_tile, MP_RAILWAY) && HasSignals(gp.old_tile)) {
+					const TrackdirBits rev_tracks = TrackBitsToTrackdirBits(GetTrackBits(gp.old_tile)) & DiagdirReachesTrackdirs(ReverseDiagDir(enterdir));
+					const Trackdir rev_trackdir = FindFirstTrackdir(rev_tracks);
+					if (HasSignalOnTrackdir(gp.old_tile, ReverseTrackdir(rev_trackdir))) {
+						const Track track = TrackdirToTrack(rev_trackdir);
+						SignalSpeedKey speed_key = {
+							speed_key.signal_tile = gp.old_tile,
+							speed_key.signal_track = track,
+							speed_key.last_passing_train_dir = v->GetVehicleTrackdir()
+						};
+						const auto found_speed_restriction = _signal_speeds.find(speed_key);
+
+						if (found_speed_restriction != _signal_speeds.end()) {
+							if (IsOutOfDate(found_speed_restriction->second)) {
+								_signal_speeds.erase(found_speed_restriction);
+								v->signal_speed_restriction = 0;
+							} else {
+								v->signal_speed_restriction = std::max<uint16>(25, found_speed_restriction->second.train_speed);
+							}
+						} else {
+							v->signal_speed_restriction = 0;
+						}
+					}
+				}
+
 				switch (TrainMovedChangeSignal(v, gp.new_tile, enterdir, true)) {
 					case CHANGED_NORMAL_TO_PBS_BLOCK:
 						/* We are entering a block with PBS signals right now, but
@@ -5559,17 +5646,33 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 				TrainMovedChangeSignal(v, gp.old_tile, ReverseDiagDir(enterdir), false);
 				if (IsLevelCrossingTile(gp.old_tile)) UpdateLevelCrossing(gp.old_tile);
 
-				if (IsTileType(gp.old_tile, MP_RAILWAY) && HasSignals(gp.old_tile) && IsRestrictedSignal(gp.old_tile)) {
+				if (IsTileType(gp.old_tile, MP_RAILWAY) && HasSignals(gp.old_tile)) {
 					const TrackdirBits rev_tracks = TrackBitsToTrackdirBits(GetTrackBits(gp.old_tile)) & DiagdirReachesTrackdirs(ReverseDiagDir(enterdir));
 					const Trackdir rev_trackdir = FindFirstTrackdir(rev_tracks);
 					const Track track = TrackdirToTrack(rev_trackdir);
+
+					if (_settings_game.vehicle.train_speed_adaptation && HasSignalOnTrackdir(gp.old_tile, ReverseTrackdir(rev_trackdir))) {
+						SignalSpeedKey speed_key = {
+							speed_key.signal_tile = gp.old_tile,
+							speed_key.signal_track = track,
+							speed_key.last_passing_train_dir = v->GetVehicleTrackdir()
+						};
+						SignalSpeedValue speed_value = {
+							speed_value.train_speed = v->First()->cur_speed,
+							speed_value.time_stamp = GetSpeedRestrictionTimeout(v->First())
+						};
+						_signal_speeds[speed_key] = speed_value;
+					}
+
 					if (HasSignalOnTrack(gp.old_tile, track)) {
-						const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(gp.old_tile, track);
-						if (prog && prog->actions_used_flags & TRPAUF_SLOT_RELEASE_BACK) {
-							TraceRestrictProgramResult out;
-							TraceRestrictProgramInput input(gp.old_tile, ReverseTrackdir(rev_trackdir), nullptr, nullptr);
-							input.permitted_slot_operations = TRPISP_RELEASE_BACK;
-							prog->Execute(first, input, out);
+						if (IsRestrictedSignal(gp.old_tile)) {
+							const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(gp.old_tile, track);
+							if (prog && prog->actions_used_flags & TRPAUF_SLOT_RELEASE_BACK) {
+								TraceRestrictProgramResult out;
+								TraceRestrictProgramInput input(gp.old_tile, ReverseTrackdir(rev_trackdir), nullptr, nullptr);
+								input.permitted_slot_operations = TRPISP_RELEASE_BACK;
+								prog->Execute(first, input, out);
+							}
 						}
 					}
 				}
@@ -6843,4 +6946,62 @@ void TrainBrakesOverheatedBreakdown(Vehicle *v)
 	t->breakdown_delay = 255;
 	t->breakdown_type = BREAKDOWN_BRAKE_OVERHEAT;
 	t->breakdown_severity = 0;
+}
+
+int GetTrainRealisticAccelerationAtSpeed(const int speed, const int mass, const uint32 cached_power, const uint32 max_te, const uint32 air_drag, const RailType railtype)
+{
+	const int64 power = cached_power * 746ll;
+	int64 resistance = 0;
+
+	const bool maglev = (GetRailTypeInfo(railtype)->acceleration_type == 2);
+
+	if (!maglev) {
+		/* Static resistance plus rolling friction. */
+		resistance = 10 * mass;
+		resistance += mass * (15 * (512 + speed) / 512);
+	}
+
+	const int area = 14;
+
+	resistance += (area * air_drag * speed * speed) / 1000;
+
+	int64 force;
+
+	if (speed > 0) {
+		if (!maglev) {
+			/* Conversion factor from km/h to m/s is 5/18 to get [N] in the end. */
+			force = power * 18 / (speed * 5);
+
+			if (force > static_cast<int>(max_te)) {
+				force = max_te;
+			}
+		} else {
+			force = power / 25;
+		}
+	} else {
+		force = (!maglev) ? std::min<uint64>(max_te, power) : power;
+		force = std::max(force, (mass * 8) + resistance);
+	}
+
+	/* Easy way out when there is no acceleration. */
+	if (force == resistance) return 0;
+
+	int acceleration = ClampToI32((force - resistance) / (mass * 4));
+	acceleration = force < resistance ? std::min(-1, acceleration) : std::max(1, acceleration);
+
+	return acceleration;
+}
+
+int GetTrainEstimatedMaxAchievableSpeed(const Train *train, const int mass, const int speed_cap)
+{
+	int max_speed = 0;
+	int acceleration;
+
+	do
+	{
+		max_speed++;
+		acceleration = GetTrainRealisticAccelerationAtSpeed(max_speed, mass, train->gcache.cached_power, train->gcache.cached_max_te, train->gcache.cached_air_drag, train->railtype);
+	} while (acceleration > 0 && max_speed < speed_cap);
+
+	return max_speed;
 }

@@ -997,7 +997,13 @@ static bool UpdateConsists(int32 p1)
 			if (t->lookahead != nullptr) SetBit(t->lookahead->flags, TRLF_APPLY_ADVISORY);
 		}
 	}
+
+	extern void AfterLoadTemplateVehiclesUpdateProperties();
+	AfterLoadTemplateVehiclesUpdateProperties();
+
 	InvalidateWindowClassesData(WC_BUILD_VEHICLE, 0);
+	SetWindowClassesDirty(WC_TEMPLATEGUI_MAIN);
+	SetWindowClassesDirty(WC_CREATE_TEMPLATE);
 	return true;
 }
 
@@ -1100,10 +1106,15 @@ static bool TrainAccelerationModelChanged(int32 p1)
 		}
 	}
 
+	extern void AfterLoadTemplateVehiclesUpdateProperties();
+	AfterLoadTemplateVehiclesUpdateProperties();
+
 	/* These windows show acceleration values only when realistic acceleration is on. They must be redrawn after a setting change. */
 	SetWindowClassesDirty(WC_ENGINE_PREVIEW);
 	InvalidateWindowClassesData(WC_BUILD_VEHICLE, 0);
 	SetWindowClassesDirty(WC_VEHICLE_DETAILS);
+	SetWindowClassesDirty(WC_TEMPLATEGUI_MAIN);
+	SetWindowClassesDirty(WC_CREATE_TEMPLATE);
 
 	return true;
 }
@@ -1349,6 +1360,12 @@ static bool InvalidateSettingsWindow(int32 p1)
 	return true;
 }
 
+static bool DeveloperModeChanged(int32 p1)
+{
+	DebugReconsiderSendRemoteMessages();
+	return true;
+}
+
 /**
  * Update any possible saveload window and delete any newgrf dialogue as
  * its widget parts might change. Reinit all windows as it allows access to the
@@ -1538,6 +1555,15 @@ static bool ChangeTrackTypeSortMode(int32 p1) {
 
 static bool PublicRoadsSettingChange(int32 p1) {
 	InvalidateWindowClassesData(WC_SCEN_LAND_GEN);
+	return true;
+}
+
+static bool TrainSpeedAdaptationChanged(int32 p1) {
+	extern void ClearAllSignalSpeedRestrictions();
+	ClearAllSignalSpeedRestrictions();
+	for (Train *t : Train::Iterate()) {
+		t->signal_speed_restriction = 0;
+	}
 	return true;
 }
 
@@ -1784,7 +1810,12 @@ static bool ImprovedBreakdownsSettingChanged(int32 p1)
 
 static bool DayLengthChanged(int32 p1)
 {
+	const DateTicksScaled old_scaled_date_ticks = _scaled_date_ticks;
 	SetScaledTickVariables();
+
+	extern void AdjustAllSignalSpeedRestrictionTickValues(DateTicksScaled delta);
+	AdjustAllSignalSpeedRestrictionTickValues(_scaled_date_ticks - old_scaled_date_ticks);
+
 	MarkWholeScreenDirty();
 	return true;
 }
@@ -2216,6 +2247,7 @@ void LoadFromConfig(bool startup)
 		HandleOldDiffCustom(false);
 
 		ValidateSettings();
+		DebugReconsiderSendRemoteMessages();
 
 		PostZoningModeChange();
 

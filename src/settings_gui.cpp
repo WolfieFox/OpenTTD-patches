@@ -1842,6 +1842,7 @@ static SettingsContainer &GetSettingsTree()
 			interface->Add(new SettingEntry("gui.open_vehicle_gui_clone_share"));
 			interface->Add(new SettingEntry("gui.vehicle_names"));
 			interface->Add(new SettingEntry("gui.station_rating_tooltip_mode"));
+			interface->Add(new SettingEntry("gui.dual_pane_train_purchase_window"));
 		}
 
 		SettingsPage *advisors = main->Add(new SettingsPage(STR_CONFIG_SETTING_ADVISORS));
@@ -1923,6 +1924,7 @@ static SettingsContainer &GetSettingsTree()
 				physics->Add(new SettingEntry("vehicle.train_braking_model"));
 				physics->Add(new SettingEntry("vehicle.train_slope_steepness"));
 				physics->Add(new SettingEntry("vehicle.wagon_speed_limits"));
+				physics->Add(new SettingEntry("vehicle.train_speed_adaptation"));
 				physics->Add(new SettingEntry("vehicle.freight_trains"));
 				physics->Add(new SettingEntry("vehicle.roadveh_acceleration_model"));
 				physics->Add(new SettingEntry("vehicle.roadveh_slope_steepness"));

@@ -59,7 +59,7 @@ struct CargoSpec {
 	uint8 rating_colour;
 	uint8 weight;                    ///< Weight of a single unit of this cargo type in 1/16 ton (62.5 kg).
 	uint16 multiplier;               ///< Capacity multiplier for vehicles. (8 fractional bits)
-	uint32 initial_payment;          ///< Initial payment rate before inflation is applied.
+	int32 initial_payment;           ///< Initial payment rate before inflation is applied.
 	uint8 transit_days[2];
 
 	bool is_freight;                 ///< Cargo type is considered to be freight (affects train freight multiplier).
@@ -88,6 +88,15 @@ struct CargoSpec {
 	inline CargoID Index() const
 	{
 		return this - CargoSpec::array;
+	}
+
+	/**
+	 * Determine CargoTypes bit of this cargospec
+	 * @return CargoTypes bit
+	 */
+	inline CargoTypes CargoTypesBit() const
+	{
+		return static_cast<CargoTypes>(1) << this->Index();
 	}
 
 	/**

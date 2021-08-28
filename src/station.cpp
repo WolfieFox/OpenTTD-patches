@@ -38,6 +38,9 @@
 StationPool _station_pool("Station");
 INSTANTIATE_POOL_METHODS(Station)
 
+std::array<ExtraStationNameInfo, MAX_EXTRA_STATION_NAMES> _extra_station_names;
+uint _extra_station_names_used;
+
 
 StationKdtree _station_kdtree(Kdtree_StationXYFunc);
 
@@ -62,6 +65,7 @@ BaseStation::~BaseStation()
 	DeleteWindowById(WC_SHIPS_LIST,    VehicleListIdentifier(VL_STATION_LIST, VEH_SHIP,     this->owner, this->index).Pack());
 	DeleteWindowById(WC_AIRCRAFT_LIST, VehicleListIdentifier(VL_STATION_LIST, VEH_AIRCRAFT, this->owner, this->index).Pack());
 	DeleteWindowById(WC_DEPARTURES_BOARD, this->index);
+	DeleteWindowById(WC_STATION_CARGO, this->index);
 
 	if (HasBit(_display_opt, Station::IsExpected(this) ? DO_SHOW_STATION_NAMES : DO_SHOW_WAYPOINT_NAMES) &&
 			!(_local_company != this->owner && this->owner != OWNER_NONE && !HasBit(_display_opt, DO_SHOW_COMPETITOR_SIGNS))) {
@@ -75,8 +79,11 @@ Station::Station(TileIndex tile) :
 	truck_station(INVALID_TILE, 0, 0),
 	ship_station(INVALID_TILE, 0, 0),
 	indtype(IT_INVALID),
+	extra_name_index(UINT16_MAX),
 	time_since_load(255),
-	time_since_unload(255)
+	time_since_unload(255),
+	station_cargo_history_cargoes(0),
+	station_cargo_history_offset(0)
 {
 	/* this->random_bits is set in Station::AddFacility() */
 }

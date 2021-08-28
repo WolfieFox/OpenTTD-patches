@@ -63,6 +63,8 @@
 
 #include "3rdparty/cpp-btree/btree_set.h"
 
+#include <bitset>
+
 #include "safeguards.h"
 
 /**
@@ -249,6 +251,8 @@ static StringID GenerateStationName(Station *st, TileIndex tile, StationNaming n
 	bool indtypes[NUM_INDUSTRYTYPES];
 	memset(indtypes, 0, sizeof(indtypes));
 
+	std::bitset<MAX_EXTRA_STATION_NAMES> extra_names;
+
 	for (const Station *s : Station::Iterate()) {
 		if (s != st && s->town == t) {
 			if (s->indtype != IT_INVALID) {
@@ -262,6 +266,9 @@ static StringID GenerateStationName(Station *st, TileIndex tile, StationNaming n
 					}
 				}
 				continue;
+			}
+			if (s->extra_name_index < MAX_EXTRA_STATION_NAMES) {
+				extra_names.set(s->extra_name_index);
 			}
 			uint str = M(s->string_id);
 			if (str <= 0x20) {
@@ -301,7 +308,8 @@ static StringID GenerateStationName(Station *st, TileIndex tile, StationNaming n
 	}
 
 	/* check close enough to town to get central as name? */
-	if (DistanceMax(tile, t->xy) < 8) {
+	const bool is_central = DistanceMax(tile, t->xy) < 8;
+	if (is_central) {
 		if (HasBit(free_names, M(STR_SV_STNAME))) return STR_SV_STNAME;
 
 		if (HasBit(free_names, M(STR_SV_STNAME_CENTRAL))) return STR_SV_STNAME_CENTRAL;
@@ -344,7 +352,32 @@ static StringID GenerateStationName(Station *st, TileIndex tile, StationNaming n
 		(TileY(tile) < TileY(t->xy)) * 2];
 
 	tmp = free_names & ((1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 6) | (1 << 7) | (1 << 12) | (1 << 26) | (1 << 27) | (1 << 28) | (1 << 29) | (1 << 30));
-	return (tmp == 0) ? STR_SV_STNAME_FALLBACK : (STR_SV_STNAME + FindFirstBit(tmp));
+	if (tmp != 0) return STR_SV_STNAME + FindFirstBit(tmp);
+
+	if (_extra_station_names_used > 0) {
+		const bool near_water = CountMapSquareAround(tile, CMSAWater) >= 5;
+		std::vector<uint16> candidates;
+		for (uint i = 0; i < _extra_station_names_used; i++) {
+			const ExtraStationNameInfo &info = _extra_station_names[i];
+			if (extra_names[i]) continue;
+			if (!HasBit(info.flags, name_class)) continue;
+			if (HasBit(info.flags, ESNIF_CENTRAL) && !is_central) continue;
+			if (HasBit(info.flags, ESNIF_NOT_CENTRAL) && is_central) continue;
+			if (HasBit(info.flags, ESNIF_NEAR_WATER) && !near_water) continue;
+			if (HasBit(info.flags, ESNIF_NOT_NEAR_WATER) && near_water) continue;
+			candidates.push_back(i);
+		}
+
+		if (!candidates.empty()) {
+			SavedRandomSeeds saved_seeds;
+			SaveRandomSeeds(&saved_seeds);
+			st->extra_name_index = candidates[RandomRange((uint)candidates.size())];
+			RestoreRandomSeeds(saved_seeds);
+			return STR_SV_STNAME_FALLBACK;
+		}
+	}
+
+	return STR_SV_STNAME_FALLBACK;
 }
 #undef M
 
@@ -402,6 +435,33 @@ void Station::GetTileArea(TileArea *ta, StationType type) const
 
 		default: NOT_REACHED();
 	}
+}
+
+/**
+ * Update the cargo history.
+ */
+void Station::UpdateCargoHistory()
+{
+	uint storage_offset = 0;
+	bool update_window = false;
+	for (const CargoSpec *cs : CargoSpec::Iterate()) {
+		uint amount = this->goods[cs->Index()].cargo.TotalCount();
+		if (!HasBit(this->station_cargo_history_cargoes, cs->Index())) {
+			if (amount == 0) {
+				/* No cargo present, and no history stored for this cargo, no work to do */
+				continue;
+			} else {
+				if (this->station_cargo_history_cargoes == 0) update_window = true;
+				SetBit(this->station_cargo_history_cargoes, cs->Index());
+				this->station_cargo_history.emplace(this->station_cargo_history.begin() + storage_offset);
+			}
+		}
+		this->station_cargo_history[storage_offset][this->station_cargo_history_offset] = static_cast<uint16>(std::clamp<uint>(amount, (uint)0, (uint)UINT16_MAX));
+		storage_offset++;
+	}
+	this->station_cargo_history_offset++;
+	if (this->station_cargo_history_offset == MAX_STATION_CARGO_HISTORY_DAYS) this->station_cargo_history_offset = 0;
+	if (update_window) InvalidateWindowData(WC_STATION_VIEW, this->index, -1);
 }
 
 /**
@@ -3771,7 +3831,7 @@ bool GetNewGrfRating(const Station *st, const CargoSpec *cs, const GoodsEntry *g
 {
 	*new_grf_rating = 0;
 	bool is_using_newgrf_rating = false;
-	
+
 	/* Perform custom station rating. If it succeeds the speed, days in transit and
 	 * waiting cargo ratings must not be executed. */
 
@@ -3805,7 +3865,7 @@ int GetSpeedRating(const GoodsEntry *ge)
 int GetWaitTimeRating(const CargoSpec *cs, const GoodsEntry *ge)
 {
 	int rating = 0;
-	
+
 	uint wait_time = ge->time_since_pickup;
 
 	if (_settings_game.station.cargo_class_rating_wait_time) {
@@ -3878,7 +3938,7 @@ int GetTargetRating(const Station *st, const CargoSpec *cs, const GoodsEntry *ge
 	} else if (HasBit(cs->callback_mask, CBM_CARGO_STATION_RATING_CALC)) {
 
 		int new_grf_rating;
-		
+
 		if (GetNewGrfRating(st, cs, ge, &new_grf_rating)) {
 			skip = true;
 			rating += new_grf_rating;
@@ -4240,6 +4300,18 @@ void OnTick_Station()
 	}
 }
 
+/** Daily loop for stations. */
+void StationDailyLoop()
+{
+	// Only record cargo history every second day.
+	if (_date % 2 != 0) {
+		for (Station *st : Station::Iterate()) {
+			st->UpdateCargoHistory();
+		}
+		InvalidateWindowClassesData(WC_STATION_CARGO);
+	}
+}
+
 /** Monthly loop for stations. */
 void StationMonthlyLoop()
 {
@@ -4512,7 +4584,7 @@ uint MoveGoodsToStation(CargoID type, uint amount, SourceType source_type, Sourc
 
 	/* If there is some cargo left due to rounding issues distribute it among the best rated stations. */
 	if (amount > moving) {
-		std::sort(used_stations.begin(), used_stations.end(), [type](const StationInfo &a, const StationInfo &b) {
+		std::stable_sort(used_stations.begin(), used_stations.end(), [type](const StationInfo &a, const StationInfo &b) {
 			return b.first->goods[type].rating < a.first->goods[type].rating;
 		});
 
