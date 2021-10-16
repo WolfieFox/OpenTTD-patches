@@ -29,6 +29,7 @@
 #include "../station_base.h"
 #include "../waypoint_base.h"
 #include "../roadstop_base.h"
+#include "../tunnelbridge.h"
 #include "../tunnelbridge_map.h"
 #include "../pathfinder/yapf/yapf_cache.h"
 #include "../elrail_func.h"
@@ -66,6 +67,7 @@
 #include "../animated_tile.h"
 #include "../company_func.h"
 #include "../infrastructure_func.h"
+#include "../event_logs.h"
 
 
 #include "saveload_internal.h"
@@ -442,9 +444,11 @@ static void CDECL HandleSavegameLoadCrash(int signum)
 		for (const GRFConfig *c = _grfconfig; c != nullptr; c = c->next) {
 			if (HasBit(c->flags, GCF_COMPATIBLE)) {
 				const GRFIdentifier *replaced = GetOverriddenIdentifier(c);
-				char buf[40];
-				md5sumToString(buf, lastof(buf), replaced->md5sum);
-				p += seprintf(p, lastof(buffer), "NewGRF %08X (checksum %s) not found.\n  Loaded NewGRF \"%s\" with same GRF ID instead.\n", BSWAP32(c->ident.grfid), buf, c->filename);
+				char original_md5[40];
+				char replaced_md5[40];
+				md5sumToString(original_md5, lastof(original_md5), c->original_md5sum);
+				md5sumToString(replaced_md5, lastof(replaced_md5), replaced->md5sum);
+				p += seprintf(p, lastof(buffer), "NewGRF %08X (checksum %s) not found.\n  Loaded NewGRF \"%s\" (checksum %s) with same GRF ID instead.\n", BSWAP32(c->ident.grfid), original_md5, c->filename, replaced_md5);
 			}
 			if (c->status == GCS_NOT_FOUND) {
 				char buf[40];
@@ -1718,7 +1722,7 @@ bool AfterLoadGame()
 		c->avail_roadtypes = GetCompanyRoadTypes(c->index);
 	}
 
-	if (!IsSavegameVersionBefore(SLV_27)) AfterLoadStations();
+	AfterLoadStations();
 
 	/* Time starts at 0 instead of 1920.
 	 * Account for this in older games by adding an offset */
@@ -3637,6 +3641,22 @@ bool AfterLoadGame()
 			c->settings.simulated_wormhole_signals = _settings_game.construction.old_simulated_wormhole_signals;
 		}
 	}
+	if (SlXvIsFeaturePresent(XSLFI_SIG_TUNNEL_BRIDGE, 1, 8)) {
+		/* spacing made per tunnel/bridge */
+		for (TileIndex t = 0; t < map_size; t++) {
+			if (IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL && IsTunnelBridgeWithSignalSimulation(t)) {
+				DiagDirection dir = GetTunnelBridgeDirection(t);
+				if (dir == DIAGDIR_NE || dir == DIAGDIR_SE) {
+					TileIndex other = GetOtherTunnelBridgeEnd(t);
+					uint spacing = GetBestTunnelBridgeSignalSimulationSpacing(GetTileOwner(t), t, other);
+					SetTunnelBridgeSignalSimulationSpacing(t, spacing);
+					SetTunnelBridgeSignalSimulationSpacing(other, spacing);
+				}
+			}
+		}
+		/* force aspect re-calculation */
+		_extra_aspects = 0;
+	}
 
 	if (SlXvIsFeatureMissing(XSLFI_CUSTOM_BRIDGE_HEADS)) {
 		/* ensure that previously unused custom bridge-head bits are cleared */
@@ -3726,7 +3746,7 @@ bool AfterLoadGame()
 		}
 	}
 
-	if (IsSavegameVersionUntil(SLV_ENDING_YEAR) || !SlXvIsFeaturePresent(XSLFI_MULTIPLE_DOCKS, 2) || !SlXvIsFeaturePresent(XSLFI_DOCKING_CACHE_VER, 1)) {
+	if (IsSavegameVersionUntil(SLV_ENDING_YEAR) || !SlXvIsFeaturePresent(XSLFI_MULTIPLE_DOCKS, 2) || !SlXvIsFeaturePresent(XSLFI_DOCKING_CACHE_VER, 2)) {
 		/* Update station docking tiles. Was only needed for pre-SLV_MULTITLE_DOCKS
 		 * savegames, but a bug in docking tiles touched all savegames between
 		 * SLV_MULTITILE_DOCKS and SLV_ENDING_YEAR. */
@@ -3976,6 +3996,8 @@ bool AfterLoadGame()
 	extern void YapfCheckRailSignalPenalties();
 	YapfCheckRailSignalPenalties();
 
+	UpdateExtraAspectsVariable();
+
 	if (_networking && !_network_server) {
 		SlProcessVENC();
 	}
@@ -4011,6 +4033,7 @@ bool AfterLoadGame()
 void ReloadNewGRFData()
 {
 	RegisterGameEvents(GEF_RELOAD_NEWGRF);
+	AppendSpecialEventsLogEntry("NewGRF reload");
 
 	RailTypeLabel rail_type_label_map[RAILTYPE_END];
 	for (RailType rt = RAILTYPE_BEGIN; rt != RAILTYPE_END; rt++) {
@@ -4049,6 +4072,8 @@ void ReloadNewGRFData()
 			if (secondary != INVALID_RAILTYPE) SetSecondaryRailType(t, rail_type_translate_map[secondary]);
 		}
 	}
+
+	UpdateExtraAspectsVariable();
 
 	/* Update company statistics. */
 	AfterLoadCompanyStats();

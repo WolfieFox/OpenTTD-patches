@@ -42,6 +42,13 @@
 			Programmable pre-signals have a signal type (<span class="code">getbits(extra_callback_info2, 16, 8)</span>) of 6.
 		</td>
 	</tr>
+	<tr><td>enable_no_entry_signals</td><td>0 or 1</td>
+		<td>
+			Enable no-entry signal graphics in <a href="https://newgrf-specs.tt-wiki.net/wiki/NML:Railtypes#signals">railtype signals</a>.<br />
+			No-entry signals have a signal type (<span class="code">getbits(extra_callback_info2, 16, 8)</span>) of 7.<br />
+			No-entry signals always have a signal state of red.
+		</td>
+	</tr>
 	<tr><td>enable_restricted_signals</td><td>0 or 1</td>
 		<td>
 			Enable restricted signal flag in <a href="https://newgrf-specs.tt-wiki.net/wiki/NML:Railtypes#signals">railtype signals</a>.<br />
@@ -64,6 +71,23 @@
 			<span class="code">extended_feature_test</span> function
 			and if necessary a suitable fallback used or error message shown.<br />
 			If the OpenTTD version does not support this property/feature, then the property would ordinarily be ignored/skipped and no recolouring would be done.
+		</td>
+	</tr>
+	<tr><td>extra_aspects</td><td>0 - 6</td>
+		<td>
+			The value is the number of additional signal aspects to use (e.g. 4-aspect signalling should use a value of 2).<br />
+			When set, the lowest byte of <span class="code">extra_callback_info2</span> (signal state) may have the given number of additional values starting from 02:
+			<table>
+			<tr><th>Value</th><th>Meaning</th></tr>
+			<tr><td>00</td><td>Red signal</td></tr>
+			<tr><td>01</td><td>Green signal</td></tr>
+			<tr><td>02</td><td>1st extra aspect (e.g. yellow)</td></tr>
+			<tr><td>03</td><td>2nd extra aspect (e.g. double yellow)</td></tr>
+			<tr><td>...</td><td>Further extra aspects...</td></tr>
+			</table>
+			<br />
+			The provided value is currently clamped to be within the range 0 - 6 (inclusive).<br />
+			N.B. Realistic braking must be enabled for additional signal aspects to be used
 		</td>
 	</tr>
 	<tr><td>disable_realistic_braking</td><td>0 or 1</td>
@@ -115,6 +139,18 @@
 			</table>
 		</td>
 	</tr>
+	<tr><td>NO_ENTRY_SIGNAL</td><td>16</td>
+		<td>
+			<b>No-entry signals</b>
+			<p>No-entry signal graphics come in groups of 8. These groups contain sprites in the same order as the red sprites of 1275-1290 in trg1[r].grf and <a href="https://newgrf-specs.tt-wiki.net/wiki/Action5#04_Signal_graphics.">Action 5 type 4 (signals)</a>;
+				red only, for each of: SW-facing, NE-facing, NW-facing, SE-facing, E-facing, W-facing, S-facing, N-facing.
+			<table>
+				<tr><th>Group</th><th>Contents</th></tr>
+				<tr><td>0</td><td>Semaphore no-entry signals</td></tr>
+				<tr><td>1</td><td>Lighted no-entry signals</td></tr>
+			</table>
+		</td>
+	</tr>
 	</table>
 	<h3>Signal graphics using switches</h3>
 	<p>
@@ -142,6 +178,13 @@
 			Programmable pre-signals have a signal type (<span class="code">getbits(extra_callback_info2, 16, 8)</span>) of 6.
 		</td>
 	</tr>
+	<tr><td>enable_no_entry_signals</td><td>0 or 1</td>
+		<td>
+			Enable no-entry signal graphics.<br />
+			No-entry signals have a signal type (<span class="code">getbits(extra_callback_info2, 16, 8)</span>) of 7.<br />
+			No-entry signals always have a signal state of red.
+		</td>
+	</tr>
 	<tr><td>enable_restricted_signals</td><td>0 or 1</td>
 		<td>
 			Enable restricted signal flag.<br />
@@ -159,6 +202,23 @@
 			<tr><td>0 - 23</td><td>Recolour sprite to use. Set to 0 for no recolouring.</td></tr>
 			<tr><td>24 - 31</td><td>Reserved, set to zero.</td></tr>
 			</table>
+		</td>
+	</tr>
+	<tr><td>extra_aspects</td><td>0 - 6</td>
+		<td>
+			The value is the number of additional signal aspects to use (e.g. 4-aspect signalling should use a value of 2).<br />
+			When set, the lowest byte of <span class="code">extra_callback_info2</span> (signal state) may have the given number of additional values starting from 02:
+			<table>
+			<tr><th>Value</th><th>Meaning</th></tr>
+			<tr><td>00</td><td>Red signal</td></tr>
+			<tr><td>01</td><td>Green signal</td></tr>
+			<tr><td>02</td><td>1st extra aspect (e.g. yellow)</td></tr>
+			<tr><td>03</td><td>2nd extra aspect (e.g. double yellow)</td></tr>
+			<tr><td>...</td><td>Further extra aspects...</td></tr>
+			</table>
+			<br />
+			The provided value is currently clamped to be within the range 0 - 6 (inclusive).<br />
+			N.B. Realistic braking must be enabled for additional signal aspects to be used
 		</td>
 	</tr>
 	</table>

@@ -85,8 +85,8 @@ const SlxiSubChunkInfo _sl_xv_sub_chunk_infos[] = {
 	{ XSLFI_DEPARTURE_BOARDS,       XSCF_IGNORABLE_UNKNOWN,   1,   1, "departure_boards",          nullptr, nullptr, nullptr        },
 	{ XSLFI_TIMETABLES_START_TICKS, XSCF_NULL,                2,   2, "timetable_start_ticks",     nullptr, nullptr, nullptr        },
 	{ XSLFI_TOWN_CARGO_ADJ,         XSCF_IGNORABLE_UNKNOWN,   2,   2, "town_cargo_adj",            nullptr, nullptr, nullptr        },
-	{ XSLFI_SIG_TUNNEL_BRIDGE,      XSCF_NULL,                8,   8, "signal_tunnel_bridge",      nullptr, nullptr, "XBSS"      },
-	{ XSLFI_IMPROVED_BREAKDOWNS,    XSCF_NULL,                7,   7, "improved_breakdowns",       nullptr, nullptr, nullptr        },
+	{ XSLFI_SIG_TUNNEL_BRIDGE,      XSCF_NULL,                9,   9, "signal_tunnel_bridge",      nullptr, nullptr, "XBSS"      },
+	{ XSLFI_IMPROVED_BREAKDOWNS,    XSCF_NULL,                8,   8, "improved_breakdowns",       nullptr, nullptr, nullptr        },
 	{ XSLFI_CONSIST_BREAKDOWN_FLAG, XSCF_NULL,                1,   1, "consist_breakdown_flag",    nullptr, nullptr, nullptr        },
 	{ XSLFI_TT_WAIT_IN_DEPOT,       XSCF_NULL,                1,   1, "tt_wait_in_depot",          nullptr, nullptr, nullptr        },
 	{ XSLFI_AUTO_TIMETABLE,         XSCF_NULL,                5,   5, "auto_timetables",           nullptr, nullptr, nullptr        },
@@ -131,7 +131,7 @@ const SlxiSubChunkInfo _sl_xv_sub_chunk_infos[] = {
 	{ XSLFI_FLOW_STAT_FLAGS,        XSCF_NULL,                1,   1, "flow_stat_flags",           nullptr, nullptr, nullptr        },
 	{ XSLFI_SPEED_RESTRICTION,      XSCF_NULL,                1,   1, "speed_restriction",         nullptr, nullptr, "VESR"         },
 	{ XSLFI_STATION_GOODS_EXTRA,    XSCF_NULL,                1,   1, "station_goods_extra",       nullptr, nullptr, nullptr        },
-	{ XSLFI_DOCKING_CACHE_VER,      XSCF_IGNORABLE_ALL,       1,   1, "docking_cache_ver",         nullptr, nullptr, nullptr        },
+	{ XSLFI_DOCKING_CACHE_VER,      XSCF_IGNORABLE_ALL,       2,   2, "docking_cache_ver",         nullptr, nullptr, nullptr        },
 	{ XSLFI_EXTRA_CHEATS,           XSCF_NULL,                1,   1, "extra_cheats",              nullptr, nullptr, "CHTX"         },
 	{ XSLFI_TOWN_MULTI_BUILDING,    XSCF_NULL,                1,   1, "town_multi_building",       nullptr, nullptr, nullptr        },
 	{ XSLFI_SHIP_LOST_COUNTER,      XSCF_NULL,                1,   1, "ship_lost_counter",         nullptr, nullptr, nullptr        },
@@ -146,7 +146,7 @@ const SlxiSubChunkInfo _sl_xv_sub_chunk_infos[] = {
 	{ XSLFI_ANIMATED_TILE_EXTRA,    XSCF_NULL,                1,   1, "animated_tile_extra",       nullptr, nullptr, nullptr        },
 	{ XSLFI_NEWGRF_INFO_EXTRA,      XSCF_NULL,                1,   1, "newgrf_info_extra",         nullptr, nullptr, nullptr        },
 	{ XSLFI_INDUSTRY_CARGO_ADJ,     XSCF_IGNORABLE_UNKNOWN,   1,   1, "industry_cargo_adj",        nullptr, nullptr, nullptr        },
-	{ XSLFI_REALISTIC_TRAIN_BRAKING,XSCF_NULL,                3,   3, "realistic_train_braking",   nullptr, nullptr, "VLKA"         },
+	{ XSLFI_REALISTIC_TRAIN_BRAKING,XSCF_NULL,                4,   4, "realistic_train_braking",   nullptr, nullptr, "VLKA"         },
 	{ XSLFI_INFLATION_FIXED_DATES,  XSCF_IGNORABLE_ALL,       1,   1, "inflation_fixed_dates",     nullptr, nullptr, nullptr        },
 	{ XSLFI_WATER_FLOODING,         XSCF_NULL,                2,   2, "water_flooding",            nullptr, nullptr, nullptr        },
 	{ XSLFI_MORE_HOUSES,            XSCF_NULL,                2,   2, "more_houses",               nullptr, nullptr, nullptr        },
@@ -155,6 +155,7 @@ const SlxiSubChunkInfo _sl_xv_sub_chunk_infos[] = {
 	{ XSLFI_TRAIN_SPEED_ADAPTATION, XSCF_NULL,                1,   1, "train_speed_adaptation",    nullptr, nullptr, "TSAS"         },
 	{ XSLFI_EXTRA_STATION_NAMES,    XSCF_NULL,                1,   1, "extra_station_names",       nullptr, nullptr, nullptr        },
 	{ XSLFI_DEPOT_ORDER_EXTRA_FLAGS,XSCF_IGNORABLE_UNKNOWN,   1,   1, "depot_order_extra_flags",   nullptr, nullptr, nullptr        },
+	{ XSLFI_EXTRA_SIGNAL_TYPES,     XSCF_NULL,                1,   1, "extra_signal_types",        nullptr, nullptr, nullptr        },
 	{ XSLFI_NULL, XSCF_NULL, 0, 0, nullptr, nullptr, nullptr, nullptr },// This is the end marker
 };
 
@@ -535,7 +536,7 @@ static void Save_SLXI()
 static void Load_SLXI()
 {
 	if (_sl_is_faked_ext || !_sl_is_ext_version) {
-		SlErrorCorrupt("SXLI chunk is unexpectedly present");
+		SlErrorCorrupt("SLXI chunk is unexpectedly present");
 	}
 
 	SlXvResetState();
@@ -644,6 +645,7 @@ static void loadVL(const SlxiSubChunkInfo *info, uint32 length)
 {
 	_sl_xv_version_label.resize(length);
 	ReadBuffer::GetCurrent()->CopyBytes(reinterpret_cast<byte *>(_sl_xv_version_label.data()), length);
+	DEBUG(sl, 2, "SLXI version label: %s", _sl_xv_version_label.c_str());
 }
 
 static uint32 saveVL(const SlxiSubChunkInfo *info, bool dry_run)

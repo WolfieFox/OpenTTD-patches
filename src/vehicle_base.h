@@ -396,7 +396,7 @@ public:
 
 	void HandleLoading(bool mode = false);
 
-	void HandleWaiting(bool stop_waiting = false);
+	void HandleWaiting(bool stop_waiting, bool process_orders = false);
 
 	/**
 	 * Marks the vehicles to be redrawn and updates cached variables
@@ -1383,6 +1383,11 @@ public:
 			this->cur_image_valid_dir = _sprite_group_resolve_check_veh_check ? current_direction : INVALID_DIR;
 		}
 		_sprite_group_resolve_check_veh_check = false;
+	}
+
+	inline void UpdateImageStateUsingMapDirection(VehicleSpriteSeq &seq)
+	{
+		this->UpdateImageState(((T *)this)->GetMapImageDirection(), seq);
 	}
 
 private:

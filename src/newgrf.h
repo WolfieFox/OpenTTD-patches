@@ -116,14 +116,18 @@ enum Action0RemapPropertyIds {
 	A0RPI_BRIDGE_PILLAR_FLAGS,
 	A0RPI_BRIDGE_AVAILABILITY_FLAGS,
 	A0RPI_RAILTYPE_ENABLE_PROGRAMMABLE_SIGNALS,
+	A0RPI_RAILTYPE_ENABLE_NO_ENTRY_SIGNALS,
 	A0RPI_RAILTYPE_ENABLE_RESTRICTED_SIGNALS,
 	A0RPI_RAILTYPE_DISABLE_REALISTIC_BRAKING,
 	A0RPI_RAILTYPE_ENABLE_SIGNAL_RECOLOUR,
+	A0RPI_RAILTYPE_EXTRA_ASPECTS,
 	A0RPI_ROADTYPE_EXTRA_FLAGS,
 	A0RPI_GLOBALVAR_EXTRA_STATION_NAMES,
 	A0RPI_SIGNALS_ENABLE_PROGRAMMABLE_SIGNALS,
+	A0RPI_SIGNALS_ENABLE_NO_ENTRY_SIGNALS,
 	A0RPI_SIGNALS_ENABLE_RESTRICTED_SIGNALS,
 	A0RPI_SIGNALS_ENABLE_SIGNAL_RECOLOUR,
+	A0RPI_SIGNALS_EXTRA_ASPECTS,
 };
 
 enum GRFPropertyMapFallbackMode {
@@ -225,6 +229,11 @@ enum NewSignalCtrlFlags {
 	NSCF_PROGSIG                = 1,                          ///< Custom signal sprites enabled for programmable pre-signals.
 	NSCF_RESTRICTEDSIG          = 2,                          ///< Custom signal sprite flag enabled for restricted signals.
 	NSCF_RECOLOUR_ENABLED       = 3,                          ///< Recolour sprites enabled
+	NSCF_NOENTRYSIG             = 4,                          ///< Custom signal sprites enabled for no-entry signals.
+};
+
+enum {
+	NEW_SIGNALS_MAX_EXTRA_ASPECT = 6,
 };
 
 /** New signal control flags. */
@@ -285,6 +294,7 @@ struct GRFFile : ZeroedMemoryAllocator {
 
 	const SpriteGroup *new_signals_group;    ///< New signals sprite group
 	byte new_signal_ctrl_flags;              ///< Ctrl flags for new signals
+	byte new_signal_extra_aspects;           ///< Number of extra aspects for new signals
 
 	GRFFile(const struct GRFConfig *config);
 	~GRFFile();

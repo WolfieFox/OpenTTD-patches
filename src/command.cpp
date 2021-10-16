@@ -29,6 +29,9 @@
 #include "scope_info.h"
 #include "core/random_func.hpp"
 #include "settings_func.h"
+#include "signal_func.h"
+#include "debug_settings.h"
+#include "debug_desync.h"
 #include <array>
 
 #include "table/strings.h"
@@ -553,7 +556,7 @@ struct CommandLogEntry {
 };
 
 struct CommandLog {
-	std::array<CommandLogEntry, 128> log;
+	std::array<CommandLogEntry, 256> log;
 	unsigned int count = 0;
 	unsigned int next = 0;
 
@@ -618,7 +621,7 @@ static void DumpSubCommandLog(char *&buffer, const char *last, const CommandLog 
 
 char *DumpCommandLog(char *buffer, const char *last)
 {
-	const unsigned int count = std::min<unsigned int>(_command_log.count, 128);
+	const unsigned int count = std::min<unsigned int>(_command_log.count, 256);
 	buffer += seprintf(buffer, last, "Command Log:\n Showing most recent %u of %u commands\n", count, _command_log.count);
 	DumpSubCommandLog(buffer, last, _command_log, count);
 
@@ -888,6 +891,12 @@ bool DoCommandPEx(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, C
 	if (!random_state.Check()) log_flags |= CLEF_RANDOM;
 	AppendCommandLogEntry(res, tile, p1, p2, p3, cmd, log_flags);
 
+	if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_POST_COMMAND)) && !(GetCommandFlags(cmd) & CMD_LOG_AUX)) {
+		CheckCachesFlags flags = CHECK_CACHE_ALL | CHECK_CACHE_EMIT_LOG;
+		if (HasChickenBit(DCBF_DESYNC_CHECK_NO_GENERAL)) flags &= ~CHECK_CACHE_GENERAL;
+		CheckCaches(true, nullptr, flags);
+	}
+
 	if (res.Failed()) {
 		/* Only show the error when it's for us. */
 		StringID error_part1 = GB(cmd, 16, 16);
@@ -927,6 +936,12 @@ CommandCost DoCommandPScript(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, ui
 	if (binary_length > 0) log_flags |= CLEF_BINARY;
 	if (!random_state.Check()) log_flags |= CLEF_RANDOM;
 	AppendCommandLogEntry(res, tile, p1, p2, p3, cmd, log_flags);
+
+	if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_POST_COMMAND)) && !(GetCommandFlags(cmd) & CMD_LOG_AUX)) {
+		CheckCachesFlags flags = CHECK_CACHE_ALL | CHECK_CACHE_EMIT_LOG;
+		if (HasChickenBit(DCBF_DESYNC_CHECK_NO_GENERAL)) flags &= ~CHECK_CACHE_GENERAL;
+		CheckCaches(true, nullptr, flags);
+	}
 
 	return res;
 }
@@ -1087,6 +1102,7 @@ CommandCost DoCommandPInternal(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, 
 		/* It could happen we removed rail, thus gained money, and deleted something else.
 		 * So make sure the signal buffer is empty even in this case */
 		UpdateSignalsInBuffer();
+		if (_extra_aspects > 0) FlushDeferredAspectUpdates();
 		SetDParam(0, _additional_cash_required);
 		return_dcpi(CommandCost(STR_ERROR_NOT_ENOUGH_CASH_REQUIRES_CURRENCY));
 	}
@@ -1101,6 +1117,7 @@ CommandCost DoCommandPInternal(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, 
 
 	/* update signals if needed */
 	UpdateSignalsInBuffer();
+	if (_extra_aspects > 0) FlushDeferredAspectUpdates();
 
 	return_dcpi(res2);
 }

@@ -70,7 +70,7 @@ void ResetRailTypes()
 		{0,0,0,0,0,0,0,0,{}},
 		{0,0,0,0,0,0,0,0},
 		{0,0,0,0,0,0},
-		0, RAILTYPES_NONE, RAILTYPES_NONE, RAILTYPES_NONE, 0, 0, 0, RTFB_NONE, 0, 0, 0, 0, 0, 0,
+		0, RAILTYPES_NONE, RAILTYPES_NONE, RAILTYPES_NONE, 0, 0, 0, RTFB_NONE, 0, 0, 0, 0, 0, 0, 0,
 		RailTypeLabelList(), 0, 0, RAILTYPES_NONE, RAILTYPES_NONE, 0,
 		{}, {} };
 	for (; i < lengthof(_railtypes);          i++) _railtypes[i] = empty_railtype;
@@ -104,22 +104,26 @@ void ResolveRailTypeGUISprites(RailtypeInfo *rti)
 	const SpriteID _signal_lookup[2][SIGTYPE_END] = {
 		{SPR_IMG_SIGNAL_ELECTRIC_NORM,  SPR_IMG_SIGNAL_ELECTRIC_ENTRY, SPR_IMG_SIGNAL_ELECTRIC_EXIT,
 		 SPR_IMG_SIGNAL_ELECTRIC_COMBO, SPR_IMG_SIGNAL_ELECTRIC_PBS,   SPR_IMG_SIGNAL_ELECTRIC_PBS_OWAY,
-		 SPR_IMG_SIGNAL_ELECTRIC_PROG},
+		 SPR_IMG_SIGNAL_ELECTRIC_PROG,  SPR_IMG_SIGNAL_ELECTRIC_NO_ENTRY},
 
 		{SPR_IMG_SIGNAL_SEMAPHORE_NORM,  SPR_IMG_SIGNAL_SEMAPHORE_ENTRY, SPR_IMG_SIGNAL_SEMAPHORE_EXIT,
 		 SPR_IMG_SIGNAL_SEMAPHORE_COMBO, SPR_IMG_SIGNAL_SEMAPHORE_PBS,   SPR_IMG_SIGNAL_SEMAPHORE_PBS_OWAY,
-		 SPR_IMG_SIGNAL_SEMAPHORE_PROG},
+		 SPR_IMG_SIGNAL_SEMAPHORE_PROG,  SPR_IMG_SIGNAL_SEMAPHORE_NO_ENTRY},
 	};
 
 	for (SignalType type = SIGTYPE_NORMAL; type < SIGTYPE_END; type = (SignalType)(type + 1)) {
 		for (SignalVariant var = SIG_ELECTRIC; var <= SIG_SEMAPHORE; var = (SignalVariant)(var + 1)) {
-			PalSpriteID red   = GetCustomSignalSprite(rti, INVALID_TILE, type, var, SIGNAL_STATE_RED, true).sprite;
-			PalSpriteID green = GetCustomSignalSprite(rti, INVALID_TILE, type, var, SIGNAL_STATE_GREEN, true).sprite;
+			PalSpriteID red   = GetCustomSignalSprite(rti, INVALID_TILE, type, var, 0, true).sprite;
 			if (red.sprite != 0) {
 				rti->gui_sprites.signals[type][var][0] = { red.sprite + SIGNAL_TO_SOUTH, red.pal };
 			} else {
 				rti->gui_sprites.signals[type][var][0] = { _signal_lookup[var][type], PAL_NONE };
 			}
+			if (type == SIGTYPE_NO_ENTRY) {
+				rti->gui_sprites.signals[type][var][1] = rti->gui_sprites.signals[type][var][0];
+				continue;
+			}
+			PalSpriteID green = GetCustomSignalSprite(rti, INVALID_TILE, type, var, 255, true).sprite;
 			if (green.sprite != 0) {
 				rti->gui_sprites.signals[type][var][1] = { green.sprite + SIGNAL_TO_SOUTH, green.pal };
 			} else {
@@ -1392,6 +1396,10 @@ static void SetupBridgeTunnelSignalSimulation(TileIndex entrance, TileIndex exit
 	SetTunnelBridgeSignalSimulationEntrance(entrance);
 	SetTunnelBridgeEntranceSignalState(entrance, SIGNAL_STATE_GREEN);
 	SetTunnelBridgeSignalSimulationExit(exit);
+	if (_extra_aspects > 0) {
+		SetTunnelBridgeEntranceSignalAspect(entrance, 0);
+		UpdateAspectDeferred(entrance, GetTunnelBridgeEntranceTrackdir(entrance));
+	}
 }
 
 static void ReReserveTrainPath(Train *v)
@@ -1504,6 +1512,10 @@ CommandCost CmdBuildSingleSignal(TileIndex tile, DoCommandFlag flags, uint32 p1,
 			SetTunnelBridgeSignalSimulationEntrance(t);
 			SetTunnelBridgeEntranceSignalState(t, SIGNAL_STATE_GREEN);
 			SetTunnelBridgeSignalSimulationExit(t);
+			if (_extra_aspects > 0) {
+				SetTunnelBridgeEntranceSignalAspect(t, 0);
+				UpdateAspectDeferred(t, GetTunnelBridgeEntranceTrackdir(t));
+			}
 		};
 
 		if (_settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
@@ -1519,8 +1531,11 @@ CommandCost CmdBuildSingleSignal(TileIndex tile, DoCommandFlag flags, uint32 p1,
 			Company * const c = Company::Get(GetTileOwner(tile));
 			std::vector<Train *> re_reserve_trains;
 			if (IsTunnelBridgeWithSignalSimulation(tile)) {
-				c->infrastructure.signal -= GetTunnelBridgeSignalSimulationSignalCount(c, tile, tile_exit);
+				c->infrastructure.signal -= GetTunnelBridgeSignalSimulationSignalCount(tile, tile_exit);
 			} else {
+				uint spacing = GetBestTunnelBridgeSignalSimulationSpacing(GetTileOwner(tile), tile, tile_exit);
+				SetTunnelBridgeSignalSimulationSpacing(tile, spacing);
+				SetTunnelBridgeSignalSimulationSpacing(tile_exit, spacing);
 				for (TileIndex t : { tile, tile_exit }) {
 					if (HasAcrossTunnelBridgeReservation(t)) {
 						Train *re_reserve_train = GetTrainForReservation(t, FindFirstTrack(GetAcrossTunnelBridgeReservationTrackBits(t)));
@@ -1594,7 +1609,7 @@ CommandCost CmdBuildSingleSignal(TileIndex tile, DoCommandFlag flags, uint32 p1,
 			AddSideToSignalBuffer(tile_exit, INVALID_DIAGDIR, GetTileOwner(tile));
 			YapfNotifyTrackLayoutChange(tile, track);
 			YapfNotifyTrackLayoutChange(tile_exit, track);
-			if (IsTunnelBridgeWithSignalSimulation(tile)) c->infrastructure.signal += GetTunnelBridgeSignalSimulationSignalCount(c, tile, tile_exit);
+			if (IsTunnelBridgeWithSignalSimulation(tile)) c->infrastructure.signal += GetTunnelBridgeSignalSimulationSignalCount(tile, tile_exit);
 			DirtyCompanyInfrastructureWindows(GetTileOwner(tile));
 			for (Train *re_reserve_train : re_reserve_trains) {
 				ReReserveTrainPath(re_reserve_train);
@@ -1678,6 +1693,8 @@ CommandCost CmdBuildSingleSignal(TileIndex tile, DoCommandFlag flags, uint32 p1,
 						/* Query current signal type so the check for PBS signals below works. */
 						sigtype = GetSignalType(tile, track);
 					} else {
+						if (GetSignalType(tile, track) == SIGTYPE_NO_ENTRY) CycleSignalSide(tile, track);
+
 						/* convert the present signal to the chosen type and variant */
 						if (IsPresignalProgrammable(tile, track)) {
 							FreeSignalProgram(SignalReference(tile, track));
@@ -1687,13 +1704,18 @@ CommandCost CmdBuildSingleSignal(TileIndex tile, DoCommandFlag flags, uint32 p1,
 						if (IsPbsSignal(sigtype) && (GetPresentSignals(tile) & SignalOnTrack(track)) == SignalOnTrack(track)) {
 							SetPresentSignals(tile, (GetPresentSignals(tile) & ~SignalOnTrack(track)) | KillFirstBit(SignalOnTrack(track)));
 						}
+
+						if (sigtype == SIGTYPE_NO_ENTRY) CycleSignalSide(tile, track);
 					}
 
 				} else if (ctrl_pressed) {
 					/* cycle through signal types */
 					sigtype = (SignalType)(GetSignalType(tile, track));
-					if(IsProgrammableSignal(sigtype))
+					if (IsProgrammableSignal(sigtype)) {
 						FreeSignalProgram(SignalReference(tile, track));
+					}
+
+					if (sigtype == SIGTYPE_NO_ENTRY) CycleSignalSide(tile, track);
 
 					do {
 						sigtype = NextSignalType(sigtype, which_signals);
@@ -1703,6 +1725,8 @@ CommandCost CmdBuildSingleSignal(TileIndex tile, DoCommandFlag flags, uint32 p1,
 					if (IsPbsSignal(sigtype) && (GetPresentSignals(tile) & SignalOnTrack(track)) == SignalOnTrack(track)) {
 						SetPresentSignals(tile, (GetPresentSignals(tile) & ~SignalOnTrack(track)) | KillFirstBit(SignalOnTrack(track)));
 					}
+
+					if (sigtype == SIGTYPE_NO_ENTRY) CycleSignalSide(tile, track);
 				} else {
 					/* programmable pre-signal dependencies are invalidated when the signal direction is changed */
 					CheckRemoveSignal(tile, track);
@@ -2087,7 +2111,7 @@ CommandCost CmdRemoveSingleSignal(TileIndex tile, DoCommandFlag flags, uint32 p1
 		}
 		if (flags & DC_EXEC) {
 			Company *c = Company::Get(GetTileOwner(tile));
-			c->infrastructure.signal -= GetTunnelBridgeSignalSimulationSignalCount(c, tile, end);
+			c->infrastructure.signal -= GetTunnelBridgeSignalSimulationSignalCount(tile, end);
 			ClearBridgeTunnelSignalSimulation(end, tile);
 			ClearBridgeTunnelSignalSimulation(tile, end);
 			MarkBridgeOrTunnelDirty(tile);
@@ -2666,19 +2690,29 @@ static void GetSignalXY(TileIndex tile, uint pos, uint &x, uint &y)
 	y = TileY(tile) * TILE_SIZE + SignalPositions[side][pos].y;
 }
 
-static bool _signal_sprite_oversized = false;
-
-static const int SIGNAL_DIRTY_LEFT   = 14 * ZOOM_LVL_BASE;
-static const int SIGNAL_DIRTY_RIGHT  = 14 * ZOOM_LVL_BASE;
-static const int SIGNAL_DIRTY_TOP    = 30 * ZOOM_LVL_BASE;
-static const int SIGNAL_DIRTY_BOTTOM =  5 * ZOOM_LVL_BASE;
-
-void DrawSingleSignal(TileIndex tile, const RailtypeInfo *rti, Track track, SignalState condition, SignalOffsets image, uint pos, SignalType type, SignalVariant variant, bool show_restricted)
+void DrawSingleSignal(TileIndex tile, const RailtypeInfo *rti, Track track, SignalState condition, SignalOffsets image, uint pos, SignalType type,
+		SignalVariant variant, bool show_restricted, bool exit_signal = false)
 {
+	if (type == SIGTYPE_NO_ENTRY) pos ^= 1;
+
 	uint x, y;
 	GetSignalXY(tile, pos, x, y);
 
-	const CustomSignalSpriteResult result = GetCustomSignalSprite(rti, tile, type, variant, condition, false, show_restricted);
+	uint8 aspect;
+	if (condition == SIGNAL_STATE_GREEN) {
+		aspect = 1;
+		if (_extra_aspects > 0) {
+			if (IsPlainRailTile(tile)) {
+				aspect = GetSignalAspect(tile, track);
+			} else if (IsTunnelBridgeWithSignalSimulation(tile)) {
+				aspect = exit_signal? GetTunnelBridgeExitSignalAspect(tile) : GetTunnelBridgeEntranceSignalAspect(tile);
+			}
+		}
+	} else {
+		aspect = 0;
+	}
+
+	const CustomSignalSpriteResult result = GetCustomSignalSprite(rti, tile, type, variant, aspect, false, show_restricted);
 	SpriteID sprite = result.sprite.sprite;
 	PaletteID pal = PAL_NONE;
 	bool is_custom_sprite = (sprite != 0);
@@ -2690,6 +2724,15 @@ void DrawSingleSignal(TileIndex tile, const RailtypeInfo *rti, Track track, Sign
 			sprite = SPR_PROGSIGNAL_BASE + image * 2 + condition;
 		} else {
 			sprite = SPR_PROGSIGNAL_BASE + 16 + image * 2 + condition;
+		}
+
+		SpriteFile *file = GetOriginFile(sprite);
+		is_custom_sprite = !(file != nullptr && file->flags & SFF_PROGSIG);
+	} else if (type == SIGTYPE_NO_ENTRY) {
+		if (variant == SIG_SEMAPHORE) {
+			sprite = SPR_EXTRASIGNAL_BASE + image;
+		} else {
+			sprite = SPR_EXTRASIGNAL_BASE + 8 + image;
 		}
 
 		SpriteFile *file = GetOriginFile(sprite);
@@ -2711,6 +2754,12 @@ void DrawSingleSignal(TileIndex tile, const RailtypeInfo *rti, Track track, Sign
 			} else {
 				sprite = SPR_DUP_PROGSIGNAL_BASE + 16 + image * 2 + condition;
 			}
+		} else if (type == SIGTYPE_NO_ENTRY) {
+			if (variant == SIG_SEMAPHORE) {
+				sprite = SPR_DUP_EXTRASIGNAL_BASE + image;
+			} else {
+				sprite = SPR_DUP_EXTRASIGNAL_BASE + 8 + image;
+			}
 		} else {
 			sprite = (type == SIGTYPE_NORMAL && variant == SIG_ELECTRIC) ? SPR_DUP_ORIGINAL_SIGNALS_BASE : SPR_DUP_SIGNALS_BASE - 16;
 			sprite += type * 16 + variant * 64 + image * 2 + condition + (IsSignalSpritePBS(type) ? 64 : 0);
@@ -2727,7 +2776,7 @@ void DrawSingleSignal(TileIndex tile, const RailtypeInfo *rti, Track track, Sign
 			AddSortableSpriteToDraw(sprite, SPR_TRACERESTRICT_BASE, x, y, 1, 1, BB_HEIGHT_UNDER_BRIDGE, GetSaveSlopeZ(x, y, track), false, 0, 0, 0, &lower_part);
 			AddSortableSpriteToDraw(sprite,               PAL_NONE, x, y, 1, 1, BB_HEIGHT_UNDER_BRIDGE, GetSaveSlopeZ(x, y, track), false, 0, 0, 0, &upper_part);
 		} else {
-			AddSortableSpriteToDraw(sprite, SPR_TRACERESTRICT_BASE + 1, x, y, 1, 1, BB_HEIGHT_UNDER_BRIDGE, GetSaveSlopeZ(x, y, track));
+			AddSortableSpriteToDraw(sprite, SPR_TRACERESTRICT_BASE + (type == SIGTYPE_NO_ENTRY ? 0 : 1), x, y, 1, 1, BB_HEIGHT_UNDER_BRIDGE, GetSaveSlopeZ(x, y, track));
 		}
 	} else {
 		AddSortableSpriteToDraw(sprite, pal, x, y, 1, 1, BB_HEIGHT_UNDER_BRIDGE, GetSaveSlopeZ(x, y, track));
@@ -2747,13 +2796,9 @@ static void DrawSingleSignal(TileIndex tile, const RailtypeInfo *rti, Track trac
 	DrawSingleSignal(tile, rti, track, condition, image, pos, type, variant, show_restricted);
 }
 
-void MarkSingleSignalDirty(TileIndex tile, Trackdir td)
+template <typename F>
+void MarkSingleSignalDirtyIntl(TileIndex tile, Trackdir td, F get_z)
 {
-	if (_signal_sprite_oversized || td >= TRACKDIR_END) {
-		MarkTileDirtyByTile(tile, VMDF_NOT_MAP_MODE);
-		return;
-	}
-
 	static const uint8 trackdir_to_pos[TRACKDIR_END] = {
 		8,  // TRACKDIR_X_NE
 		10, // TRACKDIR_Y_SE
@@ -2775,7 +2820,7 @@ void MarkSingleSignalDirty(TileIndex tile, Trackdir td)
 
 	uint x, y;
 	GetSignalXY(tile, trackdir_to_pos[td], x, y);
-	Point pt = RemapCoords(x, y, GetSaveSlopeZ(x, y, TrackdirToTrack(td)));
+	Point pt = RemapCoords(x, y, get_z(x, y));
 	MarkAllViewportsDirty(
 			pt.x - SIGNAL_DIRTY_LEFT,
 			pt.y - SIGNAL_DIRTY_TOP,
@@ -2783,6 +2828,25 @@ void MarkSingleSignalDirty(TileIndex tile, Trackdir td)
 			pt.y + SIGNAL_DIRTY_BOTTOM,
 			VMDF_NOT_MAP_MODE
 	);
+}
+
+void MarkSingleSignalDirty(TileIndex tile, Trackdir td)
+{
+	if (_signal_sprite_oversized || td >= TRACKDIR_END) {
+		MarkTileDirtyByTile(tile, VMDF_NOT_MAP_MODE);
+		return;
+	}
+
+	MarkSingleSignalDirtyIntl(tile, td, [td](uint x, uint y) -> uint {
+		return GetSaveSlopeZ(x, y, TrackdirToTrack(td));
+	});
+}
+
+void MarkSingleSignalDirtyAtZ(TileIndex tile, Trackdir td, uint z)
+{
+	MarkSingleSignalDirtyIntl(tile, td, [z](uint x, uint y) -> uint {
+		return z;
+	});
 }
 
 static uint32 _drawtile_track_palette;

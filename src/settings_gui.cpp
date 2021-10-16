@@ -44,6 +44,7 @@
 #include <functional>
 #include <iterator>
 #include <set>
+#include <cmath>
 
 #include "safeguards.h"
 #include "video/video_driver.hpp"
@@ -842,17 +843,13 @@ struct SettingEntry : BaseSettingEntry {
 	virtual bool UpdateFilterState(SettingFilter &filter, bool force_visible);
 
 	void SetButtons(byte new_val);
+	StringID GetHelpText() const;
 
-	/**
-	 * Get the help text of a single setting.
-	 * @return The requested help text.
-	 */
-	inline StringID GetHelpText() const
-	{
-		return this->setting->desc.str_help;
-	}
+	struct SetValueDParamsTempData {
+		char buffer[512];
+	};
 
-	void SetValueDParams(uint first_param, int32 value) const;
+	void SetValueDParams(uint first_param, int32 value, std::unique_ptr<SetValueDParamsTempData> &tempdata) const;
 
 protected:
 	SettingEntry(const SettingDesc *setting, uint index);
@@ -862,6 +859,24 @@ protected:
 private:
 	bool IsVisibleByRestrictionMode(RestrictionMode mode) const;
 };
+
+/**
+ * Get the help text of a single setting.
+ * @return The requested help text.
+ */
+StringID SettingEntry::GetHelpText() const
+{
+	StringID str = this->setting->desc.str_help;
+	if (this->setting->desc.guiproc != nullptr) {
+		SettingOnGuiCtrlData data;
+		data.type = SOGCT_DESCRIPTION_TEXT;
+		data.text = str;
+		if (this->setting->desc.guiproc(data)) {
+			str = data.text;
+		}
+	}
+	return str;
+}
 
 /** Cargodist per-cargo setting */
 struct CargoDestPerCargoSettingEntry : SettingEntry {
@@ -1212,11 +1227,21 @@ static const void *ResolveVariableAddress(const GameSettings *settings_ptr, cons
  * @param first_param First DParam to use
  * @param value Setting value to set params for.
  */
-void SettingEntry::SetValueDParams(uint first_param, int32 value) const
+void SettingEntry::SetValueDParams(uint first_param, int32 value, std::unique_ptr<SettingEntry::SetValueDParamsTempData> &tempdata) const
 {
 	const SettingDescBase *sdb = &this->setting->desc;
 	if (sdb->cmd == SDT_BOOLX) {
 		SetDParam(first_param++, value != 0 ? STR_CONFIG_SETTING_ON : STR_CONFIG_SETTING_OFF);
+	} else if (sdb->flags & SGF_DEC1SCALE) {
+		tempdata.reset(new SettingEntry::SetValueDParamsTempData());
+		double scale = std::exp2(((double)value) / 10);
+		int log = -std::min(0, (int)std::floor(std::log10(scale)) - 2);
+
+		int64 args_array[] = { value, (int64)(scale * std::pow(10.f, (float)log)), log };
+		StringParameters tmp_params(args_array);
+		GetStringWithArgs(tempdata->buffer, sdb->str_val, &tmp_params, lastof(tempdata->buffer));
+		SetDParam(first_param++, STR_JUST_RAW_STRING);
+		SetDParamStr(first_param++, tempdata->buffer);
 	} else {
 		if ((sdb->flags & SGF_ENUM) != 0) {
 			StringID str = STR_UNDEFINED;
@@ -1283,7 +1308,8 @@ void SettingEntry::DrawSettingString(uint left, uint right, int y, bool highligh
 {
 	const SettingDesc *sd = this->setting;
 	const SettingDescBase *sdb = &sd->desc;
-	this->SetValueDParams(1, value);
+	std::unique_ptr<SettingEntry::SetValueDParamsTempData> tempdata;
+	this->SetValueDParams(1, value, tempdata);
 	DrawString(left, right, y, sdb->str, highlight ? TC_WHITE : TC_LIGHT_BLUE);
 }
 
@@ -1304,7 +1330,8 @@ void CargoDestPerCargoSettingEntry::DrawSettingString(uint left, uint right, int
 	assert(sdb->str == STR_CONFIG_SETTING_DISTRIBUTION_PER_CARGO);
 	SetDParam(0, CargoSpec::Get(this->cargo)->name);
 	SetDParam(1, highlight ? STR_ORANGE_STRING1_WHITE : STR_ORANGE_STRING1_LTBLUE);
-	this->SetValueDParams(2, value);
+	std::unique_ptr<SettingEntry::SetValueDParamsTempData> tempdata;
+	this->SetValueDParams(2, value, tempdata);
 	DrawString(left, right, y, STR_CONFIG_SETTING_DISTRIBUTION_PER_CARGO_PARAM, highlight ? TC_WHITE : TC_LIGHT_BLUE);
 }
 
@@ -1816,6 +1843,7 @@ static SettingsContainer &GetSettingsTree()
 			SettingsPage *advsig = interface->Add(new SettingsPage(STR_CONFIG_SETTING_INTERFACE_ADV_SIGNALS));
 			{
 				advsig->Add(new SettingEntry("gui.show_progsig_ui"));
+				advsig->Add(new SettingEntry("gui.show_noentrysig_ui"));
 				advsig->Add(new SettingEntry("gui.show_adv_tracerestrict_features"));
 			}
 
@@ -2415,7 +2443,8 @@ struct GameSettingsWindow : Window {
 					y += FONT_HEIGHT_NORMAL;
 
 					int32 default_value = ReadValue(&sd->desc.def, sd->save.conv);
-					this->last_clicked->SetValueDParams(0, default_value);
+					std::unique_ptr<SettingEntry::SetValueDParamsTempData> tempdata;
+					this->last_clicked->SetValueDParams(0, default_value, tempdata);
 					DrawString(r.left, r.right, y, STR_CONFIG_SETTING_DEFAULT_VALUE);
 					y += FONT_HEIGHT_NORMAL + WD_PAR_VSEP_NORMAL;
 
@@ -2549,7 +2578,15 @@ struct GameSettingsWindow : Window {
 					DropDownList list;
 					if (sd->desc.flags & SGF_MULTISTRING) {
 						for (int i = sdb->min; i <= (int)sdb->max; i++) {
-							int val = sd->orderproc ? sd->orderproc(i - sdb->min) : i;
+							int val = i;
+							if (sd->desc.guiproc != nullptr) {
+								SettingOnGuiCtrlData data;
+								data.type = SOGCT_MULTISTRING_ORDER;
+								data.val = i - sdb->min;
+								if (sd->desc.guiproc(data)) {
+									val = data.val;
+								}
+							}
 							assert_msg(val >= sdb->min && val <= (int)sdb->max, "min: %d, max: %d, val: %d", sdb->min, sdb->max, val);
 							list.emplace_back(new DropDownListStringItem(sdb->str_val + val - sdb->min, val, false));
 						}

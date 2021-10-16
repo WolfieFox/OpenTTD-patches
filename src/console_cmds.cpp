@@ -53,6 +53,9 @@
 #include "linkgraph/linkgraphjob.h"
 #include "base_media_base.h"
 #include "debug_settings.h"
+#include "debug_desync.h"
+#include "scope_info.h"
+#include "event_logs.h"
 #include <time.h>
 
 #include "safeguards.h"
@@ -171,11 +174,24 @@ DEF_CONSOLE_HOOK(ConHookNoNetwork)
 	return CHR_ALLOW;
 }
 
+/**
+ * Check if are either in singleplayer or a server.
+ * @return True iff we are either in singleplayer or a server.
+ */
+DEF_CONSOLE_HOOK(ConHookServerOrNoNetwork)
+{
+	if (_networking && !_network_server) {
+		if (echo) IConsoleError("This command is only available to a network server.");
+		return CHR_DISALLOW;
+	}
+	return CHR_ALLOW;
+}
+
 DEF_CONSOLE_HOOK(ConHookNewGRFDeveloperTool)
 {
 	if (_settings_client.gui.newgrf_developer_tools) {
 		if (_game_mode == GM_MENU) {
-			if (echo) IConsoleError("This command is only available in game and editor.");
+			if (echo) IConsoleError("This command is only available in-game and in the editor.");
 			return CHR_DISALLOW;
 		}
 		return ConHookNoNetwork(echo);
@@ -220,7 +236,7 @@ DEF_CONSOLE_CMD(ConResetEnginePool)
 	}
 
 	if (_game_mode == GM_MENU) {
-		IConsoleError("This command is only available in game and editor.");
+		IConsoleError("This command is only available in-game and in the editor.");
 		return true;
 	}
 
@@ -681,6 +697,11 @@ DEF_CONSOLE_CMD(ConPauseGame)
 		return true;
 	}
 
+	if (_game_mode == GM_MENU) {
+		IConsoleError("This command is only available in-game and in the editor.");
+		return true;
+	}
+
 	if ((_pause_mode & PM_PAUSED_NORMAL) == PM_UNPAUSED) {
 		DoCommandP(0, PM_PAUSED_NORMAL, 1, CMD_PAUSE);
 		if (!_networking) IConsolePrint(CC_DEFAULT, "Game paused.");
@@ -695,6 +716,11 @@ DEF_CONSOLE_CMD(ConUnpauseGame)
 {
 	if (argc == 0) {
 		IConsoleHelp("Unpause a network game. Usage: 'unpause'");
+		return true;
+	}
+
+	if (_game_mode == GM_MENU) {
+		IConsoleError("This command is only available in-game and in the editor.");
 		return true;
 	}
 
@@ -2247,6 +2273,19 @@ DEF_CONSOLE_CMD(ConDumpCommandLog)
 	return true;
 }
 
+DEF_CONSOLE_CMD(ConDumpSpecialEventsLog)
+{
+	if (argc == 0) {
+		IConsoleHelp("Dump log of special events.");
+		return true;
+	}
+
+	char buffer[32768];
+	DumpSpecialEventsLog(buffer, lastof(buffer));
+	PrintLineByLine(buffer);
+	return true;
+}
+
 DEF_CONSOLE_CMD(ConDumpDesyncMsgLog)
 {
 	if (argc == 0) {
@@ -2484,7 +2523,7 @@ DEF_CONSOLE_CMD(ConDumpRailTypes)
 			grfid = grf->grfid;
 			grfs.insert(std::pair<uint32, const GRFFile *>(grfid, grf));
 		}
-		IConsolePrintF(CC_DEFAULT, "  %02u %c%c%c%c, Flags: %c%c%c%c%c%c, Ctrl Flags: %c%c%c, GRF: %08X, %s",
+		IConsolePrintF(CC_DEFAULT, "  %02u %c%c%c%c, Flags: %c%c%c%c%c%c, Ctrl Flags: %c%c%c%c, GRF: %08X, %s",
 				(uint) rt,
 				rti->label >> 24, rti->label >> 16, rti->label >> 8, rti->label,
 				HasBit(rti->flags, RTF_CATENARY)            ? 'c' : '-',
@@ -2496,6 +2535,7 @@ DEF_CONSOLE_CMD(ConDumpRailTypes)
 				HasBit(rti->ctrl_flags, RTCF_PROGSIG)       ? 'p' : '-',
 				HasBit(rti->ctrl_flags, RTCF_RESTRICTEDSIG) ? 'r' : '-',
 				HasBit(rti->ctrl_flags, RTCF_NOREALISTICBRAKING) ? 'b' : '-',
+				HasBit(rti->ctrl_flags, RTCF_NOENTRYSIG)    ? 'n' : '-',
 				BSWAP32(grfid),
 				GetStringPtr(rti->strings.name)
 		);
@@ -2621,6 +2661,23 @@ DEF_CONSOLE_CMD(ConDumpCargoTypes)
 	return true;
 }
 
+DEF_CONSOLE_CMD(ConDumpVehicle)
+{
+	if (argc != 2) {
+		IConsoleHelp("Debug: Show vehicle information.  Usage: 'dump_vehicle <vehicle-id>'");
+		return true;
+	}
+
+	const Vehicle *v = Vehicle::GetIfValid(atoi(argv[1]));
+	if (v != nullptr) {
+		IConsolePrint(CC_DEFAULT, scope_dumper().VehicleInfo(v));
+	} else {
+		IConsolePrint(CC_DEFAULT, "No such vehicle");
+	}
+
+	return true;
+}
+
 /**
  * Dump the state of a tile on the map.
  * param x tile number or tile x coordinate.
@@ -2676,7 +2733,7 @@ DEF_CONSOLE_CMD(ConDumpTile)
 DEF_CONSOLE_CMD(ConCheckCaches)
 {
 	if (argc == 0) {
-		IConsoleHelp("Debug: Check caches");
+		IConsoleHelp("Debug: Check caches. Usage: 'check_caches [<broadcast>]'");
 		return true;
 	}
 
@@ -2686,8 +2743,7 @@ DEF_CONSOLE_CMD(ConCheckCaches)
 	if (broadcast) {
 		DoCommandP(0, 0, 0, CMD_DESYNC_CHECK);
 	} else {
-		extern void CheckCaches(bool force_check, std::function<void(const char *)> log);
-		CheckCaches(true, nullptr);
+		CheckCaches(true, nullptr, CHECK_CACHE_ALL | CHECK_CACHE_EMIT_LOG);
 	}
 
 	return true;
@@ -3241,7 +3297,7 @@ DEF_CONSOLE_CMD(ConFramerateWindow)
 DEF_CONSOLE_CMD(ConFindNonRealisticBrakingSignal)
 {
 	if (argc == 0) {
-		IConsoleHelp("Find next signal tile which prevents enabling of realitic braking");
+		IConsoleHelp("Find the next signal tile which prevents enabling of realistic braking");
 		return true;
 	}
 
@@ -3397,8 +3453,8 @@ void IConsoleStdLibRegister()
 	IConsole::CmdRegister("unban",                   ConUnBan,            ConHookServerOnly);
 	IConsole::CmdRegister("banlist",                 ConBanList,          ConHookServerOnly);
 
-	IConsole::CmdRegister("pause",                   ConPauseGame,        ConHookServerOnly);
-	IConsole::CmdRegister("unpause",                 ConUnpauseGame,      ConHookServerOnly);
+	IConsole::CmdRegister("pause",                   ConPauseGame,        ConHookServerOrNoNetwork);
+	IConsole::CmdRegister("unpause",                 ConUnpauseGame,      ConHookServerOrNoNetwork);
 
 	IConsole::CmdRegister("company_pw",              ConCompanyPassword,  ConHookNeedNetwork);
 	IConsole::AliasRegister("company_password",      "company_pw %+");
@@ -3450,6 +3506,7 @@ void IConsoleStdLibRegister()
 
 	IConsole::CmdRegister("getfulldate",             ConGetFullDate,      nullptr, true);
 	IConsole::CmdRegister("dump_command_log",        ConDumpCommandLog,   nullptr, true);
+	IConsole::CmdRegister("dump_special_events_log", ConDumpSpecialEventsLog, nullptr, true);
 	IConsole::CmdRegister("dump_desync_msgs",        ConDumpDesyncMsgLog, nullptr, true);
 	IConsole::CmdRegister("dump_inflation",          ConDumpInflation,    nullptr, true);
 	IConsole::CmdRegister("dump_cpdp_stats",         ConDumpCpdpStats,    nullptr, true);
@@ -3464,6 +3521,7 @@ void IConsoleStdLibRegister()
 	IConsole::CmdRegister("dump_rail_types",         ConDumpRailTypes,    nullptr, true);
 	IConsole::CmdRegister("dump_bridge_types",       ConDumpBridgeTypes,  nullptr, true);
 	IConsole::CmdRegister("dump_cargo_types",        ConDumpCargoTypes,   nullptr, true);
+	IConsole::CmdRegister("dump_vehicle",            ConDumpVehicle,      nullptr, true);
 	IConsole::CmdRegister("dump_tile",               ConDumpTile,         nullptr, true);
 	IConsole::CmdRegister("check_caches",            ConCheckCaches,      nullptr, true);
 	IConsole::CmdRegister("show_town_window",        ConShowTownWindow,   nullptr, true);
