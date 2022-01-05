@@ -32,6 +32,7 @@
 #include "signal_func.h"
 #include "debug_settings.h"
 #include "debug_desync.h"
+#include "order_backup.h"
 #include <array>
 
 #include "table/strings.h"
@@ -65,7 +66,7 @@ CommandProc CmdSellLandArea;
 CommandProc CmdBuildTunnel;
 
 CommandProc CmdBuildTrainDepot;
-CommandProc CmdBuildRailWaypoint;
+CommandProcEx CmdBuildRailWaypoint;
 CommandProc CmdRenameWaypoint;
 CommandProc CmdRemoveFromRailWaypoint;
 
@@ -144,6 +145,7 @@ CommandProc CmdPause;
 CommandProc CmdBuyShareInCompany;
 CommandProc CmdSellShareInCompany;
 CommandProc CmdBuyCompany;
+CommandProc CmdDeclineBuyCompany;
 
 CommandProc CmdFoundTown;
 CommandProc CmdRenameTown;
@@ -264,12 +266,13 @@ CommandProc CmdRemoveSignalInstruction;
 CommandProc CmdSignalProgramMgmt;
 
 CommandProc CmdScheduledDispatch;
-CommandProc CmdScheduledDispatchAdd;
+CommandProcEx CmdScheduledDispatchAdd;
 CommandProc CmdScheduledDispatchRemove;
 CommandProc CmdScheduledDispatchSetDuration;
 CommandProc CmdScheduledDispatchSetStartDate;
 CommandProc CmdScheduledDispatchSetDelay;
 CommandProc CmdScheduledDispatchResetLastDispatch;
+CommandProc CmdScheduledDispatchClear;
 
 CommandProc CmdAddPlan;
 CommandProcEx CmdAddPlanLine;
@@ -302,7 +305,7 @@ static const Command _command_proc_table[] = {
 	DEF_CMD(CmdBuildSingleSignal,                       CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_BUILD_SIGNALS
 	DEF_CMD(CmdRemoveSingleSignal,                      CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_REMOVE_SIGNALS
 	DEF_CMD(CmdTerraformLand,           CMD_ALL_TILES | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_TERRAFORM_LAND
-	DEF_CMD(CmdBuildObject,              CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_BUILD_OBJECT
+	DEF_CMD(CmdBuildObject,  CMD_DEITY | CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_BUILD_OBJECT
 	DEF_CMD(CmdPurchaseLandArea, CMD_NO_WATER | CMD_AUTO | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_PURCHASE_LAND_AREA
 	DEF_CMD(CmdBuildObjectArea,  CMD_NO_WATER | CMD_AUTO | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_BUILD_OBJECT_AREA
 	DEF_CMD(CmdBuildHouse,   CMD_DEITY | CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_BUILD_HOUSE
@@ -380,7 +383,8 @@ static const Command _command_proc_table[] = {
 
 	DEF_CMD(CmdBuyShareInCompany,                              0, CMDT_MONEY_MANAGEMENT      ), // CMD_BUY_SHARE_IN_COMPANY
 	DEF_CMD(CmdSellShareInCompany,                             0, CMDT_MONEY_MANAGEMENT      ), // CMD_SELL_SHARE_IN_COMPANY
-	DEF_CMD(CmdBuyCompany,                                     0, CMDT_MONEY_MANAGEMENT      ), // CMD_BUY_COMANY
+	DEF_CMD(CmdBuyCompany,                                     0, CMDT_MONEY_MANAGEMENT      ), // CMD_BUY_COMPANY
+	DEF_CMD(CmdDeclineBuyCompany,                              0, CMDT_MONEY_MANAGEMENT      ), // CMD_DECLINE_BUY_COMPANY
 
 	DEF_CMD(CmdFoundTown,                CMD_DEITY | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION), // CMD_FOUND_TOWN; founding random town can fail only in exec run
 	DEF_CMD(CmdRenameTown,                CMD_DEITY | CMD_SERVER, CMDT_OTHER_MANAGEMENT      ), // CMD_RENAME_TOWN
@@ -504,6 +508,7 @@ static const Command _command_proc_table[] = {
 	DEF_CMD(CmdScheduledDispatchSetStartDate,                  0, CMDT_ROUTE_MANAGEMENT      ), // CMD_SCHEDULED_DISPATCH_SET_START_DATE
 	DEF_CMD(CmdScheduledDispatchSetDelay,                      0, CMDT_ROUTE_MANAGEMENT      ), // CMD_SCHEDULED_DISPATCH_SET_DELAY
 	DEF_CMD(CmdScheduledDispatchResetLastDispatch,             0, CMDT_ROUTE_MANAGEMENT      ), // CMD_SCHEDULED_DISPATCH_RESET_LAST_DISPATCH
+	DEF_CMD(CmdScheduledDispatchClear,                         0, CMDT_ROUTE_MANAGEMENT      ), // CMD_SCHEDULED_DISPATCH_CLEAR
 
 	DEF_CMD(CmdAddPlan,                              CMD_NO_TEST, CMDT_OTHER_MANAGEMENT      ), // CMD_ADD_PLAN
 	DEF_CMD(CmdAddPlanLine,                          CMD_NO_TEST, CMDT_OTHER_MANAGEMENT      ), // CMD_ADD_PLAN_LINE
@@ -532,10 +537,12 @@ enum CommandLogEntryFlag : uint16 {
 	CLEF_SCRIPT              =  0x80, ///< command run by AI/game script
 	CLEF_TWICE               = 0x100, ///< command logged twice (only sending and execution)
 	CLEF_RANDOM              = 0x200, ///< command changed random seed
+	CLEF_ORDER_BACKUP        = 0x400, ///< command changed order backups
 };
 DECLARE_ENUM_AS_BIT_SET(CommandLogEntryFlag)
 
 struct CommandLogEntry {
+	std::string text;
 	TileIndex tile;
 	uint32 p1;
 	uint32 p2;
@@ -550,8 +557,8 @@ struct CommandLogEntry {
 
 	CommandLogEntry() { }
 
-	CommandLogEntry(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, CommandLogEntryFlag log_flags)
-			: tile(tile), p1(p1), p2(p2), cmd(cmd), p3(p3), date(_date), date_fract(_date_fract), tick_skip_counter(_tick_skip_counter),
+	CommandLogEntry(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, CommandLogEntryFlag log_flags, std::string text)
+			: text(text), tile(tile), p1(p1), p2(p2), cmd(cmd), p3(p3), date(_date), date_fract(_date_fract), tick_skip_counter(_tick_skip_counter),
 			current_company(_current_company), local_company(_local_company), log_flags(log_flags) { }
 };
 
@@ -594,8 +601,9 @@ static void DumpSubCommandLog(char *&buffer, const char *last, const CommandLog 
 		YearMonthDay ymd;
 		ConvertDateToYMD(entry.date, &ymd);
 		buffer += seprintf(buffer, last, " %3u | %4i-%02i-%02i, %2i, %3i | ", i, ymd.year, ymd.month + 1, ymd.day, entry.date_fract, entry.tick_skip_counter);
-		buffer += seprintf(buffer, last, "%c%c%c%c%c%c%c%c%c%c | ",
-				fc(CLEF_RANDOM, 'r'), fc(CLEF_TWICE, '2'), fc(CLEF_SCRIPT, 'a'), fc(CLEF_BINARY, 'b'), fc(CLEF_MY_CMD, 'm'), fc(CLEF_ONLY_SENDING, 's'),
+		buffer += seprintf(buffer, last, "%c%c%c%c%c%c%c%c%c%c%c | ",
+				fc(CLEF_ORDER_BACKUP, 'o'), fc(CLEF_RANDOM, 'r'), fc(CLEF_TWICE, '2'),
+				fc(CLEF_SCRIPT, 'a'),fc(CLEF_BINARY, 'b'), fc(CLEF_MY_CMD, 'm'), fc(CLEF_ONLY_SENDING, 's'),
 				fc(CLEF_ESTIMATE_ONLY, 'e'), fc(CLEF_TEXT, 't'), fc(CLEF_GENERATING_WORLD, 'g'), fc(CLEF_CMD_FAILED, 'f'));
 		buffer += seprintf(buffer, last, " %7d x %7d, p1: 0x%08X, p2: 0x%08X, ",
 				TileX(entry.tile), TileY(entry.tile), entry.p1, entry.p2);
@@ -607,11 +615,8 @@ static void DumpSubCommandLog(char *&buffer, const char *last, const CommandLog 
 
 		switch (entry.cmd & CMD_ID_MASK) {
 			case CMD_CHANGE_SETTING:
-				buffer += seprintf(buffer, last, " [%s]", GetSettingNameByIndex(entry.p1));
-				break;
-
 			case CMD_CHANGE_COMPANY_SETTING:
-				buffer += seprintf(buffer, last, " [%s]", GetCompanySettingNameByIndex(entry.p1));
+				buffer += seprintf(buffer, last, " [%s]", entry.text.c_str());
 				break;
 		}
 
@@ -806,7 +811,7 @@ Money GetAvailableMoneyForCommand()
 	return Company::Get(company)->money;
 }
 
-static void AppendCommandLogEntry(const CommandCost &res, TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, CommandLogEntryFlag log_flags)
+static void AppendCommandLogEntry(const CommandCost &res, TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, CommandLogEntryFlag log_flags, const char *text)
 {
 	if (res.Failed()) log_flags |= CLEF_CMD_FAILED;
 	if (_generating_world) log_flags |= CLEF_GENERATING_WORLD;
@@ -824,7 +829,16 @@ static void AppendCommandLogEntry(const CommandCost &res, TileIndex tile, uint32
 			return;
 		}
 	}
-	cmd_log.log[cmd_log.next] = CommandLogEntry(tile, p1, p2, p3, cmd, log_flags);
+
+	std::string str;
+	switch (cmd & CMD_ID_MASK) {
+		case CMD_CHANGE_SETTING:
+		case CMD_CHANGE_COMPANY_SETTING:
+			if (text != nullptr) str.assign(text);
+			break;
+	}
+
+	cmd_log.log[cmd_log.next] = CommandLogEntry(tile, p1, p2, p3, cmd, log_flags, std::move(str));
 	cmd_log.next = (cmd_log.next + 1) % cmd_log.log.size();
 	cmd_log.count++;
 }
@@ -878,6 +892,7 @@ bool DoCommandPEx(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, C
 	if (!(cmd & CMD_NETWORK_COMMAND) && GetCommandFlags(cmd) & CMD_CLIENT_ID && p2 == 0) p2 = CLIENT_ID_SERVER;
 
 	GameRandomSeedChecker random_state;
+	uint order_backup_update_counter = OrderBackup::GetUpdateCounter();
 
 	CommandCost res = DoCommandPInternal(tile, p1, p2, p3, cmd, callback, text, my_cmd, estimate_only, binary_length);
 
@@ -889,7 +904,8 @@ bool DoCommandPEx(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, C
 	if (my_cmd) log_flags |= CLEF_MY_CMD;
 	if (binary_length > 0) log_flags |= CLEF_BINARY;
 	if (!random_state.Check()) log_flags |= CLEF_RANDOM;
-	AppendCommandLogEntry(res, tile, p1, p2, p3, cmd, log_flags);
+	if (order_backup_update_counter != OrderBackup::GetUpdateCounter()) log_flags |= CLEF_ORDER_BACKUP;
+	AppendCommandLogEntry(res, tile, p1, p2, p3, cmd, log_flags, text);
 
 	if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_POST_COMMAND)) && !(GetCommandFlags(cmd) & CMD_LOG_AUX)) {
 		CheckCachesFlags flags = CHECK_CACHE_ALL | CHECK_CACHE_EMIT_LOG;
@@ -924,6 +940,7 @@ bool DoCommandPEx(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, C
 CommandCost DoCommandPScript(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, uint32 cmd, CommandCallback *callback, const char *text, bool my_cmd, bool estimate_only, uint32 binary_length)
 {
 	GameRandomSeedChecker random_state;
+	uint order_backup_update_counter = OrderBackup::GetUpdateCounter();
 
 	CommandCost res = DoCommandPInternal(tile, p1, p2, p3, cmd, callback, text, my_cmd, estimate_only, binary_length);
 
@@ -935,7 +952,8 @@ CommandCost DoCommandPScript(TileIndex tile, uint32 p1, uint32 p2, uint64 p3, ui
 	if (my_cmd) log_flags |= CLEF_MY_CMD;
 	if (binary_length > 0) log_flags |= CLEF_BINARY;
 	if (!random_state.Check()) log_flags |= CLEF_RANDOM;
-	AppendCommandLogEntry(res, tile, p1, p2, p3, cmd, log_flags);
+	if (order_backup_update_counter != OrderBackup::GetUpdateCounter()) log_flags |= CLEF_ORDER_BACKUP;
+	AppendCommandLogEntry(res, tile, p1, p2, p3, cmd, log_flags, text);
 
 	if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_POST_COMMAND)) && !(GetCommandFlags(cmd) & CMD_LOG_AUX)) {
 		CheckCachesFlags flags = CHECK_CACHE_ALL | CHECK_CACHE_EMIT_LOG;

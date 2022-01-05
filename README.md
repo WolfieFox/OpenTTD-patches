@@ -1,4 +1,4 @@
-## JGR's Patchpack version 0.43.1
+## JGR's Patchpack version 0.44.2
 
 This is a collection of patches applied to [OpenTTD](http://www.openttd.org/)
 
@@ -66,6 +66,7 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Improve road vehicle pathfinding when multiple vehicles are simultaneously heading to a station with multiple bay/stop entrances.
 * Add setting for default road/tram types.
 * Add a setting to turn off road vehicles slowing in curves.
+* Add a setting to disable road vehicles from passing through each other when blocked for an extended period of time.
 
 #### Level Crossings
 
@@ -73,6 +74,7 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Prevent road vehicles from being stopped on level crossings.
 * Add setting to enable improved level crossing safety.
 * Trains break down after colliding with a road vehicle.
+* Only show level crossing overlay sprites on the outsides of multi-track crossings when using both adjacent and safer crossings settings.
 
 #### Bridges and Tunnels
 
@@ -112,6 +114,8 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Add a setting for whether to open the new vehicle GUI when share-cloning.
 * Add setting to disable mass action buttons for top-level vehicle lists.
 * Add feature to create a new auto-named group when dragging and dropping a vehicle onto the new group button (ctrl includes shared order vehicles).
+* Add settings to reduce vehicle running costs when a vehicle is stationary or in a depot.
+* If a vehicle's next order is for the current station when leaving, start loading again without moving, instead of leaving.
 
 #### Orders and Timetabling
 
@@ -221,7 +225,6 @@ See [installation.md](/installation.md) for instructions on how to install.
 
 #### Limits
 
-* Increase maximum number of NewGRFs to 255 in single player and multiplayer.
 * [Extra large maps](http://www.tt-forums.net/viewtopic.php?f=33&t=33137).
   Maximum map size is now 256M tiles, ranging from 16k x 16k to 256 x 1M.
 * Increase the limit of NewGRF house IDs in a single game from 512 to 1024.
@@ -383,7 +386,7 @@ Both 'stable' and 'nightly' versions are available for download:
 - most people should choose the 'stable' version, as this has been more extensively tested
 - the 'nightly' version includes the latest changes and features, but may sometimes be less reliable
 
-On some platforms OpenTTD will also be available via your OS package manager or a similar service.
+OpenTTD is also available for free on [Steam](https://store.steampowered.com/app/1536610/OpenTTD/), [GOG.com](https://www.gog.com/game/openttd), and the [Microsoft Store](https://www.microsoft.com/p/openttd-official/9ncjg5rvrr1c). On some platforms OpenTTD will be available via your OS package manager or a similar service.
 
 
 ## 1.2) OpenTTD gameplay manual
@@ -426,9 +429,9 @@ For some platforms, you will need to refer to [the installation guide](https://w
 The free data files, split into OpenGFX for graphics, OpenSFX for sounds and
 OpenMSX for music can be found at:
 
-- https://www.openttd.org/downloads/opengfx-releases/ for OpenGFX
-- https://www.openttd.org/downloads/opensfx-releases/ for OpenSFX
-- https://www.openttd.org/downloads/openmsx-releases/ for OpenMSX
+- https://www.openttd.org/downloads/opengfx-releases/latest for OpenGFX
+- https://www.openttd.org/downloads/opensfx-releases/latest for OpenSFX
+- https://www.openttd.org/downloads/openmsx-releases/latest for OpenMSX
 
 Please follow the readme of these packages about the installation procedure.
 The Windows installer can optionally download and install these packages.

@@ -37,6 +37,7 @@
 #include "order_cmd.h"
 #include "vehiclelist.h"
 #include "tracerestrict.h"
+#include "train.h"
 
 #include "table/strings.h"
 
@@ -1361,7 +1362,7 @@ static void CancelLoadingDueToDeletedOrder(Vehicle *v)
 
 	assert(v->current_order.IsType(OT_LOADING));
 	/* NON-stop flag is misused to see if a train is in a station that is
-	 * on his order list or not */
+	 * on its order list or not */
 	v->current_order.SetNonStopType(ONSF_STOP_EVERYWHERE);
 	/* When full loading, "cancel" that order so the vehicle doesn't
 	 * stay indefinitely at this station anymore. */
@@ -1462,6 +1463,12 @@ CommandCost CmdSkipToOrder(TileIndex tile, DoCommandFlag flags, uint32 p1, uint3
 		if (v->current_order.IsAnyLoadingType()) v->LeaveStation();
 		if (v->current_order.IsType(OT_WAITING)) v->HandleWaiting(true);
 
+		if (v->type == VEH_TRAIN) {
+			for (Train *u = Train::From(v); u != nullptr; u = u->Next()) {
+				ClrBit(u->flags, VRF_BEYOND_PLATFORM_END);
+			}
+		}
+
 		v->cur_implicit_order_index = v->cur_real_order_index = sel_ord;
 		v->UpdateRealOrderIndex();
 		v->cur_timetable_order_index = INVALID_VEH_ORDER_ID;
@@ -1470,10 +1477,10 @@ CommandCost CmdSkipToOrder(TileIndex tile, DoCommandFlag flags, uint32 p1, uint3
 
 		v->ClearSeparation();
 		if (HasBit(v->vehicle_flags, VF_TIMETABLE_SEPARATION)) ClrBit(v->vehicle_flags, VF_TIMETABLE_STARTED);
-	}
 
-	/* We have an aircraft/ship, they have a mini-schedule, so update them all */
-	if (v->type == VEH_AIRCRAFT || v->type == VEH_SHIP) DirtyVehicleListWindowForVehicle(v);
+		/* We have an aircraft/ship, they have a mini-schedule, so update them all */
+		if (v->type == VEH_AIRCRAFT || v->type == VEH_SHIP) DirtyVehicleListWindowForVehicle(v);
+	}
 
 	return CommandCost();
 }
@@ -2718,7 +2725,7 @@ static uint16 GetFreeStationPlatforms(StationID st_id)
 	bool is_free;
 	TileIndex t2;
 	uint16 counter = 0;
-	TILE_AREA_LOOP(t1, st->train_station) {
+	for (TileIndex t1 : st->train_station) {
 		if (st->TileBelongsToRailStation(t1)) {
 			/* We only proceed if this tile is a track tile and the north(-east/-west) end of the platform */
 			if (IsCompatibleTrainStationTile(t1 + TileOffsByDiagDir(GetRailStationAxis(t1) == AXIS_X ? DIAGDIR_NE : DIAGDIR_NW), t1) || IsStationTileBlocked(t1)) continue;

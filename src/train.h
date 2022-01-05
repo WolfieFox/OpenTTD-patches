@@ -110,6 +110,7 @@ struct TrainCache {
 	int cached_max_curve_speed;   ///< max consist speed limited by curves
 
 	/* cached values, recalculated on load and each time a vehicle is added to/removed from the consist. */
+	int cached_curve_speed_mod;   ///< curve speed modifier of the entire train
 	TrainCacheFlags cached_tflags;///< train cached flags
 	uint8 cached_num_engines;     ///< total number of engines, including rear ends of multiheaded engines
 	uint16 cached_centre_mass;    ///< Cached position of the centre of mass, from the front
@@ -169,6 +170,7 @@ struct Train FINAL : public GroundVehicle<Train, VEH_TRAIN> {
 	bool IsInDepot() const { return this->track == TRACK_BIT_DEPOT; }
 	bool Tick();
 	void OnNewDay();
+	void OnPeriodic();
 	uint Crash(bool flooded = false);
 	Money CalculateCurrentOverallValue() const;
 	Trackdir GetVehicleTrackdir() const;
@@ -189,6 +191,8 @@ struct Train FINAL : public GroundVehicle<Train, VEH_TRAIN> {
 		int strict_max_speed;
 		int advisory_max_speed;
 	};
+
+	bool ConsistNeedsRepair() const;
 
 private:
 	MaxSpeedInfo GetCurrentMaxSpeedInfoInternal(bool update_state) const;
@@ -450,6 +454,15 @@ protected: // These functions should not be called outside acceleration code.
 	inline uint16 GetMaxTrackSpeed() const
 	{
 		return GetRailTypeInfo(GetRailTypeByTrackBit(this->tile, this->track))->max_speed;
+	}
+
+	/**
+	 * Returns the curve speed modifier of this vehicle.
+	 * @return Current curve speed modifier, in fixed-point binary representation with 8 fractional bits.
+	 */
+	inline int GetCurveSpeedModifier() const
+	{
+		return GetVehicleProperty(this, PROP_TRAIN_CURVE_SPEED_MOD, RailVehInfo(this->engine_type)->curve_speed_mod, true);
 	}
 
 	/**

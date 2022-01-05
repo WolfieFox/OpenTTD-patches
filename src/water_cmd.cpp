@@ -38,6 +38,9 @@
 #include "company_gui.h"
 #include "newgrf_generic.h"
 #include "industry.h"
+#include "object_base.h"
+#include "object_map.h"
+#include "newgrf_object.h"
 
 #include "table/strings.h"
 
@@ -481,19 +484,20 @@ CommandCost CmdBuildCanal(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32
 
 	std::unique_ptr<TileIterator> iter(HasBit(p2, 2) ? (TileIterator *)new DiagonalTileIterator(tile, p1) : new OrthogonalTileIterator(tile, p1));
 	for (; *iter != INVALID_TILE; ++(*iter)) {
-		TileIndex tile = *iter;
+		TileIndex current_tile = *iter;
 		CommandCost ret;
 
-		Slope slope = GetTileSlope(tile);
+		Slope slope = GetTileSlope(current_tile);
 		if (slope != SLOPE_FLAT && (wc != WATER_CLASS_RIVER || !IsInclinedSlope(slope))) {
 			return_cmd_error(STR_ERROR_FLAT_LAND_REQUIRED);
 		}
 
-		/* can't make water of water! */
-		if (IsTileType(tile, MP_WATER) && (!IsTileOwner(tile, OWNER_WATER) || wc == WATER_CLASS_SEA)) continue;
+		bool water = IsWaterTile(current_tile);
 
-		bool water = IsWaterTile(tile);
-		ret = DoCommand(tile, 0, 0, flags | DC_FORCE_CLEAR_TILE, CMD_LANDSCAPE_CLEAR);
+		/* Outside the editor, prevent building canals over your own or OWNER_NONE owned canals */
+		if (water && IsCanal(current_tile) && _game_mode != GM_EDITOR && (IsTileOwner(current_tile, _current_company) || IsTileOwner(current_tile, OWNER_NONE))) continue;
+
+		ret = DoCommand(current_tile, 0, 0, flags, CMD_LANDSCAPE_CLEAR);
 		if (ret.Failed()) return ret;
 
 		if (!water) cost.AddCost(ret);
@@ -501,31 +505,31 @@ CommandCost CmdBuildCanal(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32
 		if (flags & DC_EXEC) {
 			switch (wc) {
 				case WATER_CLASS_RIVER:
-					MakeRiver(tile, Random());
+					MakeRiver(current_tile, Random());
 					if (_game_mode == GM_EDITOR) {
-						TileIndex tile2 = tile;
+						TileIndex tile2 = current_tile;
 						CircularTileSearch(&tile2, _settings_game.game_creation.river_tropics_width, RiverModifyDesertZone, nullptr);
 					}
 					break;
 
 				case WATER_CLASS_SEA:
-					if (TileHeight(tile) == 0) {
-						MakeSea(tile);
+					if (TileHeight(current_tile) == 0) {
+						MakeSea(current_tile);
 						break;
 					}
 					FALLTHROUGH;
 
 				default:
-					MakeCanal(tile, _current_company, Random());
+					MakeCanal(current_tile, _current_company, Random());
 					if (Company::IsValidID(_current_company)) {
 						Company::Get(_current_company)->infrastructure.water++;
 						DirtyCompanyInfrastructureWindows(_current_company);
 					}
 					break;
 			}
-			MarkTileDirtyByTile(tile);
-			MarkCanalsAndRiversAroundDirty(tile);
-			CheckForDockingTile(tile);
+			MarkTileDirtyByTile(current_tile);
+			MarkCanalsAndRiversAroundDirty(current_tile);
+			CheckForDockingTile(current_tile);
 		}
 
 		cost.AddCost(_price[PR_BUILD_CANAL]);
@@ -1079,8 +1083,8 @@ static void FloodVehicles(TileIndex tile)
 
 	if (IsAirportTile(tile)) {
 		const Station *st = Station::GetByTile(tile);
-		TILE_AREA_LOOP(tile, st->airport) {
-			if (st->TileBelongsToAirport(tile)) FindFloodVehicle(tile, z);
+		for (TileIndex airport_tile : st->airport) {
+			if (st->TileBelongsToAirport(airport_tile)) FindFloodVehicle(airport_tile, z);
 		}
 
 		/* No vehicle could be flooded on this airport anymore */
@@ -1120,7 +1124,6 @@ FloodingBehaviour GetFloodingBehaviour(TileIndex tile)
 			FALLTHROUGH;
 		case MP_STATION:
 		case MP_INDUSTRY:
-		case MP_OBJECT:
 			return (GetWaterClass(tile) == WATER_CLASS_SEA) ? FLOOD_ACTIVE : FLOOD_NONE;
 
 		case MP_RAILWAY:
@@ -1131,6 +1134,9 @@ FloodingBehaviour GetFloodingBehaviour(TileIndex tile)
 
 		case MP_TREES:
 			return (GetTreeGround(tile) == TREE_GROUND_SHORE ? FLOOD_DRYUP : FLOOD_NONE);
+
+		case MP_OBJECT:
+			return (GetObjectGroundType(tile) == OBJECT_GROUND_SHORE ? FLOOD_DRYUP : ((GetWaterClass(tile) == WATER_CLASS_SEA) ? FLOOD_ACTIVE : FLOOD_NONE));
 
 		default:
 			return FLOOD_NONE;
@@ -1175,6 +1181,30 @@ void DoFloodTile(TileIndex target)
 					flooded = true;
 				}
 				break;
+
+			case MP_OBJECT: {
+				const ObjectSpec *spec = ObjectSpec::GetByTile(target);
+				if ((spec->ctrl_flags & OBJECT_CTRL_FLAG_USE_LAND_GROUND) && (spec->ctrl_flags & OBJECT_CTRL_FLAG_EDGE_FOUNDATION)) {
+					Object *obj = Object::GetByTile(target);
+					uint8 flags = spec->edge_foundation[obj->view];
+					DiagDirection edge = (DiagDirection)GB(flags, 0, 2);
+					Slope incline = InclinedSlope(edge);
+					if (!(tileh & incline) && !(flags & OBJECT_EF_FLAG_FOUNDATION_LOWER)) {
+						/* object is on the lower edge with no foundation, and now underwater, clear the tile and then flood it */
+						if (DoCommand(target, 0, 0, DC_EXEC, CMD_LANDSCAPE_CLEAR).Succeeded()) {
+							MakeShore(target);
+							MarkTileDirtyByTile(target);
+							flooded = true;
+						}
+						break;
+					}
+					SetWaterClass(target, WATER_CLASS_SEA);
+					SetObjectGroundTypeDensity(target, OBJECT_GROUND_SHORE, 3);
+					MarkTileDirtyByTile(target, VMDF_NOT_MAP_MODE);
+					flooded = true;
+				}
+				break;
+			}
 
 			default:
 				break;
@@ -1242,6 +1272,12 @@ static void DoDryUp(TileIndex tile)
 			}
 			break;
 
+		case MP_OBJECT:
+			SetWaterClass(tile, WATER_CLASS_INVALID);
+			SetObjectGroundTypeDensity(tile, OBJECT_GROUND_GRASS, 3);
+			MarkTileDirtyByTile(tile, VMDF_NOT_MAP_MODE);
+			break;
+
 		default: NOT_REACHED();
 	}
 
@@ -1273,6 +1309,7 @@ void TileLoop_Water(TileIndex tile)
 
 				/* TREE_GROUND_SHORE is the sign of a previous flood. */
 				if (IsTileType(dest, MP_TREES) && GetTreeGround(dest) == TREE_GROUND_SHORE) continue;
+				if (IsTileType(dest, MP_OBJECT) && (!GetObjectHasNoEffectiveFoundation(dest) || GetObjectGroundType(dest) == OBJECT_GROUND_SHORE)) continue;
 
 				int z_dest;
 				Slope slope_dest = GetFoundationSlope(dest, &z_dest) & ~SLOPE_HALFTILE_MASK & ~SLOPE_STEEP;
@@ -1288,8 +1325,7 @@ void TileLoop_Water(TileIndex tile)
 
 		case FLOOD_DRYUP: {
 			Slope slope_here = GetFoundationSlope(tile) & ~SLOPE_HALFTILE_MASK & ~SLOPE_STEEP;
-			uint dir;
-			FOR_EACH_SET_BIT(dir, _flood_from_dirs[slope_here]) {
+			for (uint dir : SetBitIterator(_flood_from_dirs[slope_here])) {
 				TileIndex dest = tile + TileOffsByDir((Direction)dir);
 				if (!IsValidTile(dest)) continue;
 
@@ -1327,8 +1363,7 @@ void ConvertGroundTilesIntoWaterTiles()
 					break;
 
 				default:
-					uint dir;
-					FOR_EACH_SET_BIT(dir, _flood_from_dirs[slope & ~SLOPE_STEEP]) {
+					for (uint dir : SetBitIterator(_flood_from_dirs[slope & ~SLOPE_STEEP])) {
 						TileIndex dest = TileAddByDir(tile, (Direction)dir);
 						Slope slope_dest = GetTileSlope(dest) & ~SLOPE_STEEP;
 						if (slope_dest == SLOPE_FLAT || IsSlopeWithOneCornerRaised(slope_dest)) {

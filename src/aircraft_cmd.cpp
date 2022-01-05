@@ -207,7 +207,7 @@ void GetRotorImage(const Aircraft *v, EngineImageType image_type, VehicleSpriteS
 
 	const Aircraft *w = v->Next()->Next();
 	if (is_custom_sprite(v->spritenum)) {
-		GetCustomRotorSprite(v, false, image_type, result);
+		GetCustomRotorSprite(v, image_type, result);
 		if (result->IsValid()) return;
 	}
 
@@ -463,7 +463,18 @@ Money Aircraft::GetRunningCost() const
 {
 	const Engine *e = this->GetEngine();
 	uint cost_factor = GetVehicleProperty(this, PROP_AIRCRAFT_RUNNING_COST_FACTOR, e->u.air.running_cost);
-	return GetPrice(PR_RUNNING_AIRCRAFT, cost_factor, e->GetGRF());
+	Money cost = GetPrice(PR_RUNNING_AIRCRAFT, cost_factor, e->GetGRF());
+
+	if (this->cur_speed == 0) {
+		if (this->IsInDepot()) {
+			/* running costs if in depot */
+			cost = CeilDivT<Money>(cost, _settings_game.difficulty.vehicle_costs_in_depot);
+		} else {
+			/* running costs if stopped */
+			cost = CeilDivT<Money>(cost, _settings_game.difficulty.vehicle_costs_when_stopped);
+		}
+	}
+	return cost;
 }
 
 void Aircraft::OnNewDay()
@@ -472,10 +483,16 @@ void Aircraft::OnNewDay()
 
 	if ((++this->day_counter & 7) == 0) DecreaseVehicleValue(this);
 
+	AgeVehicle(this);
+}
+
+void Aircraft::OnPeriodic()
+{
+	if (!this->IsNormalAircraft()) return;
+
 	CheckOrders(this);
 
 	CheckVehicleBreakdown(this);
-	AgeVehicle(this);
 	CheckIfAircraftNeedsService(this);
 
 	if (this->running_ticks == 0) return;
@@ -1058,7 +1075,7 @@ static bool AircraftController(Aircraft *v)
 	if (count == 0) return false;
 
 	/* If the plane will be a few subpixels away from the destination after
-	 * this movement loop, start nudging him towards the exact position for
+	 * this movement loop, start nudging it towards the exact position for
 	 * the whole loop. Otherwise, heavily depending on the speed of the plane,
 	 * it is possible we totally overshoot the target, causing the plane to
 	 * make a loop, and trying again, and again, and again .. */
@@ -1424,7 +1441,12 @@ static void CrashAirplane(Aircraft *v)
 	AI::NewEvent(v->owner, new ScriptEventVehicleCrashed(v->index, vt, st == nullptr ? ScriptEventVehicleCrashed::CRASH_AIRCRAFT_NO_AIRPORT : ScriptEventVehicleCrashed::CRASH_PLANE_LANDING));
 	Game::NewEvent(new ScriptEventVehicleCrashed(v->index, vt, st == nullptr ? ScriptEventVehicleCrashed::CRASH_AIRCRAFT_NO_AIRPORT : ScriptEventVehicleCrashed::CRASH_PLANE_LANDING));
 
-	AddTileNewsItem(newsitem, NT_ACCIDENT, vt, nullptr, st != nullptr ? st->index : INVALID_STATION);
+	NewsType newstype = NT_ACCIDENT;
+	if (v->owner != _local_company) {
+		newstype = NT_ACCIDENT_OTHER;
+	}
+
+	AddTileNewsItem(newsitem, newstype, vt, nullptr, st != nullptr ? st->index : INVALID_STATION);
 
 	ModifyStationRatingAround(vt, v->owner, -160, 30);
 	if (_settings_client.sound.disaster) SndPlayVehicleFx(SND_12_EXPLOSION, v);

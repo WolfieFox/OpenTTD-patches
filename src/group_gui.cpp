@@ -24,6 +24,7 @@
 #include "core/geometry_func.hpp"
 #include "company_base.h"
 #include "company_gui.h"
+#include "gui.h"
 #include "tbtr_template_gui_main.h"
 
 #include "widgets/group_widget.h"
@@ -824,17 +825,25 @@ public:
 						NOT_REACHED();
 				}
 				if (v) {
-					this->vehicle_sel = v->index;
+					if (_ctrl_pressed && this->grouping == GB_SHARED_ORDERS) {
+						ShowOrdersWindow(v);
+					} else {
+						this->vehicle_sel = v->index;
 
-					if (_ctrl_pressed) {
-						this->SelectGroup(v->group_id);
+						if (_ctrl_pressed && this->grouping == GB_NONE) {
+							/*
+							 * It only makes sense to select a group if not using shared orders
+							 * since two vehicles sharing orders can be from different groups.
+							 */
+							this->SelectGroup(v->group_id);
+						}
+
+						SetObjectToPlaceWnd(SPR_CURSOR_MOUSE, PAL_NONE, HT_DRAG, this);
+						SetMouseCursorVehicle(v, EIT_IN_LIST);
+						_cursor.vehchain = true;
+
+						this->SetDirty();
 					}
-
-					SetObjectToPlaceWnd(SPR_CURSOR_MOUSE, PAL_NONE, HT_DRAG, this);
-					SetMouseCursorVehicle(v, EIT_IN_LIST);
-					_cursor.vehchain = true;
-
-					this->SetDirty();
 				}
 
 				break;

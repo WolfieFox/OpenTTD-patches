@@ -248,9 +248,7 @@ static inline bool CheckAddToTodoSet(TileIndex t1, DiagDirection d1, TileIndex t
 
 	assert(!_tbdset.IsIn(t1, d1)); // it really shouldn't be there already
 
-	if (_tbdset.Remove(t2, d2)) return false;
-
-	return true;
+	return !_tbdset.Remove(t2, d2);
 }
 
 
@@ -465,6 +463,10 @@ static SigInfo ExploreSegment(Owner owner)
 						if (IsTunnelBridgeSignalSimulationExit(tile) && !_tbuset.Add(tile, INVALID_TRACKDIR)) {
 							info.flags |= SF_FULL;
 							return info;
+						}
+						if (_extra_aspects > 0 && IsTunnelBridgeSignalSimulationEntrance(tile)) {
+							info.out_signal_tile = tile;
+							info.out_signal_trackdir = GetTunnelBridgeEntranceTrackdir(tile, tunnel_bridge_dir);
 						}
 						Trackdir exit_track = GetTunnelBridgeExitTrackdir(tile, tunnel_bridge_dir);
 						exitdir = TrackdirToExitdir(exit_track);

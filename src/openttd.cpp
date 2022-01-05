@@ -75,12 +75,14 @@
 #include "tbtr_template_vehicle.h"
 #include "string_func_extra.h"
 #include "industry.h"
+#include "network/network_gui.h"
 #include "cargopacket.h"
 #include "core/checksum_func.hpp"
 #include "tbtr_template_vehicle_func.h"
 #include "debug_settings.h"
 #include "debug_desync.h"
 #include "event_logs.h"
+#include "tunnelbridge.h"
 
 #include "linkgraph/linkgraphschedule.h"
 #include "tracerestrict.h"
@@ -553,23 +555,19 @@ void OpenBrowser(const char *url)
 
 /** Callback structure of statements to be executed after the NewGRF scan. */
 struct AfterNewGRFScan : NewGRFScanCallback {
-	Year startyear;                    ///< The start year.
-	uint32 generation_seed;            ///< Seed for the new game.
-	char *dedicated_host;              ///< Hostname for the dedicated server.
-	uint16 dedicated_port;             ///< Port for the dedicated server.
-	char *network_conn;                ///< Information about the server to connect to, or nullptr.
-	const char *join_server_password;  ///< The password to join the server with.
-	const char *join_company_password; ///< The password to join the company with.
-	bool save_config;                  ///< The save config setting.
+	Year startyear = INVALID_YEAR;              ///< The start year.
+	uint32 generation_seed = GENERATE_NEW_SEED; ///< Seed for the new game.
+	std::string dedicated_host;                 ///< Hostname for the dedicated server.
+	uint16 dedicated_port = 0;                  ///< Port for the dedicated server.
+	std::string connection_string;              ///< Information about the server to connect to
+	std::string join_server_password;           ///< The password to join the server with.
+	std::string join_company_password;          ///< The password to join the company with.
+	bool save_config = true;                    ///< The save config setting.
 
 	/**
 	 * Create a new callback.
 	 */
-	AfterNewGRFScan() :
-			startyear(INVALID_YEAR), generation_seed(GENERATE_NEW_SEED),
-			dedicated_host(nullptr), dedicated_port(0), network_conn(nullptr),
-			join_server_password(nullptr), join_company_password(nullptr),
-			save_config(true)
+	AfterNewGRFScan()
 	{
 		/* Visual C++ 2015 fails compiling this line (AfterNewGRFScan::generation_seed undefined symbol)
 		 * if it's placed outside a member function, directly in the struct body. */
@@ -608,7 +606,7 @@ struct AfterNewGRFScan : NewGRFScanCallback {
 		if (startyear != INVALID_YEAR) IConsoleSetSetting("game_creation.starting_year", startyear);
 		if (generation_seed != GENERATE_NEW_SEED) _settings_newgame.game_creation.generation_seed = generation_seed;
 
-		if (dedicated_host != nullptr) {
+		if (!dedicated_host.empty()) {
 			_network_bind_list.clear();
 			_network_bind_list.emplace_back(dedicated_host);
 		}
@@ -622,30 +620,11 @@ struct AfterNewGRFScan : NewGRFScanCallback {
 		/* Make sure _settings is filled with _settings_newgame if we switch to a game directly */
 		if (_switch_mode != SM_NONE) MakeNewgameSettingsLive();
 
-		if (_network_available && network_conn != nullptr) {
-			const char *port = nullptr;
-			const char *company = nullptr;
-			uint16 rport = NETWORK_DEFAULT_PORT;
-			CompanyID join_as = COMPANY_NEW_COMPANY;
-
-			ParseGameConnectionString(&company, &port, network_conn);
-
-			if (company != nullptr) {
-				join_as = (CompanyID)atoi(company);
-
-				if (join_as != COMPANY_SPECTATOR) {
-					join_as--;
-					if (join_as >= MAX_COMPANIES) {
-						delete this;
-						return;
-					}
-				}
-			}
-			if (port != nullptr) rport = atoi(port);
-
+		if (_network_available && !connection_string.empty()) {
 			LoadIntroGame();
 			_switch_mode = SM_NONE;
-			NetworkClientConnectGame(network_conn, rport, join_as, join_server_password, join_company_password);
+
+			NetworkClientConnectGame(connection_string, COMPANY_NEW_COMPANY, join_server_password, join_company_password);
 		}
 
 		/* After the scan we're not used anymore. */
@@ -741,15 +720,12 @@ int openttd_main(int argc, char *argv[])
 			dedicated = true;
 			SetDebugString("net=3");
 			if (mgo.opt != nullptr) {
-				const char *port = nullptr;
-				ParseConnectionString(&port, mgo.opt);
-				if (!StrEmpty(mgo.opt)) scanner->dedicated_host = mgo.opt;
-				if (port != nullptr) scanner->dedicated_port = atoi(port);
+				scanner->dedicated_host = ParseFullConnectionString(mgo.opt, scanner->dedicated_port);
 			}
 			break;
 		case 'f': _dedicated_forks = true; break;
 		case 'n':
-			scanner->network_conn = mgo.opt; // optional IP parameter, nullptr if unset
+			scanner->connection_string = mgo.opt; // optional IP:port#company parameter
 			break;
 		case 'l':
 			debuglog_conn = mgo.opt;
@@ -812,7 +788,7 @@ int openttd_main(int argc, char *argv[])
 			if (res != SL_OK || _load_check_data.HasErrors()) {
 				fprintf(stderr, "Failed to open savegame\n");
 				if (_load_check_data.HasErrors()) {
-					InitializeLanguagePacks();
+					InitializeLanguagePacks(); // A language pack is needed for GetString()
 					char buf[256];
 					SetDParamStr(0, _load_check_data.error_data);
 					GetString(buf, _load_check_data.error, lastof(buf));
@@ -862,7 +838,7 @@ int openttd_main(int argc, char *argv[])
 	DeterminePaths(argv[0], only_local_path);
 	TarScanner::DoScan(TarScanner::BASESET);
 
-	if (dedicated) DEBUG(net, 0, "Starting dedicated version %s", _openttd_revision);
+	if (dedicated) DEBUG(net, 3, "Starting dedicated server, version %s", _openttd_revision);
 	if (_dedicated_forks && !dedicated) _dedicated_forks = false;
 
 #if defined(UNIX)
@@ -903,7 +879,7 @@ int openttd_main(int argc, char *argv[])
 			BaseGraphics::SetSet({});
 
 			ErrorMessageData msg(STR_CONFIG_ERROR, STR_CONFIG_ERROR_INVALID_BASE_GRAPHICS_NOT_FOUND);
-			msg.SetDParamStr(0, graphics_set.c_str());
+			msg.SetDParamStr(0, graphics_set);
 			ScheduleErrorMessage(msg);
 		}
 	}
@@ -942,15 +918,7 @@ int openttd_main(int argc, char *argv[])
 	NetworkStartUp(); // initialize network-core
 
 	if (debuglog_conn != nullptr && _network_available) {
-		const char *port = nullptr;
-		uint16 rport;
-
-		rport = NETWORK_DEFAULT_DEBUGLOG_PORT;
-
-		ParseConnectionString(&port, debuglog_conn);
-		if (port != nullptr) rport = atoi(port);
-
-		NetworkStartDebugLog(debuglog_conn, rport);
+		NetworkStartDebugLog(debuglog_conn);
 	}
 
 	if (!HandleBootstrap()) {
@@ -970,7 +938,7 @@ int openttd_main(int argc, char *argv[])
 			usererror("Failed to find a sounds set. Please acquire a sounds set for OpenTTD. See section 1.4 of README.md.");
 		} else {
 			ErrorMessageData msg(STR_CONFIG_ERROR, STR_CONFIG_ERROR_INVALID_BASE_SOUNDS_NOT_FOUND);
-			msg.SetDParamStr(0, sounds_set.c_str());
+			msg.SetDParamStr(0, sounds_set);
 			ScheduleErrorMessage(msg);
 		}
 	}
@@ -982,7 +950,7 @@ int openttd_main(int argc, char *argv[])
 			usererror("Failed to find a music set. Please acquire a music set for OpenTTD. See section 1.4 of README.md.");
 		} else {
 			ErrorMessageData msg(STR_CONFIG_ERROR, STR_CONFIG_ERROR_INVALID_BASE_MUSIC_NOT_FOUND);
-			msg.SetDParamStr(0, music_set.c_str());
+			msg.SetDParamStr(0, music_set);
 			ScheduleErrorMessage(msg);
 		}
 	}
@@ -1030,6 +998,28 @@ void HandleExitGameRequest()
 	}
 }
 
+/**
+ * Triggers everything that should be triggered when starting a game.
+ * @param dedicated_server Whether this is a dedicated server or not.
+ */
+static void OnStartGame(bool dedicated_server)
+{
+	/* Update the local company for a loaded game. It is either always
+	 * a company or in the case of a dedicated server a spectator */
+	if (_network_server && !dedicated_server) {
+		NetworkServerDoMove(CLIENT_ID_SERVER, GetDefaultLocalCompany());
+	} else {
+		SetLocalCompany(dedicated_server ? COMPANY_SPECTATOR : GetDefaultLocalCompany());
+	}
+	if (_ctrl_pressed && !dedicated_server) {
+		DoCommandP(0, PM_PAUSED_NORMAL, 1, CMD_PAUSE);
+	}
+	/* Update the static game info to set the values from the new game. */
+	NetworkServerUpdateGameInfo();
+	/* Execute the game-start script */
+	IConsoleCmdExec("exec scripts/game_start.scr 0");
+}
+
 static void MakeNewGameDone()
 {
 	SettingsDisableElrail(_settings_game.vehicle.disable_elrails);
@@ -1039,9 +1029,8 @@ static void MakeNewGameDone()
 
 	/* In a dedicated server, the server does not play */
 	if (!VideoDriver::GetInstance()->HasGUI()) {
-		SetLocalCompany(COMPANY_SPECTATOR);
+		OnStartGame(true);
 		if (_settings_client.gui.pause_on_newgame) DoCommandP(0, PM_PAUSED_NORMAL, 1, CMD_PAUSE);
-		IConsoleCmdExec("exec scripts/game_start.scr 0");
 		return;
 	}
 
@@ -1060,16 +1049,14 @@ static void MakeNewGameDone()
 		BuildOwnerLegend();
 	}
 
-	IConsoleCmdExec("exec scripts/game_start.scr 0");
-
-	SetLocalCompany(COMPANY_FIRST);
+	OnStartGame(false);
 
 	InitializeRailGUI();
 	InitializeRoadGUI();
 
 	/* We are the server, we start a new company (not dedicated),
 	 * so set the default password *if* needed. */
-	if (_network_server && !StrEmpty(_settings_client.network.default_company_pass)) {
+	if (_network_server && !_settings_client.network.default_company_pass.empty()) {
 		NetworkChangeCompanyPassword(_local_company, _settings_client.network.default_company_pass);
 	}
 
@@ -1078,6 +1065,8 @@ static void MakeNewGameDone()
 	CheckEngines();
 	CheckIndustries();
 	MarkWholeScreenDirty();
+
+	if (_network_server && !_network_dedicated) ShowClientList();
 }
 
 /*
@@ -1163,7 +1152,7 @@ bool SafeLoad(const std::string &filename, SaveLoadOperation fop, DetailedFileTy
 				 * special cases which make clients desync immediately. So we fall
 				 * back to just generating a new game with the current settings.
 				 */
-				DEBUG(net, 0, "Loading game failed, so a new (random) game will be started!");
+				DEBUG(net, 0, "Loading game failed, so a new (random) game will be started");
 				MakeNewGame(false, true);
 				return false;
 			}
@@ -1187,7 +1176,7 @@ bool SafeLoad(const std::string &filename, SaveLoadOperation fop, DetailedFileTy
 
 void SwitchToMode(SwitchMode new_mode)
 {
-	/* If we are saving something, the network stays in his current state */
+	/* If we are saving something, the network stays in its current state */
 	if (new_mode != SM_SAVE_GAME) {
 		/* If the network is active, make it not-active */
 		if (_networking) {
@@ -1257,18 +1246,7 @@ void SwitchToMode(SwitchMode new_mode)
 					/* Reset engine pool to simplify changing engine NewGRFs in scenario editor. */
 					EngineOverrideManager::ResetToCurrentNewGRFConfig();
 				}
-				/* Update the local company for a loaded game. It is either always
-				 * a company or in the case of a dedicated server a spectator */
-				if (_network_server && !_network_dedicated) {
-					NetworkServerDoMove(CLIENT_ID_SERVER, GetDefaultLocalCompany());
-				} else {
-					SetLocalCompany(_network_dedicated ? COMPANY_SPECTATOR : GetDefaultLocalCompany());
-				}
-				if (_ctrl_pressed && !_network_dedicated) {
-					DoCommandP(0, PM_PAUSED_NORMAL, 1, CMD_PAUSE);
-				}
-				/* Execute the game-start script */
-				IConsoleCmdExec("exec scripts/game_start.scr 0");
+				OnStartGame(_network_dedicated);
 				/* Decrease pause counter (was increased from opening load dialog) */
 				DoCommandP(0, PM_PAUSED_SAVELOAD, 0, CMD_PAUSE);
 			}
@@ -1300,6 +1278,11 @@ void SwitchToMode(SwitchMode new_mode)
 			}
 			break;
 		}
+
+		case SM_JOIN_GAME: // Join a multiplayer game
+			LoadIntroGame();
+			NetworkClientJoinGame();
+			break;
 
 		case SM_MENU: // Switch to game intro menu
 			LoadIntroGame();
@@ -1354,6 +1337,43 @@ void WriteVehicleInfo(char *&p, const char *last, const Vehicle *u, const Vehicl
 	}
 }
 
+static bool SignalInfraTotalMatches()
+{
+	std::array<int, MAX_COMPANIES> old_signal_totals = {};
+	for (const Company *c : Company::Iterate()) {
+		old_signal_totals[c->index] = c->infrastructure.signal;
+	}
+
+	std::array<int, MAX_COMPANIES> new_signal_totals = {};
+	for (TileIndex tile = 0; tile < MapSize(); tile++) {
+		switch (GetTileType(tile)) {
+			case MP_RAILWAY:
+				if (HasSignals(tile)) {
+					const Company *c = Company::GetIfValid(GetTileOwner(tile));
+					if (c != nullptr) new_signal_totals[c->index] += CountBits(GetPresentSignals(tile));
+				}
+				break;
+
+			case MP_TUNNELBRIDGE: {
+				/* Only count the tunnel/bridge if we're on the northern end tile. */
+				DiagDirection dir = GetTunnelBridgeDirection(tile);
+				if (dir == DIAGDIR_NE || dir == DIAGDIR_NW) break;
+
+				if (IsTunnelBridgeWithSignalSimulation(tile)) {
+					const Company *c = Company::GetIfValid(GetTileOwner(tile));
+					if (c != nullptr) new_signal_totals[c->index] += GetTunnelBridgeSignalSimulationSignalCount(tile, GetOtherTunnelBridgeEnd(tile));
+				}
+				break;
+			}
+
+			default:
+				break;
+		}
+	}
+
+	return old_signal_totals == new_signal_totals;
+}
+
 /**
  * Check the validity of some of the caches.
  * Especially in the sense of desyncs between
@@ -1368,6 +1388,9 @@ void CheckCaches(bool force_check, std::function<void(const char *)> log, CheckC
 		if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_PERIODIC)) && desync_level < 1) {
 			desync_level = 1;
 			if (HasChickenBit(DCBF_DESYNC_CHECK_NO_GENERAL)) flags &= ~CHECK_CACHE_GENERAL;
+		}
+		if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_PERIODIC_SIGNALS)) && desync_level < 2 && _scaled_date_ticks % 256 == 0) {
+			if (!SignalInfraTotalMatches()) desync_level = 2;
 		}
 
 		/* Return here so it is easy to add checks that are run
@@ -1510,6 +1533,9 @@ void CheckCaches(bool force_check, std::function<void(const char *)> log, CheckC
 				ProcessLineByLine(buffer, [&](const char *line) {
 					CCLOG("  %s", line);
 				});
+				if (old_infrastructure[i].signal != c->infrastructure.signal && _network_server && !HasChickenBit(DCBF_DESYNC_CHECK_PERIODIC_SIGNALS)) {
+					DoCommandP(0, 0, _settings_game.debug.chicken_bits | (1 << DCBF_DESYNC_CHECK_PERIODIC_SIGNALS), CMD_CHANGE_SETTING, nullptr, "debug.chicken_bits");
+				}
 			}
 			i++;
 		}
@@ -1654,8 +1680,9 @@ void CheckCaches(bool force_check, std::function<void(const char *)> log, CheckC
 							print_gv_cache_diff("train", gro_cache[length], Train::From(u)->gcache);
 						}
 						if (memcmp(&tra_cache[length], &Train::From(u)->tcache, sizeof(TrainCache)) != 0) {
-							CCLOGV("train cache mismatch: %c%c%c%c%c%c%c%c%c",
+							CCLOGV("train cache mismatch: %c%c%c%c%c%c%c%c%c%c",
 									tra_cache[length].cached_override != Train::From(u)->tcache.cached_override ? 'o' : '-',
+									tra_cache[length].cached_curve_speed_mod != Train::From(u)->tcache.cached_curve_speed_mod ? 'C' : '-',
 									tra_cache[length].cached_tflags != Train::From(u)->tcache.cached_tflags ? 'f' : '-',
 									tra_cache[length].cached_num_engines != Train::From(u)->tcache.cached_num_engines ? 'e' : '-',
 									tra_cache[length].cached_centre_mass != Train::From(u)->tcache.cached_centre_mass ? 'm' : '-',
@@ -1721,7 +1748,7 @@ void CheckCaches(bool force_check, std::function<void(const char *)> log, CheckC
 			/* Check docking tiles */
 			TileArea ta;
 			std::map<TileIndex, bool> docking_tiles;
-			TILE_AREA_LOOP(tile, st->docking_station) {
+			for (TileIndex tile : st->docking_station) {
 				ta.Add(tile);
 				docking_tiles[tile] = IsDockingTile(tile);
 			}
@@ -1730,7 +1757,7 @@ void CheckCaches(bool force_check, std::function<void(const char *)> log, CheckC
 				CCLOG("station docking mismatch: station %i, company %i, prev: (%X, %u, %u), recalc: (%X, %u, %u)",
 						st->index, (int)st->owner, ta.tile, ta.w, ta.h, st->docking_station.tile, st->docking_station.w, st->docking_station.h);
 			}
-			TILE_AREA_LOOP(tile, ta) {
+			for (TileIndex tile : ta) {
 				if (docking_tiles[tile] != IsDockingTile(tile)) {
 					CCLOG("docking tile mismatch: tile %i", (int)tile);
 				}
@@ -1866,6 +1893,14 @@ void StateGameLoop()
 		_tick_skip_counter++;
 		_scaled_tick_counter++; // This must update in lock-step with _tick_skip_counter, such that it always matches what SetScaledTickVariables would return.
 		_scaled_date_ticks++;   // "
+
+		if (_settings_client.gui.autosave == 6 && !(_game_mode == GM_MENU || _game_mode == GM_BOOTSTRAP) &&
+				(_scaled_date_ticks % (_settings_client.gui.autosave_custom_minutes * (60000 / MILLISECONDS_PER_TICK))) == 0) {
+			_do_autosave = true;
+			_check_special_modes = true;
+			SetWindowDirty(WC_STATUS_BAR, 0);
+		}
+
 		if (_tick_skip_counter < _settings_game.economy.day_length_factor) {
 			AnimateAnimatedTiles();
 			CallVehicleTicks();
@@ -1890,16 +1925,22 @@ void StateGameLoop()
 
 		CallWindowGameTickEvent();
 		NewsLoop();
-		cur_company.Restore();
 
 		for (Company *c : Company::Iterate()) {
 			DEBUG_UPDATESTATECHECKSUM("Company: %u, Money: " OTTD_PRINTF64, c->index, (int64)c->money);
 			UpdateStateChecksum(c->money);
 		}
+		cur_company.Restore();
 	}
 	if (_extra_aspects > 0) FlushDeferredAspectUpdates();
 
 	assert(IsLocalCompany());
+}
+
+FiosNumberedSaveName &GetAutoSaveFiosNumberedSaveName()
+{
+	static FiosNumberedSaveName _autosave_ctr("autosave");
+	return _autosave_ctr;
 }
 
 /**
@@ -1908,24 +1949,7 @@ void StateGameLoop()
  */
 static void DoAutosave()
 {
-	char buf[MAX_PATH];
-
-	if (_settings_client.gui.keep_all_autosave) {
-		GenerateDefaultSaveName(buf, lastof(buf));
-		strecat(buf, ".sav", lastof(buf));
-	} else {
-		static int _autosave_ctr = 0;
-
-		/* generate a savegame name and number according to _settings_client.gui.max_num_autosaves */
-		seprintf(buf, lastof(buf), "autosave%d.sav", _autosave_ctr);
-
-		if (++_autosave_ctr >= _settings_client.gui.max_num_autosaves) _autosave_ctr = 0;
-	}
-
-	DEBUG(sl, 2, "Autosaving to '%s'", buf);
-	if (SaveOrLoad(buf, SLO_SAVE, DFT_GAME_FILE, AUTOSAVE_DIR, true, SMF_ZSTD_OK) != SL_OK) {
-		ShowErrorMessage(STR_ERROR_AUTOSAVE_FAILED, INVALID_STRING_ID, WL_ERROR);
-	}
+	DoAutoOrNetsave(GetAutoSaveFiosNumberedSaveName(), true);
 }
 
 /**
@@ -2007,7 +2031,7 @@ void GameLoop()
 		if (_network_reconnect > 0 && --_network_reconnect == 0) {
 			/* This means that we want to reconnect to the last host
 			 * We do this here, because it means that the network is really closed */
-			NetworkClientConnectGame(_settings_client.network.last_host, _settings_client.network.last_port, COMPANY_SPECTATOR);
+			NetworkClientConnectGame(_settings_client.network.last_joined, COMPANY_SPECTATOR);
 		}
 		/* Singleplayer */
 		StateGameLoop();

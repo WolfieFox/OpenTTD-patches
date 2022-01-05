@@ -229,7 +229,18 @@ Money Ship::GetRunningCost() const
 {
 	const Engine *e = this->GetEngine();
 	uint cost_factor = GetVehicleProperty(this, PROP_SHIP_RUNNING_COST_FACTOR, e->u.ship.running_cost);
-	return GetPrice(PR_RUNNING_SHIP, cost_factor, e->GetGRF());
+	Money cost = GetPrice(PR_RUNNING_SHIP, cost_factor, e->GetGRF());
+
+	if (this->cur_speed == 0) {
+		if (this->IsInDepot()) {
+			/* running costs if in depot */
+			cost = CeilDivT<Money>(cost, _settings_game.difficulty.vehicle_costs_in_depot);
+		} else {
+			/* running costs if stopped */
+			cost = CeilDivT<Money>(cost, _settings_game.difficulty.vehicle_costs_when_stopped);
+		}
+	}
+	return cost;
 }
 
 void Ship::OnNewDay()
@@ -237,9 +248,12 @@ void Ship::OnNewDay()
 	if ((++this->day_counter & 7) == 0) {
 		DecreaseVehicleValue(this);
 	}
-
-	CheckVehicleBreakdown(this);
 	AgeVehicle(this);
+}
+
+void Ship::OnPeriodic()
+{
+	CheckVehicleBreakdown(this);
 	CheckIfShipNeedsService(this);
 
 	CheckOrders(this);
@@ -268,7 +282,7 @@ Trackdir Ship::GetVehicleTrackdir() const
 	}
 
 	if (this->state == TRACK_BIT_WORMHOLE) {
-		/* ship on aqueduct, so just use his direction and assume a diagonal track */
+		/* ship on aqueduct, so just use its direction and assume a diagonal track */
 		return DiagDirToDiagTrackdir(DirToDiagDir(this->direction));
 	}
 
@@ -361,6 +375,18 @@ static Vehicle *EnsureNoMovingShipProc(Vehicle *v, void *data)
 	return (v->vehstatus & (VS_HIDDEN | VS_STOPPED)) == 0 ? v : nullptr;
 }
 
+static bool CheckReverseShip(const Ship *v, Trackdir *trackdir = nullptr)
+{
+	/* Ask pathfinder for best direction */
+	bool reverse = false;
+	switch (_settings_game.pf.pathfinder_for_ships) {
+		case VPF_NPF: reverse = NPFShipCheckReverse(v, trackdir); break;
+		case VPF_YAPF: reverse = YapfShipCheckReverse(v, trackdir); break;
+		default: NOT_REACHED();
+	}
+	return reverse;
+}
+
 static bool CheckShipLeaveDepot(Ship *v)
 {
 	if (!v->IsChainInDepot()) return false;
@@ -397,14 +423,7 @@ static bool CheckShipLeaveDepot(Ship *v)
 	TrackBits north_tracks = DiagdirReachesTracks(north_dir) & GetTileShipTrackStatus(north_neighbour);
 	TrackBits south_tracks = DiagdirReachesTracks(south_dir) & GetTileShipTrackStatus(south_neighbour);
 	if (north_tracks && south_tracks) {
-		/* Ask pathfinder for best direction */
-		bool reverse = false;
-		switch (_settings_game.pf.pathfinder_for_ships) {
-			case VPF_NPF: reverse = NPFShipCheckReverse(v); break;
-			case VPF_YAPF: reverse = YapfShipCheckReverse(v); break;
-			default: NOT_REACHED();
-		}
-		if (reverse) north_tracks = TRACK_BIT_NONE;
+		if (CheckReverseShip(v)) north_tracks = TRACK_BIT_NONE;
 	}
 
 	if (north_tracks) {
@@ -820,6 +839,7 @@ static void ShipController(Ship *v)
 	const byte *b;
 	Track track;
 	TrackBits tracks;
+	GetNewVehiclePosResult gp;
 
 	v->tick_counter++;
 	v->current_order_time++;
@@ -828,7 +848,8 @@ static void ShipController(Ship *v)
 
 	if (v->vehstatus & VS_STOPPED) return;
 
-	ProcessOrders(v);
+	if (ProcessOrders(v) && CheckReverseShip(v)) goto reverse_direction;
+
 	v->HandleLoading();
 
 	if (v->current_order.IsType(OT_LOADING)) return;
@@ -849,9 +870,9 @@ static void ShipController(Ship *v)
 
 	if (ShipMoveUpDownOnLock(v)) return;
 
-	if (!ShipAccelerate(v)) return;
+	if (!ShipAccelerate(v) && !v->current_order.IsType(OT_LEAVESTATION)) return;
 
-	GetNewVehiclePosResult gp = GetNewVehiclePos(v);
+	gp = GetNewVehiclePos(v);
 	if (v->state != TRACK_BIT_WORMHOLE) {
 		/* Not on a bridge */
 		if (gp.old_tile == gp.new_tile) {
@@ -867,8 +888,25 @@ static void ShipController(Ship *v)
 				/* A leave station order only needs one tick to get processed, so we can
 				 * always skip ahead. */
 				if (v->current_order.IsType(OT_LEAVESTATION)) {
+					StationID station_id = v->current_order.GetDestination();
 					v->current_order.Free();
+
+					bool may_reverse = ProcessOrders(v);
+
+					if (v->current_order.IsType(OT_GOTO_STATION) && v->current_order.GetDestination() == station_id && IsDockingTile(gp.new_tile)) {
+						Station *st = Station::Get(station_id);
+						if (st->facilities & FACIL_DOCK && st->docking_station.Contains(gp.new_tile) && IsShipDestinationTile(gp.new_tile, station_id)) {
+							v->last_station_visited = station_id;
+							ShipArrivesAt(v, st);
+							v->BeginLoading();
+							return;
+						}
+					}
+
+					v->PlayLeaveStationSound();
+
 					SetWindowWidgetDirty(WC_VEHICLE_VIEW, v->index, WID_VV_START_STOP);
+					if (may_reverse && CheckReverseShip(v)) goto reverse_direction;
 					/* Test if continuing forward would lead to a dead-end, moving into the dock. */
 					DiagDirection exitdir = VehicleExitDir(v->direction, v->state);
 					TileIndex tile = TileAddByDiagDir(v->tile, exitdir);
@@ -912,7 +950,19 @@ static void ShipController(Ship *v)
 			DiagDirection diagdir = DiagdirBetweenTiles(gp.old_tile, gp.new_tile);
 			assert(diagdir != INVALID_DIAGDIR);
 			tracks = GetAvailShipTracks(gp.new_tile, diagdir);
-			if (tracks == TRACK_BIT_NONE) goto reverse_direction;
+			if (tracks == TRACK_BIT_NONE) {
+				Trackdir trackdir = INVALID_TRACKDIR;
+				CheckReverseShip(v, &trackdir);
+				if (trackdir == INVALID_TRACKDIR) goto reverse_direction;
+				static const Direction _trackdir_to_direction[] = {
+					DIR_NE, DIR_SE, DIR_E, DIR_E, DIR_S, DIR_S, INVALID_DIR, INVALID_DIR,
+					DIR_SW, DIR_NW, DIR_W, DIR_W, DIR_N, DIR_N, INVALID_DIR, INVALID_DIR,
+				};
+				v->direction = _trackdir_to_direction[trackdir];
+				assert(v->direction != INVALID_DIR);
+				v->state = TrackdirBitsToTrackBits(TrackdirToTrackdirBits(trackdir));
+				goto direction_changed;
+			}
 
 			/* Choose a direction, and continue if we find one */
 			track = ChooseShipTrack(v, gp.new_tile, diagdir, tracks);
@@ -989,6 +1039,7 @@ getout:
 
 reverse_direction:
 	v->direction = ReverseDir(v->direction);
+direction_changed:
 	/* Remember our current location to avoid movement glitch */
 	v->rotation_x_pos = v->x_pos;
 	v->rotation_y_pos = v->y_pos;

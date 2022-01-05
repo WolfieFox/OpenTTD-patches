@@ -263,6 +263,8 @@ static const StringID _direction_value_str[] = {
 	STR_TRACE_RESTRICT_DIRECTION_SE,
 	STR_TRACE_RESTRICT_DIRECTION_SW,
 	STR_TRACE_RESTRICT_DIRECTION_NW,
+	STR_TRACE_RESTRICT_DIRECTION_TUNBRIDGE_ENTRANCE,
+	STR_TRACE_RESTRICT_DIRECTION_TUNBRIDGE_EXIT,
 	INVALID_STRING_ID
 };
 static const uint _direction_value_val[] = {
@@ -272,6 +274,8 @@ static const uint _direction_value_val[] = {
 	TRNTSV_SE,
 	TRNTSV_SW,
 	TRNTSV_NW,
+	TRDTSV_TUNBRIDGE_ENTER,
+	TRDTSV_TUNBRIDGE_EXIT,
 };
 
 /** value drop down list for direction type strings and values */
@@ -346,12 +350,16 @@ static const StringID _time_date_value_str[] = {
 	STR_TRACE_RESTRICT_TIME_MINUTE,
 	STR_TRACE_RESTRICT_TIME_HOUR,
 	STR_TRACE_RESTRICT_TIME_HOUR_MINUTE,
+	STR_TRACE_RESTRICT_TIME_DAY,
+	STR_TRACE_RESTRICT_TIME_MONTH,
 	INVALID_STRING_ID
 };
 static const uint _time_date_value_val[] = {
 	TRTDVF_MINUTE,
 	TRTDVF_HOUR,
 	TRTDVF_HOUR_MINUTE,
+	TRTDVF_DAY,
+	TRTDVF_MONTH,
 };
 
 /** value drop down list for time/date types strings and values */
@@ -543,7 +551,6 @@ static const TraceRestrictDropDownListSet *GetTypeDropDownListSet(TraceRestrictG
 		} else {
 			*hide_mask = is_conditional ? 0x1FE0000 : 0x6F0;
 		}
-		if (is_conditional && !_settings_game.game_time.time_in_minutes) *hide_mask |= 0x800000;
 		if (is_conditional && _settings_game.vehicle.train_braking_model != TBM_REALISTIC) *hide_mask |= 0x1040000;
 	}
 	return is_conditional ? &set_cond : &set_action;
@@ -560,12 +567,12 @@ static const TraceRestrictDropDownListSet *GetSortedCargoTypeDropDownListSet()
 		cargo_list_str, cargo_list_id,
 	};
 
-	for (size_t i = 0; i < _sorted_standard_cargo_specs_size; ++i) {
+	for (size_t i = 0; i < _sorted_standard_cargo_specs.size(); ++i) {
 		const CargoSpec *cs = _sorted_cargo_specs[i];
 		cargo_list_str[i] = cs->name;
 		cargo_list_id[i] = cs->Index();
 	}
-	cargo_list_str[_sorted_standard_cargo_specs_size] = INVALID_STRING_ID;
+	cargo_list_str[_sorted_standard_cargo_specs.size()] = INVALID_STRING_ID;
 
 	return &cargo_list;
 }
@@ -1122,7 +1129,9 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 					break;
 
 				case TRVT_DIRECTION:
-					if (GetTraceRestrictValue(item) >= TRDTSV_FRONT) {
+					if (GetTraceRestrictValue(item) >= TRDTSV_TUNBRIDGE_ENTER) {
+						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ENTRY_SIGNAL_TYPE;
+					} else if (GetTraceRestrictValue(item) >= TRDTSV_FRONT) {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ENTRY_SIGNAL_FACE;
 					} else {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ENTRY_DIRECTION;
@@ -1757,10 +1766,10 @@ public:
 					ConvertValueToDecimal(type, GetTraceRestrictValue(item), value, decimal);
 					SetDParam(0, value);
 					SetDParam(1, decimal);
-					char *saved = _settings_game.locale.digit_group_separator;
-					_settings_game.locale.digit_group_separator = const_cast<char*>("");
+					std::string saved = std::move(_settings_game.locale.digit_group_separator);
+					_settings_game.locale.digit_group_separator.clear();
 					ShowQueryString(STR_JUST_DECIMAL, STR_TRACE_RESTRICT_VALUE_CAPTION, 16, this, CS_NUMERAL_DECIMAL, QSF_NONE);
-					_settings_game.locale.digit_group_separator = saved;
+					_settings_game.locale.digit_group_separator = std::move(saved);
 				}
 				break;
 			}
@@ -1858,7 +1867,7 @@ public:
 					}
 
 					case TRVT_TIME_DATE_INT: {
-						this->ShowDropDownListWithValue(&_time_date_value, GetTraceRestrictValue(item), false, TR_WIDGET_LEFT_AUX_DROPDOWN, 0, 0, UINT_MAX);
+						this->ShowDropDownListWithValue(&_time_date_value, GetTraceRestrictValue(item), false, TR_WIDGET_LEFT_AUX_DROPDOWN, _settings_game.game_time.time_in_minutes ? 0 : 7, 0, UINT_MAX);
 						break;
 					}
 
@@ -2090,7 +2099,7 @@ public:
 	 */
 	void OnPlaceObjectSignal(Point pt, TileIndex source_tile, int widget, int error_message)
 	{
-		if (!IsPlainRailTile(source_tile)) {
+		if (!IsPlainRailTile(source_tile) && !IsRailTunnelBridgeTile(source_tile)) {
 			ShowErrorMessage(error_message, STR_ERROR_THERE_IS_NO_RAILROAD_TRACK, WL_INFO);
 			return;
 		}
@@ -2109,14 +2118,26 @@ public:
 			return;
 		}
 
-		if (!HasTrack(source_tile, source_track)) {
-			ShowErrorMessage(error_message, STR_ERROR_THERE_IS_NO_RAILROAD_TRACK, WL_INFO);
-			return;
-		}
+		if (IsTileType(source_tile, MP_RAILWAY)) {
+			if (!HasTrack(source_tile, source_track)) {
+				ShowErrorMessage(error_message, STR_ERROR_THERE_IS_NO_RAILROAD_TRACK, WL_INFO);
+				return;
+			}
 
-		if (!HasSignalOnTrack(source_tile, source_track)) {
-			ShowErrorMessage(error_message, STR_ERROR_THERE_ARE_NO_SIGNALS, WL_INFO);
-			return;
+			if (!HasSignalOnTrack(source_tile, source_track)) {
+				ShowErrorMessage(error_message, STR_ERROR_THERE_ARE_NO_SIGNALS, WL_INFO);
+				return;
+			}
+		} else {
+			if (!HasTrack(GetTunnelBridgeTrackBits(source_tile), source_track)) {
+				ShowErrorMessage(error_message, STR_ERROR_THERE_IS_NO_RAILROAD_TRACK, WL_INFO);
+				return;
+			}
+
+			if (!IsTunnelBridgeWithSignalSimulation(source_tile) || !HasTrack(GetAcrossTunnelBridgeTrackBits(source_tile), source_track)) {
+				ShowErrorMessage(error_message, STR_ERROR_THERE_ARE_NO_SIGNALS, WL_INFO);
+				return;
+			}
 		}
 
 		switch (widget) {

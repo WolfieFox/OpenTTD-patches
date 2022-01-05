@@ -260,6 +260,8 @@ add_files(
     newgrf_debug_gui.cpp
     newgrf_engine.cpp
     newgrf_engine.h
+    newgrf_extension.cpp
+    newgrf_extension.h
     newgrf_generic.cpp
     newgrf_generic.h
     newgrf_gui.cpp
@@ -334,6 +336,7 @@ add_files(
     rail_cmd.cpp
     rail_gui.cpp
     rail_gui.h
+    rail_gui_type.h
     rail_map.h
     rail_type.h
     random_access_file.cpp
@@ -517,6 +520,7 @@ add_files(
     viewport_type.h
     void_cmd.cpp
     void_map.h
+    walltime_func.h
     water.h
     water_cmd.cpp
     water_map.h

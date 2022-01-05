@@ -59,13 +59,6 @@
 	return UINT_MAX;
 }
 
-/* virtual */ const SpriteGroup *RailTypeResolverObject::ResolveReal(const RealSpriteGroup *group) const
-{
-	if (!group->loading.empty()) return group->loading[0];
-	if (!group->loaded.empty())  return group->loaded[0];
-	return nullptr;
-}
-
 GrfSpecFeature RailTypeResolverObject::GetFeature() const
 {
 	return GSF_RAILTYPES;
@@ -153,6 +146,8 @@ static PalSpriteID GetRailTypeCustomSignalSprite(const RailtypeInfo *rti, TileIn
  */
 CustomSignalSpriteResult GetCustomSignalSprite(const RailtypeInfo *rti, TileIndex tile, SignalType type, SignalVariant var, uint8 aspect, bool gui, bool restricted)
 {
+	if (_settings_client.gui.show_all_signal_default) return { { 0, PAL_NONE }, false };
+
 	PalSpriteID spr = GetRailTypeCustomSignalSprite(rti, tile, type, var, aspect, gui, restricted);
 	if (spr.sprite != 0) return { spr, HasBit(rti->ctrl_flags, RTCF_RESTRICTEDSIG) };
 

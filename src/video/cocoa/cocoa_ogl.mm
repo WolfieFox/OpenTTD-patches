@@ -12,6 +12,8 @@
 #include "../../stdafx.h"
 #include "../../os/macosx/macos.h"
 
+#define GL_SILENCE_DEPRECATION
+
 #define Rect  OTTDRect
 #define Point OTTDPoint
 #import <Cocoa/Cocoa.h>
@@ -150,7 +152,6 @@ static bool _allowSoftware;
 {
 	if (self = [ super initWithFrame:frameRect ]) {
 		/* We manage our content updates ourselves. */
-		self.wantsBestResolutionOpenGLSurface = _allow_hidpi_window ? YES : NO;
 		self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawOnSetNeedsDisplay;
 
 		/* Create backing layer. */
@@ -231,11 +232,15 @@ void VideoDriver_CocoaOpenGL::Stop()
 
 void VideoDriver_CocoaOpenGL::PopulateSystemSprites()
 {
+	VideoDriver_Cocoa::PopulateSystemSprites();
+
 	OpenGLBackend::Get()->PopulateCursorCache();
 }
 
 void VideoDriver_CocoaOpenGL::ClearSystemSprites()
 {
+	VideoDriver_Cocoa::ClearSystemSprites();
+
 	CGLSetCurrentContext(this->gl_context);
 	OpenGLBackend::Get()->ClearCursorCache();
 }

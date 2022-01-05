@@ -204,14 +204,21 @@ public:
 	 * @param tile Current position
 	 * @param td1 Forward direction
 	 * @param td2 Reverse direction
+	 * @param trackdir [out] the best of all possible reversed trackdirs
 	 * @return true if the reverse direction is better
 	 */
-	static bool CheckShipReverse(const Ship *v, TileIndex tile, Trackdir td1, Trackdir td2)
+	static bool CheckShipReverse(const Ship *v, TileIndex tile, Trackdir td1, Trackdir td2, Trackdir *trackdir)
 	{
 		/* create pathfinder instance */
 		Tpf pf;
 		/* set origin and destination nodes */
-		pf.SetOrigin(tile, TrackdirToTrackdirBits(td1) | TrackdirToTrackdirBits(td2));
+		if (trackdir == nullptr) {
+			pf.SetOrigin(tile, TrackdirToTrackdirBits(td1) | TrackdirToTrackdirBits(td2));
+		} else {
+			DiagDirection entry = ReverseDiagDir(VehicleExitDir(v->direction, v->state));
+			TrackdirBits rtds = DiagdirReachesTrackdirs(entry) & TrackStatusToTrackdirBits(GetTileTrackStatus(tile, TRANSPORT_WATER, 0, entry));
+			pf.SetOrigin(tile, rtds);
+		}
 		pf.SetDestination(v);
 		/* find best path */
 		if (!pf.FindPath(v)) return false;
@@ -226,8 +233,12 @@ public:
 		}
 
 		Trackdir best_trackdir = pNode->GetTrackdir();
-		assert(best_trackdir == td1 || best_trackdir == td2);
-		return best_trackdir == td2;
+		if (trackdir != nullptr) {
+			*trackdir = best_trackdir;
+		} else {
+			assert(best_trackdir == td1 || best_trackdir == td2);
+		}
+		return best_trackdir != td1;
 	}
 };
 
@@ -353,13 +364,13 @@ Track YapfShipChooseTrack(const Ship *v, TileIndex tile, DiagDirection enterdir,
 	return (td_ret != INVALID_TRACKDIR) ? TrackdirToTrack(td_ret) : INVALID_TRACK;
 }
 
-bool YapfShipCheckReverse(const Ship *v)
+bool YapfShipCheckReverse(const Ship *v, Trackdir *trackdir)
 {
 	Trackdir td = v->GetVehicleTrackdir();
 	Trackdir td_rev = ReverseTrackdir(td);
 	TileIndex tile = v->tile;
 
-	typedef bool (*PfnCheckReverseShip)(const Ship*, TileIndex, Trackdir, Trackdir);
+	typedef bool (*PfnCheckReverseShip)(const Ship*, TileIndex, Trackdir, Trackdir, Trackdir*);
 	PfnCheckReverseShip pfnCheckReverseShip = CYapfShip2::CheckShipReverse; // default: ExitDir
 
 	/* check if non-default YAPF type needed */
@@ -367,7 +378,7 @@ bool YapfShipCheckReverse(const Ship *v)
 		pfnCheckReverseShip = &CYapfShip1::CheckShipReverse; // Trackdir
 	}
 
-	bool reverse = pfnCheckReverseShip(v, tile, td, td_rev);
+	bool reverse = pfnCheckReverseShip(v, tile, td, td_rev, trackdir);
 
 	return reverse;
 }

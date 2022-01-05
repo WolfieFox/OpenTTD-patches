@@ -57,6 +57,8 @@ static Window *_last_scroll_window = nullptr; ///< Window of the last scroll eve
 WindowBase *_z_front_window = nullptr;
 /** List of windows opened at the screen sorted from the back. */
 WindowBase *_z_back_window  = nullptr;
+/** List of windows in an arbitrary order, that is not instantaneously changed by bringing windows to the front. */
+WindowBase *_first_window  = nullptr;
 
 /** If false, highlight is white, otherwise the by the widget defined colour. */
 bool _window_highlight_colour = false;
@@ -143,13 +145,12 @@ int16 WindowDesc::GetDefaultHeight() const
  */
 void WindowDesc::LoadFromConfig()
 {
-	IniFile *ini = new IniFile();
-	ini->LoadFromDisk(_windows_file, NO_DIRECTORY);
+	IniFile ini;
+	ini.LoadFromDisk(_windows_file, NO_DIRECTORY);
 	for (WindowDesc *wd : *_window_descs) {
 		if (wd->ini_key == nullptr) continue;
 		IniLoadWindowSettings(ini, wd->ini_key, wd);
 	}
-	delete ini;
 }
 
 /**
@@ -169,14 +170,13 @@ void WindowDesc::SaveToConfig()
 	/* Sort the stuff to get a nice ini file on first write */
 	std::sort(_window_descs->begin(), _window_descs->end(), DescSorter);
 
-	IniFile *ini = new IniFile();
-	ini->LoadFromDisk(_windows_file, NO_DIRECTORY);
+	IniFile ini;
+	ini.LoadFromDisk(_windows_file, NO_DIRECTORY);
 	for (WindowDesc *wd : *_window_descs) {
 		if (wd->ini_key == nullptr) continue;
 		IniSaveWindowSettings(ini, wd->ini_key, wd);
 	}
-	ini->SaveToDisk(_windows_file);
-	delete ini;
+	ini.SaveToDisk(_windows_file);
 }
 
 /**
@@ -1193,14 +1193,10 @@ void DeleteWindowById(WindowClass cls, WindowNumber number, bool force)
  */
 void DeleteWindowByClass(WindowClass cls)
 {
-restart_search:
-	/* When we find the window to delete, we need to restart the search
-	 * as deleting this window could cascade in deleting (many) others
-	 * anywhere in the z-array */
-	for (Window *w : Window::IterateFromBack()) {
+	/* Note: the container remains stable, even when deleting windows. */
+	for (Window *w : Window::IterateUnordered()) {
 		if (w->window_class == cls) {
 			delete w;
-			goto restart_search;
 		}
 	}
 }
@@ -1213,14 +1209,10 @@ restart_search:
  */
 void DeleteCompanyWindows(CompanyID id)
 {
-restart_search:
-	/* When we find the window to delete, we need to restart the search
-	 * as deleting this window could cascade in deleting (many) others
-	 * anywhere in the z-array */
-	for (Window *w : Window::IterateFromBack()) {
+	/* Note: the container remains stable, even when deleting windows. */
+	for (Window *w : Window::IterateUnordered()) {
 		if (w->owner == id) {
 			delete w;
-			goto restart_search;
 		}
 	}
 
@@ -1347,6 +1339,7 @@ static uint GetWindowZPriority(WindowClass wc)
 
 		case WC_ERRMSG:
 		case WC_CONFIRM_POPUP_QUERY:
+		case WC_NETWORK_ASK_RELAY:
 		case WC_MODAL_PROGRESS:
 		case WC_NETWORK_STATUS_WINDOW:
 		case WC_SAVE_PRESET:
@@ -1510,6 +1503,8 @@ void Window::InitializeData(WindowNumber window_number)
 
 	/* Insert the window into the correct location in the z-ordering. */
 	AddWindowToZOrdering(this);
+	this->next_window = _first_window;
+	_first_window = this;
 }
 
 /**
@@ -1910,6 +1905,7 @@ void InitWindowSystem()
 
 	_z_back_window = nullptr;
 	_z_front_window = nullptr;
+	_first_window = nullptr;
 	_focused_window = nullptr;
 	_mouseover_last_w = nullptr;
 	_last_scroll_window = nullptr;
@@ -1930,7 +1926,7 @@ void UnInitWindowSystem()
 {
 	UnshowCriticalError();
 
-	for (Window *w : Window::IterateFromFront()) delete w;
+	for (Window *w : Window::IterateUnordered()) delete w;
 
 	for (WindowBase *w = _z_front_window; w != nullptr; /* nothing */) {
 		WindowBase *to_del = w;
@@ -1940,6 +1936,7 @@ void UnInitWindowSystem()
 
 	_z_front_window = nullptr;
 	_z_back_window = nullptr;
+	_first_window = nullptr;
 }
 
 /**
@@ -2699,6 +2696,22 @@ bool FocusWindowById(WindowClass cls, WindowNumber number)
 }
 
 /**
+ * Handle Toolbar hotkey events - can come from a source like the MacBook Touch Bar.
+ * @param hotkey Hotkey code
+ */
+void HandleToolbarHotkey(int hotkey)
+{
+	assert(HasModalProgress() || IsLocalCompany());
+
+	Window *w = FindWindowById(WC_MAIN_TOOLBAR, 0);
+	if (w != nullptr) {
+		if (w->window_desc->hotkeys != nullptr) {
+			if (hotkey >= 0 && w->OnHotkey(hotkey) == ES_HANDLED) return;
+		}
+	}
+}
+
+/**
  * Handle keyboard input.
  * @param keycode Virtual keycode of the key.
  * @param key Unicode character of the key.
@@ -3145,6 +3158,8 @@ void InputLoop()
 
 	CheckSoftLimit();
 
+	bool reset_window_nexts = false;
+
 	/* Do the actual free of the deleted windows. */
 	for (WindowBase *v = _z_front_window; v != nullptr; /* nothing */) {
 		WindowBase *w = v;
@@ -3154,6 +3169,14 @@ void InputLoop()
 
 		RemoveWindowFromZOrdering(w);
 		free(w);
+		reset_window_nexts = true;
+	}
+
+	if (reset_window_nexts) {
+		_first_window = _z_front_window;
+		for (WindowBase *w = _z_front_window; w != nullptr; w = w->z_back) {
+			w->next_window = w->z_back;
+		}
 	}
 
 	if (_input_events_this_tick != 0) {
@@ -3406,11 +3429,8 @@ void CallWindowGameTickEvent()
  */
 void DeleteNonVitalWindows()
 {
-restart_search:
-	/* When we find the window to delete, we need to restart the search
-	 * as deleting this window could cascade in deleting (many) others
-	 * anywhere in the z-array */
-	for (const Window *w : Window::IterateFromBack()) {
+	/* Note: the container remains stable, even when deleting windows. */
+	for (const Window *w : Window::IterateUnordered()) {
 		if (w->window_class != WC_MAIN_WINDOW &&
 				w->window_class != WC_SELECT_GAME &&
 				w->window_class != WC_MAIN_TOOLBAR &&
@@ -3419,7 +3439,6 @@ restart_search:
 				(w->flags & WF_STICKY) == 0) { // do not delete windows which are 'pinned'
 
 			delete w;
-			goto restart_search;
 		}
 	}
 }
@@ -3436,14 +3455,10 @@ void DeleteAllNonVitalWindows()
 	/* Delete every window except for stickied ones, then sticky ones as well */
 	DeleteNonVitalWindows();
 
-restart_search:
-	/* When we find the window to delete, we need to restart the search
-	 * as deleting this window could cascade in deleting (many) others
-	 * anywhere in the z-array */
-	for (const Window *w : Window::IterateFromBack()) {
+	/* Note: the container remains stable, even when deleting windows. */
+	for (const Window *w : Window::IterateUnordered()) {
 		if (w->flags & WF_STICKY) {
 			delete w;
-			goto restart_search;
 		}
 	}
 }
@@ -3465,14 +3480,10 @@ void DeleteAllMessages()
  */
 void DeleteConstructionWindows()
 {
-restart_search:
-	/* When we find the window to delete, we need to restart the search
-	 * as deleting this window could cascade in deleting (many) others
-	 * anywhere in the z-array */
-	for (const Window *w : Window::IterateFromBack()) {
+	/* Note: the container remains stable, even when deleting windows. */
+	for (const Window *w : Window::IterateUnordered()) {
 		if (w->window_desc->flags & WDF_CONSTRUCTION) {
 			delete w;
-			goto restart_search;
 		}
 	}
 }
