@@ -3995,6 +3995,42 @@ bool AfterLoadGame()
 		_settings_game.station.station_delivery_mode = SD_NEAREST_FIRST;
 	}
 
+	if (SlXvIsFeatureMissing(XSLFI_TL_SPEED_LIMIT)) {
+		_settings_game.vehicle.through_load_speed_limit = 15;
+	}
+
+	if (SlXvIsFeaturePresent(XSLFI_SCHEDULED_DISPATCH, 1, 2)) {
+		for (OrderList *order_list : OrderList::Iterate()) {
+			if (order_list->GetScheduledDispatchScheduleCount() == 1) {
+				const DispatchSchedule &ds = order_list->GetDispatchScheduleByIndex(0);
+				if (!ds.IsScheduledDispatchValid() && ds.GetScheduledDispatch().empty()) {
+					order_list->GetScheduledDispatchScheduleSet().clear();
+				} else {
+					VehicleOrderID idx = order_list->GetFirstSharedVehicle()->GetFirstWaitingLocation(false);
+					if (idx != INVALID_VEH_ORDER_ID) {
+						order_list->GetOrderAt(idx)->SetDispatchScheduleIndex(0);
+					}
+				}
+			}
+		}
+	}
+
+	if (SlXvIsFeaturePresent(XSLFI_TRACE_RESTRICT, 7, 12)) {
+		/* Move vehicle in slot flag */
+		for (Vehicle *v : Vehicle::Iterate()) {
+			if (v->type == VEH_TRAIN && HasBit(Train::From(v)->flags, 2)) { /* was VRF_HAVE_SLOT */
+				SetBit(v->vehicle_flags, VF_HAVE_SLOT);
+				ClrBit(Train::From(v)->flags, 2);
+			} else {
+				ClrBit(v->vehicle_flags, VF_HAVE_SLOT);
+			}
+		}
+	} else if (SlXvIsFeatureMissing(XSLFI_TRACE_RESTRICT)) {
+		for (Vehicle *v : Vehicle::Iterate()) {
+			ClrBit(v->vehicle_flags, VF_HAVE_SLOT);
+		}
+	}
+
 	InitializeRoadGUI();
 
 	/* This needs to be done after conversion. */

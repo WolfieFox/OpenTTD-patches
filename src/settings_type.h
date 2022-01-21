@@ -22,6 +22,7 @@
 #include "openttd.h"
 #include "rail_gui_type.h"
 #include "station_type.h"
+#include "signal_type.h"
 
 /* Used to validate sizes of "max" value in settings. */
 const size_t MAX_SLE_UINT8 = UINT8_MAX;
@@ -192,6 +193,7 @@ struct GUISettings : public TimeSettings {
 	bool   pause_on_newgame;                 ///< whether to start new games paused or not
 	SignalGUISettings signal_gui_mode;       ///< select which signal types are shown in the signal GUI
 	SignalCycleSettings cycle_signal_types;  ///< Which signal types to cycle with the build signal tool.
+	SignalType default_signal_type;          ///< The default signal type, which is set automatically by the last signal used. Not available in Settings.
 	Year   coloured_news_year;               ///< when does newspaper become coloured?
 	bool   override_time_settings;           ///< Whether to override time display settings stored in savegame.
 	bool   timetable_in_ticks;               ///< whether to show the timetable in ticks rather than days
@@ -626,6 +628,7 @@ struct VehicleSettings {
 	bool   roadveh_articulated_overtaking;   ///< enable articulated road vehicles overtaking other vehicles
 	bool   roadveh_cant_quantum_tunnel;      ///< enable or disable vehicles quantum tunelling through over vehicles when blocked
 	bool   drive_through_train_depot;        ///< enable drive-through train depot emulation
+	uint16 through_load_speed_limit;         ///< maximum speed for through load
 };
 
 /** Settings related to the economy. */
