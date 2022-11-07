@@ -52,8 +52,10 @@ void CcTerraform(const CommandCost &result, TileIndex tile, uint32 p1, uint32 p2
 	if (result.Succeeded()) {
 		if (_settings_client.sound.confirm) SndPlayTileFx(SND_1F_CONSTRUCTION_OTHER, tile);
 	} else {
-		extern TileIndex _terraform_err_tile;
-		SetRedErrorSquare(_terraform_err_tile);
+		TileIndex err_tile = result.GetTile();
+		if (err_tile == INVALID_TILE || IsValidTile(err_tile)) {
+			SetRedErrorSquare(err_tile);
+		}
 	}
 }
 
@@ -264,7 +266,7 @@ struct TerraformToolbarWindow : Window {
 				break;
 
 			case WID_TT_MEASUREMENT_TOOL:
-				HandlePlacePushButton(this, WID_TT_MEASUREMENT_TOOL, SPR_CURSOR_QUERY, HT_RECT);
+				HandlePlacePushButton(this, WID_TT_MEASUREMENT_TOOL, SPR_CURSOR_QUERY, HT_RECT | HT_MAP);
 				this->last_user_action = widget;
 				break;
 

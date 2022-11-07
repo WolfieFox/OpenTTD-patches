@@ -1759,7 +1759,7 @@ static void DrawSmallOrderList(const Vehicle *v, int left, int right, int y, uin
 		oid++;
 		order = order->next;
 		if (order == nullptr) {
-			order = v->orders.list->GetFirstOrder();
+			order = v->orders->GetFirstOrder();
 			oid = 0;
 		}
 	} while (oid != start);
@@ -1994,7 +1994,7 @@ void BaseVehicleListWindow::DrawVehicleListItems(VehicleID selected_vehicle, int
 					DrawString(text_left, text_right, y, STR_TINY_BLACK_VEHICLE);
 				} else if (v->group_id != DEFAULT_GROUP) {
 					/* The vehicle has no name, but is member of a group, so print group name */
-					SetDParam(0, v->group_id);
+					SetDParam(0, v->group_id | GROUP_NAME_HIERARCHY);
 					DrawString(text_left, text_right, y, STR_TINY_GROUP, TC_BLACK);
 				}
 
@@ -2018,6 +2018,22 @@ void BaseVehicleListWindow::DrawVehicleListItems(VehicleID selected_vehicle, int
 				for (int i = 0; i < static_cast<int>(vehgroup.NumVehicles()); ++i) {
 					if (image_left + 8 * i >= image_right) break; // Break if there is no more space to draw any more vehicles anyway.
 					DrawVehicleImage(vehgroup.vehicles_begin[i], image_left + 8 * i, image_right, y + FONT_HEIGHT_SMALL - 1, selected_vehicle, EIT_IN_LIST, 0);
+				}
+
+				if (vehgroup.vehicles_begin[0]->group_id != DEFAULT_GROUP) {
+					/* If all vehicles are in the same group, print group name */
+					GroupID gid = vehgroup.vehicles_begin[0]->group_id;
+					bool show_group = true;
+					for (int i = 1; i < static_cast<int>(vehgroup.NumVehicles()); ++i) {
+						if (vehgroup.vehicles_begin[i]->group_id != gid) {
+							show_group = false;
+							break;
+						}
+					}
+					if (show_group) {
+						SetDParam(0, gid | GROUP_NAME_HIERARCHY);
+						DrawString(text_left, text_right, y, STR_TINY_GROUP, TC_BLACK);
+					}
 				}
 
 				if (show_orderlist) DrawSmallOrderList((vehgroup.vehicles_begin[0])->GetFirstOrder(), orderlist_left, orderlist_right, y, this->order_arrow_width);
@@ -2460,7 +2476,7 @@ public:
 		if (IsDepotTile(tile) && GetDepotVehicleType(tile) == this->vli.vtype) {
 			if (this->vli.type != VL_DEPOT_LIST) return;
 			if (!IsInfraTileUsageAllowed(this->vli.vtype, this->vli.company, tile)) return;
-			if (this->vli.vtype == VEH_ROAD && GetRoadTypes(Depot::Get(this->vli.index)->xy) != GetRoadTypes(tile)) return;
+			if (this->vli.vtype == VEH_ROAD && GetPresentRoadTramTypes(Depot::Get(this->vli.index)->xy) != GetPresentRoadTramTypes(tile)) return;
 
 			DestinationID dest = (this->vli.vtype == VEH_AIRCRAFT) ? GetStationIndex(tile) : GetDepotIndex(tile);
 			DoCommandP(0, this->vli.index | (this->vli.vtype << 16) | (OT_GOTO_DEPOT << 20), dest, CMD_MASS_CHANGE_ORDER);
@@ -2470,6 +2486,7 @@ public:
 
 		/* check rail waypoint or buoy (no ownership) */
 		if ((IsRailWaypointTile(tile) && this->vli.vtype == VEH_TRAIN && IsInfraTileUsageAllowed(VEH_TRAIN, this->vli.company, tile))
+				|| (IsRoadWaypointTile(tile) && this->vli.vtype == VEH_ROAD && IsInfraTileUsageAllowed(VEH_ROAD, this->vli.company, tile))
 				|| (IsBuoyTile(tile) && this->vli.vtype == VEH_SHIP)) {
 			if (this->vli.type != VL_STATION_LIST) return;
 			if (!(Station::Get(this->vli.index)->facilities & FACIL_WAYPOINT)) return;
@@ -2480,7 +2497,7 @@ public:
 
 		if (IsTileType(tile, MP_STATION)) {
 			if (this->vli.type != VL_STATION_LIST) return;
-			if (Station::Get(this->vli.index)->facilities & FACIL_WAYPOINT) return;
+			if (BaseStation::Get(this->vli.index)->facilities & FACIL_WAYPOINT) return;
 
 			StationID st_index = GetStationIndex(tile);
 			const Station *st = Station::Get(st_index);
@@ -2730,6 +2747,7 @@ struct VehicleDetailsWindow : Window {
 	bool vehicle_weight_ratio_line_shown;
 	bool vehicle_slots_line_shown;
 	bool vehicle_speed_restriction_line_shown;
+	bool vehicle_speed_adaptation_exempt_line_shown;
 
 	/** Initialize a newly created vehicle details window */
 	VehicleDetailsWindow(WindowDesc *desc, WindowNumber window_number) : Window(desc)
@@ -2829,6 +2847,12 @@ struct VehicleDetailsWindow : Window {
 		return Train::From(v)->speed_restriction != 0;
 	}
 
+	bool ShouldShowSpeedAdaptationExemptLine(const Vehicle *v) const
+	{
+		if (v->type != VEH_TRAIN) return false;
+		return HasBit(Train::From(v)->flags, VRF_SPEED_ADAPTATION_EXEMPT);
+	}
+
 	void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
 	{
 		switch (widget) {
@@ -2839,11 +2863,13 @@ struct VehicleDetailsWindow : Window {
 				this->vehicle_weight_ratio_line_shown = ShouldShowWeightRatioLine(v);
 				this->vehicle_slots_line_shown = ShouldShowSlotsLine(v);
 				this->vehicle_speed_restriction_line_shown = ShouldShowSpeedRestrictionLine(v);
+				this->vehicle_speed_adaptation_exempt_line_shown = ShouldShowSpeedAdaptationExemptLine(v);
 				int lines = 4;
 				if (this->vehicle_group_line_shown) lines++;
 				if (this->vehicle_weight_ratio_line_shown) lines++;
 				if (this->vehicle_slots_line_shown) lines++;
 				if (this->vehicle_speed_restriction_line_shown) lines++;
+				if (this->vehicle_speed_adaptation_exempt_line_shown) lines++;
 				size->height = WD_FRAMERECT_TOP + lines * FONT_HEIGHT_NORMAL + WD_FRAMERECT_BOTTOM;
 
 				for (uint i = 0; i < 5; i++) SetDParamMaxValue(i, INT16_MAX);
@@ -2869,12 +2895,14 @@ struct VehicleDetailsWindow : Window {
 					dim = maxdim(dim, GetStringBoundingBox(STR_VEHICLE_INFO_PROFIT_THIS_YEAR_LAST_YEAR_LIFETIME));
 				}
 				if (this->vehicle_group_line_shown) {
-					SetDParam(0, v->group_id);
+					SetDParam(0, v->group_id | GROUP_NAME_HIERARCHY);
 					dim = maxdim(dim, GetStringBoundingBox(STR_VEHICLE_INFO_GROUP));
 				}
 				if (this->vehicle_weight_ratio_line_shown) {
-					SetDParamMaxValue(0, 1 << 16);
+					SetDParam(0, STR_VEHICLE_INFO_POWER_WEIGHT_RATIO);
 					SetDParamMaxValue(1, 1 << 16);
+					SetDParam(2, (v->type != VEH_TRAIN || Train::From(v)->GetAccelerationType() == 2) ? STR_EMPTY : STR_VEHICLE_INFO_TE_WEIGHT_RATIO);
+					SetDParamMaxValue(3, 1 << 16);
 					dim = maxdim(dim, GetStringBoundingBox(STR_VEHICLE_INFO_WEIGHT_RATIOS));
 				}
 				SetDParam(0, STR_VEHICLE_INFO_AGE);
@@ -3021,8 +3049,10 @@ struct VehicleDetailsWindow : Window {
 
 				bool should_show_weight_ratio = this->ShouldShowWeightRatioLine(v);
 				if (should_show_weight_ratio) {
-					SetDParam(0, (100 * Train::From(v)->gcache.cached_power) / std::max<uint>(1, Train::From(v)->gcache.cached_weight));
-					SetDParam(1, (Train::From(v)->gcache.cached_max_te / 10) / std::max<uint>(1, Train::From(v)->gcache.cached_weight));
+					SetDParam(0, STR_VEHICLE_INFO_POWER_WEIGHT_RATIO);
+					SetDParam(1, (100 * Train::From(v)->gcache.cached_power) / std::max<uint>(1, Train::From(v)->gcache.cached_weight));
+					SetDParam(2, Train::From(v)->GetAccelerationType() == 2 ? STR_EMPTY : STR_VEHICLE_INFO_TE_WEIGHT_RATIO);
+					SetDParam(3, (Train::From(v)->gcache.cached_max_te / 10) / std::max<uint>(1, Train::From(v)->gcache.cached_weight));
 					DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_RIGHT, y, STR_VEHICLE_INFO_WEIGHT_RATIOS);
 					y += FONT_HEIGHT_NORMAL;
 				}
@@ -3072,7 +3102,7 @@ struct VehicleDetailsWindow : Window {
 
 				bool should_show_group = this->ShouldShowGroupLine(v);
 				if (should_show_group) {
-					SetDParam(0, v->group_id);
+					SetDParam(0, v->group_id | GROUP_NAME_HIERARCHY);
 					DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_RIGHT, y, STR_VEHICLE_INFO_GROUP);
 					y += FONT_HEIGHT_NORMAL;
 				}
@@ -3104,10 +3134,17 @@ struct VehicleDetailsWindow : Window {
 					y += FONT_HEIGHT_NORMAL;
 				}
 
+				bool should_show_speed_adaptation_exempt = this->ShouldShowSpeedAdaptationExemptLine(v);
+				if (should_show_speed_adaptation_exempt) {
+					DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_RIGHT, y, STR_VEHICLE_INFO_SPEED_ADAPTATION_EXEMPT);
+					y += FONT_HEIGHT_NORMAL;
+				}
+
 				if (this->vehicle_weight_ratio_line_shown != should_show_weight_ratio ||
 						this->vehicle_weight_ratio_line_shown != should_show_weight_ratio ||
 						this->vehicle_slots_line_shown != should_show_slots ||
-						this->vehicle_speed_restriction_line_shown != should_show_speed_restriction) {
+						this->vehicle_speed_restriction_line_shown != should_show_speed_restriction ||
+						this->vehicle_speed_adaptation_exempt_line_shown != should_show_speed_adaptation_exempt) {
 					const_cast<VehicleDetailsWindow *>(this)->ReInit();
 				}
 				break;
@@ -3409,7 +3446,7 @@ void CcStartStopVehicle(const CommandCost &result, TileIndex tile, uint32 p1, ui
 	if (result.Failed()) return;
 
 	const Vehicle *v = Vehicle::GetIfValid(p1);
-	if (v == nullptr || !v->IsPrimaryVehicle() || v->owner != _local_company) return;
+	if (v == nullptr || !v->IsPrimaryVehicle()) return;
 
 	StringID msg = (v->vehstatus & VS_STOPPED) ? STR_VEHICLE_COMMAND_STOPPED : STR_VEHICLE_COMMAND_STARTED;
 	Point pt = RemapCoords(v->x_pos, v->y_pos, v->z_pos);
@@ -3529,7 +3566,7 @@ public:
 		}
 		this->FinishInitNested(window_number);
 		this->owner = v->owner;
-		this->GetWidget<NWidgetViewport>(WID_VV_VIEWPORT)->InitializeViewport(this, this->window_number | (1 << 31), _vehicle_view_zoom_levels[v->type]);
+		this->GetWidget<NWidgetViewport>(WID_VV_VIEWPORT)->InitializeViewport(this, this->window_number | (1 << 31), ScaleZoomGUI(_vehicle_view_zoom_levels[v->type]));
 
 		this->GetWidget<NWidgetCore>(WID_VV_START_STOP)->tool_tip       = STR_VEHICLE_VIEW_TRAIN_STATUS_START_STOP_TOOLTIP + v->type;
 		this->GetWidget<NWidgetCore>(WID_VV_RENAME)->tool_tip           = STR_VEHICLE_DETAILS_TRAIN_RENAME + v->type;
@@ -3614,6 +3651,9 @@ public:
 		if (v->type == VEH_TRAIN) {
 			this->SetWidgetLoweredState(WID_VV_FORCE_PROCEED, Train::From(v)->force_proceed == TFP_SIGNAL);
 			this->SetWidgetDisabledState(WID_VV_FORCE_PROCEED, !can_control);
+		}
+
+		if (v->type == VEH_TRAIN || v->type == VEH_ROAD) {
 			this->SetWidgetDisabledState(WID_VV_TURN_AROUND, !can_control);
 		}
 
@@ -3725,7 +3765,7 @@ public:
 					SetDParam(0, v->type);
 					SetDParam(1, v->current_order.GetDestination());
 					SetDParam(2, v->GetDisplaySpeed());
-					if (v->current_order.GetDepotActionType() & ODATFB_NEAREST_DEPOT) {
+					if (v->current_order.GetDestination() == INVALID_DEPOT) {
 						/* This case *only* happens when multiple nearest depot orders
 						 * follow each other (including an order list only one order: a
 						 * nearest depot order) and there are no reachable depots.
@@ -3754,7 +3794,7 @@ public:
 					break;
 
 				case OT_GOTO_WAYPOINT: {
-					assert(v->type == VEH_TRAIN || v->type == VEH_SHIP);
+					assert(v->type == VEH_TRAIN || v->type == VEH_ROAD || v->type == VEH_SHIP);
 					SetDParam(0, v->current_order.GetDestination());
 					str = HasBit(v->vehicle_flags, VF_PATHFINDER_LOST) ? STR_VEHICLE_STATUS_CANNOT_REACH_WAYPOINT_VEL : STR_VEHICLE_STATUS_HEADING_FOR_WAYPOINT_VEL;
 					SetDParam(1, v->GetDisplaySpeed());
@@ -4150,6 +4190,7 @@ void SetMouseCursorVehicle(const Vehicle *v, EngineImageType image_type)
 	int total_width = 0;
 	int y_offset = 0;
 	bool rotor_seq = false; // Whether to draw the rotor of the vehicle in this step.
+	bool is_ground_vehicle = v->IsGroundVehicle();
 
 	while (v != nullptr) {
 		if (total_width >= ScaleGUITrad(2 * (int)VEHICLEINFO_FULL_VEHICLE_WIDTH)) break;
@@ -4185,10 +4226,13 @@ void SetMouseCursorVehicle(const Vehicle *v, EngineImageType image_type)
 		}
 	}
 
-	int offs = (ScaleGUITrad(VEHICLEINFO_FULL_VEHICLE_WIDTH) - total_width) / 2;
-	if (rtl) offs = -offs;
-	for (uint i = 0; i < _cursor.sprite_count; ++i) {
-		_cursor.sprite_pos[i].x += offs;
+	if (is_ground_vehicle) {
+		/* Center trains and road vehicles on the front vehicle */
+		int offs = (ScaleGUITrad(VEHICLEINFO_FULL_VEHICLE_WIDTH) - total_width) / 2;
+		if (rtl) offs = -offs;
+		for (uint i = 0; i < _cursor.sprite_count; ++i) {
+			_cursor.sprite_pos[i].x += offs;
+		}
 	}
 
 	UpdateCursorSize();

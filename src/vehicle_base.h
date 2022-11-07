@@ -59,7 +59,7 @@ enum VehicleFlags {
 	/* gap, above are common with upstream */
 	VF_SEPARATION_ACTIVE        = 11, ///< Whether timetable auto-separation is currently active
 	VF_SCHEDULED_DISPATCH       = 12, ///< Whether the vehicle should follow a timetabled dispatching schedule
-	VF_LAST_LOAD_ST_SEP         = 13, ///< Each vehicle of this chain has its last_loading_station field set separately
+	VF_LAST_LOAD_ST_SEP         = 13, ///< Each vehicle of this chain has its last_loading_station and last_loading_tick fields set separately
 	VF_TIMETABLE_SEPARATION     = 14, ///< Whether timetable auto-separation is enabled
 	VF_AUTOMATE_TIMETABLE       = 15, ///< Whether the vehicle should manage the timetable automatically.
 	VF_HAVE_SLOT                = 16, ///< Vehicle has 1 or more slots
@@ -159,7 +159,7 @@ struct VehicleCache {
 
 /** Sprite sequence for a vehicle part. */
 struct VehicleSpriteSeq {
-	PalSpriteID seq[4];
+	PalSpriteID seq[8];
 	uint count;
 
 	bool operator==(const VehicleSpriteSeq &other) const
@@ -349,6 +349,7 @@ public:
 
 	StationID last_station_visited;     ///< The last station we stopped at.
 	StationID last_loading_station;     ///< Last station the vehicle has stopped at and could possibly leave from with any cargo loaded. (See VF_LAST_LOAD_ST_SEP).
+	uint64 last_loading_tick;           ///< Last time (relative to _tick_counter) the vehicle has stopped at a station and could possibly leave with any cargo loaded. (See VF_LAST_LOAD_ST_SEP).
 
 	CargoID cargo_type;                 ///< type of cargo this vehicle is carrying
 	byte cargo_subtype;                 ///< Used for livery refits (NewGRF variations)
@@ -368,9 +369,9 @@ public:
 	Order current_order;                ///< The current order (+ status, like: loading)
 
 	union {
-		OrderList *list;            ///< Pointer to the order list for this vehicle
-		Order     *old;             ///< Only used during conversion of old save games
-	} orders;                           ///< The orders currently assigned to the vehicle.
+		OrderList *orders;              ///< Pointer to the order list for this vehicle
+		Order *old_orders;              ///< Only used during conversion of old save games
+	};
 
 	uint16 load_unload_ticks;           ///< Ticks to wait before starting next cycle.
 	GroupID group_id;                   ///< Index of group Pool array
@@ -746,7 +747,7 @@ public:
 	 * Get the first order of the vehicles order list.
 	 * @return first order of order list.
 	 */
-	inline Order *GetFirstOrder() const { return (this->orders.list == nullptr) ? nullptr : this->orders.list->GetFirstOrder(); }
+	inline Order *GetFirstOrder() const { return (this->orders == nullptr) ? nullptr : this->orders->GetFirstOrder(); }
 
 	/**
 	 * Clears this vehicle's separation status
@@ -772,25 +773,25 @@ public:
 	 * Get the first vehicle of this vehicle chain.
 	 * @return the first vehicle of the chain.
 	 */
-	inline Vehicle *FirstShared() const { return (this->orders.list == nullptr) ? this->First() : this->orders.list->GetFirstSharedVehicle(); }
+	inline Vehicle *FirstShared() const { return (this->orders == nullptr) ? this->First() : this->orders->GetFirstSharedVehicle(); }
 
 	/**
 	 * Check if we share our orders with another vehicle.
 	 * @return true if there are other vehicles sharing the same order
 	 */
-	inline bool IsOrderListShared() const { return this->orders.list != nullptr && this->orders.list->IsShared(); }
+	inline bool IsOrderListShared() const { return this->orders != nullptr && this->orders->IsShared(); }
 
 	/**
 	 * Get the number of orders this vehicle has.
 	 * @return the number of orders this vehicle has.
 	 */
-	inline VehicleOrderID GetNumOrders() const { return (this->orders.list == nullptr) ? 0 : this->orders.list->GetNumOrders(); }
+	inline VehicleOrderID GetNumOrders() const { return (this->orders == nullptr) ? 0 : this->orders->GetNumOrders(); }
 
 	/**
 	 * Get the number of manually added orders this vehicle has.
 	 * @return the number of manually added orders this vehicle has.
 	 */
-	inline VehicleOrderID GetNumManualOrders() const { return (this->orders.list == nullptr) ? 0 : this->orders.list->GetNumManualOrders(); }
+	inline VehicleOrderID GetNumManualOrders() const { return (this->orders == nullptr) ? 0 : this->orders->GetNumManualOrders(); }
 
 	/**
 	 * Get the next station the vehicle will stop at.
@@ -799,7 +800,7 @@ public:
 	inline CargoStationIDStackSet GetNextStoppingStation() const
 	{
 		CargoStationIDStackSet set;
-		if (this->orders.list != nullptr) set.FillNextStoppingStation(this, this->orders.list);
+		if (this->orders != nullptr) set.FillNextStoppingStation(this, this->orders);
 		return set;
 	}
 
@@ -810,7 +811,7 @@ public:
 	inline StationIDStack GetNextStoppingStationCargoIndependent() const
 	{
 		StationIDStack set;
-		if (this->orders.list != nullptr) set = this->orders.list->GetNextStoppingStation(this, 0).station;
+		if (this->orders != nullptr) set = this->orders->GetNextStoppingStation(this, 0).station;
 		return set;
 	}
 
@@ -884,7 +885,7 @@ public:
 	CommandCost SendToDepot(DoCommandFlag flags, DepotCommand command, TileIndex specific_depot = 0);
 
 	void UpdateVisualEffect(bool allow_power_change = true);
-	void ShowVisualEffect() const;
+	void ShowVisualEffect(uint max_speed) const;
 
 	/**
 	 * Update the position of the vehicle. This will update the hash that tells
@@ -1003,7 +1004,7 @@ public:
 	 */
 	inline Order *GetOrder(int index) const
 	{
-		return (this->orders.list == nullptr) ? nullptr : this->orders.list->GetOrderAt(index);
+		return (this->orders == nullptr) ? nullptr : this->orders->GetOrderAt(index);
 	}
 
 	/**
@@ -1013,7 +1014,7 @@ public:
 	 */
 	inline VehicleOrderID GetIndexOfOrder(const Order *order) const
 	{
-		return (this->orders.list == nullptr) ? INVALID_VEH_ORDER_ID : this->orders.list->GetIndexOfOrder(order);
+		return (this->orders == nullptr) ? INVALID_VEH_ORDER_ID : this->orders->GetIndexOfOrder(order);
 	}
 
 	/**
@@ -1022,7 +1023,7 @@ public:
 	 */
 	inline Order *GetLastOrder() const
 	{
-		return (this->orders.list == nullptr) ? nullptr : this->orders.list->GetLastOrder();
+		return (this->orders == nullptr) ? nullptr : this->orders->GetLastOrder();
 	}
 
 	bool IsEngineCountable() const;
@@ -1199,7 +1200,7 @@ public:
 	 * Returns an iterable ensemble of orders of a vehicle
 	 * @return an iterable ensemble of orders of a vehicle
 	 */
-	IterateWrapper Orders() const { return IterateWrapper(this->orders.list); }
+	IterateWrapper Orders() const { return IterateWrapper(this->orders); }
 };
 
 inline bool IsPointInViewportVehicleRedrawArea(const std::vector<Rect> &viewport_redraw_rects, const Point &pt)
@@ -1450,10 +1451,19 @@ public:
 			return;
 		}
 
+		bool always_update_viewport = false;
+
+		if (EXPECTED_TYPE == VEH_SHIP && update_delta) {
+			extern bool RecentreShipSpriteBounds(Vehicle *v);
+			always_update_viewport = RecentreShipSpriteBounds(this);
+		}
+
 		SetBit(this->vcache.cached_veh_flags, VCF_IMAGE_REFRESH);
 
 		if (force_update) {
 			this->Vehicle::UpdateViewport(IsPointInViewportVehicleRedrawArea(_viewport_vehicle_map_redraw_rects, pt));
+		} else if (always_update_viewport) {
+			this->Vehicle::UpdateViewport(false);
 		}
 	}
 

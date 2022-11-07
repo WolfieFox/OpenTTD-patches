@@ -250,7 +250,7 @@ struct MainWindow : Window
 		ResizeWindow(this, _screen.width, _screen.height);
 
 		NWidgetViewport *nvp = this->GetWidget<NWidgetViewport>(WID_M_VIEWPORT);
-		nvp->InitializeViewport(this, TileXY(32, 32), ZOOM_LVL_VIEWPORT);
+		nvp->InitializeViewport(this, TileXY(32, 32), ScaleZoomGUI(ZOOM_LVL_VIEWPORT));
 
 		this->viewport->map_type = (ViewportMapType) _settings_client.gui.default_viewport_map_mode;
 		this->viewport->overlay = new LinkGraphOverlay(this, WID_M_VIEWPORT, 0, 0, 3);
@@ -277,8 +277,8 @@ struct MainWindow : Window
 		this->DrawWidgets();
 		if (_game_mode == GM_MENU) {
 			static const SpriteID title_sprites[] = {SPR_OTTD_O, SPR_OTTD_P, SPR_OTTD_E, SPR_OTTD_N, SPR_OTTD_T, SPR_OTTD_T, SPR_OTTD_D};
-			static const uint LETTER_SPACING = 10;
-			int name_width = (lengthof(title_sprites) - 1) * LETTER_SPACING;
+			uint letter_spacing = ScaleGUITrad(10);
+			int name_width = (lengthof(title_sprites) - 1) * letter_spacing;
 
 			for (uint i = 0; i < lengthof(title_sprites); i++) {
 				name_width += GetSpriteSize(title_sprites[i]).width;
@@ -286,8 +286,8 @@ struct MainWindow : Window
 			int off_x = (this->width - name_width) / 2;
 
 			for (uint i = 0; i < lengthof(title_sprites); i++) {
-				DrawSprite(title_sprites[i], PAL_NONE, off_x, 50);
-				off_x += GetSpriteSize(title_sprites[i]).width + LETTER_SPACING;
+				DrawSprite(title_sprites[i], PAL_NONE, off_x, ScaleGUITrad(50));
+				off_x += GetSpriteSize(title_sprites[i]).width + letter_spacing;
 			}
 		}
 	}
@@ -491,6 +491,12 @@ struct MainWindow : Window
 		}
 	}
 
+	bool OnTooltip(Point pt, int widget, TooltipCloseCondition close_cond) override
+	{
+		if (widget != WID_M_VIEWPORT) return false;
+		return this->viewport->overlay->ShowTooltip(pt, close_cond);
+	}
+
 	/**
 	 * Some data on this window has become invalid.
 	 * @param data Information about the changed data.
@@ -505,7 +511,7 @@ struct MainWindow : Window
 
 	virtual void OnMouseOver(Point pt, int widget) override
 	{
-		if (pt.x != -1 && _game_mode != GM_MENU && (_mouse_hovering || _settings_client.gui.hover_delay_ms == 0)) {
+		if (pt.x != -1 && _game_mode != GM_MENU && (_settings_client.gui.hover_delay_ms == 0 ? _right_button_down : _mouse_hovering)) {
 			/* Show tooltip with last month production or town name */
 			const Point p = GetTileBelowCursor();
 			const TileIndex tile = TileVirtXY(p.x, p.y);

@@ -41,13 +41,16 @@ macro(compile_flags)
         "$<$<CONFIG:Debug>:-D_DEBUG>"
         "$<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=2>" # FORTIFY_SOURCE should only be used in non-debug builds (requires -O1+)
     )
+    if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_compile_options(-DFEWER_ASSERTS)
+    endif()
     if(MINGW)
         add_link_options(
             "$<$<NOT:$<CONFIG:Debug>>:-fstack-protector>" # Prevent undefined references when _FORTIFY_SOURCE > 0
         )
         if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-            add_link_options(
-                "$<$<CONFIG:Debug>:-Wl,--disable-dynamicbase,--disable-high-entropy-va,--default-image-base-low>" # ASLR somehow breaks linking for x64 Debug builds
+            add_compile_options(
+                "$<$<CONFIG:Debug>:-Wa,-mbig-obj>" # Switch to pe-bigobj-x86-64 as x64 Debug builds push pe-x86-64 to the limits (linking errors with ASLR, ...)
             )
         endif()
     endif()
@@ -58,6 +61,11 @@ macro(compile_flags)
 
     if(MSVC)
         add_compile_options(/W3)
+        if(MSVC_VERSION GREATER 1929)
+            # Starting with version 19.30, there is an optimisation bug, see #9966 for details
+            # This flag disables the broken optimisation to work around the bug
+            add_compile_options(/d2ssa-rse-)
+        endif()
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
         add_compile_options(
             -W
@@ -88,7 +96,10 @@ macro(compile_flags)
 
         if(NOT CMAKE_BUILD_TYPE)
             # Sensible default if no build type specified
-            add_compile_options(-O2 -DNDEBUG)
+            add_compile_options(-O2)
+            if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+                add_compile_options(-DNDEBUG)
+            endif()
         endif(NOT CMAKE_BUILD_TYPE)
 
         # When we are a stable release (Release build + USE_ASSERTS not set),
@@ -158,6 +169,10 @@ macro(compile_flags)
                 endif()
             endif()
         endif()
+
+        if (OPTION_NO_WARN_UNINIT)
+            add_compile_options(-Wno-maybe-uninitialized -Wno-uninitialized)
+        endif (OPTION_NO_WARN_UNINIT)
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
         add_compile_options(
             -Wall

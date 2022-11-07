@@ -13,6 +13,8 @@
 #include "../roadstop_base.h"
 #include "../vehicle_base.h"
 #include "../newgrf_station.h"
+#include "../newgrf_roadstop.h"
+#include "../core/math_func.hpp"
 
 #include "saveload.h"
 #include "saveload_buffer.h"
@@ -21,6 +23,8 @@
 #include "../safeguards.h"
 
 static byte _old_last_vehicle_type;
+static uint8 _num_specs;
+static uint8 _num_roadstop_specs;
 
 /**
  * Update the buoy orders to be waypoint orders.
@@ -109,10 +113,15 @@ void AfterLoadStations()
 {
 	/* Update the speclists of all stations to point to the currently loaded custom stations. */
 	for (BaseStation *st : BaseStation::Iterate()) {
-		for (uint i = 0; i < st->num_specs; i++) {
+		for (uint i = 0; i < st->speclist.size(); i++) {
 			if (st->speclist[i].grfid == 0) continue;
 
 			st->speclist[i].spec = StationClass::GetByGrf(st->speclist[i].grfid, st->speclist[i].localidx, nullptr);
+		}
+		for (uint i = 0; i < st->roadstop_speclist.size(); i++) {
+			if (st->roadstop_speclist[i].grfid == 0) continue;
+
+			st->roadstop_speclist[i].spec = RoadStopClass::GetByGrf(st->roadstop_speclist[i].grfid, st->roadstop_speclist[i].localidx, nullptr);
 		}
 
 		if (Station::IsExpected(st)) {
@@ -122,6 +131,7 @@ void AfterLoadStations()
 		}
 
 		StationUpdateCachedTriggers(st);
+		StationUpdateRoadStopCachedTriggers(st);
 	}
 }
 
@@ -210,7 +220,7 @@ static const SaveLoad _old_station_desc[] = {
 	/* Used by newstations for graphic variations */
 	SLE_CONDVAR(Station, random_bits,                SLE_UINT16,                 SLV_27, SL_MAX_VERSION),
 	SLE_CONDVAR(Station, waiting_triggers,           SLE_UINT8,                  SLV_27, SL_MAX_VERSION),
-	SLE_CONDVAR(Station, num_specs,                  SLE_UINT8,                  SLV_27, SL_MAX_VERSION),
+	SLEG_CONDVAR(_num_specs,                         SLE_UINT8,                  SLV_27, SL_MAX_VERSION),
 
 	SLE_CONDVEC(Station, loading_vehicles,           REF_VEHICLE,                SLV_57, SL_MAX_VERSION),
 
@@ -321,6 +331,7 @@ static void Load_STNS()
 	_cargo_source_xy = 0;
 	_cargo_days = 0;
 	_cargo_feeder_share = 0;
+	_num_specs = 0;
 
 	uint num_cargo = IsSavegameVersionBefore(SLV_55) ? 12 : IsSavegameVersionBefore(SLV_EXTEND_CARGOTYPES) ? 32 : NUM_CARGO;
 	int index;
@@ -356,10 +367,10 @@ static void Load_STNS()
 			if (SlXvIsFeatureMissing(XSLFI_ST_LAST_VEH_TYPE)) ge->last_vehicle_type = _old_last_vehicle_type;
 		}
 
-		if (st->num_specs != 0) {
+		if (_num_specs != 0) {
 			/* Allocate speclist memory when loading a game */
-			st->speclist = CallocT<StationSpecList>(st->num_specs);
-			for (uint i = 0; i < st->num_specs; i++) {
+			st->speclist.resize(_num_specs);
+			for (uint i = 0; i < st->speclist.size(); i++) {
 				SlObject(&st->speclist[i], _station_speclist_desc);
 			}
 		}
@@ -401,7 +412,10 @@ static const SaveLoad _base_station_desc[] = {
 	/* Used by newstations for graphic variations */
 	      SLE_VAR(BaseStation, random_bits,            SLE_UINT16),
 	      SLE_VAR(BaseStation, waiting_triggers,       SLE_UINT8),
-	      SLE_VAR(BaseStation, num_specs,              SLE_UINT8),
+	      SLEG_VAR(_num_specs,                         SLE_UINT8),
+	SLEG_CONDVAR_X(_num_roadstop_specs,                SLE_UINT8,                   SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_GRF_ROADSTOPS)),
+	SLE_CONDVARVEC_X(BaseStation, custom_road_stop_tiles,  SLE_UINT32,              SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_GRF_ROADSTOPS)),
+	SLE_CONDVARVEC_X(BaseStation, custom_road_stop_data,   SLE_UINT16,              SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_GRF_ROADSTOPS)),
 };
 
 static OldPersistentStorage _old_st_persistent_storage;
@@ -461,6 +475,10 @@ static const SaveLoad _waypoint_desc[] = {
 	  SLE_CONDVAR(Waypoint, train_station.tile,        SLE_UINT32,                  SLV_124, SL_MAX_VERSION),
 	  SLE_CONDVAR(Waypoint, train_station.w,           SLE_FILE_U8 | SLE_VAR_U16,   SLV_124, SL_MAX_VERSION),
 	  SLE_CONDVAR(Waypoint, train_station.h,           SLE_FILE_U8 | SLE_VAR_U16,   SLV_124, SL_MAX_VERSION),
+	SLE_CONDVAR_X(Waypoint, waypoint_flags,            SLE_UINT16,           SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_WAYPOINT_FLAGS)),
+	SLE_CONDVAR_X(Waypoint, road_waypoint_area.tile,   SLE_UINT32,                  SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_ROAD_WAYPOINTS)),
+	SLE_CONDVAR_X(Waypoint, road_waypoint_area.w,      SLE_FILE_U8 | SLE_VAR_U16,   SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_ROAD_WAYPOINTS)),
+	SLE_CONDVAR_X(Waypoint, road_waypoint_area.h,      SLE_FILE_U8 | SLE_VAR_U16,   SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_ROAD_WAYPOINTS)),
 };
 
 /**
@@ -495,6 +513,9 @@ static void SetupDescs_ROADSTOP()
 
 static void RealSave_STNN(BaseStation *bst)
 {
+	_num_specs = (uint8)bst->speclist.size();
+	_num_roadstop_specs = (uint8)bst->roadstop_speclist.size();
+
 	bool waypoint = (bst->facilities & FACIL_WAYPOINT) != 0;
 	SlObjectSaveFiltered(bst, waypoint ? SaveLoadTable(_filtered_waypoint_desc) : SaveLoadTable(_filtered_station_desc));
 
@@ -547,8 +568,12 @@ static void RealSave_STNN(BaseStation *bst)
 		}
 	}
 
-	for (uint i = 0; i < bst->num_specs; i++) {
+	for (uint i = 0; i < bst->speclist.size(); i++) {
 		SlObjectSaveFiltered(&bst->speclist[i], _filtered_station_speclist_desc);
+	}
+
+	for (uint i = 0; i < bst->roadstop_speclist.size(); i++) {
+		SlObjectSaveFiltered(&bst->roadstop_speclist[i], _filtered_station_speclist_desc);
 	}
 }
 
@@ -568,6 +593,8 @@ static void Load_STNN()
 	SetupDescs_STNN();
 
 	_num_flows = 0;
+	_num_specs = 0;
+	_num_roadstop_specs = 0;
 
 	const uint num_cargo = IsSavegameVersionBefore(SLV_EXTEND_CARGOTYPES) ? 32 : NUM_CARGO;
 	ReadBuffer *buffer = ReadBuffer::GetCurrent();
@@ -662,14 +689,29 @@ static void Load_STNN()
 					amount = buffer->RawReadUint16();
 				}
 			}
+			if (SlXvIsFeaturePresent(XSLFI_STATION_CARGO_HISTORY, 1, 1)) {
+				for (auto &history : st->station_cargo_history) {
+					for (uint16 &amount : history) {
+						amount = RXCompressUint(amount);
+					}
+				}
+			}
 			st->station_cargo_history_offset = 0;
 		}
 
-		if (bst->num_specs != 0) {
+		if (_num_specs != 0) {
 			/* Allocate speclist memory when loading a game */
-			bst->speclist = CallocT<StationSpecList>(bst->num_specs);
-			for (uint i = 0; i < bst->num_specs; i++) {
+			bst->speclist.resize(_num_specs);
+			for (uint i = 0; i < bst->speclist.size(); i++) {
 				SlObjectLoadFiltered(&bst->speclist[i], _filtered_station_speclist_desc);
+			}
+		}
+
+		if (_num_roadstop_specs != 0) {
+			/* Allocate speclist memory when loading a game */
+			bst->roadstop_speclist.resize(_num_roadstop_specs);
+			for (uint i = 0; i < bst->roadstop_speclist.size(); i++) {
+				SlObjectLoadFiltered(&bst->roadstop_speclist[i], _filtered_station_speclist_desc);
 			}
 		}
 	}

@@ -312,6 +312,7 @@ enum OptionMenuEntries {
 	OME_TRANSPARENTBUILDINGS,
 	OME_SHOW_STATIONSIGNS,
 	OME_SHOW_MONEYTEXT,
+	OME_SHOW_HIDDEN_SIGNS,
 };
 
 /**
@@ -338,6 +339,9 @@ static CallBackFunction ToolbarOptionsClick(Window *w)
 	list.emplace_back(new DropDownListCheckedItem(STR_SETTINGS_MENU_WAYPOINTS_DISPLAYED,     OME_SHOW_WAYPOINTNAMES, false, HasBit(_display_opt, DO_SHOW_WAYPOINT_NAMES)));
 	list.emplace_back(new DropDownListCheckedItem(STR_SETTINGS_MENU_SIGNS_DISPLAYED,         OME_SHOW_SIGNS, false, HasBit(_display_opt, DO_SHOW_SIGNS)));
 	list.emplace_back(new DropDownListCheckedItem(STR_SETTINGS_MENU_SHOW_COMPETITOR_SIGNS,   OME_SHOW_COMPETITOR_SIGNS, false, HasBit(_display_opt, DO_SHOW_COMPETITOR_SIGNS)));
+	if (_settings_client.gui.allow_hiding_waypoint_labels) {
+		list.emplace_back(new DropDownListCheckedItem(STR_SETTINGS_MENU_SHOW_HIDDEN_SIGNS,       OME_SHOW_HIDDEN_SIGNS, false, HasBit(_extra_display_opt, XDO_SHOW_HIDDEN_SIGNS)));
+	}
 	list.emplace_back(new DropDownListCheckedItem(STR_SETTINGS_MENU_FULL_ANIMATION,          OME_FULL_ANIMATION, false, HasBit(_display_opt, DO_FULL_ANIMATION)));
 	list.emplace_back(new DropDownListCheckedItem(STR_SETTINGS_MENU_FULL_DETAIL,             OME_FULL_DETAILS, false, HasBit(_display_opt, DO_FULL_DETAIL)));
 	list.emplace_back(new DropDownListCheckedItem(STR_SETTINGS_MENU_TRANSPARENT_BUILDINGS,   OME_TRANSPARENTBUILDINGS, false, IsTransparencySet(TO_HOUSES)));
@@ -378,6 +382,7 @@ static CallBackFunction MenuClickSettings(int index)
 		case OME_TRANSPARENTBUILDINGS: ToggleTransparency(TO_HOUSES);                   break;
 		case OME_SHOW_STATIONSIGNS:    ToggleTransparency(TO_SIGNS);                    break;
 		case OME_SHOW_MONEYTEXT:       ToggleBit(_extra_display_opt, XDO_SHOW_MONEY_TEXT_EFFECTS); break;
+		case OME_SHOW_HIDDEN_SIGNS:    ToggleBit(_extra_display_opt, XDO_SHOW_HIDDEN_SIGNS); break;
 	}
 	MarkWholeScreenDirty();
 	return CBF_NONE;
@@ -1170,7 +1175,6 @@ static CallBackFunction ToolbarScenDatePanel(Window *w)
 {
 	SetDParam(0, _settings_game.game_creation.starting_year);
 	ShowQueryString(STR_JUST_INT, STR_MAPGEN_START_DATE_QUERY_CAPT, 8, w, CS_NUMERAL, QSF_ENABLE_DEFAULT);
-	_left_button_clicked = false;
 	return CBF_NONE;
 }
 
@@ -2389,14 +2393,18 @@ struct ScenarioEditorToolbarWindow : Window {
 		this->DrawWidgets();
 	}
 
-	void DrawWidget(const Rect &r, int widget) const override
+	void SetStringParameters(int widget) const override
 	{
 		switch (widget) {
 			case WID_TE_DATE:
 				SetDParam(0, ConvertYMDToDate(_settings_game.game_creation.starting_year, 0, 1));
-				DrawString(r.left, r.right, (this->height - FONT_HEIGHT_NORMAL) / 2, STR_WHITE_DATE_LONG, TC_FROMSTRING, SA_HOR_CENTER);
 				break;
+		}
+	}
 
+	void DrawWidget(const Rect &r, int widget) const override
+	{
+		switch (widget) {
 			case WID_TE_SPACER: {
 				int height = r.bottom - r.top;
 				if (height > 2 * FONT_HEIGHT_NORMAL) {
@@ -2420,7 +2428,6 @@ struct ScenarioEditorToolbarWindow : Window {
 			case WID_TE_DATE:
 				SetDParam(0, ConvertYMDToDate(MAX_YEAR, 0, 1));
 				*size = GetStringBoundingBox(STR_WHITE_DATE_LONG);
-				size->height = std::max(size->height, GetSpriteSize(SPR_IMG_SAVE).height + WD_IMGBTN_TOP + WD_IMGBTN_BOTTOM);
 				break;
 		}
 	}
@@ -2583,10 +2590,10 @@ static const NWidgetPart _nested_toolb_scen_inner_widgets[] = {
 	NWidget(WWT_PANEL, COLOUR_GREY, WID_TE_SPACER), EndContainer(),
 	NWidget(NWID_SPACER),
 	NWidget(WWT_PANEL, COLOUR_GREY, WID_TE_DATE_PANEL),
-		NWidget(NWID_HORIZONTAL), SetPIP(3, 2, 3),
-			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_DATE_BACKWARD), SetDataTip(SPR_ARROW_DOWN, STR_SCENEDIT_TOOLBAR_TOOLTIP_MOVE_THE_STARTING_DATE_BACKWARD),
-			NWidget(WWT_EMPTY, COLOUR_GREY, WID_TE_DATE), SetDataTip(STR_NULL, STR_SCENEDIT_TOOLBAR_TOOLTIP_SET_DATE),
-			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_DATE_FORWARD), SetDataTip(SPR_ARROW_UP, STR_SCENEDIT_TOOLBAR_TOOLTIP_MOVE_THE_STARTING_DATE_FORWARD),
+		NWidget(NWID_HORIZONTAL), SetPIP(2, 2, 2), SetPadding(1),
+			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_DATE_BACKWARD), SetDataTip(SPR_ARROW_DOWN, STR_SCENEDIT_TOOLBAR_TOOLTIP_MOVE_THE_STARTING_DATE_BACKWARD), SetFill(0, 1),
+			NWidget(WWT_TEXT, COLOUR_GREY, WID_TE_DATE), SetDataTip(STR_WHITE_DATE_LONG, STR_SCENEDIT_TOOLBAR_TOOLTIP_SET_DATE), SetAlignment(SA_CENTER), SetFill(0, 1),
+			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_DATE_FORWARD), SetDataTip(SPR_ARROW_UP, STR_SCENEDIT_TOOLBAR_TOOLTIP_MOVE_THE_STARTING_DATE_FORWARD), SetFill(0, 1),
 		EndContainer(),
 	EndContainer(),
 	NWidget(NWID_SPACER),

@@ -1,5 +1,3 @@
-/* $Id$ */
-
 /*
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -22,6 +20,7 @@ public:
 
 	// void *MoveTo(void *video, int x, int y) override;
 	void SetPixel(void *video, int x, int y, uint8 colour) override;
+	void SetPixel32(void *video, int x, int y, uint8 colour, uint32 colour32) override;
 	void SetRect(void *video, int x, int y, const uint8 *colours, uint lines, uint width, uint pitch) override;
 	void SetRect32(void *video, int x, int y, const uint32 *colours, uint lines, uint width, uint pitch) override;
 	void DrawRect(void *video, int width, int height, uint8 colour) override;

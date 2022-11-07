@@ -729,27 +729,6 @@ STR_GAME_OPTIONS_CURRENCY_SEK                                   :स्वीड
 STR_GAME_OPTIONS_CURRENCY_TRY                                   :तुर्की लिरा (TRY)
 STR_GAME_OPTIONS_CURRENCY_SKK                                   :स्लोवाक कोरुना (SKK)
 
-###length 2
-
-
-###length 21
-STR_GAME_OPTIONS_TOWN_NAME_FRENCH                               :फ्रेंच
-STR_GAME_OPTIONS_TOWN_NAME_GERMAN                               :जर्मन
-STR_GAME_OPTIONS_TOWN_NAME_SWEDISH                              :स्वीडीश
-STR_GAME_OPTIONS_TOWN_NAME_DUTCH                                :डच
-STR_GAME_OPTIONS_TOWN_NAME_FINNISH                              :फिन्निश
-STR_GAME_OPTIONS_TOWN_NAME_POLISH                               :पोलिश
-STR_GAME_OPTIONS_TOWN_NAME_SLOVAK                               :स्लोवाक
-STR_GAME_OPTIONS_TOWN_NAME_NORWEGIAN                            :नोर्वेगीअन
-STR_GAME_OPTIONS_TOWN_NAME_HUNGARIAN                            :हंगेरियन
-STR_GAME_OPTIONS_TOWN_NAME_AUSTRIAN                             :ओस्त्रिअन
-STR_GAME_OPTIONS_TOWN_NAME_ROMANIAN                             :रोमेनिअन
-STR_GAME_OPTIONS_TOWN_NAME_CZECH                                :झेख
-STR_GAME_OPTIONS_TOWN_NAME_SWISS                                :स्विस
-STR_GAME_OPTIONS_TOWN_NAME_DANISH                               :डेनिष
-STR_GAME_OPTIONS_TOWN_NAME_TURKISH                              :तुर्की
-STR_GAME_OPTIONS_TOWN_NAME_ITALIAN                              :ईटेलिअन
-
 
 # Autosave dropdown
 ###length 5
@@ -775,8 +754,8 @@ STR_GAME_OPTIONS_RESOLUTION_OTHER                               :अन्य
 
 
 
-# Custom currency window
 
+# Custom currency window
 
 
 
@@ -799,9 +778,11 @@ STR_SUBSIDY_X2                                                  :x२
 STR_SUBSIDY_X3                                                  :x३
 STR_SUBSIDY_X4                                                  :x४
 
+###length 4
+
 ###length 7
 
-###length 3
+###length 4
 
 
 # Settings tree window
@@ -915,10 +896,14 @@ STR_CONFIG_SETTING_WARN_LOST_VEHICLE                            : वाहन �
 
 ###length 2
 
+###length 2
+
 
 
 
 ###length 3
+
+###length 4
 
 ###length 4
 
@@ -951,7 +936,6 @@ STR_CONFIG_SETTING_COMMAND_PAUSE_LEVEL_ALL_ACTIONS              :सर्व �
 
 
 ###length 3
-
 
 
 
@@ -1079,8 +1063,6 @@ STR_INTRO_CAPTION                                               :{WHITE}ओप�
 # Cheat window
 STR_CHEAT_CHANGE_DATE_QUERY_CAPT                                :{WHITE}चालू वर्ष बदला
 
-###length 4
-
 # Livery window
 
 
@@ -1203,6 +1185,8 @@ STR_NETWORK_SERVER_MESSAGE                                      :*** {1:STRING}
 # Linkgraph legend window
 
 # Linkgraph legend window and linkgraph legend in smallmap
+
+# Linkgraph tooltip
 
 # Base for station construction window(s)
 
@@ -1329,6 +1313,24 @@ STR_SAVELOAD_DETAIL_COMPANY_INDEX                               :{SILVER}{COMMA}
 STR_MAPGEN_BY                                                   :{BLACK}*
 STR_MAPGEN_DATE                                                 :{BLACK}तिथी:
 
+###length 21
+STR_MAPGEN_TOWN_NAME_FRENCH                                     :फ्रेंच
+STR_MAPGEN_TOWN_NAME_GERMAN                                     :जर्मन
+STR_MAPGEN_TOWN_NAME_SWEDISH                                    :स्वीडीश
+STR_MAPGEN_TOWN_NAME_DUTCH                                      :डच
+STR_MAPGEN_TOWN_NAME_FINNISH                                    :फिन्निश
+STR_MAPGEN_TOWN_NAME_POLISH                                     :पोलिश
+STR_MAPGEN_TOWN_NAME_SLOVAK                                     :स्लोवाक
+STR_MAPGEN_TOWN_NAME_NORWEGIAN                                  :नोर्वेगीअन
+STR_MAPGEN_TOWN_NAME_HUNGARIAN                                  :हंगेरियन
+STR_MAPGEN_TOWN_NAME_AUSTRIAN                                   :ओस्त्रिअन
+STR_MAPGEN_TOWN_NAME_ROMANIAN                                   :रोमेनिअन
+STR_MAPGEN_TOWN_NAME_CZECH                                      :झेख
+STR_MAPGEN_TOWN_NAME_SWISS                                      :स्विस
+STR_MAPGEN_TOWN_NAME_DANISH                                     :डेनिष
+STR_MAPGEN_TOWN_NAME_TURKISH                                    :तुर्की
+STR_MAPGEN_TOWN_NAME_ITALIAN                                    :ईटेलिअन
+
 # Strings for map borders at game generation
 STR_MAPGEN_BORDER_WATER                                         :{BLACK}पाणी
 
@@ -1448,17 +1450,17 @@ STR_WAYPOINT_VIEW_CAPTION                                       :{WHITE}{WAYPOIN
 
 
 # Finances window
-STR_FINANCES_EXPENDITURE_INCOME_TITLE                           :{WHITE}खर्च/कमाई
 STR_FINANCES_YEAR                                               :{WHITE}{NUM}
+
+###length 3
+
 
 ###length 13
 STR_FINANCES_SECTION_AIRCRAFT_RUNNING_COSTS                     :{GOLD}विमान चालवण्याचा खर्च
-STR_FINANCES_SECTION_AIRCRAFT_INCOME                            :{GOLD}विमानाची कमाई
 STR_FINANCES_SECTION_OTHER                                      :{GOLD}अन्य
 
 STR_FINANCES_NEGATIVE_INCOME                                    :{BLACK}-{CURRENCY_LONG}
 STR_FINANCES_POSITIVE_INCOME                                    :{BLACK}+{CURRENCY_LONG}
-STR_FINANCES_TOTAL_CAPTION                                      :{WHITE}संपूर्ण:
 STR_FINANCES_LOAN_TITLE                                         :{WHITE}कर्ज
 STR_FINANCES_TOTAL_CURRENCY                                     :{BLACK}{CURRENCY_LONG}
 

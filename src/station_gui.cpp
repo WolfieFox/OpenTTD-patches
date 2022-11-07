@@ -477,16 +477,6 @@ public:
 				this->rating_width = this->rating_width * 16 / 10;
 				break;
 
-			case WID_STL_CARGOALL:
-			case WID_STL_FACILALL:
-			case WID_STL_NOCARGOWAITING: {
-				Dimension d = GetStringBoundingBox(widget == WID_STL_NOCARGOWAITING ? STR_ABBREV_NONE : STR_ABBREV_ALL);
-				d.width  += padding.width + 2;
-				d.height += padding.height;
-				*size = maxdim(*size, d);
-				break;
-			}
-
 			default:
 				if (widget >= WID_STL_CARGOSTART) {
 					Dimension d = GetStringBoundingBox(_sorted_cargo_specs[widget - WID_STL_CARGOSTART]->abbrev);
@@ -563,24 +553,6 @@ public:
 					DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_RIGHT, y, STR_STATION_LIST_NONE);
 					return;
 				}
-				break;
-			}
-
-			case WID_STL_NOCARGOWAITING: {
-				int cg_ofst = this->IsWidgetLowered(widget) ? 1 : 0;
-				DrawString(r.left + cg_ofst, r.right + cg_ofst, r.top + (r.bottom - r.top - FONT_HEIGHT_SMALL) / 2 + cg_ofst, STR_ABBREV_NONE, TC_BLACK, SA_HOR_CENTER);
-				break;
-			}
-
-			case WID_STL_CARGOALL: {
-				int cg_ofst = this->IsWidgetLowered(widget) ? 1 : 0;
-				DrawString(r.left + cg_ofst, r.right + cg_ofst, r.top + (r.bottom - r.top - FONT_HEIGHT_SMALL) / 2 + cg_ofst, STR_ABBREV_ALL, TC_BLACK, SA_HOR_CENTER);
-				break;
-			}
-
-			case WID_STL_FACILALL: {
-				int cg_ofst = this->IsWidgetLowered(widget) ? 1 : 0;
-				DrawString(r.left + cg_ofst, r.right + cg_ofst, r.top + (r.bottom - r.top - FONT_HEIGHT_SMALL) / 2 + cg_ofst, STR_ABBREV_ALL, TC_BLACK, SA_HOR_CENTER);
 				break;
 			}
 
@@ -826,17 +798,17 @@ static const NWidgetPart _nested_company_stations_widgets[] = {
 		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_STL_BUS), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(STR_BUS, STR_STATION_LIST_USE_CTRL_TO_SELECT_MORE), SetFill(0, 1),
 		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_STL_SHIP), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(STR_SHIP, STR_STATION_LIST_USE_CTRL_TO_SELECT_MORE), SetFill(0, 1),
 		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_STL_AIRPLANE), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(STR_PLANE, STR_STATION_LIST_USE_CTRL_TO_SELECT_MORE), SetFill(0, 1),
-		NWidget(WWT_PUSHBTN, COLOUR_GREY, WID_STL_FACILALL), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(0x0, STR_STATION_LIST_SELECT_ALL_FACILITIES), SetFill(0, 1),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_STL_FACILALL), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(STR_ABBREV_ALL, STR_STATION_LIST_SELECT_ALL_FACILITIES), SetFill(0, 1),
 		NWidget(WWT_PANEL, COLOUR_GREY), SetMinimalSize(5, 0), SetFill(0, 1), EndContainer(),
 		NWidgetFunction(CargoWidgets),
-		NWidget(WWT_PANEL, COLOUR_GREY, WID_STL_NOCARGOWAITING), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(0x0, STR_STATION_LIST_NO_WAITING_CARGO), SetFill(0, 1), EndContainer(),
-		NWidget(WWT_PUSHBTN, COLOUR_GREY, WID_STL_CARGOALL), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(0x0, STR_STATION_LIST_SELECT_ALL_TYPES), SetFill(0, 1),
-		NWidget(WWT_PANEL, COLOUR_GREY), SetDataTip(0x0, STR_NULL), SetResize(1, 0), SetFill(1, 1), EndContainer(),
+		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_STL_NOCARGOWAITING), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(STR_ABBREV_NONE, STR_STATION_LIST_NO_WAITING_CARGO), SetFill(0, 1),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_STL_CARGOALL), SetMinimalSize(14, 0), SetMinimalTextLines(1, 0), SetDataTip(STR_ABBREV_ALL, STR_STATION_LIST_SELECT_ALL_TYPES), SetFill(0, 1),
+		NWidget(WWT_PANEL, COLOUR_GREY), SetResize(1, 0), SetFill(1, 1), EndContainer(),
 	EndContainer(),
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_STL_SORTBY), SetMinimalSize(81, 12), SetDataTip(STR_BUTTON_SORT_BY, STR_TOOLTIP_SORT_ORDER),
 		NWidget(WWT_DROPDOWN, COLOUR_GREY, WID_STL_SORTDROPBTN), SetMinimalSize(163, 12), SetDataTip(STR_SORT_BY_NAME, STR_TOOLTIP_SORT_CRITERIA), // widget_data gets overwritten.
-		NWidget(WWT_PANEL, COLOUR_GREY), SetDataTip(0x0, STR_NULL), SetResize(1, 0), SetFill(1, 1), EndContainer(),
+		NWidget(WWT_PANEL, COLOUR_GREY), SetResize(1, 0), SetFill(1, 1), EndContainer(),
 	EndContainer(),
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_PANEL, COLOUR_GREY, WID_STL_LIST), SetMinimalSize(346, 125), SetResize(1, 10), SetDataTip(0x0, STR_STATION_LIST_TOOLTIP), SetScrollbar(WID_STL_SCROLLBAR), EndContainer(),
@@ -2326,6 +2298,10 @@ struct TileAndStation {
 
 static std::vector<TileAndStation> _deleted_stations_nearby;
 static std::vector<StationID> _stations_nearby_list;
+static bool _station_nearby_road_waypoint_search;
+
+static bool IsNearbyStationRightType(const Station *st) { return true; }
+static bool IsNearbyStationRightType(const Waypoint *wp) { return HasBit(wp->waypoint_flags, WPF_ROAD) == _station_nearby_road_waypoint_search; }
 
 /**
  * Add station on this tile to _stations_nearby_list if it's fully within the
@@ -2358,7 +2334,7 @@ static bool AddNearbyStation(TileIndex tile, void *user_data)
 	if (!T::IsValidID(sid)) return false;
 
 	T *st = T::Get(sid);
-	if (st->owner != _local_company || std::find(_stations_nearby_list.begin(), _stations_nearby_list.end(), sid) != _stations_nearby_list.end()) return false;
+	if (st->owner != _local_company || !IsNearbyStationRightType(st) || std::find(_stations_nearby_list.begin(), _stations_nearby_list.end(), sid) != _stations_nearby_list.end()) return false;
 
 	if (st->rect.BeforeAddRect(ctx->tile, ctx->w, ctx->h, StationRect::ADD_TEST).Succeeded()) {
 		_stations_nearby_list.push_back(sid);
@@ -2391,7 +2367,7 @@ static const T *FindStationsNearby(TileArea ta, bool distant_join)
 
 	/* Look for deleted stations */
 	for (const BaseStation *st : BaseStation::Iterate()) {
-		if (T::IsExpected(st) && !st->IsInUse() && st->owner == _local_company) {
+		if (T::IsExpected(st) && !st->IsInUse() && st->owner == _local_company && IsNearbyStationRightType(T::From(st))) {
 			/* Include only within station spread (yes, it is strictly less than) */
 			if (std::max(DistanceMax(ta.tile, st->xy), DistanceMax(TILE_ADDXY(ta.tile, ta.w - 1, ta.h - 1), st->xy)) < _settings_game.station.station_spread) {
 				_deleted_stations_nearby.push_back({st->xy, st->index});
@@ -2546,6 +2522,7 @@ struct SelectStationWindow : Window {
 	void OnInvalidateData(int data = 0, bool gui_scope = true) override
 	{
 		if (!gui_scope) return;
+		if (T::EXPECTED_FACIL == FACIL_WAYPOINT) _station_nearby_road_waypoint_search = (this->select_station_cmd.cmd & CMD_ID_MASK) == CMD_BUILD_ROAD_WAYPOINT;
 		FindStationsNearby<T>(this->area, true);
 		this->vscroll->SetCount((uint)_stations_nearby_list.size() + 1);
 		this->SetDirty();
@@ -2608,6 +2585,7 @@ static bool StationJoinerNeeded(const CommandContainer &cmd, TileArea ta)
 	/* Test for adjacent station or station below selection.
 	 * If adjacent-stations is disabled and we are building next to a station, do not show the selection window.
 	 * but join the other station immediately. */
+	if (T::EXPECTED_FACIL == FACIL_WAYPOINT) _station_nearby_road_waypoint_search = (cmd.cmd & CMD_ID_MASK) == CMD_BUILD_ROAD_WAYPOINT;
 	const T *st = FindStationsNearby<T>(ta, false);
 	return st == nullptr && (_settings_game.station.adjacent_stations || _stations_nearby_list.size() == 0);
 }
@@ -3017,4 +2995,13 @@ public:
 void GuiShowStationRatingTooltip(Window *parent, const Station *st, const CargoSpec *cs) {
 	DeleteWindowById(WC_STATION_RATING_TOOLTIP, 0);
 	new StationRatingTooltipWindow(parent, st, cs);
+}
+
+bool ShouldShowBaseStationViewportLabel(const BaseStation *bst)
+{
+	if (!HasBit(_display_opt, Station::IsExpected(bst) ? DO_SHOW_STATION_NAMES : DO_SHOW_WAYPOINT_NAMES)) return false;
+	if (HasBit(_display_opt, DO_SHOW_COMPETITOR_SIGNS) && (_local_company != bst->owner && bst->owner != OWNER_NONE)) return false;
+	if (Waypoint::IsExpected(bst) && HasBit(Waypoint::From(bst)->waypoint_flags, WPF_HIDE_LABEL) && _settings_client.gui.allow_hiding_waypoint_labels &&
+			!HasBit(_extra_display_opt, XDO_SHOW_HIDDEN_SIGNS)) return false;
+	return true;
 }

@@ -220,6 +220,8 @@ STR_UNITS_VOLUME_LONG_IMPERIAL                                  :{COMMA}{NBSP}ج
 STR_UNITS_VOLUME_LONG_METRIC                                    :{COMMA}{NBSP} لتر
 STR_UNITS_VOLUME_LONG_SI                                        :{COMMA}{NBSP}م3
 
+STR_UNITS_FORCE_IMPERIAL                                        :{COMMA}{NBSP}رطل قوة
+STR_UNITS_FORCE_METRIC                                          :{COMMA}{NBSP}كيلوغرام قوة
 STR_UNITS_FORCE_SI                                              :{COMMA}{NBSP} كيلو نيوتن
 
 STR_UNITS_HEIGHT_IMPERIAL                                       :{COMMA}{NBSP} قدم
@@ -320,6 +322,7 @@ STR_GROUP_BY_NONE                                               :لا شيء
 STR_GROUP_BY_SHARED_ORDERS                                      :لأوامر المشتركة
 
 # Order button in shared orders vehicle list
+STR_GOTO_ORDER_VIEW                                             :{BLACK}أوامر
 
 # Tooltips for the main toolbar
 ###length 31
@@ -679,7 +682,7 @@ STR_MUSIC_TOOLTIP_DRAG_SLIDERS_TO_SET_MUSIC                     :{BLACK}اسحب
 STR_MUSIC_TOOLTIP_SELECT_ALL_TRACKS_PROGRAM                     :{BLACK}اختار " جميع المسارات"
 STR_MUSIC_TOOLTIP_SELECT_OLD_STYLE_MUSIC                        :{BLACK}اختار ،المسارات القديمة
 STR_MUSIC_TOOLTIP_SELECT_NEW_STYLE_MUSIC                        :{BLACK}اختار المسارات الحديثة
-STR_MUSIC_TOOLTIP_SELECT_EZY_STREET_STYLE                       :{BLACK}اختر'Ezy Street style music'برنامج
+STR_MUSIC_TOOLTIP_SELECT_EZY_STREET_STYLE                       :{BLACK}اختر برنامج 'Ezy Street style music'
 STR_MUSIC_TOOLTIP_SELECT_CUSTOM_1_USER_DEFINED                  :{BLACK}اختياري 1
 STR_MUSIC_TOOLTIP_SELECT_CUSTOM_2_USER_DEFINED                  :{BLACK}اختياري 2
 STR_MUSIC_TOOLTIP_TOGGLE_PROGRAM_SHUFFLE                        :{BLACK}تشغيل / ايقاف العشوائي
@@ -891,6 +894,7 @@ STR_NEWS_SERVICE_SUBSIDY_AWARDED_TRIPLE                         :{BIG_FONT}{BLAC
 STR_NEWS_SERVICE_SUBSIDY_AWARDED_QUADRUPLE                      :{BIG_FONT}{BLACK} شركة {STRING} فازت بالعرض !{}{}{STRING} من {STRING} الى {STRING} سوف يعطي اربعة اضعاف الدخل ل{NUM} سنة!
 
 STR_NEWS_ROAD_REBUILDING                                        :{BIG_FONT}{BLACK} فوضى طرق عارمة في مدينة {TOWN}!{}{}اعادة ترميم الطرق مولت من قبل شركة {STRING} تجلي ستة أشهر من الشقاء لعربات الطريق.
+STR_NEWS_EXCLUSIVE_RIGHTS_TITLE                                 :{BIG_FONT}{BLACK}احتكار النقل!
 
 # Extra view window
 STR_EXTRA_VIEWPORT_TITLE                                        :{WHITE}شاشة العرض {COMMA}
@@ -939,36 +943,7 @@ STR_GAME_OPTIONS_CURRENCY_CUSTOM                                :مخصص ...
 STR_GAME_OPTIONS_CURRENCY_GEL                                   :(GEL) لاري جورجي
 STR_GAME_OPTIONS_CURRENCY_CNY                                   :(CNY) الرنمينبي الصيني
 STR_GAME_OPTIONS_CURRENCY_HKD                                   :(HKD) دولار هونج كونج
-
-###length 2
-STR_GAME_OPTIONS_ROAD_VEHICLES_DROPDOWN_LEFT                    :القيادة على اليسار
-STR_GAME_OPTIONS_ROAD_VEHICLES_DROPDOWN_RIGHT                   :القيادة على اليمين
-
-STR_GAME_OPTIONS_TOWN_NAMES_FRAME                               :{BLACK}اسماء المدن:
-STR_GAME_OPTIONS_TOWN_NAMES_DROPDOWN_TOOLTIP                    :{BLACK}اختيار طريقة عرض اسماء المدن
-
-###length 21
-STR_GAME_OPTIONS_TOWN_NAME_ORIGINAL_ENGLISH                     :English (Original)
-STR_GAME_OPTIONS_TOWN_NAME_FRENCH                               :فرنسي
-STR_GAME_OPTIONS_TOWN_NAME_GERMAN                               :الماني
-STR_GAME_OPTIONS_TOWN_NAME_ADDITIONAL_ENGLISH                   :انجليزي اضافي
-STR_GAME_OPTIONS_TOWN_NAME_LATIN_AMERICAN                       :امريكي لاتيني
-STR_GAME_OPTIONS_TOWN_NAME_SILLY                                :مضحك
-STR_GAME_OPTIONS_TOWN_NAME_SWEDISH                              :سويدي
-STR_GAME_OPTIONS_TOWN_NAME_DUTCH                                :هولندي
-STR_GAME_OPTIONS_TOWN_NAME_FINNISH                              :فنلندي
-STR_GAME_OPTIONS_TOWN_NAME_POLISH                               :بلغاري
-STR_GAME_OPTIONS_TOWN_NAME_SLOVAK                               :سلوفاكي
-STR_GAME_OPTIONS_TOWN_NAME_NORWEGIAN                            :نرويجي
-STR_GAME_OPTIONS_TOWN_NAME_HUNGARIAN                            :هنغاري
-STR_GAME_OPTIONS_TOWN_NAME_AUSTRIAN                             :نمساوي
-STR_GAME_OPTIONS_TOWN_NAME_ROMANIAN                             :روماني
-STR_GAME_OPTIONS_TOWN_NAME_CZECH                                :تشيكي
-STR_GAME_OPTIONS_TOWN_NAME_SWISS                                :سويدي
-STR_GAME_OPTIONS_TOWN_NAME_DANISH                               :دنماكي
-STR_GAME_OPTIONS_TOWN_NAME_TURKISH                              :تركي
-STR_GAME_OPTIONS_TOWN_NAME_ITALIAN                              :ايطالي
-STR_GAME_OPTIONS_TOWN_NAME_CATALAN                              :كتالونية
+STR_GAME_OPTIONS_CURRENCY_INR                                   :الروبية الهندية (INR)
 
 STR_GAME_OPTIONS_AUTOSAVE_FRAME                                 :{BLACK}حفظ آلي
 STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_TOOLTIP                      :{BLACK}اختار مدة الحفظ الآلي
@@ -995,6 +970,7 @@ STR_GAME_OPTIONS_RESOLUTION_OTHER                               :اخرى
 STR_GAME_OPTIONS_VIDEO_ACCELERATION                             :{BLACK}تسريع الأجهزة
 STR_GAME_OPTIONS_VIDEO_ACCELERATION_TOOLTIP                     :{BLACK}حدد هذا المربع للسماح لـ OpenTTD بمحاولة استخدام تسريع الأجهزة. سيتم تطبيق الإعداد الذي تم تغييره فقط عند إعادة تشغيل اللعبة
 STR_GAME_OPTIONS_VIDEO_ACCELERATION_RESTART                     :{WHITE}لن يعمل الإعداد إلا بعد إعادة تشغيل اللعبة
+
 
 
 STR_GAME_OPTIONS_GUI_ZOOM_FRAME                                 :{BLACK}حجم اللوحة
@@ -1062,8 +1038,6 @@ STR_CURRENCY_PREVIEW                                            :{LTBLUE}عرض:
 STR_CURRENCY_CUSTOM_CURRENCY_PREVIEW_TOOLTIP                    :{BLACK} 10000 جنية استرليني في عملتك
 STR_CURRENCY_CHANGE_PARAMETER                                   :{BLACK}غير الخيارات الاختيارة
 
-STR_DIFFICULTY_LEVEL_SETTING_MAXIMUM_NO_COMPETITORS             :{LTBLUE}العدد الاقصى للمتنافسين: {ORANGE}{COMMA}
-
 STR_NONE                                                        :بدون
 STR_FUNDING_ONLY                                                :التمويل فقط
 STR_MINIMAL                                                     :الادنى
@@ -1113,17 +1087,25 @@ STR_SUBSIDY_X2                                                  :*2
 STR_SUBSIDY_X3                                                  :*3
 STR_SUBSIDY_X4                                                  :*4
 
+###length 4
+STR_CLIMATE_TEMPERATE_LANDSCAPE                                 :مناطق معتدلة
+STR_CLIMATE_SUB_ARCTIC_LANDSCAPE                                :مناطق ثلجية
+STR_CLIMATE_SUB_TROPICAL_LANDSCAPE                              :مناطق مدارية
+STR_CLIMATE_TOYLAND_LANDSCAPE                                   :ألعاب
+
 ###length 7
 STR_TERRAIN_TYPE_VERY_FLAT                                      :مسطح تماما
 STR_TERRAIN_TYPE_FLAT                                           :مسطح
 STR_TERRAIN_TYPE_HILLY                                          :مرتفعات - هضاب
 STR_TERRAIN_TYPE_MOUNTAINOUS                                    :جبال
 STR_TERRAIN_TYPE_ALPINIST                                       :شاهق
+STR_TERRAIN_TYPE_CUSTOM                                         :الارتفاع المخصص
 
-###length 3
-STR_CITY_APPROVAL_PERMISSIVE                                    :متساهل
+###length 4
+STR_CITY_APPROVAL_LENIENT                                       :متساهل
 STR_CITY_APPROVAL_TOLERANT                                      :متقبل
 STR_CITY_APPROVAL_HOSTILE                                       :معاد
+STR_CITY_APPROVAL_PERMISSIVE                                    :متساهل (لا يؤثر على اعمال الشركة )
 
 STR_WARNING_NO_SUITABLE_AI                                      :{WHITE}لايوجد ذكاء اصطناعي متاح ...{}تستطيع تجميل العديد من الذكاء الاصطناعي عن طريق اللانترنت
 
@@ -1179,16 +1161,19 @@ STR_CONFIG_SETTING_CONSTRUCTION_SPEED                           ::سرعة ال�
 
 STR_CONFIG_SETTING_VEHICLE_BREAKDOWNS                           ::تعطلات العربة {STRING}
 
+STR_CONFIG_SETTING_SUBSIDY_MULTIPLIER_HELPTEXT                  :حدد المبلغ الذي يتم دفعه مقابل الاتصالات المدعومة
 
 
+STR_CONFIG_SETTING_SUBSIDY_DURATION_VALUE                       :{NUM} سنة
 ###setting-zero-is-special
 
 
 STR_CONFIG_SETTING_RECESSIONS                                   :حالات الركود: {STRING}
 
 
+STR_CONFIG_SETTING_DISASTERS                                    :الكوارث: {STRING}
 
-STR_CONFIG_SETTING_CITY_APPROVAL                                :موقف مجلس المدينة من إعادة هيكلة المنطقة: {STRING}
+STR_CONFIG_SETTING_CITY_APPROVAL                                :سلوك السلطة المحلية: {STRING}
 
 STR_CONFIG_SETTING_MAP_HEIGHT_LIMIT                             :حد ارتفاع الخريطة:{STRING}
 STR_CONFIG_SETTING_MAP_HEIGHT_LIMIT_HELPTEXT                    :اضبط أقصى ارتفاع لتضاريس الخريطة. باستخدام "(أوتوماتيك)" ، سيتم اختيار قيمة جيدة بعد إنشاء التضاريس
@@ -1220,6 +1205,7 @@ STR_CONFIG_SETTING_INFLATION                                    :التضخم: {
 STR_CONFIG_SETTING_INFLATION_HELPTEXT                           :تمكين التضخم في الاقتصاد ، حيث ترتفع التكاليف بشكل أسرع قليلاً من المدفوعات
 
 
+STR_CONFIG_SETTING_MAX_BRIDGE_HEIGHT_HELPTEXT                   :الارتفاع الأقصى لبناء الجسور
 
 
 STR_CONFIG_SETTING_RAW_INDUSTRY_CONSTRUCTION_METHOD             :طريقة بناء المصانع الأولية يدوية : {STRING}
@@ -1263,6 +1249,7 @@ STR_CONFIG_SETTING_ALLOW_GIVE_MONEY_HELPTEXT                    :السماح ب
 
 STR_CONFIG_SETTING_FREIGHT_TRAINS                               :مضاعفة وزن الشحنة لمحاكاة القطارات الثقيلة: {STRING}
 
+STR_CONFIG_SETTING_PLANE_SPEED_VALUE                            :1 / {COMMA}
 
 STR_CONFIG_SETTING_PLANE_CRASHES                                :عدد الطائرات المتحطمة: {STRING}
 ###length 3
@@ -1277,6 +1264,8 @@ STR_CONFIG_SETTING_DYNAMIC_ENGINES_EXISTING_VEHICLES            :{WHITE}تغير
 
 STR_CONFIG_SETTING_INFRASTRUCTURE_MAINTENANCE                   :صيانة البنية التحتية: {STRING}
 
+STR_CONFIG_SETTING_COMPANY_STARTING_COLOUR                      :لون الشركة البدائي: {STRING}
+STR_CONFIG_SETTING_COMPANY_STARTING_COLOUR_HELPTEXT             :اختر اللون البدائي للشركة
 
 STR_CONFIG_SETTING_NEVER_EXPIRE_AIRPORTS                        :المطارات لا تنتهي صلاحيتها {STRING}
 
@@ -1329,6 +1318,7 @@ STR_CONFIG_SETTING_SNOWLINE_HEIGHT_HELPTEXT                     :تحكم على
 
 STR_CONFIG_SETTING_SNOW_COVERAGE_VALUE                          :{NUM}%
 
+STR_CONFIG_SETTING_DESERT_COVERAGE_VALUE                        :{NUM}%
 
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN                         :خشونة التضاريس: {STRING}
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_HELPTEXT                :(TerraGenesis only)إختر تكرار الهضبات: الاراض المستويه تحتوي على البضع منها,هضبات موزعه عرضيا اكثر,الاراض الوعرة تحتوي الكثير من الهضاب,التي من الممكن ان تكون متكررة
@@ -1354,6 +1344,10 @@ STR_CONFIG_SETTING_TREE_PLACER_IMPROVED                         :المحسن
 STR_CONFIG_SETTING_ROAD_SIDE                                    :السيارات: {STRING}
 STR_CONFIG_SETTING_ROAD_SIDE_HELPTEXT                           :إختر جهة القيادة
 
+###length 2
+STR_CONFIG_SETTING_ROAD_SIDE_LEFT                               :القيادة على اليسار
+STR_CONFIG_SETTING_ROAD_SIDE_RIGHT                              :القيادة على اليمين
+
 STR_CONFIG_SETTING_HEIGHTMAP_ROTATION                           :اتجاة خريطة المرتفعات: {STRING}
 ###length 2
 STR_CONFIG_SETTING_HEIGHTMAP_ROTATION_COUNTER_CLOCKWISE         :عكس عقارب الساعة
@@ -1375,6 +1369,8 @@ STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_HELPTEXT                :لون الار
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_GREEN                   :اخضر
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_DARK_GREEN              :اخضر غامق
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_VIOLET                  :بنفسجي
+
+###length 4
 
 ###length 4
 
@@ -1400,8 +1396,10 @@ STR_CONFIG_SETTING_SCROLLWHEEL_OFF                              :عدم استخ
 
 STR_CONFIG_SETTING_OSK_ACTIVATION                               :كيبورد على الشاشة: {STRING}
 ###length 4
+STR_CONFIG_SETTING_OSK_ACTIVATION_DISABLED                      :غير مفعل
 
 ###length 3
+STR_CONFIG_SETTING_USE_RELAY_SERVICE_ALLOW                      :سماح
 
 STR_CONFIG_SETTING_RIGHT_MOUSE_BTN_EMU                          :محاكاة الزر الأيمن : {STRING}
 ###length 3
@@ -1450,9 +1448,8 @@ STR_CONFIG_SETTING_SHOW_TRACK_RESERVATION                       :اظهار ال
 
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS                     :ابقاء ادوات البناء فعالة بعد استخدامها: {STRING}
 
-STR_CONFIG_SETTING_EXPENSES_LAYOUT                              :النفقات للمجموعة في النافذة المالية: {STRING}
 
-
+STR_CONFIG_SETTING_FAST_FORWARD_SPEED_LIMIT_VAL                 :{NUM}% سرعة اللعبة العادية
 ###setting-zero-is-special
 
 STR_CONFIG_SETTING_SOUND_TICKER                                 :خبر: {STRING}
@@ -1501,6 +1498,7 @@ STR_CONFIG_SETTING_AI_BUILDS_SHIPS                              :حظر السف
 STR_CONFIG_SETTING_AI_PROFILE_EASY                              :سهل
 
 STR_CONFIG_SETTING_AI_IN_MULTIPLAYER                            :السماح بالذكاء الصناعي في اللعب الجماعي : {STRING}
+STR_CONFIG_SETTING_AI_IN_MULTIPLAYER_HELPTEXT                   :السماح بلاعبين كمبيوترالذكاء الصناعي بالمشاركة في الالعاب الجماعية.
 
 STR_CONFIG_SETTING_SCRIPT_MAX_OPCODES                           :#opcodes قبل تعليق الاسكربت: {STRING}
 
@@ -1525,6 +1523,7 @@ STR_CONFIG_SETTING_NEWS_ACCIDENTS_DISASTERS                     :الحوادث/
 STR_CONFIG_SETTING_NEWS_COMPANY_INFORMATION                     :معلومات الشركة: {STRING}
 
 STR_CONFIG_SETTING_NEWS_INDUSTRY_OPEN                           :تشغيل مصنع جديد: {STRING}
+STR_CONFIG_SETTING_NEWS_INDUSTRY_OPEN_HELPTEXT                  :عرض صحيفة عند افتتاح الصنعات الجديدة
 
 STR_CONFIG_SETTING_NEWS_INDUSTRY_CLOSE                          :اغلاق مصنع: {STRING}
 
@@ -1560,10 +1559,12 @@ STR_CONFIG_SETTING_COLOURED_NEWS_YEAR                           :الاخبار 
 STR_CONFIG_SETTING_COLOURED_NEWS_YEAR_HELPTEXT                  :السنة التي تُطبع فيها إعلانات الجريدة بالألوان. قبل هذا العام ، يستخدم اللون أسود / أبيض
 STR_CONFIG_SETTING_STARTING_YEAR                                :سنة البدايه: {STRING}
 
+STR_CONFIG_SETTING_ENDING_YEAR_VALUE                            :{NUM}
 ###setting-zero-is-special
 STR_CONFIG_SETTING_ENDING_YEAR_ZERO                             :لا تنتهي
 
 ###length 3
+STR_CONFIG_SETTING_ECONOMY_TYPE_FROZEN                          :مجمد
 
 STR_CONFIG_SETTING_ALLOW_SHARES                                 :السماح بشراء حصص من الشركات الاخرى: {STRING}
 
@@ -1602,13 +1603,16 @@ STR_CONFIG_SETTING_TOWN_FOUNDING_ALLOWED_CUSTOM_LAYOUT          :مسموح - ن
 
 ###length 2
 STR_CONFIG_SETTING_TOWN_CARGOGENMODE_ORIGINAL                   :تربيعي (أصلي)
+STR_CONFIG_SETTING_TOWN_CARGOGENMODE_BITCOUNT                   :خطي
 
 STR_CONFIG_SETTING_EXTRA_TREE_PLACEMENT                         :اضافة الاشجار اثناء اللعب: {STRING}
 ###length 4
+STR_CONFIG_SETTING_EXTRA_TREE_PLACEMENT_SPREAD_RAINFOREST       :تنموا ولكن فقط في الغابات الاستوائية
 
 STR_CONFIG_SETTING_TOOLBAR_POS                                  :موقع شريط الأدوات الرئيسي: {STRING}
 STR_CONFIG_SETTING_STATUSBAR_POS                                :موقع شريط المعلومات: {STRING}
 ###setting-zero-is-special
+STR_CONFIG_SETTING_SNAP_RADIUS_DISABLED                         :غير مفعل
 STR_CONFIG_SETTING_SOFT_LIMIT                                   :حدود نعومة النوافذ - غير ملتصقة - :{STRING}
 ###setting-zero-is-special
 STR_CONFIG_SETTING_SOFT_LIMIT_DISABLED                          :غير مفعل
@@ -1634,6 +1638,7 @@ STR_CONFIG_SETTING_TOWN_GROWTH_NORMAL                           :عادي
 STR_CONFIG_SETTING_TOWN_GROWTH_FAST                             :سريع
 STR_CONFIG_SETTING_TOWN_GROWTH_VERY_FAST                        :سريع جدا
 
+STR_CONFIG_SETTING_LARGER_TOWNS_HELPTEXT                        :عدد المدن التي ستصبح مدينة كبيرة، وبالتالي اي مدينة تبدء اكبر وتنمو بطريقة سريعة.
 ###setting-zero-is-special
 STR_CONFIG_SETTING_CITY_SIZE_MULTIPLIER                         :مضاعف المدن المبدئي: {STRING}
 
@@ -1649,6 +1654,7 @@ STR_CONFIG_SETTING_DEMAND_SIZE_HELPTEXT                         :ضبط هذا �
 STR_CONFIG_SETTING_LOCALISATION_UNITS_VELOCITY                  :وحدات السرعة: {STRING}
 ###length 4
 STR_CONFIG_SETTING_LOCALISATION_UNITS_VELOCITY_METRIC           :(متري (كم / ساعة
+STR_CONFIG_SETTING_LOCALISATION_UNITS_VELOCITY_SI               :متري (م / ثانية)
 
 STR_CONFIG_SETTING_LOCALISATION_UNITS_POWER                     :وحدات الطاقة في السيارة: {STRING}
 ###length 3
@@ -1695,7 +1701,7 @@ STR_CONFIG_SETTING_PATHFINDER_FOR_SHIPS                         :موجد طري
 STR_CONFIG_SETTING_REVERSE_AT_SIGNALS                           :العكس عند الإشارات: {STRING}
 ###length 2
 STR_CONFIG_SETTING_PATHFINDER_NPF                               :NPF
-STR_CONFIG_SETTING_PATHFINDER_YAPF_RECOMMENDED                  :YAPF {BLUE}(مفضل)
+STR_CONFIG_SETTING_PATHFINDER_YAPF                              :YAPF {BLUE}(مفضل)
 
 STR_CONFIG_SETTING_QUERY_CAPTION                                :{WHITE}عدل قيمة التغيير
 
@@ -1778,12 +1784,6 @@ STR_CHEAT_NO_JETCRASH                                           :{LTBLUE}الط�
 STR_CHEAT_CHANGE_DATE                                           :{LTBLUE}عدل التاريخ {ORANGE} {DATE_SHORT}
 STR_CHEAT_CHANGE_DATE_QUERY_CAPT                                :{WHITE}غير السنة الحالية
 STR_CHEAT_SETUP_PROD                                            :{LTBLUE}تفعيل تغيير قيمة الانتاج: {ORANGE}{STRING}
-
-###length 4
-STR_CHEAT_SWITCH_CLIMATE_TEMPERATE_LANDSCAPE                    :مناطق معتدلة
-STR_CHEAT_SWITCH_CLIMATE_SUB_ARCTIC_LANDSCAPE                   :مناطق ثلجية
-STR_CHEAT_SWITCH_CLIMATE_SUB_TROPICAL_LANDSCAPE                 :مناطق مدارية
-STR_CHEAT_SWITCH_CLIMATE_TOYLAND_LANDSCAPE                      :ألعاب
 
 # Livery window
 
@@ -1985,6 +1985,7 @@ STR_NETWORK_CLIENT_LIST_SERVER_CONNECTION_TYPE_DIRECT           :{BLACK}عامة
 STR_NETWORK_CLIENT_LIST_ADMIN_CLIENT_BAN                        :منع
 
 STR_NETWORK_CLIENT_LIST_ASK_CLIENT_KICK                         :{YELLOW}هل أنت متأكد أنك تريد طرد اللاعب '{STRING}'؟
+STR_NETWORK_CLIENT_LIST_ASK_CLIENT_BAN                          :{YELLOW}هل أنت متأكد أنك تريد حظر اللاعب '{STRING}'؟
 
 STR_NETWORK_ASK_RELAY_NO                                        :{BLACK}لا
 
@@ -2064,8 +2065,10 @@ STR_NETWORK_SERVER_MESSAGE                                      :*** {1:STRING}
 ###length 12
 STR_NETWORK_SERVER_MESSAGE_GAME_PAUSED                          :اللعبة متوقفة ({STRING})
 STR_NETWORK_SERVER_MESSAGE_GAME_STILL_PAUSED_1                  :اللعبة مازالت متوقفة ({STRING})
-STR_NETWORK_SERVER_MESSAGE_GAME_STILL_PAUSED_2                  :اللعبة مازالت متوقفة ({STRING}, {STRING})
-STR_NETWORK_SERVER_MESSAGE_GAME_STILL_PAUSED_3                  :اللعبة متوقفة ({STRING}, {STRING}, {STRING})
+STR_NETWORK_SERVER_MESSAGE_GAME_STILL_PAUSED_2                  :اللعبة مازالت متوقفة ({STRING}، {STRING})
+STR_NETWORK_SERVER_MESSAGE_GAME_STILL_PAUSED_3                  :اللعبة متوقفة ({STRING}، {STRING}، {STRING})
+STR_NETWORK_SERVER_MESSAGE_GAME_STILL_PAUSED_4                  :اللعبة مازالت متوقفة ({STRING}، {STRING}، {STRING}، {STRING})
+STR_NETWORK_SERVER_MESSAGE_GAME_STILL_PAUSED_5                  :اللعبة مازالت متوقفة ({STRING}، {STRING}، {STRING}، {STRING}، {STRING})
 STR_NETWORK_SERVER_MESSAGE_GAME_UNPAUSED                        :اللعبة غير موقوفه ({STRING})
 STR_NETWORK_SERVER_MESSAGE_GAME_REASON_NOT_ENOUGH_PLAYERS       :عدد اللاعبين غير كافي
 STR_NETWORK_SERVER_MESSAGE_GAME_REASON_CONNECTING_CLIENTS       :ربط العملاء
@@ -2182,6 +2185,8 @@ STR_LINKGRAPH_LEGEND_COMPANY_TOOLTIP                            :{BLACK}{STRING}
 STR_LINKGRAPH_LEGEND_UNUSED                                     :{TINY_FONT}{BLACK}غير مستخدم
 STR_LINKGRAPH_LEGEND_SATURATED                                  :{TINY_FONT}{BLACK}عادي الاستخدام
 STR_LINKGRAPH_LEGEND_OVERLOADED                                 :{TINY_FONT}{BLACK}زائد الاستخدام
+
+# Linkgraph tooltip
 
 # Base for station construction window(s)
 STR_STATION_BUILD_COVERAGE_AREA_TITLE                           :{BLACK}وضح منطقة التغطية
@@ -2453,6 +2458,10 @@ STR_FUND_INDUSTRY_INDUSTRY_BUILD_COST                           :{BLACK}التك
 STR_FUND_INDUSTRY_PROSPECT_NEW_INDUSTRY                         :{BLACK} الاحتمالية
 STR_FUND_INDUSTRY_BUILD_NEW_INDUSTRY                            :{BLACK}بناء
 STR_FUND_INDUSTRY_FUND_NEW_INDUSTRY                             :{BLACK}مول
+STR_FUND_INDUSTRY_REMOVE_ALL_INDUSTRIES                         :{BLACK}إزالة جميع الصناعات
+STR_FUND_INDUSTRY_REMOVE_ALL_INDUSTRIES_TOOLTIP                 :{BLACK}إزالة جميع الصناعات الموجودة حاليًا على الخريطة
+STR_FUND_INDUSTRY_REMOVE_ALL_INDUSTRIES_CAPTION                 :{WHITE}إزالة جميع الصناعات
+STR_FUND_INDUSTRY_REMOVE_ALL_INDUSTRIES_QUERY                   :{YELLOW}هل أنت متأكد أنك تريد إزالة جميع الصناعات؟
 
 # Industry cargoes window
 STR_INDUSTRY_CARGOES_INDUSTRY_CAPTION                           :{WHITE}سلسلة مصانع لـ {STRING} مصنع
@@ -2606,9 +2615,11 @@ STR_FRAMERATE_GRAPH_SECONDS                                     :{TINY_FONT}{COM
 STR_FRAMERATE_GL_ECONOMY                                        :{BLACK}  التعامل مع البضائع:
 STR_FRAMERATE_GL_TRAINS                                         :{BLACK}  تكتكة القطار:
 STR_FRAMERATE_DRAWING_VIEWPORTS                                 :{BLACK} منافذ العرض للعالم:
+STR_FRAMERATE_GAMESCRIPT                                        :{BLACK}  مخطوط اللعبة:
 STR_FRAMERATE_AI                                                :{BLACK}   AI {NUM} {STRING}
 
 ###length 15
+STR_FRAMETIME_CAPTION_SOUND                                     :اختلاط الصوت
 STR_FRAMETIME_CAPTION_GAMESCRIPT                                :كتابة اللعبة
 
 
@@ -2645,11 +2656,15 @@ STR_MAPGEN_MAPSIZE                                              :{BLACK}حجم �
 STR_MAPGEN_MAPSIZE_TOOLTIP                                      :{BLACK} حدد حجم الخريطة بالمربعات. سيكون عدد المربعات المتاحة أصغر قليلاً
 STR_MAPGEN_BY                                                   :{BLACK}*
 STR_MAPGEN_NUMBER_OF_TOWNS                                      :{BLACK}عدد المدن:
+STR_MAPGEN_TOWN_NAME_LABEL                                      :{BLACK}اسماء المدن:
+STR_MAPGEN_TOWN_NAME_DROPDOWN_TOOLTIP                           :{BLACK}اختيار طريقة عرض اسماء المدن
 STR_MAPGEN_DATE                                                 :{BLACK}التاريخ:
 STR_MAPGEN_NUMBER_OF_INDUSTRIES                                 :{BLACK}عدد المصانع:
 STR_MAPGEN_HEIGHTMAP_HEIGHT_UP                                  :{BLACK}قم بزيادة أقصى ارتفاع لأعلى قمة على الخريطة بواحد
+STR_MAPGEN_SNOW_COVERAGE                                        :{BLACK}تغطية الثلج:
 STR_MAPGEN_SNOW_COVERAGE_DOWN                                   :{BLACK}تقليل تغطية الثلوج بنسبة عشرة بالمائة
 STR_MAPGEN_DESERT_COVERAGE                                      :{BLACK}مدى تغطيت السحراء:
+STR_MAPGEN_DESERT_COVERAGE_TEXT                                 :{BLACK}{NUM}%
 STR_MAPGEN_SNOW_LINE_HEIGHT                                     :{BLACK} ارتفاع خط الثلج
 STR_MAPGEN_SNOW_LINE_UP                                         :{BLACK}ارفع خط الثلج مستوى واحد
 STR_MAPGEN_SNOW_LINE_DOWN                                       :{BLACK}خفض خط الثلج مستوى واحد
@@ -2660,6 +2675,29 @@ STR_MAPGEN_QUANTITY_OF_RIVERS                                   :{BLACK}انها
 STR_MAPGEN_SMOOTHNESS                                           :{BLACK} النعومة:
 STR_MAPGEN_VARIETY                                              :{BLACK}توزيع التنوع:
 STR_MAPGEN_GENERATE                                             :{WHITE}ولد
+
+###length 21
+STR_MAPGEN_TOWN_NAME_ORIGINAL_ENGLISH                           :English (Original)
+STR_MAPGEN_TOWN_NAME_FRENCH                                     :فرنسي
+STR_MAPGEN_TOWN_NAME_GERMAN                                     :الماني
+STR_MAPGEN_TOWN_NAME_ADDITIONAL_ENGLISH                         :انجليزي اضافي
+STR_MAPGEN_TOWN_NAME_LATIN_AMERICAN                             :امريكي لاتيني
+STR_MAPGEN_TOWN_NAME_SILLY                                      :مضحك
+STR_MAPGEN_TOWN_NAME_SWEDISH                                    :سويدي
+STR_MAPGEN_TOWN_NAME_DUTCH                                      :هولندي
+STR_MAPGEN_TOWN_NAME_FINNISH                                    :فنلندي
+STR_MAPGEN_TOWN_NAME_POLISH                                     :بلغاري
+STR_MAPGEN_TOWN_NAME_SLOVAK                                     :سلوفاكي
+STR_MAPGEN_TOWN_NAME_NORWEGIAN                                  :نرويجي
+STR_MAPGEN_TOWN_NAME_HUNGARIAN                                  :هنغاري
+STR_MAPGEN_TOWN_NAME_AUSTRIAN                                   :نمساوي
+STR_MAPGEN_TOWN_NAME_ROMANIAN                                   :روماني
+STR_MAPGEN_TOWN_NAME_CZECH                                      :تشيكي
+STR_MAPGEN_TOWN_NAME_SWISS                                      :سويدي
+STR_MAPGEN_TOWN_NAME_DANISH                                     :دنماكي
+STR_MAPGEN_TOWN_NAME_TURKISH                                    :تركي
+STR_MAPGEN_TOWN_NAME_ITALIAN                                    :ايطالي
+STR_MAPGEN_TOWN_NAME_CATALAN                                    :كتالونية
 
 # Strings for map borders at game generation
 STR_MAPGEN_BORDER_TYPE                                          :{BLACK} حدود الخريطة:
@@ -2748,6 +2786,7 @@ STR_NEWGRF_SETTINGS_VERSION                                     :{BLACK} نسخ�
 STR_NEWGRF_SETTINGS_MIN_VERSION                                 :{BLACK}اقل نسخة متوافقة: {SILVER}{NUM}
 STR_NEWGRF_SETTINGS_MD5SUM                                      :{BLACK} : مجموع ام دي 5 {SILVER}{STRING}
 STR_NEWGRF_SETTINGS_PALETTE                                     :{BLACK} صحيفة : {SILVER}{STRING}
+STR_NEWGRF_SETTINGS_PALETTE_LEGACY                              :ليجاسي (W)
 STR_NEWGRF_SETTINGS_PARAMETER                                   :{BLACK}الاعدادات: {SILVER}{STRING}
 
 STR_NEWGRF_SETTINGS_NO_INFO                                     :{BLACK}لا يوجد معلومات متاحة
@@ -2949,6 +2988,7 @@ STR_LOCAL_AUTHORITY_ACTION_TOOLTIP_BRIBE                        :{YELLOW} ارش
 STR_GOALS_CAPTION                                               :{WHITE}{COMPANY} الأهداف
 STR_GOALS_SPECTATOR                                             :الأهداف العالمية
 STR_GOALS_TEXT                                                  :{ORANGE}{STRING}
+STR_GOALS_PROGRESS                                              :{ORANGE}{STRING}
 
 # Goal question window
 STR_GOAL_QUESTION_CAPTION_QUESTION                              :{BLACK}اسئله
@@ -2962,6 +3002,7 @@ STR_GOAL_QUESTION_BUTTON_NO                                     :لا
 STR_GOAL_QUESTION_BUTTON_YES                                    :نعم
 STR_GOAL_QUESTION_BUTTON_RETRY                                  :إعادة المحاولة
 STR_GOAL_QUESTION_BUTTON_RESTART                                :إعادة تشغيل
+STR_GOAL_QUESTION_BUTTON_POSTPONE                               :تأجيل
 STR_GOAL_QUESTION_BUTTON_SURRENDER                              :استسلام
 
 # Subsidies window
@@ -2978,7 +3019,9 @@ STR_STORY_BOOK_CAPTION                                          :{WHITE}{COMPANY
 STR_STORY_BOOK_SPECTATOR_CAPTION                                :{WHITE}كتاب القصة العالمية
 STR_STORY_BOOK_TITLE                                            :{YELLOW}{STRING}
 STR_STORY_BOOK_GENERIC_PAGE_ITEM                                :الصفحة {NUM}
+STR_STORY_BOOK_PREV_PAGE                                        :{BLACK}السابق
 STR_STORY_BOOK_PREV_PAGE_TOOLTIP                                :{BLACK}الانتقال إلى الصفحة السابقة
+STR_STORY_BOOK_NEXT_PAGE                                        :{BLACK}التالي
 
 # Station list window
 STR_STATION_LIST_TOOLTIP                                        :{BLACK}اسم المحطة - اضغط على اسم المحطة لتوسيطها في الشاشة. اضغط + كنترول لفتح شاشة عرض جديدة بمنطقة المحطة.
@@ -3011,6 +3054,7 @@ STR_STATION_VIEW_FROM                                           :{YELLOW}{CARGO_
 STR_STATION_VIEW_TO                                             :{YELLOW}{CARGO_SHORT} إلى {STATION}
 STR_STATION_VIEW_TO_ANY                                         :{RED}{CARGO_SHORT} إلى أي محطة
 
+STR_STATION_VIEW_GROUP_V_S_D                                    :عبر-المصدر-الوجهة
 
 ###length 8
 STR_CARGO_RATING_APPALLING                                      :منعدم
@@ -3045,27 +3089,24 @@ STR_EDIT_WAYPOINT_NAME                                          :{WHITE}عدل �
 
 # Finances window
 STR_FINANCES_CAPTION                                            :{WHITE}{COMPANY} {BLACK} {COMPANY_NUM} سجل المحاسبة
-STR_FINANCES_EXPENDITURE_INCOME_TITLE                           :{WHITE}المصروفات / الدخل
 STR_FINANCES_YEAR                                               :{WHITE}{NUM}
+
+###length 3
+STR_FINANCES_REVENUE_TITLE                                      :{WHITE}الدخل
+
 
 ###length 13
 STR_FINANCES_SECTION_CONSTRUCTION                               :{GOLD}البناء
 STR_FINANCES_SECTION_NEW_VEHICLES                               :{GOLD}العربات الجديدة
-STR_FINANCES_SECTION_TRAIN_RUNNING_COSTS                        :{GOLD}تكلفة تشغيل القطار
-STR_FINANCES_SECTION_ROAD_VEHICLE_RUNNING_COSTS                 :{GOLD}تكلفة تشغيل العربات
-STR_FINANCES_SECTION_AIRCRAFT_RUNNING_COSTS                     :{GOLD}تكلفة تشغيل الطائرات
-STR_FINANCES_SECTION_SHIP_RUNNING_COSTS                         :{GOLD}تكلفة تشغيل السفن
-STR_FINANCES_SECTION_PROPERTY_MAINTENANCE                       :{GOLD}صيانة الممتلكات
-STR_FINANCES_SECTION_TRAIN_INCOME                               :{GOLD}دخل القطار
-STR_FINANCES_SECTION_ROAD_VEHICLE_INCOME                        :{GOLD}دخل العربات
-STR_FINANCES_SECTION_AIRCRAFT_INCOME                            :{GOLD}دخل الطائرات
-STR_FINANCES_SECTION_SHIP_INCOME                                :{GOLD}دخل السفن
+STR_FINANCES_SECTION_TRAIN_RUNNING_COSTS                        :{GOLD}القطارات
+STR_FINANCES_SECTION_ROAD_VEHICLE_RUNNING_COSTS                 :{GOLD}العربات
+STR_FINANCES_SECTION_AIRCRAFT_RUNNING_COSTS                     :{GOLD}الطائرات
+STR_FINANCES_SECTION_SHIP_RUNNING_COSTS                         :{GOLD}السفن
 STR_FINANCES_SECTION_LOAN_INTEREST                              :{GOLD}فوائد القرض
 STR_FINANCES_SECTION_OTHER                                      :{GOLD}اخرى
 
-STR_FINANCES_NEGATIVE_INCOME                                    :{BLACK}-{CURRENCY_LONG}
-STR_FINANCES_POSITIVE_INCOME                                    :{BLACK}+{CURRENCY_LONG}
-STR_FINANCES_TOTAL_CAPTION                                      :{WHITE}المجموع
+STR_FINANCES_NEGATIVE_INCOME                                    :-{CURRENCY_LONG}
+STR_FINANCES_POSITIVE_INCOME                                    :+{CURRENCY_LONG}
 STR_FINANCES_BANK_BALANCE_TITLE                                 :{WHITE}السيولة المتاحة
 STR_FINANCES_LOAN_TITLE                                         :{WHITE}القرض
 STR_FINANCES_MAX_LOAN                                           :{WHITE}اقصى حد للقرض: {BLACK}{CURRENCY_LONG}
@@ -3146,7 +3187,9 @@ STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}صناع
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}-بدون-
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {STRING}، {STRING}، {STRING} و{NUM} اكثر...
 STR_INDUSTRY_DIRECTORY_LIST_CAPTION                             :{BLACK}اسماء المصانع - اضغط على اسم المصنع لتوسيط الشاشة عليه. اضغط + كنترول لفتح شاشة عرض جديدة لمنطقة المصنع.
+STR_INDUSTRY_DIRECTORY_FILTER_ALL_TYPES                         :جميع انواع الحمولة
 STR_INDUSTRY_DIRECTORY_FILTER_NONE                              :بدون
 
 # Industry view
@@ -3158,6 +3201,7 @@ STR_INDUSTRY_VIEW_PRODUCTION_LEVEL                              :{BLACK}نسبة
 
 
 STR_INDUSTRY_VIEW_REQUIRES                                      :{BLACK}:يتطلب
+STR_INDUSTRY_VIEW_ACCEPT_CARGO_AMOUNT                           :{YELLOW}{STRING}{BLACK}: {CARGO_SHORT} تنتظر{STRING}
 
 STR_CONFIG_GAME_PRODUCTION                                      :{WHITE}تغيير الانتاج مضاعف من 8 الى 2040
 STR_CONFIG_GAME_PRODUCTION_LEVEL                                :{WHITE}غير مستوى الانتاج{}نسبة مئوية حتى 800%.
@@ -3256,14 +3300,16 @@ STR_PURCHASE_INFO_RUNNINGCOST                                   :{BLACK}تكلف
 STR_PURCHASE_INFO_CAPACITY                                      :{BLACK}السعة: {GOLD}{CARGO_LONG} {STRING}
 STR_PURCHASE_INFO_REFITTABLE                                    :(قابل لتغيي)
 STR_PURCHASE_INFO_DESIGNED_LIFE                                 :{BLACK}تصميم: {GOLD}{NUM}{BLACK} العمر الافتراضي: {GOLD}{COMMA} سنة
+STR_PURCHASE_INFO_DESIGNED                                      :{BLACK}تصميم: {GOLD}{NUM}
 STR_PURCHASE_INFO_RELIABILITY                                   :{BLACK}الاعتمادية القصوى: {GOLD}{COMMA}%
 STR_PURCHASE_INFO_COST                                          :{BLACK}التكلفة: {GOLD}{CURRENCY_LONG}
+STR_PURCHASE_INFO_COST_REFIT                                    :{BLACK}التكلفة: {GOLD}{CURRENCY_LONG}{BLACK} (تكلفة التغيير: {GOLD}{CURRENCY_LONG}{BLACK})
 STR_PURCHASE_INFO_WEIGHT_CWEIGHT                                :{BLACK}الوزن: {GOLD}{WEIGHT_SHORT} ({WEIGHT_SHORT})
 STR_PURCHASE_INFO_COST_SPEED                                    :{BLACK}التكلفة: {GOLD}{CURRENCY_LONG}{BLACK} السرعة : {GOLD}{VELOCITY}
 STR_PURCHASE_INFO_AIRCRAFT_CAPACITY                             :{BLACK} السعة {GOLD}{CARGO_LONG}, {CARGO_LONG}
 STR_PURCHASE_INFO_PWAGPOWER_PWAGWEIGHT                          :{BLACK} العربات ذات الطاقة: {GOLD}+{POWER}{BLACK} الوزن: {GOLD}+{WEIGHT_SHORT}
 STR_PURCHASE_INFO_REFITTABLE_TO                                 :{BLACK}يمكن تعديلها الى: {GOLD}{STRING}
-STR_PURCHASE_INFO_ALL_TYPES                                     :كل انواع الحمولة
+STR_PURCHASE_INFO_ALL_TYPES                                     :جميع انواع الحمولة
 STR_PURCHASE_INFO_NONE                                          :بدون
 STR_PURCHASE_INFO_ALL_BUT                                       :الكل الا {CARGO_LIST}
 STR_PURCHASE_INFO_MAX_TE                                        :{BLACK}تأثير الجذب القصى: {GOLD}{FORCE}
@@ -3420,6 +3466,7 @@ STR_ENGINE_PREVIEW_MONORAIL_LOCOMOTIVE                          :قاطرة سك
 STR_ENGINE_PREVIEW_MAGLEV_LOCOMOTIVE                            :قاطرة سكة قطار ممغنطة
 
 STR_ENGINE_PREVIEW_ROAD_VEHICLE                                 :مركبة
+STR_ENGINE_PREVIEW_TRAM_VEHICLE                                 :مركبات الترام
 
 STR_ENGINE_PREVIEW_AIRCRAFT                                     :طائرة
 STR_ENGINE_PREVIEW_SHIP                                         :سفينة
@@ -3574,6 +3621,7 @@ STR_VEHICLE_DETAILS_DECREASE_SERVICING_INTERVAL_TOOLTIP         :{BLACK} انق�
 
 STR_SERVICE_INTERVAL_DROPDOWN_TOOLTIP                           :{BLACK}تغيير نوع الفاصل الزمني للصيانة
 STR_VEHICLE_DETAILS_DAYS                                        :الأيام
+STR_VEHICLE_DETAILS_PERCENT                                     :النسبة المئوية
 
 ###length VEHICLE_TYPES
 STR_QUERY_RENAME_TRAIN_CAPTION                                  :{WHITE}اسم القطار
@@ -3586,8 +3634,8 @@ STR_VEHICLE_DETAILS_TRAIN_ENGINE_BUILT_AND_VALUE                :{LTBLUE}{ENGINE
 STR_VEHICLE_DETAILS_TRAIN_WAGON_VALUE                           :{LTBLUE}{ENGINE}{BLACK} تكلفة: {LTBLUE}{CURRENCY_LONG}
 
 STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_TEXT                   :{BLACK}الحمولة القصوى لهذا القطار:
-STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY                        :{LTBLUE}- {CARGO_LONG} ({CARGO_SHORT})
-STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_MULT                   :{LTBLUE}- {CARGO_LONG} ({CARGO_SHORT}) (x{NUM})
+STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY                        :{LTBLUE}{CARGO_LONG} ({CARGO_SHORT})
+STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_MULT                   :{LTBLUE}{CARGO_LONG} ({CARGO_SHORT}) (x{NUM})
 
 STR_VEHICLE_DETAILS_CARGO_EMPTY                                 :{LTBLUE}فارغ
 STR_VEHICLE_DETAILS_CARGO_FROM                                  :{LTBLUE}{CARGO_LONG} الى {STATION}
@@ -3607,9 +3655,9 @@ STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}السع
 # Vehicle refit
 STR_REFIT_CAPTION                                               :{WHITE}{VEHICLE} (تغيير)
 STR_REFIT_TITLE                                                 :{GOLD}اختر نوع الحمولة ...
-STR_REFIT_NEW_CAPACITY_COST_OF_REFIT                            :{BLACK}السعة الجديدة: {GOLD}{CARGO_LONG}{}{BLACK}تكلفة التغيير: {RED}{CURRENCY_LONG}
-STR_REFIT_NEW_CAPACITY_INCOME_FROM_REFIT                        :{BLACK}:المساحة الجديدة {GOLD}{CARGO_LONG}{}{BLACK}:الدخل من التجديد {GREEN}{CURRENCY_LONG}
-STR_REFIT_NEW_CAPACITY_COST_OF_AIRCRAFT_REFIT                   :{BLACK}السعة الجديدة: {GOLD}{CARGO_LONG}, {GOLD}{CARGO_LONG}{}{BLACK}تكلفة اعادة التهيئة: {RED}{CURRENCY_LONG}
+STR_REFIT_NEW_CAPACITY_COST_OF_REFIT                            :{BLACK}المساحة الجديدة: {GOLD}{CARGO_LONG}{}{BLACK}تكلفة التغيير: {RED}{CURRENCY_LONG}
+STR_REFIT_NEW_CAPACITY_INCOME_FROM_REFIT                        :{BLACK}المساحة الجديدة: {GOLD}{CARGO_LONG}{}{BLACK}:الدخل من التغيير{GREEN}{CURRENCY_LONG}
+STR_REFIT_NEW_CAPACITY_COST_OF_AIRCRAFT_REFIT                   :{BLACK}السعة الجديدة: {GOLD}{CARGO_LONG}, {GOLD}{CARGO_LONG}{}{BLACK}تكلفة التغيير: {RED}{CURRENCY_LONG}
 STR_REFIT_SELECT_VEHICLES_TOOLTIP                               :{BLACK}اختر العربة لاعادة تهيئتها. اسحب بالفارة لاختيار عدة عربات. اضغط على مساحة خالية لاختيار كل العربات. اضغط + كنترول لاختيار العربة الحالية وما بعدها.
 
 ###length VEHICLE_TYPES
@@ -3820,7 +3868,7 @@ STR_TIMETABLE_STATUS_NOT_STARTED                                :{BLACK}جدول
 STR_TIMETABLE_STATUS_START_AT                                   :{BLACK}جدولة الاعمال ستبدأ فى {STRING}
 
 STR_TIMETABLE_STARTING_DATE                                     :{BLACK}تاريخ البدأ
-STR_TIMETABLE_STARTING_DATE_TOOLTIP                             :{BLACK}حدد تاريخًا كنقطة بداية لهذا الجدول الزمني. يحدد Ctrl + Click نقطة البداية لهذا الجدول الزمني ويوزع جميع المركبات التي تشارك هذا الطلب بالتساوي بناءً على ترتيبها النسبي ، إذا كان الطلب محددًا بجدول زمني كامل
+STR_TIMETABLE_STARTING_DATE_TOOLTIP                             :{BLACK}حدد تاريخًا كنقطة بداية لهذا الجدول الزمني. Ctrl + Click يوزع جميع المركبات التي تشارك هذا الطلب بالتساوي من التاريخ المحدد بناءً على ترتيبها النسبي ، إذا كان الطلب محددًا بجدول زمني كامل
 
 STR_TIMETABLE_CHANGE_TIME                                       :{BLACK}غير الوقت
 STR_TIMETABLE_WAIT_TIME_TOOLTIP                                 :{BLACK}غير مقدار الزمن الذي يستغرقه هذا الامر
@@ -3881,10 +3929,11 @@ STR_ERROR_AI_DEBUG_SERVER_ONLY                                  :{YELLOW} شاش
 
 # AI configuration window
 STR_AI_CONFIG_CAPTION                                           :{WHITE}إعدادات الذكاء الصناعي
-STR_AI_CONFIG_GAMELIST_TOOLTIP                                  :{BLACK}مخطوطت اللعبة الذي سيتم تحميله في اللعبة التالية
+STR_AI_CONFIG_GAMELIST_TOOLTIP                                  :{BLACK}مخطوطات اللعبة الذي سيتم تحميله في اللعبة التالية
 STR_AI_CONFIG_HUMAN_PLAYER                                      :لاعب انساني
 STR_AI_CONFIG_RANDOM_AI                                         :ذكاء صناعي عشوائي
 STR_AI_CONFIG_NONE                                              :(لا شيء)
+STR_AI_CONFIG_MAX_COMPETITORS                                   :{LTBLUE}العدد الاقصى للمتنافسين: {ORANGE}{COMMA}
 
 STR_AI_CONFIG_MOVE_UP                                           :{BLACK}انقل للاعلى
 STR_AI_CONFIG_MOVE_UP_TOOLTIP                                   :{BLACK}انقل الذكاء الاصطناعي المختار للاعلى
@@ -3895,6 +3944,8 @@ STR_AI_CONFIG_AI                                                :{SILVER} الذ
 
 STR_AI_CONFIG_CHANGE                                            :{BLACK}اختر {STRING}
 STR_AI_CONFIG_CHANGE_NONE                                       :
+STR_AI_CONFIG_CHANGE_AI                                         :الذكاء الاصطناعي
+STR_AI_CONFIG_CHANGE_GAMESCRIPT                                 :مخطوط اللعبة
 STR_AI_CONFIG_CONFIGURE                                         :{BLACK} اعداد
 STR_AI_CONFIG_CONFIGURE_TOOLTIP                                 :{BLACK} اعداد خواص الذكاء الصناعي
 
@@ -3989,6 +4040,7 @@ STR_WARNING_FALLBACK_SOUNDSET                                   :{WHITE}لايو
 # Screenshot related messages
 STR_WARNING_SCREENSHOT_SIZE_CAPTION                             :{WHITE}صورة ضخمة من شاشة
 
+STR_MESSAGE_HEIGHTMAP_SUCCESSFULLY                              :{WHITE}تم حفظ خارطة التضاريس ك'{STRING}'. أعلى قمة هي {NUM}
 STR_MESSAGE_SCREENSHOT_SUCCESSFULLY                             :{WHITE}صورة من الشاشة حفظت بنجاح باسم: '{STRING}'
 STR_ERROR_SCREENSHOT_FAILED                                     :{WHITE}لم يتم حفظ الصورة
 
@@ -4172,6 +4224,7 @@ STR_ERROR_NO_SUITABLE_RAILROAD_TRACK                            :{WHITE}... مس
 STR_ERROR_MUST_REMOVE_RAILROAD_TRACK                            :{WHITE}يجب إزاله السكه الحديديه اولاً
 STR_ERROR_CROSSING_ON_ONEWAY_ROAD                               :{WHITE}الطريق باتجاه واحد او ربما يكون مسدوداً
 STR_ERROR_CROSSING_DISALLOWED_RAIL                              :{WHITE}التقاطع المتعدد غير متاح لهذا النوع من السكك
+STR_ERROR_CROSSING_DISALLOWED_ROAD                              :التقاطع المتعدد غير متاح لهذا النوع من الشوارع
 STR_ERROR_CAN_T_BUILD_SIGNALS_HERE                              :{WHITE}تعذر بناء اﻹشارات هنا...
 STR_ERROR_CAN_T_BUILD_RAILROAD_TRACK                            :{WHITE}تعذر بناء السكه الحديديه هنا...
 STR_ERROR_CAN_T_REMOVE_RAILROAD_TRACK                           :{WHITE}تعذر إزاله السكه الحديديه من هنا...
@@ -4814,6 +4867,7 @@ STR_COMPANY_NAME                                                :{COMPANY}
 STR_COMPANY_NAME_COMPANY_NUM                                    :{COMPANY} {COMPANY_NUM}
 STR_DEPOT_NAME                                                  :{DEPOT}
 STR_ENGINE_NAME                                                 :{ENGINE}
+STR_HIDDEN_ENGINE_NAME                                          :{ENGINE} (مخفي)
 STR_GROUP_NAME                                                  :{GROUP}
 STR_INDUSTRY_NAME                                               :{INDUSTRY}
 STR_PRESIDENT_NAME                                              :{PRESIDENT_NAME}

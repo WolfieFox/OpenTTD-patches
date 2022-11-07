@@ -96,7 +96,7 @@ std::string _windows_file;
 /** Window description constructor. */
 WindowDesc::WindowDesc(WindowPosition def_pos, const char *ini_key, int16 def_width_trad, int16 def_height_trad,
 			WindowClass window_class, WindowClass parent_class, uint32 flags,
-			const NWidgetPart *nwid_parts, int16 nwid_length, HotkeyList *hotkeys) :
+			const NWidgetPart *nwid_parts, int16 nwid_length, HotkeyList *hotkeys, WindowDesc *ini_parent) :
 	default_pos(def_pos),
 	cls(window_class),
 	parent_cls(parent_class),
@@ -105,9 +105,8 @@ WindowDesc::WindowDesc(WindowPosition def_pos, const char *ini_key, int16 def_wi
 	nwid_parts(nwid_parts),
 	nwid_length(nwid_length),
 	hotkeys(hotkeys),
-	pref_sticky(false),
-	pref_width(0),
-	pref_height(0),
+	ini_parent(ini_parent),
+	prefs({ false, 0, 0 }),
 	default_width_trad(def_width_trad),
 	default_height_trad(def_height_trad)
 {
@@ -120,6 +119,11 @@ WindowDesc::~WindowDesc()
 	_window_descs->erase(std::find(_window_descs->begin(), _window_descs->end(), this));
 }
 
+const WindowDescPreferences &WindowDesc::GetPreferences() const
+{
+	return this->ini_parent != nullptr ? this->ini_parent->prefs : this->prefs;
+}
+
 /**
  * Determine default width of window.
  * This is either a stored user preferred size, or the built-in default.
@@ -127,7 +131,8 @@ WindowDesc::~WindowDesc()
  */
 int16 WindowDesc::GetDefaultWidth() const
 {
-	return this->pref_width != 0 ? this->pref_width : ScaleGUITrad(this->default_width_trad);
+	const WindowDescPreferences &prefs = this->GetPreferences();
+	return prefs.pref_width != 0 ? prefs.pref_width : ScaleGUITrad(this->default_width_trad);
 }
 
 /**
@@ -137,7 +142,8 @@ int16 WindowDesc::GetDefaultWidth() const
  */
 int16 WindowDesc::GetDefaultHeight() const
 {
-	return this->pref_height != 0 ? this->pref_height : ScaleGUITrad(this->default_height_trad);
+	const WindowDescPreferences &prefs = this->GetPreferences();
+	return prefs.pref_height != 0 ? prefs.pref_height : ScaleGUITrad(this->default_height_trad);
 }
 
 /**
@@ -149,7 +155,7 @@ void WindowDesc::LoadFromConfig()
 	ini.LoadFromDisk(_windows_file, NO_DIRECTORY);
 	for (WindowDesc *wd : *_window_descs) {
 		if (wd->ini_key == nullptr) continue;
-		IniLoadWindowSettings(ini, wd->ini_key, wd);
+		IniLoadWindowSettings(ini, wd->ini_key, &(wd->prefs));
 	}
 }
 
@@ -174,7 +180,7 @@ void WindowDesc::SaveToConfig()
 	ini.LoadFromDisk(_windows_file, NO_DIRECTORY);
 	for (WindowDesc *wd : *_window_descs) {
 		if (wd->ini_key == nullptr) continue;
-		IniSaveWindowSettings(ini, wd->ini_key, wd);
+		IniSaveWindowSettings(ini, wd->ini_key, &(wd->prefs));
 	}
 	ini.SaveToDisk(_windows_file);
 }
@@ -185,10 +191,10 @@ void WindowDesc::SaveToConfig()
 void Window::ApplyDefaults()
 {
 	if (this->nested_root != nullptr && this->nested_root->GetWidgetOfType(WWT_STICKYBOX) != nullptr) {
-		if (this->window_desc->pref_sticky) this->flags |= WF_STICKY;
+		if (this->window_desc->GetPreferences().pref_sticky) this->flags |= WF_STICKY;
 	} else {
 		/* There is no stickybox; clear the preference in case someone tried to be funny */
-		this->window_desc->pref_sticky = false;
+		this->window_desc->prefs.pref_sticky = false;
 	}
 }
 
@@ -234,7 +240,7 @@ void Window::DisableAllWidgetHighlight()
  */
 void Window::SetWidgetHighlight(byte widget_index, TextColour highlighted_colour)
 {
-	assert(widget_index < this->nested_array_size);
+	dbg_assert(widget_index < this->nested_array_size);
 
 	NWidgetBase *nwid = this->GetWidget<NWidgetBase>(widget_index);
 	if (nwid == nullptr) return;
@@ -267,7 +273,7 @@ void Window::SetWidgetHighlight(byte widget_index, TextColour highlighted_colour
  */
 bool Window::IsWidgetHighlighted(byte widget_index) const
 {
-	assert(widget_index < this->nested_array_size);
+	dbg_assert(widget_index < this->nested_array_size);
 
 	const NWidgetBase *nwid = this->GetWidget<NWidgetBase>(widget_index);
 	if (nwid == nullptr) return false;
@@ -515,7 +521,7 @@ bool Window::SetFocusedWidget(int widget_index)
 	/* Do nothing if widget_index is already focused, or if it wasn't a valid widget. */
 	if ((uint)widget_index >= this->nested_array_size) return false;
 
-	assert(this->nested_array[widget_index] != nullptr); // Setting focus to a non-existing widget is a bad idea.
+	dbg_assert(this->nested_array[widget_index] != nullptr); // Setting focus to a non-existing widget is a bad idea.
 	if (this->nested_focus != nullptr) {
 		if (this->GetWidget<NWidgetCore>(widget_index) == this->nested_focus) return false;
 
@@ -741,8 +747,8 @@ static void DispatchLeftClickEvent(Window *w, int x, int y, int click_count)
 
 		case WWT_DEFSIZEBOX: {
 			if (_ctrl_pressed) {
-				w->window_desc->pref_width = w->width;
-				w->window_desc->pref_height = w->height;
+				w->window_desc->GetPreferences().pref_width = w->width;
+				w->window_desc->GetPreferences().pref_height = w->height;
 			} else {
 				int16 def_width = std::max<int16>(std::min<int16>(w->window_desc->GetDefaultWidth(), _screen.width), w->nested_root->smallest_x);
 				int16 def_height = std::max<int16>(std::min<int16>(w->window_desc->GetDefaultHeight(), _screen.height - 50), w->nested_root->smallest_y);
@@ -774,7 +780,7 @@ static void DispatchLeftClickEvent(Window *w, int x, int y, int click_count)
 		case WWT_STICKYBOX:
 			w->flags ^= WF_STICKY;
 			nw->SetDirty(w);
-			if (_ctrl_pressed) w->window_desc->pref_sticky = (w->flags & WF_STICKY) != 0;
+			if (_ctrl_pressed) w->window_desc->GetPreferences().pref_sticky = (w->flags & WF_STICKY) != 0;
 			return;
 
 		default:
@@ -1188,6 +1194,22 @@ void DeleteWindowById(WindowClass cls, WindowNumber number, bool force)
 }
 
 /**
+ * Delete all windows of its class and window number (if open).
+ * @param cls Window class
+ * @param number Number of the window within the window class
+ * @param force force deletion; if false don't delete when stickied
+ */
+void DeleteAllWindowsById(WindowClass cls, WindowNumber number, bool force)
+{
+	/* Note: the container remains stable, even when deleting windows. */
+	for (Window *w : Window::IterateUnordered()) {
+		if (w->window_class == cls && w->window_number == number && (force || (w->flags & WF_STICKY) == 0)) {
+			delete w;
+		}
+	}
+}
+
+/**
  * Delete all windows of a given class
  * @param cls Window class of windows to delete
  */
@@ -1381,7 +1403,7 @@ static uint GetWindowZPriority(WindowClass wc)
  */
 static void AddWindowToZOrdering(Window *w)
 {
-	assert(w->z_front == nullptr && w->z_back == nullptr);
+	dbg_assert(w->z_front == nullptr && w->z_back == nullptr);
 
 	if (_z_front_window == nullptr) {
 		/* It's the only window. */
@@ -1395,7 +1417,7 @@ static void AddWindowToZOrdering(Window *w)
 		while (v != nullptr && (v->window_class == WC_INVALID || GetWindowZPriority(v->window_class) > GetWindowZPriority(w->window_class))) {
 			if (v->window_class != WC_INVALID) {
 				/* Sanity check z-ordering, while we're at it. */
-				assert(last_z_priority >= GetWindowZPriority(v->window_class));
+				dbg_assert(last_z_priority >= GetWindowZPriority(v->window_class));
 				last_z_priority = GetWindowZPriority(v->window_class);
 			}
 
@@ -1432,14 +1454,14 @@ static void AddWindowToZOrdering(Window *w)
 static void RemoveWindowFromZOrdering(WindowBase *w)
 {
 	if (w->z_front == nullptr) {
-		assert(_z_front_window == w);
+		dbg_assert(_z_front_window == w);
 		_z_front_window = w->z_back;
 	} else {
 		w->z_front->z_back = w->z_back;
 	}
 
 	if (w->z_back == nullptr) {
-		assert(_z_back_window == w);
+		dbg_assert(_z_back_window == w);
 		_z_back_window = w->z_front;
 	} else {
 		w->z_back->z_front = w->z_front;
@@ -1742,7 +1764,7 @@ restart:
 Point GetToolbarAlignedWindowPosition(int window_width)
 {
 	const Window *w = FindWindowById(WC_MAIN_TOOLBAR, 0);
-	assert(w != nullptr);
+	dbg_assert(w != nullptr);
 	Point pt = { _current_text_dir == TD_RTL ? w->left : (w->left + w->width) - window_width, w->top + w->height };
 	return pt;
 }
@@ -3001,6 +3023,7 @@ static void MouseLoop(MouseClick click, int mousewheel)
 					_scrolling_viewport = w;
 					_cursor.fix_at = (_settings_client.gui.scroll_mode == VSM_VIEWPORT_RMB_FIXED ||
 							_settings_client.gui.scroll_mode == VSM_MAP_RMB_FIXED);
+					DispatchRightClickEvent(w, x - w->left, y - w->top);
 					return;
 				}
 				break;
@@ -3010,27 +3033,25 @@ static void MouseLoop(MouseClick click, int mousewheel)
 		}
 	}
 
-	if (vp == nullptr || (w->flags & WF_DISABLE_VP_SCROLL)) {
-		switch (click) {
-			case MC_LEFT:
-			case MC_DOUBLE_LEFT:
-				DispatchLeftClickEvent(w, x - w->left, y - w->top, click == MC_DOUBLE_LEFT ? 2 : 1);
-				return;
+	switch (click) {
+		case MC_LEFT:
+		case MC_DOUBLE_LEFT:
+			DispatchLeftClickEvent(w, x - w->left, y - w->top, click == MC_DOUBLE_LEFT ? 2 : 1);
+			return;
 
-			default:
-				if (!scrollwheel_scrolling || w == nullptr || w->window_class != WC_SMALLMAP) break;
-				/* We try to use the scrollwheel to scroll since we didn't touch any of the buttons.
-				 * Simulate a right button click so we can get started. */
-				FALLTHROUGH;
+		default:
+			if (!scrollwheel_scrolling || w == nullptr || w->window_class != WC_SMALLMAP) break;
+			/* We try to use the scrollwheel to scroll since we didn't touch any of the buttons.
+			 * Simulate a right button click so we can get started. */
+			FALLTHROUGH;
 
-			case MC_RIGHT:
-				DispatchRightClickEvent(w, x - w->left, y - w->top);
-				return;
+		case MC_RIGHT:
+			DispatchRightClickEvent(w, x - w->left, y - w->top);
+			return;
 
-			case MC_HOVER:
-				DispatchHoverEvent(w, x - w->left, y - w->top);
-				break;
-		}
+		case MC_HOVER:
+			DispatchHoverEvent(w, x - w->left, y - w->top);
+			break;
 	}
 
 	/* We're not doing anything with 2D scrolling, so reset the value.  */
@@ -3094,11 +3115,12 @@ void HandleMouseEvents()
 			hover_pos = _cursor.pos;
 			hover_time = std::chrono::steady_clock::now();
 			_mouse_hovering = false;
-		} else {
+		} else if (!_mouse_hovering) {
 			if (std::chrono::steady_clock::now() > hover_time + std::chrono::milliseconds(_settings_client.gui.hover_delay_ms)) {
 				click = MC_HOVER;
 				_input_events_this_tick++;
 				_mouse_hovering = true;
+				hover_time = std::chrono::steady_clock::now();
 			}
 		}
 	} else {
@@ -3488,11 +3510,31 @@ void DeleteConstructionWindows()
 	}
 }
 
+/**
+ * Delete all windows that use network client functionality.
+ */
+void DeleteNetworkClientWindows()
+{
+	/* Note: the container remains stable, even when deleting windows. */
+	for (const Window *w : Window::IterateUnordered()) {
+		if (w->window_desc->flags & WDF_NETWORK) {
+			delete w;
+		}
+	}
+}
+
 /** Delete all always on-top windows to get an empty screen */
 void HideVitalWindows()
 {
 	DeleteWindowById(WC_MAIN_TOOLBAR, 0);
 	DeleteWindowById(WC_STATUS_BAR, 0);
+}
+
+void ReInitWindow(Window *w, bool zoom_changed)
+{
+	if (w == nullptr) return;
+	if (zoom_changed) w->nested_root->AdjustPaddingForZoom();
+	w->ReInit();
 }
 
 /** Re-initialize all windows. */
@@ -3504,9 +3546,13 @@ void ReInitAllWindows(bool zoom_changed)
 	extern void InitDepotWindowBlockSizes();
 	InitDepotWindowBlockSizes();
 
+	/* When _gui_zoom has changed, we need to resize toolbar and statusbar first,
+	 * so EnsureVisibleCaption uses the updated size information. */
+	ReInitWindow(FindWindowById(WC_MAIN_TOOLBAR, 0), zoom_changed);
+	ReInitWindow(FindWindowById(WC_STATUS_BAR, 0), zoom_changed);
 	for (Window *w : Window::IterateFromBack()) {
-		if (zoom_changed) w->nested_root->AdjustPaddingForZoom();
-		w->ReInit();
+		if (w->window_class == WC_MAIN_TOOLBAR || w->window_class == WC_STATUS_BAR) continue;
+		ReInitWindow(w, zoom_changed);
 	}
 
 	void NetworkReInitChatBoxSize();

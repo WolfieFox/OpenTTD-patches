@@ -162,8 +162,12 @@ public:
 	inline bool IsFrontEngine() const { return HasBit(this->subtype, GVSF_FRONT); }
 	inline bool HasArticulatedPart() const { return this->Next() != nullptr && this->Next()->IsArticulatedPart(); }
 
+	inline bool IsEngine() const { return HasBit(this->subtype, GVSF_ENGINE); }
+	inline bool IsWagon() const { return HasBit(this->subtype, GVSF_WAGON); }
+
 	inline bool IsArticulatedPart() const { return HasBit(this->subtype, GVSF_ARTICULATED_PART); }
 	inline bool IsMultiheaded() const { return HasBit(this->subtype, GVSF_MULTIHEADED); }
+	inline bool IsRearDualheaded() const { return this->IsMultiheaded() && !this->IsEngine(); }
 
 	inline bool IsFreeWagonChain() const { return HasBit(this->subtype, GVSF_FREE_WAGON); }
 
@@ -221,6 +225,6 @@ short DeleteTemplateReplacementsByGroupID(GroupID);
 
 void ReindexTemplateReplacements();
 
-int GetTemplateVehicleEstimatedMaxAchievableSpeed(const TemplateVehicle *tv, const int mass, const int speed_cap);
+int GetTemplateVehicleEstimatedMaxAchievableSpeed(const TemplateVehicle *tv, int mass, const int speed_cap);
 
 #endif /* TEMPLATE_VEH_H */

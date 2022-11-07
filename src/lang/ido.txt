@@ -483,11 +483,6 @@ STR_GAME_OPTIONS_CAPTION                                        :{WHITE}Ludo Sel
 
 ###length 42
 
-###length 2
-
-
-###length 21
-
 
 # Autosave dropdown
 ###length 5
@@ -508,8 +503,8 @@ STR_GAME_OPTIONS_RESOLUTION_OTHER                               :altra
 
 
 
-# Custom currency window
 
+# Custom currency window
 
 
 
@@ -546,9 +541,11 @@ STR_SEA_LEVEL_CUSTOM_PERCENTAGE                                 :Kustumigita ({N
 
 ###length 4
 
+###length 4
+
 ###length 7
 
-###length 3
+###length 4
 
 
 # Settings tree window
@@ -660,6 +657,8 @@ STR_CONFIG_SETTING_PLANE_CRASHES_NORMAL                         :normala
 
 ###length 2
 
+###length 2
+
 
 
 
@@ -670,6 +669,8 @@ STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_VIOLET                  :Violkolora
 
 ###length 4
 
+###length 4
+
 
 
 ###length 3
@@ -697,7 +698,6 @@ STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_VIOLET                  :Violkolora
 
 
 ###length 3
-
 
 
 
@@ -829,8 +829,6 @@ STR_QUIT_NO                                                     :{BLACK}Ne
 
 # Cheat window
 
-###length 4
-
 # Livery window
 
 
@@ -914,6 +912,8 @@ STR_NETWORK_SERVER_MESSAGE                                      :*** {1:STRING}
 # Linkgraph legend window
 
 # Linkgraph legend window and linkgraph legend in smallmap
+
+# Linkgraph tooltip
 
 # Base for station construction window(s)
 STR_STATION_BUILD_ACCEPTS_CARGO                                 :{BLACK}Aceptas: {GOLD}{CARGO_LIST}
@@ -1038,6 +1038,8 @@ STR_SAVELOAD_DETAIL_GRFSTATUS                                   :{SILVER}NovaGRF
 # World generation
 STR_MAPGEN_BY                                                   :{BLACK}*
 
+###length 21
+
 # Strings for map borders at game generation
 
 
@@ -1152,6 +1154,9 @@ STR_WAYPOINT_VIEW_CAPTION                                       :{WHITE}{WAYPOIN
 
 # Finances window
 STR_FINANCES_YEAR                                               :{WHITE}{NUM}
+
+###length 3
+
 
 ###length 13
 

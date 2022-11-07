@@ -38,6 +38,7 @@
 #include "scope_info.h"
 #include "string_func.h"
 #include "core/checksum_func.hpp"
+#include "newgrf_roadstop.h"
 
 #include "table/strings.h"
 
@@ -794,11 +795,11 @@ static void RoadVehArrivesAt(const RoadVehicle *v, Station *st)
  * and subspeed) variables. Furthermore, it returns the distance that
  * the vehicle can drive this tick. #Vehicle::GetAdvanceDistance() determines
  * the distance to drive before moving a step on the map.
+ * @param max_speed maximum speed as from GetCurrentMaxSpeed()
  * @return distance to drive.
  */
-int RoadVehicle::UpdateSpeed()
+int RoadVehicle::UpdateSpeed(int max_speed)
 {
-	int max_speed = this->GetCurrentMaxSpeed();
 	switch (_settings_game.vehicle.roadveh_acceleration_model) {
 		default: NOT_REACHED();
 		case AM_ORIGINAL: {
@@ -1083,7 +1084,7 @@ static void RoadVehCheckOvertake(RoadVehicle *v, RoadVehicle *u)
 			check_tile = ahead_end;
 			continue;
 		}
-		if (IsDriveThroughStopTile(check_tile) && GetDriveThroughStopDisallowedRoadDirections(check_tile) != DRD_NONE) {
+		if (IsStationRoadStopTile(check_tile) && IsDriveThroughStopTile(check_tile) && GetDriveThroughStopDisallowedRoadDirections(check_tile) != DRD_NONE) {
 			const RoadStop *rs = RoadStop::GetByTile(check_tile, GetRoadStopType(check_tile));
 			DiagDirection dir = DirToDiagDir(v->direction);
 			const RoadStop::Entry *entry = rs->GetEntry(dir);
@@ -1565,6 +1566,37 @@ inline byte IncreaseOvertakingCounter(RoadVehicle *v)
 	return v->overtaking_ctr;
 }
 
+static bool CheckRestartLoadingAtRoadStop(RoadVehicle *v)
+{
+	if (v->GetNumOrders() < 1) return false;
+
+	StationID station_id = v->current_order.GetDestination();
+	VehicleOrderID next_order_idx = AdvanceOrderIndexDeferred(v, v->cur_implicit_order_index);
+	const Order *next_order = v->GetOrder(next_order_idx);
+	FlushAdvanceOrderIndexDeferred(v, false);
+	if (next_order != nullptr && next_order->IsType(OT_GOTO_STATION) && next_order->GetDestination() == station_id &&
+			!(next_order->GetNonStopType() & ONSF_NO_STOP_AT_DESTINATION_STATION) &&
+			IsInfraTileUsageAllowed(VEH_ROAD, v->owner, v->tile) &&
+			GetRoadStopType(v->tile) == (v->IsBus() ? ROADSTOP_BUS : ROADSTOP_TRUCK)) {
+		v->current_order.Free();
+		ProcessOrders(v);
+
+		/* Double check that order prediction was correct and v->current_order is now for the same station */
+		if (v->current_order.IsType(OT_GOTO_STATION) && v->current_order.GetDestination() == station_id &&
+				!(v->current_order.GetNonStopType() & ONSF_NO_STOP_AT_DESTINATION_STATION)) {
+			v->last_station_visited = station_id;
+			v->BeginLoading();
+			return true;
+		} else {
+			/* Order prediction was incorrect, this should not be reached, just restore the leave station order */
+			v->current_order.MakeLeaveStation();
+			v->current_order.SetDestination(station_id);
+		}
+	}
+
+	return false;
+}
+
 bool IndividualRoadVehicleController(RoadVehicle *v, const RoadVehicle *prev)
 {
 	SCOPE_INFO_FMT([&], "IndividualRoadVehicleController: %s, %s", scope_dumper().VehicleInfo(v), scope_dumper().VehicleInfo(prev));
@@ -1715,7 +1747,7 @@ again:
 					if (IsNormalRoadTile(tile)) {
 						return !HasRoadWorks(tile) && HasTileAnyRoadType(tile, v->compatible_roadtypes) && (needed & GetRoadBits(tile, RTT_TRAM)) != ROAD_NONE;
 					} else if (IsRoadCustomBridgeHeadTile(tile)) {
-						return HasTileAnyRoadType(tile, v->compatible_roadtypes) && (needed & GetCustomBridgeHeadRoadBits(tile, RTT_TRAM)) != ROAD_NONE;
+						return HasTileAnyRoadType(tile, v->compatible_roadtypes) && (needed & GetCustomBridgeHeadRoadBits(tile, RTT_TRAM) & ~DiagDirToRoadBits(GetTunnelBridgeDirection(tile))) != ROAD_NONE;
 					} else {
 						return false;
 					}
@@ -1766,9 +1798,12 @@ again:
 
 		Direction new_dir = RoadVehGetSlidingDirection(v, x, y);
 		if (v->IsFrontEngine()) {
-			Vehicle *u = RoadVehFindCloseTo(v, x, y, new_dir);
+			const Vehicle *u = RoadVehFindCloseTo(v, x, y, new_dir);
 			if (u != nullptr) {
 				v->cur_speed = u->First()->cur_speed;
+				/* We might be blocked, prevent pathfinding rerun as we already know where we are heading to. */
+				v->path.tile.push_front(tile);
+				v->path.td.push_front(dir);
 				return false;
 			}
 		}
@@ -1799,12 +1834,12 @@ again:
 			 * stop. It also makes it possible to load when on the edge of
 			 * two road stops; otherwise you could get vehicles that should
 			 * be loading but are not actually loading. */
-			if (IsDriveThroughStopTile(v->tile) &&
+			if (IsStationRoadStopTile(v->tile) && IsDriveThroughStopTile(v->tile) &&
 					RoadStop::IsDriveThroughRoadStopContinuation(v->tile, tile) &&
 					v->tile != tile) {
 				/* So, keep 'our' state */
 				dir = (Trackdir)v->state;
-			} else if (IsRoadStop(v->tile)) {
+			} else if (IsStationRoadStop(v->tile)) {
 				/* We're not continuing our drive through road stop, so leave. */
 				RoadStop::GetByTile(v->tile, GetRoadStopType(v->tile))->Leave(v);
 			}
@@ -1879,15 +1914,15 @@ again:
 		int y = TileY(v->tile) * TILE_SIZE + rdp[turn_around_start_frame].y;
 
 		Direction new_dir = RoadVehGetSlidingDirection(v, x, y);
-		if (v->IsFrontEngine() && RoadVehFindCloseTo(v, x, y, new_dir) != nullptr) {
-			/* We are blocked. */
-			v->cur_speed = 0;
-			if (!v->path.empty()) {
-				/* Prevent pathfinding rerun as we already know where we are heading to. */
+		if (v->IsFrontEngine()) {
+			const Vehicle *u = RoadVehFindCloseTo(v, x, y, new_dir);
+			if (u != nullptr) {
+				v->cur_speed = u->First()->cur_speed;
+				/* We might be blocked, prevent pathfinding rerun as we already know where we are heading to. */
 				v->path.tile.push_front(v->tile);
 				v->path.td.push_front(dir);
+				return false;
 			}
-			return false;
 		}
 
 		uint32 r = VehicleEnterTile(v, v->tile, x, y);
@@ -1950,6 +1985,8 @@ again:
 				v->last_station_visited = st->index;
 				RoadVehArrivesAt(v, st);
 				v->BeginLoading();
+				TriggerRoadStopRandomisation(st, v->tile, RSRT_VEH_ARRIVES);
+				TriggerRoadStopAnimation(st, v->tile, SAT_TRAIN_ARRIVES);
 			}
 			return false;
 		}
@@ -2012,16 +2049,25 @@ again:
 			if (IsDriveThroughStopTile(v->tile) || (v->current_order.IsType(OT_GOTO_STATION) && v->current_order.GetDestination() == st->index)) {
 				RoadVehArrivesAt(v, st);
 				v->BeginLoading();
+				TriggerRoadStopRandomisation(st, v->tile, RSRT_VEH_ARRIVES);
+				TriggerRoadStopAnimation(st, v->tile, SAT_TRAIN_ARRIVES);
 				return false;
 			}
 		} else {
+			if (v->current_order.IsType(OT_LEAVESTATION)) {
+				if (CheckRestartLoadingAtRoadStop(v)) return false;
+			}
+
 			/* Vehicle is ready to leave a bay in a road stop */
 			if (rs->IsEntranceBusy()) {
 				/* Road stop entrance is busy, so wait as there is nowhere else to go */
 				v->cur_speed = 0;
 				return false;
 			}
-			if (v->current_order.IsType(OT_LEAVESTATION)) v->current_order.Free();
+			if (v->current_order.IsType(OT_LEAVESTATION)) {
+				v->PlayLeaveStationSound();
+				v->current_order.Free();
+			}
 		}
 
 		if (IsStandardRoadStopTile(v->tile)) rs->SetEntranceBusy(true);
@@ -2039,6 +2085,8 @@ again:
 	}
 
 	if (v->current_order.IsType(OT_LEAVESTATION) && IsDriveThroughStopTile(v->tile)) {
+		if (CheckRestartLoadingAtRoadStop(v)) return false;
+		v->PlayLeaveStationSound();
 		v->current_order.Free();
 	}
 
@@ -2081,10 +2129,14 @@ static bool RoadVehController(RoadVehicle *v)
 
 	if (v->IsInDepot() && RoadVehLeaveDepot(v, true)) return true;
 
-	v->ShowVisualEffect();
+	int j;
+	{
+		int max_speed = v->GetCurrentMaxSpeed();
+		v->ShowVisualEffect(max_speed);
 
-	/* Check how far the vehicle needs to proceed */
-	int j = v->UpdateSpeed();
+		/* Check how far the vehicle needs to proceed */
+		j = v->UpdateSpeed(max_speed);
+	 }
 
 	int adv_spd = v->GetAdvanceDistance();
 	bool blocked = false;

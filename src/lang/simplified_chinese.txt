@@ -230,9 +230,9 @@ STR_UNITS_HEIGHT_METRIC                                         :{COMMA}{NBSP}�
 STR_UNITS_HEIGHT_SI                                             :{COMMA}{NBSP}米
 
 # Common window strings
-STR_LIST_FILTER_TITLE                                           :{BLACK}过滤字串:
-STR_LIST_FILTER_OSKTITLE                                        :{BLACK}输入过滤器字符串
-STR_LIST_FILTER_TOOLTIP                                         :{BLACK}输入用以过滤此列表的关键词
+STR_LIST_FILTER_TITLE                                           :{BLACK}关键字词:
+STR_LIST_FILTER_OSKTITLE                                        :{BLACK}输入关键字筛选
+STR_LIST_FILTER_TOOLTIP                                         :{BLACK}输入关键字以筛选查找此列表
 
 STR_TOOLTIP_GROUP_ORDER                                         :{BLACK}选择分组次序
 STR_TOOLTIP_SORT_ORDER                                          :{BLACK}选择排序方法 （降序/升序）
@@ -977,36 +977,6 @@ STR_GAME_OPTIONS_CURRENCY_INR                                   :印度卢布（
 STR_GAME_OPTIONS_CURRENCY_IDR                                   :印尼盾 (IDR)
 STR_GAME_OPTIONS_CURRENCY_MYR                                   :马来西亚林吉特 (MYR)
 
-###length 2
-STR_GAME_OPTIONS_ROAD_VEHICLES_DROPDOWN_LEFT                    :左侧通行
-STR_GAME_OPTIONS_ROAD_VEHICLES_DROPDOWN_RIGHT                   :右侧通行
-
-STR_GAME_OPTIONS_TOWN_NAMES_FRAME                               :{BLACK}城镇名称：
-STR_GAME_OPTIONS_TOWN_NAMES_DROPDOWN_TOOLTIP                    :{BLACK}选择城镇名称的命名风格
-
-###length 21
-STR_GAME_OPTIONS_TOWN_NAME_ORIGINAL_ENGLISH                     :英国 (原始的)
-STR_GAME_OPTIONS_TOWN_NAME_FRENCH                               :法国
-STR_GAME_OPTIONS_TOWN_NAME_GERMAN                               :德国
-STR_GAME_OPTIONS_TOWN_NAME_ADDITIONAL_ENGLISH                   :英国 (增强的)
-STR_GAME_OPTIONS_TOWN_NAME_LATIN_AMERICAN                       :美式拉丁
-STR_GAME_OPTIONS_TOWN_NAME_SILLY                                :搞笑地名
-STR_GAME_OPTIONS_TOWN_NAME_SWEDISH                              :瑞典
-STR_GAME_OPTIONS_TOWN_NAME_DUTCH                                :荷兰
-STR_GAME_OPTIONS_TOWN_NAME_FINNISH                              :芬兰
-STR_GAME_OPTIONS_TOWN_NAME_POLISH                               :波兰
-STR_GAME_OPTIONS_TOWN_NAME_SLOVAK                               :斯洛伐克
-STR_GAME_OPTIONS_TOWN_NAME_NORWEGIAN                            :挪威
-STR_GAME_OPTIONS_TOWN_NAME_HUNGARIAN                            :匈牙利
-STR_GAME_OPTIONS_TOWN_NAME_AUSTRIAN                             :澳大利亚
-STR_GAME_OPTIONS_TOWN_NAME_ROMANIAN                             :罗马尼亚
-STR_GAME_OPTIONS_TOWN_NAME_CZECH                                :捷克
-STR_GAME_OPTIONS_TOWN_NAME_SWISS                                :瑞士
-STR_GAME_OPTIONS_TOWN_NAME_DANISH                               :丹麦
-STR_GAME_OPTIONS_TOWN_NAME_TURKISH                              :土耳其
-STR_GAME_OPTIONS_TOWN_NAME_ITALIAN                              :意大利
-STR_GAME_OPTIONS_TOWN_NAME_CATALAN                              :加泰罗尼亚
-
 STR_GAME_OPTIONS_AUTOSAVE_FRAME                                 :{BLACK}自动保存
 STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_TOOLTIP                      :{BLACK}选择自动保存的周期
 
@@ -1036,6 +1006,8 @@ STR_GAME_OPTIONS_VIDEO_ACCELERATION_RESTART                     :{WHITE}修改�
 
 STR_GAME_OPTIONS_VIDEO_VSYNC                                    :{BLACK}垂直同步
 STR_GAME_OPTIONS_VIDEO_VSYNC_TOOLTIP                            :{BLACK}点击该复选框开启垂直同步(V-sync)。修改后的设置将在游戏重启后生效。仅开启硬件加速时有效
+
+STR_GAME_OPTIONS_VIDEO_DRIVER_INFO                              :{BLACK}使用中的驱动程序: {STRING}
 
 STR_GAME_OPTIONS_GUI_ZOOM_FRAME                                 :{BLACK}界面大小
 STR_GAME_OPTIONS_GUI_ZOOM_DROPDOWN_TOOLTIP                      :{BLACK}选择使用的界面元素大小
@@ -1103,8 +1075,6 @@ STR_CURRENCY_PREVIEW                                            :{LTBLUE}预览�
 STR_CURRENCY_CUSTOM_CURRENCY_PREVIEW_TOOLTIP                    :{BLACK}10000 英磅(£) 兑换自定义货币的数量
 STR_CURRENCY_CHANGE_PARAMETER                                   :{BLACK}改变当前的货币参数
 
-STR_DIFFICULTY_LEVEL_SETTING_MAXIMUM_NO_COMPETITORS             :{LTBLUE}最大竞争对手个数：{ORANGE}{COMMA}
-
 STR_NONE                                                        :没有
 STR_FUNDING_ONLY                                                :不生成
 STR_MINIMAL                                                     :每种仅一个
@@ -1154,6 +1124,12 @@ STR_SUBSIDY_X2                                                  :x2
 STR_SUBSIDY_X3                                                  :x3
 STR_SUBSIDY_X4                                                  :x4
 
+###length 4
+STR_CLIMATE_TEMPERATE_LANDSCAPE                                 :温带景观
+STR_CLIMATE_SUB_ARCTIC_LANDSCAPE                                :寒带景观
+STR_CLIMATE_SUB_TROPICAL_LANDSCAPE                              :沙漠景观
+STR_CLIMATE_TOYLAND_LANDSCAPE                                   :奇幻景观
+
 ###length 7
 STR_TERRAIN_TYPE_VERY_FLAT                                      :非常平整
 STR_TERRAIN_TYPE_FLAT                                           :平整
@@ -1163,16 +1139,17 @@ STR_TERRAIN_TYPE_ALPINIST                                       :多山
 STR_TERRAIN_TYPE_CUSTOM                                         :自定义高度
 STR_TERRAIN_TYPE_CUSTOM_VALUE                                   :自定义高度 ({NUM})
 
-###length 3
-STR_CITY_APPROVAL_PERMISSIVE                                    :宽容
+###length 4
+STR_CITY_APPROVAL_LENIENT                                       :宽容的
 STR_CITY_APPROVAL_TOLERANT                                      :隐忍
 STR_CITY_APPROVAL_HOSTILE                                       :对立
+STR_CITY_APPROVAL_PERMISSIVE                                    :宽容（对公司行为没有影响 ）
 
 STR_WARNING_NO_SUITABLE_AI                                      :{WHITE}无合适的 AI 可用...{}你可以在线下载各种 AI 。
 
 # Settings tree window
 STR_CONFIG_SETTING_TREE_CAPTION                                 :{WHITE}设置
-STR_CONFIG_SETTING_FILTER_TITLE                                 :{BLACK}关键字过滤:
+STR_CONFIG_SETTING_FILTER_TITLE                                 :{BLACK}关键字搜索:
 STR_CONFIG_SETTING_EXPAND_ALL                                   :{BLACK}展开全部
 STR_CONFIG_SETTING_COLLAPSE_ALL                                 :{BLACK}关闭全部
 STR_CONFIG_SETTING_RESET_ALL                                    :{BLACK}重置所有值
@@ -1268,7 +1245,7 @@ STR_CONFIG_SETTING_DISASTERS                                    :灾难: {STRING
 STR_CONFIG_SETTING_DISASTERS_HELPTEXT                           :灾难可能引起堵车或者车祸或者建筑损毁。
 
 STR_CONFIG_SETTING_CITY_APPROVAL                                :地区政府对区域改造的态度: {STRING}
-STR_CONFIG_SETTING_CITY_APPROVAL_HELPTEXT                       :设置相关参数以决定各公司造成的噪音及环境破坏时，各城镇对该公司的评价及未来区域建设的影响。
+STR_CONFIG_SETTING_CITY_APPROVAL_HELPTEXT                       :设置相关参数以决定各公司造成的噪音及环境破坏时，各城镇对该公司的评价及未来城镇建设的影响。
 
 STR_CONFIG_SETTING_MAP_HEIGHT_LIMIT                             :地图高度限制：{STRING}
 STR_CONFIG_SETTING_MAP_HEIGHT_LIMIT_HELPTEXT                    :设置高原的最大高度。选择 "(自动)" 则在地形生成后自动选取合适的值
@@ -1512,6 +1489,10 @@ STR_CONFIG_SETTING_TREE_PLACER_IMPROVED                         :增强的
 STR_CONFIG_SETTING_ROAD_SIDE                                    :道路车辆: {STRING}
 STR_CONFIG_SETTING_ROAD_SIDE_HELPTEXT                           :选择道路通行方向
 
+###length 2
+STR_CONFIG_SETTING_ROAD_SIDE_LEFT                               :左侧通行
+STR_CONFIG_SETTING_ROAD_SIDE_RIGHT                              :右侧通行
+
 STR_CONFIG_SETTING_HEIGHTMAP_ROTATION                           :高度图旋转：{STRING}
 ###length 2
 STR_CONFIG_SETTING_HEIGHTMAP_ROTATION_COUNTER_CLOCKWISE         :逆时针
@@ -1537,6 +1518,14 @@ STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_HELPTEXT                :设置缩略地
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_GREEN                   :绿色
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_DARK_GREEN              :深绿色
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_VIOLET                  :紫色
+
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS                            :货物分配图配色：{STRING}
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_HELPTEXT                   :设置货物分配图的配色。
+###length 4
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREEN_TO_RED               :绿色到红色（原版）
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREEN_TO_BLUE              :绿色到蓝色
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREY_TO_RED                :灰色到红色
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREYSCALE                  :灰度
 
 STR_CONFIG_SETTING_SCROLLMODE                                   :视点滚动方式：{STRING}
 STR_CONFIG_SETTING_SCROLLMODE_HELPTEXT                          :滚动地图的行为
@@ -1645,9 +1634,6 @@ STR_CONFIG_SETTING_SHOW_TRACK_RESERVATION_HELPTEXT              :让预留的铁
 
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS                     :建造工具使用后仍选中： {STRING}
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS_HELPTEXT            :“打开”时在桥梁、隧道等建造工具使用后保持选中，方便继续使用
-
-STR_CONFIG_SETTING_EXPENSES_LAYOUT                              :企业财政窗口中的组群支出：{STRING}
-STR_CONFIG_SETTING_EXPENSES_LAYOUT_HELPTEXT                     :“打开”时公司财务报表将分组显示
 
 STR_CONFIG_SETTING_AUTO_REMOVE_SIGNALS                          :建造铁路时自动移除信号灯：{STRING}
 STR_CONFIG_SETTING_AUTO_REMOVE_SIGNALS_HELPTEXT                 :建造铁路时自动移除路过的信号灯。注意，这可能导致火车事故。
@@ -2041,7 +2027,7 @@ STR_CONFIG_SETTING_REVERSE_AT_SIGNALS                           :遇到红灯时
 STR_CONFIG_SETTING_REVERSE_AT_SIGNALS_HELPTEXT                  :当列车在信号灯前长时间等待时，允许掉头
 ###length 2
 STR_CONFIG_SETTING_PATHFINDER_NPF                               :NPF
-STR_CONFIG_SETTING_PATHFINDER_YAPF_RECOMMENDED                  :YAPF {BLUE}(推荐)
+STR_CONFIG_SETTING_PATHFINDER_YAPF                              :YAPF {BLUE}(推荐)
 
 STR_CONFIG_SETTING_QUERY_CAPTION                                :{WHITE}改变设置值
 
@@ -2135,12 +2121,6 @@ STR_CHEAT_EDIT_MAX_HL_QUERY_CAPT                                :{WHITE}修改�
 STR_CHEAT_CHANGE_DATE                                           :{LTBLUE}改变日期：{ORANGE}{DATE_SHORT}
 STR_CHEAT_CHANGE_DATE_QUERY_CAPT                                :{WHITE}改变当前年份
 STR_CHEAT_SETUP_PROD                                            :{LTBLUE}开启可调整产量模式：{ORANGE}{STRING}
-
-###length 4
-STR_CHEAT_SWITCH_CLIMATE_TEMPERATE_LANDSCAPE                    :温带景观
-STR_CHEAT_SWITCH_CLIMATE_SUB_ARCTIC_LANDSCAPE                   :寒带景观
-STR_CHEAT_SWITCH_CLIMATE_SUB_TROPICAL_LANDSCAPE                 :沙漠景观
-STR_CHEAT_SWITCH_CLIMATE_TOYLAND_LANDSCAPE                      :奇幻景观
 
 # Livery window
 STR_LIVERY_CAPTION                                              :{WHITE}{COMPANY} 的色彩方案
@@ -2620,6 +2600,8 @@ STR_LINKGRAPH_LEGEND_COMPANY_TOOLTIP                            :{BLACK}{STRING}
 STR_LINKGRAPH_LEGEND_UNUSED                                     :{TINY_FONT}{BLACK}空跑
 STR_LINKGRAPH_LEGEND_SATURATED                                  :{TINY_FONT}{BLACK}饱和
 STR_LINKGRAPH_LEGEND_OVERLOADED                                 :{TINY_FONT}{BLACK}超载
+
+# Linkgraph tooltip
 
 # Base for station construction window(s)
 STR_STATION_BUILD_COVERAGE_AREA_TITLE                           :{BLACK}显示覆盖区域
@@ -3128,7 +3110,7 @@ STR_SAVELOAD_DETAIL_CAPTION                                     :{BLACK}游戏�
 STR_SAVELOAD_DETAIL_NOT_AVAILABLE                               :{BLACK}无可用信息
 STR_SAVELOAD_DETAIL_COMPANY_INDEX                               :{SILVER}{COMMA}: {WHITE}{STRING}
 STR_SAVELOAD_DETAIL_GRFSTATUS                                   :{SILVER}NewGRF: {WHITE}{STRING}
-STR_SAVELOAD_FILTER_TITLE                                       :{BLACK}过滤字串：
+STR_SAVELOAD_FILTER_TITLE                                       :{BLACK}关键字词：
 STR_SAVELOAD_OVERWRITE_TITLE                                    :{WHITE}覆盖文件
 STR_SAVELOAD_OVERWRITE_WARNING                                  :{YELLOW}你确定要覆盖已有文件吗？
 STR_SAVELOAD_DIRECTORY                                          :{STRING} (目录)
@@ -3142,6 +3124,8 @@ STR_MAPGEN_MAPSIZE                                              :{BLACK}地图�
 STR_MAPGEN_MAPSIZE_TOOLTIP                                      :{BLACK}选择地图尺寸（单位：格）。可用的数值会略小。
 STR_MAPGEN_BY                                                   :{BLACK}*
 STR_MAPGEN_NUMBER_OF_TOWNS                                      :{BLACK}城镇数量：
+STR_MAPGEN_TOWN_NAME_LABEL                                      :{BLACK}城镇名称：
+STR_MAPGEN_TOWN_NAME_DROPDOWN_TOOLTIP                           :{BLACK}选择城镇名称的命名风格
 STR_MAPGEN_DATE                                                 :{BLACK}日期:
 STR_MAPGEN_NUMBER_OF_INDUSTRIES                                 :{BLACK}工业数量：
 STR_MAPGEN_HEIGHTMAP_HEIGHT                                     :{BLACK}最高峰：
@@ -3165,6 +3149,29 @@ STR_MAPGEN_QUANTITY_OF_RIVERS                                   :{BLACK}河流�
 STR_MAPGEN_SMOOTHNESS                                           :{BLACK}平滑度：
 STR_MAPGEN_VARIETY                                              :{BLACK}多样的分发：
 STR_MAPGEN_GENERATE                                             :{WHITE}生成
+
+###length 21
+STR_MAPGEN_TOWN_NAME_ORIGINAL_ENGLISH                           :英国 (原始的)
+STR_MAPGEN_TOWN_NAME_FRENCH                                     :法国
+STR_MAPGEN_TOWN_NAME_GERMAN                                     :德国
+STR_MAPGEN_TOWN_NAME_ADDITIONAL_ENGLISH                         :英国 (增强的)
+STR_MAPGEN_TOWN_NAME_LATIN_AMERICAN                             :美式拉丁
+STR_MAPGEN_TOWN_NAME_SILLY                                      :搞笑地名
+STR_MAPGEN_TOWN_NAME_SWEDISH                                    :瑞典
+STR_MAPGEN_TOWN_NAME_DUTCH                                      :荷兰
+STR_MAPGEN_TOWN_NAME_FINNISH                                    :芬兰
+STR_MAPGEN_TOWN_NAME_POLISH                                     :波兰
+STR_MAPGEN_TOWN_NAME_SLOVAK                                     :斯洛伐克
+STR_MAPGEN_TOWN_NAME_NORWEGIAN                                  :挪威
+STR_MAPGEN_TOWN_NAME_HUNGARIAN                                  :匈牙利
+STR_MAPGEN_TOWN_NAME_AUSTRIAN                                   :澳大利亚
+STR_MAPGEN_TOWN_NAME_ROMANIAN                                   :罗马尼亚
+STR_MAPGEN_TOWN_NAME_CZECH                                      :捷克
+STR_MAPGEN_TOWN_NAME_SWISS                                      :瑞士
+STR_MAPGEN_TOWN_NAME_DANISH                                     :丹麦
+STR_MAPGEN_TOWN_NAME_TURKISH                                    :土耳其
+STR_MAPGEN_TOWN_NAME_ITALIAN                                    :意大利
+STR_MAPGEN_TOWN_NAME_CATALAN                                    :加泰罗尼亚
 
 # Strings for map borders at game generation
 STR_MAPGEN_BORDER_TYPE                                          :{BLACK}地图边缘：
@@ -3224,7 +3231,7 @@ STR_NEWGRF_SETTINGS_INFO_TITLE                                  :{WHITE}NewGRF �
 STR_NEWGRF_SETTINGS_ACTIVE_LIST                                 :{WHITE}激活 NewGRF
 STR_NEWGRF_SETTINGS_INACTIVE_LIST                               :{WHITE}停用 NewGRF
 STR_NEWGRF_SETTINGS_SELECT_PRESET                               :{ORANGE}选择预设
-STR_NEWGRF_FILTER_TITLE                                         :{ORANGE}过滤器字符串：
+STR_NEWGRF_FILTER_TITLE                                         :{ORANGE}关键字词搜索：
 STR_NEWGRF_SETTINGS_PRESET_LIST_TOOLTIP                         :{BLACK}装载选定的预定义
 STR_NEWGRF_SETTINGS_PRESET_SAVE                                 :{BLACK}保存预定义
 STR_NEWGRF_SETTINGS_PRESET_SAVE_TOOLTIP                         :{BLACK}将当前组保存为预定义
@@ -3625,29 +3632,37 @@ STR_EDIT_WAYPOINT_NAME                                          :{WHITE}编辑�
 
 # Finances window
 STR_FINANCES_CAPTION                                            :{WHITE}{COMPANY} 财务报表 {BLACK}{COMPANY_NUM}
-STR_FINANCES_EXPENDITURE_INCOME_TITLE                           :{WHITE}收入/支出
 STR_FINANCES_YEAR                                               :{WHITE}{NUM}
+
+###length 3
+STR_FINANCES_REVENUE_TITLE                                      :{WHITE}收入
+STR_FINANCES_OPERATING_EXPENSES_TITLE                           :{WHITE}运营支出
+STR_FINANCES_CAPITAL_EXPENSES_TITLE                             :{WHITE}资本支出
+
 
 ###length 13
 STR_FINANCES_SECTION_CONSTRUCTION                               :{GOLD}建设费用
 STR_FINANCES_SECTION_NEW_VEHICLES                               :{GOLD}购置新运输工具
-STR_FINANCES_SECTION_TRAIN_RUNNING_COSTS                        :{GOLD}铁路运行费用
-STR_FINANCES_SECTION_ROAD_VEHICLE_RUNNING_COSTS                 :{GOLD}汽车运行费用
-STR_FINANCES_SECTION_AIRCRAFT_RUNNING_COSTS                     :{GOLD}航空运行费用
-STR_FINANCES_SECTION_SHIP_RUNNING_COSTS                         :{GOLD}船舶运行费用
-STR_FINANCES_SECTION_PROPERTY_MAINTENANCE                       :{GOLD}固定资产维护
-STR_FINANCES_SECTION_TRAIN_INCOME                               :{GOLD}铁路运输收入
-STR_FINANCES_SECTION_ROAD_VEHICLE_INCOME                        :{GOLD}公路运输收入
-STR_FINANCES_SECTION_AIRCRAFT_INCOME                            :{GOLD}航空运输收入
-STR_FINANCES_SECTION_SHIP_INCOME                                :{GOLD}水上运输收入
+STR_FINANCES_SECTION_TRAIN_RUNNING_COSTS                        :{GOLD}列车
+STR_FINANCES_SECTION_ROAD_VEHICLE_RUNNING_COSTS                 :{GOLD}公路车辆
+STR_FINANCES_SECTION_AIRCRAFT_RUNNING_COSTS                     :{GOLD}航空运行成本
+STR_FINANCES_SECTION_SHIP_RUNNING_COSTS                         :{GOLD}船舶
+STR_FINANCES_SECTION_INFRASTRUCTURE                             :{GOLD}基础设施
+STR_FINANCES_SECTION_TRAIN_REVENUE                              :{GOLD}列车
+STR_FINANCES_SECTION_ROAD_VEHICLE_REVENUE                       :{GOLD}公路车辆
+STR_FINANCES_SECTION_AIRCRAFT_REVENUE                           :{GOLD}飞机
+STR_FINANCES_SECTION_SHIP_REVENUE                               :{GOLD}船只
 STR_FINANCES_SECTION_LOAN_INTEREST                              :{GOLD}贷款利息
 STR_FINANCES_SECTION_OTHER                                      :{GOLD}其他费用
 
-STR_FINANCES_NEGATIVE_INCOME                                    :{BLACK}-{CURRENCY_LONG}
-STR_FINANCES_POSITIVE_INCOME                                    :{BLACK}+{CURRENCY_LONG}
-STR_FINANCES_TOTAL_CAPTION                                      :{WHITE}总计：
+STR_FINANCES_NEGATIVE_INCOME                                    :-{CURRENCY_LONG}
+STR_FINANCES_ZERO_INCOME                                        :{CURRENCY_LONG}
+STR_FINANCES_POSITIVE_INCOME                                    :+{CURRENCY_LONG}
+STR_FINANCES_NET_PROFIT                                         :{WHITE}净利润
 STR_FINANCES_BANK_BALANCE_TITLE                                 :{WHITE}流动资金
+STR_FINANCES_OWN_FUNDS_TITLE                                    :{WHITE}自有资金
 STR_FINANCES_LOAN_TITLE                                         :{WHITE}已贷款额
+STR_FINANCES_INTEREST_RATE                                      :{WHITE}贷款利息: {BLACK}{NUM}%
 STR_FINANCES_MAX_LOAN                                           :{WHITE}最大贷款额度：{BLACK}{CURRENCY_LONG}
 STR_FINANCES_TOTAL_CURRENCY                                     :{BLACK}{CURRENCY_LONG}
 STR_FINANCES_BORROW_BUTTON                                      :{BLACK}贷款 {CURRENCY_LONG}
@@ -3854,6 +3869,7 @@ STR_PURCHASE_INFO_RUNNINGCOST                                   :{BLACK}运行�
 STR_PURCHASE_INFO_CAPACITY                                      :{BLACK}运载能力：{GOLD}{CARGO_LONG} {STRING}
 STR_PURCHASE_INFO_REFITTABLE                                    :(可改装)
 STR_PURCHASE_INFO_DESIGNED_LIFE                                 :{BLACK}设计日期：{GOLD}{NUM}{BLACK} 寿命：{GOLD}{COMMA} 年
+STR_PURCHASE_INFO_DESIGNED                                      :{BLACK}设计日期：{GOLD}{NUM}
 STR_PURCHASE_INFO_RELIABILITY                                   :{BLACK}最大可靠性：{GOLD}{COMMA}%
 STR_PURCHASE_INFO_COST                                          :{BLACK}售价：{GOLD}{CURRENCY_LONG}
 STR_PURCHASE_INFO_COST_REFIT                                    :{BLACK}售价: {GOLD}{CURRENCY_LONG}{BLACK} (改装费用: {GOLD}{CURRENCY_LONG}{BLACK})
@@ -4229,8 +4245,8 @@ STR_VEHICLE_DETAILS_TRAIN_ENGINE_BUILT_AND_VALUE                :{LTBLUE}{ENGINE
 STR_VEHICLE_DETAILS_TRAIN_WAGON_VALUE                           :{LTBLUE}{ENGINE}{BLACK}   价值：{LTBLUE}{CURRENCY_LONG}
 
 STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_TEXT                   :{BLACK}全车的装载能力为：
-STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY                        :{LTBLUE}- {CARGO_LONG} ({CARGO_SHORT})
-STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_MULT                   :{LTBLUE}- {CARGO_LONG} ({CARGO_SHORT}) (x{NUM})
+STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY                        :{LTBLUE}{CARGO_LONG} ({CARGO_SHORT})
+STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_MULT                   :{LTBLUE}{CARGO_LONG} ({CARGO_SHORT}) (x{NUM})
 
 STR_VEHICLE_DETAILS_CARGO_EMPTY                                 :{LTBLUE}空
 STR_VEHICLE_DETAILS_CARGO_FROM                                  :{LTBLUE}{CARGO_LONG} (来自 {STATION})
@@ -4469,7 +4485,7 @@ STR_TIMETABLE_STATUS_NOT_STARTED                                :{BLACK}此时�
 STR_TIMETABLE_STATUS_START_AT                                   :{BLACK}此时刻表将于 {STRING} 开始
 
 STR_TIMETABLE_STARTING_DATE                                     :{BLACK}起始日期
-STR_TIMETABLE_STARTING_DATE_TOOLTIP                             :{BLACK}选择此时刻表开始实施的日期。如果时刻表每一项指令皆已指定持续时间，Ctrl+左击会使系统为每个共用此时刻表的运具赋予一个开始实施时刻表的日期，使它们之间的时间间距一致
+STR_TIMETABLE_STARTING_DATE_TOOLTIP                             :{BLACK}选择一个时间作为此时间表的起始日期。按住Ctrl键单击将会给所有共享此时刻表的车辆指定一个时间，以使所有共享车辆保持运行间隔，但前提是时间表已为所有命令设定计划执行时间。
 
 STR_TIMETABLE_CHANGE_TIME                                       :{BLACK}改变时间
 STR_TIMETABLE_WAIT_TIME_TOOLTIP                                 :{BLACK}改变高亮选择的命令执行的时间
@@ -4537,6 +4553,7 @@ STR_AI_CONFIG_AILIST_TOOLTIP                                    :{BLACK}下局�
 STR_AI_CONFIG_HUMAN_PLAYER                                      :玩家
 STR_AI_CONFIG_RANDOM_AI                                         :随机 AI
 STR_AI_CONFIG_NONE                                              :（无）
+STR_AI_CONFIG_MAX_COMPETITORS                                   :{LTBLUE}最大竞争对手个数：{ORANGE}{COMMA}
 
 STR_AI_CONFIG_MOVE_UP                                           :{BLACK}上移
 STR_AI_CONFIG_MOVE_UP_TOOLTIP                                   :{BLACK}在列表中将选择的AI上移

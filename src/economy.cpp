@@ -26,6 +26,7 @@
 #include "newgrf_industrytiles.h"
 #include "newgrf_station.h"
 #include "newgrf_airporttiles.h"
+#include "newgrf_roadstop.h"
 #include "object.h"
 #include "strings_func.h"
 #include "date_func.h"
@@ -109,14 +110,33 @@ static PriceMultipliers _price_base_multiplier;
 
 /**
  * Calculate the value of the company. That is the value of all
- * assets (vehicles, stations, etc) and money minus the loan,
+ * assets (vehicles, stations, shares) and money minus the loan,
  * except when including_loan is \c false which is useful when
  * we want to calculate the value for bankruptcy.
- * @param c              the company to get the value of.
+ * @param c the company to get the value of.
  * @param including_loan include the loan in the company value.
  * @return the value of the company.
  */
 Money CalculateCompanyValue(const Company *c, bool including_loan)
+{
+	Money owned_shares_value = 0;
+
+	for (const Company *co : Company::Iterate()) {
+		uint8 shares_owned = 0;
+
+		for (uint8 i = 0; i < 4; i++) {
+			if (co->share_owners[i] == c->index) {
+				shares_owned++;
+			}
+		}
+
+		owned_shares_value += (CalculateCompanyValueExcludingShares(co) / 4) * shares_owned;
+	}
+
+	return std::max<Money>(owned_shares_value + CalculateCompanyValueExcludingShares(c), 1);
+}
+
+Money CalculateCompanyValueExcludingShares(const Company *c, bool including_loan)
 {
 	Owner owner = c->index;
 
@@ -333,13 +353,13 @@ void ChangeOwnershipOfCompanyItems(Owner old_owner, Owner new_owner)
 
 		/* Sell all the shares that people have on this company */
 		Backup<CompanyID> cur_company2(_current_company, FILE_LINE);
-		const Company *c = Company::Get(old_owner);
+		Company *c = Company::Get(old_owner);
 		for (i = 0; i < 4; i++) {
 			if (c->share_owners[i] == INVALID_OWNER) continue;
 
 			if (c->bankrupt_value == 0 && c->share_owners[i] == new_owner) {
 				/* You are the one buying the company; so don't sell the shares back to you. */
-				Company::Get(new_owner)->share_owners[i] = INVALID_OWNER;
+				c->share_owners[i] = INVALID_OWNER;
 			} else {
 				cur_company2.Change(c->share_owners[i]);
 				/* Sell the shares */
@@ -608,10 +628,12 @@ void ChangeOwnershipOfCompanyItems(Owner old_owner, Owner new_owner)
 static void CompanyCheckBankrupt(Company *c)
 {
 	/*  If the company has money again, it does not go bankrupt */
+	if (c->bankrupt_flags & CBRF_SALE) return;
 	if (c->money - c->current_loan >= -_economy.max_loan) {
 		int previous_months_of_bankruptcy = CeilDiv(c->months_of_bankruptcy, 3);
 		c->months_of_bankruptcy = 0;
 		c->bankrupt_asked = 0;
+		DeleteWindowById(WC_BUY_COMPANY, c->index);
 		if (previous_months_of_bankruptcy != 0) CompanyAdminUpdate(c);
 		return;
 	}
@@ -704,13 +726,8 @@ static void CompaniesGenStatistics()
 
 	Backup<CompanyID> cur_company(_current_company, FILE_LINE);
 
-	if (!_settings_game.economy.infrastructure_maintenance) {
-		for (const Station *st : Station::Iterate()) {
-			cur_company.Change(st->owner);
-			CommandCost cost(EXPENSES_PROPERTY, _price[PR_STATION_VALUE] >> 1);
-			SubtractMoneyFromCompany(cost);
-		}
-	} else {
+	/* Pay Infrastructure Maintenance, if enabled */
+	if (_settings_game.economy.infrastructure_maintenance) {
 		/* Improved monthly infrastructure costs. */
 		for (const Company *c : Company::Iterate()) {
 			cur_company.Change(c->index);
@@ -896,7 +913,7 @@ static void CompaniesPayInterest()
 		Money up_to_previous_month = yearly_fee * _cur_date_ymd.month / 12;
 		Money up_to_this_month = yearly_fee * (_cur_date_ymd.month + 1) / 12;
 
-		SubtractMoneyFromCompany(CommandCost(EXPENSES_LOAN_INT, up_to_this_month - up_to_previous_month));
+		SubtractMoneyFromCompany(CommandCost(EXPENSES_LOAN_INTEREST, up_to_this_month - up_to_previous_month));
 
 		SubtractMoneyFromCompany(CommandCost(EXPENSES_OTHER, _price[PR_STATION_VALUE] >> 2));
 	}
@@ -1077,7 +1094,8 @@ static SmallIndustryList _cargo_delivery_destinations;
 
 template <class F>
 void ForAcceptingIndustries(const Station *st, CargoID cargo_type, IndustryID source, CompanyID company, F&& f) {
-	for (Industry *ind : st->industries_near) {
+	for (const auto &i : st->industries_near) {
+		Industry *ind = i.industry;
 		if (ind->index == source) continue;
 
 		uint cargo_index;
@@ -1364,7 +1382,7 @@ CargoPayment::~CargoPayment()
 		if (this->visual_transfer != 0) {
 			ShowFeederIncomeAnimation(this->front->x_pos, this->front->y_pos,
 					this->front->z_pos, this->visual_transfer, -this->visual_profit);
-		} else if (this->visual_profit != 0) {
+		} else {
 			ShowCostOrIncomeAnimation(this->front->x_pos, this->front->y_pos,
 					this->front->z_pos, -this->visual_profit);
 		}
@@ -1469,7 +1487,7 @@ void PrepareUnload(Vehicle *front_v)
 	front_v->cargo_payment = new CargoPayment(front_v);
 
 	CargoStationIDStackSet next_station = front_v->GetNextStoppingStation();
-	if (front_v->orders.list == nullptr || (front_v->current_order.GetUnloadType() & OUFB_NO_UNLOAD) == 0) {
+	if (front_v->orders == nullptr || (front_v->current_order.GetUnloadType() & OUFB_NO_UNLOAD) == 0) {
 		Station *st = Station::Get(front_v->last_station_visited);
 		for (Vehicle *v = front_v; v != nullptr; v = v->Next()) {
 			if (GetUnloadType(v) & OUFB_NO_UNLOAD) continue;
@@ -1992,6 +2010,11 @@ static void LoadUnloadVehicle(Vehicle *front)
 
 		GoodsEntry *ge = &st->goods[v->cargo_type];
 
+		if (HasBit(v->vehicle_flags, VF_CARGO_UNLOADING) && payment == nullptr) {
+			/* Once the payment has been made, never attempt to unload again */
+			ClrBit(v->vehicle_flags, VF_CARGO_UNLOADING);
+		}
+
 		if (HasBit(v->vehicle_flags, VF_CARGO_UNLOADING) && (GetUnloadType(v) & OUFB_NO_UNLOAD) == 0) {
 			uint cargo_count = v->cargo.UnloadCount();
 			uint amount_unloaded = _settings_game.order.gradual_loading ? std::min(cargo_count, GetLoadAmount(v)) : cargo_count;
@@ -2056,9 +2079,6 @@ static void LoadUnloadVehicle(Vehicle *front)
 			}
 
 			continue;
-		} else if (HasBit(v->vehicle_flags, VF_CARGO_UNLOADING) && payment == nullptr) {
-			/* Once the payment has been made, never attempt to unload again */
-			ClrBit(v->vehicle_flags, VF_CARGO_UNLOADING);
 		}
 
 		/* Do not pick up goods when we have no-load set or loading is stopped.
@@ -2146,6 +2166,8 @@ static void LoadUnloadVehicle(Vehicle *front)
 						TriggerStationRandomisation(st, st->xy, SRT_CARGO_TAKEN, v->cargo_type);
 						TriggerStationAnimation(st, st->xy, SAT_CARGO_TAKEN, v->cargo_type);
 						AirportAnimationTrigger(st, AAT_STATION_CARGO_TAKEN, v->cargo_type);
+						TriggerRoadStopAnimation(st, st->xy, SAT_NEW_CARGO, v->cargo_type);
+						TriggerRoadStopRandomisation(st, st->xy, RSRT_CARGO_TAKEN, v->cargo_type);
 					}
 
 					new_load_unload_ticks += loaded;
@@ -2166,6 +2188,9 @@ static void LoadUnloadVehicle(Vehicle *front)
 		if (front->type == VEH_TRAIN) {
 			TriggerStationRandomisation(st, station_tile, SRT_TRAIN_LOADS);
 			TriggerStationAnimation(st, station_tile, SAT_TRAIN_LOADS);
+		} else if (front->type == VEH_ROAD) {
+			TriggerRoadStopRandomisation(st, station_tile, RSRT_VEH_LOADS);
+			TriggerRoadStopAnimation(st, station_tile, SAT_TRAIN_LOADS);
 		}
 	}
 

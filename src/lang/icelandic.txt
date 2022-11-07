@@ -906,36 +906,6 @@ STR_GAME_OPTIONS_CURRENCY_CUSTOM                                :Sérsniðinn...
 STR_GAME_OPTIONS_CURRENCY_GEL                                   :Lari (Gel)
 STR_GAME_OPTIONS_CURRENCY_IRR                                   :Íranskt ríal (IRR)
 
-###length 2
-STR_GAME_OPTIONS_ROAD_VEHICLES_DROPDOWN_LEFT                    :Vinstristefna
-STR_GAME_OPTIONS_ROAD_VEHICLES_DROPDOWN_RIGHT                   :Hægristefna
-
-STR_GAME_OPTIONS_TOWN_NAMES_FRAME                               :{BLACK}Bæjanöfn
-STR_GAME_OPTIONS_TOWN_NAMES_DROPDOWN_TOOLTIP                    :{BLACK}Tungumál bæjarnafna
-
-###length 21
-STR_GAME_OPTIONS_TOWN_NAME_ORIGINAL_ENGLISH                     :Ensk (Upphafleg)
-STR_GAME_OPTIONS_TOWN_NAME_FRENCH                               :Frönsk
-STR_GAME_OPTIONS_TOWN_NAME_GERMAN                               :Þýsk
-STR_GAME_OPTIONS_TOWN_NAME_ADDITIONAL_ENGLISH                   :Ensk (Aukaleg)
-STR_GAME_OPTIONS_TOWN_NAME_LATIN_AMERICAN                       :Rómönsk-Amerísk
-STR_GAME_OPTIONS_TOWN_NAME_SILLY                                :Fáránleg
-STR_GAME_OPTIONS_TOWN_NAME_SWEDISH                              :Sænsk
-STR_GAME_OPTIONS_TOWN_NAME_DUTCH                                :Hollensk
-STR_GAME_OPTIONS_TOWN_NAME_FINNISH                              :Finnsk
-STR_GAME_OPTIONS_TOWN_NAME_POLISH                               :Pólsk
-STR_GAME_OPTIONS_TOWN_NAME_SLOVAK                               :Slóvakísk
-STR_GAME_OPTIONS_TOWN_NAME_NORWEGIAN                            :Norsk
-STR_GAME_OPTIONS_TOWN_NAME_HUNGARIAN                            :Ungversk
-STR_GAME_OPTIONS_TOWN_NAME_AUSTRIAN                             :Austurrísk
-STR_GAME_OPTIONS_TOWN_NAME_ROMANIAN                             :Rúmensk
-STR_GAME_OPTIONS_TOWN_NAME_CZECH                                :Tékknesk
-STR_GAME_OPTIONS_TOWN_NAME_SWISS                                :Svissnesk
-STR_GAME_OPTIONS_TOWN_NAME_DANISH                               :Dönsk
-STR_GAME_OPTIONS_TOWN_NAME_TURKISH                              :Tyrknesk
-STR_GAME_OPTIONS_TOWN_NAME_ITALIAN                              :Ítölsk
-STR_GAME_OPTIONS_TOWN_NAME_CATALAN                              :Katalónsk
-
 STR_GAME_OPTIONS_AUTOSAVE_FRAME                                 :{BLACK}Sjálfvirk vistun
 STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_TOOLTIP                      :{BLACK}Tíðni sjálfvirkra vistana
 
@@ -956,6 +926,7 @@ STR_GAME_OPTIONS_FULLSCREEN_TOOLTIP                             :{BLACK}Smelltu 
 STR_GAME_OPTIONS_RESOLUTION                                     :{BLACK}Skjáupplausn
 STR_GAME_OPTIONS_RESOLUTION_TOOLTIP                             :{BLACK}Stilla skjáupplausn
 STR_GAME_OPTIONS_RESOLUTION_OTHER                               :annað
+
 
 
 
@@ -1007,8 +978,6 @@ STR_CURRENCY_PREVIEW                                            :{LTBLUE}Dæmi: 
 STR_CURRENCY_CUSTOM_CURRENCY_PREVIEW_TOOLTIP                    :{BLACK}10.000 pund (£) í þessum gjaldmiðli
 STR_CURRENCY_CHANGE_PARAMETER                                   :{BLACK}Breyta sérsniðnum gjaldmiðli
 
-STR_DIFFICULTY_LEVEL_SETTING_MAXIMUM_NO_COMPETITORS             :{LTBLUE}Hámarksfjöldi keppinauta: {ORANGE}{COMMA}
-
 STR_NONE                                                        :Engin
 STR_FUNDING_ONLY                                                :Með fjármögnun
 STR_MINIMAL                                                     :Lágmark
@@ -1058,16 +1027,22 @@ STR_SUBSIDY_X2                                                  :x2
 STR_SUBSIDY_X3                                                  :x3
 STR_SUBSIDY_X4                                                  :x4
 
+###length 4
+STR_CLIMATE_TEMPERATE_LANDSCAPE                                 :Temprað landslag
+STR_CLIMATE_SUB_ARCTIC_LANDSCAPE                                :Heimskautalandslag
+STR_CLIMATE_SUB_TROPICAL_LANDSCAPE                              :Miðjarðarlandslag
+STR_CLIMATE_TOYLAND_LANDSCAPE                                   :Leikfangalandslag
+
 ###length 7
 STR_TERRAIN_TYPE_VERY_FLAT                                      :Mjög slétt
 STR_TERRAIN_TYPE_FLAT                                           :Slétt
 STR_TERRAIN_TYPE_HILLY                                          :Hæðótt
 STR_TERRAIN_TYPE_MOUNTAINOUS                                    :Fjallótt
 
-###length 3
-STR_CITY_APPROVAL_PERMISSIVE                                    :Eftirgefin
+###length 4
 STR_CITY_APPROVAL_TOLERANT                                      :Umburðarlynd
 STR_CITY_APPROVAL_HOSTILE                                       :Fjandsamleg
+STR_CITY_APPROVAL_PERMISSIVE                                    :Eftirgefin
 
 STR_WARNING_NO_SUITABLE_AI                                      :{WHITE}Engin nothæf gervigreind í boði...{}Þú getur hlaðið niður mörgum gervigreindum í gegnum 'Ná í viðbætur af netinu' viðmótið
 
@@ -1364,6 +1339,10 @@ STR_CONFIG_SETTING_TREE_PLACER_ORIGINAL                         :Venjulega
 STR_CONFIG_SETTING_TREE_PLACER_IMPROVED                         :Nýstárlega
 
 
+###length 2
+STR_CONFIG_SETTING_ROAD_SIDE_LEFT                               :Vinstristefna
+STR_CONFIG_SETTING_ROAD_SIDE_RIGHT                              :Hægristefna
+
 STR_CONFIG_SETTING_HEIGHTMAP_ROTATION                           :Snúningur hæðakorts: {STRING}
 ###length 2
 STR_CONFIG_SETTING_HEIGHTMAP_ROTATION_COUNTER_CLOCKWISE         :Rangsælis
@@ -1389,6 +1368,8 @@ STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_HELPTEXT                :Litur á landsl
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_GREEN                   :Grænn
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_DARK_GREEN              :Dökkgrænn
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_VIOLET                  :Fjólublátt
+
+###length 4
 
 ###length 4
 
@@ -1482,9 +1463,6 @@ STR_CONFIG_SETTING_SHOW_TRACK_RESERVATION_HELPTEXT              :Frátekin spor 
 
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS                     :Halda byggingartólum virkum eftir notkun: {STRING}
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS_HELPTEXT            :Halda byggingartólum fyrir brýr, gögn og fleira opnum eftir notkun
-
-STR_CONFIG_SETTING_EXPENSES_LAYOUT                              :Hópa saman útgjöld í fjármálaglugga: {STRING}
-STR_CONFIG_SETTING_EXPENSES_LAYOUT_HELPTEXT                     :Skilgreinir útlit fjármálaglugga
 
 
 ###setting-zero-is-special
@@ -1770,7 +1748,7 @@ STR_CONFIG_SETTING_REVERSE_AT_SIGNALS                           :Snúa járnbrau
 STR_CONFIG_SETTING_REVERSE_AT_SIGNALS_HELPTEXT                  :Leyfa járnbrautarlestum að snúa við á umferðarmerkjum ef þau hafa beðið þar í langan tíma
 ###length 2
 STR_CONFIG_SETTING_PATHFINDER_NPF                               :NPF
-STR_CONFIG_SETTING_PATHFINDER_YAPF_RECOMMENDED                  :YAPF {BLUE}(Ráðlegt)
+STR_CONFIG_SETTING_PATHFINDER_YAPF                              :YAPF {BLUE}(Ráðlegt)
 
 STR_CONFIG_SETTING_QUERY_CAPTION                                :{WHITE}Breyta gildi stillingar
 
@@ -1855,12 +1833,6 @@ STR_CHEAT_NO_JETCRASH                                           :{LTBLUE}Þotur 
 STR_CHEAT_CHANGE_DATE                                           :{LTBLUE}Breyta dagsetningu: {ORANGE} {DATE_SHORT}
 STR_CHEAT_CHANGE_DATE_QUERY_CAPT                                :{WHITE}Breyta um ár
 STR_CHEAT_SETUP_PROD                                            :{LTBLUE}Leyfa breytingar á verðmæti framleiðslu: {ORANGE}{STRING}
-
-###length 4
-STR_CHEAT_SWITCH_CLIMATE_TEMPERATE_LANDSCAPE                    :Temprað landslag
-STR_CHEAT_SWITCH_CLIMATE_SUB_ARCTIC_LANDSCAPE                   :Heimskautalandslag
-STR_CHEAT_SWITCH_CLIMATE_SUB_TROPICAL_LANDSCAPE                 :Miðjarðarlandslag
-STR_CHEAT_SWITCH_CLIMATE_TOYLAND_LANDSCAPE                      :Leikfangalandslag
 
 # Livery window
 
@@ -2252,6 +2224,8 @@ STR_TRANSPARENT_INVISIBLE_TOOLTIP                               :{BLACK}Gera hlu
 # Linkgraph legend window
 
 # Linkgraph legend window and linkgraph legend in smallmap
+
+# Linkgraph tooltip
 
 # Base for station construction window(s)
 STR_STATION_BUILD_COVERAGE_AREA_TITLE                           :{BLACK}Svæði sem tilheyrir stöð
@@ -2693,6 +2667,8 @@ STR_MAPGEN_MAPSIZE                                              :{BLACK}Kortast�
 STR_MAPGEN_MAPSIZE_TOOLTIP                                      :{BLACK}Veldu stærð kortsins í reitum. Fjöldi reita verða aðeins færri
 STR_MAPGEN_BY                                                   :{BLACK}*
 STR_MAPGEN_NUMBER_OF_TOWNS                                      :{BLACK}Fjöldi bæja:
+STR_MAPGEN_TOWN_NAME_LABEL                                      :{BLACK}Bæjanöfn
+STR_MAPGEN_TOWN_NAME_DROPDOWN_TOOLTIP                           :{BLACK}Tungumál bæjarnafna
 STR_MAPGEN_DATE                                                 :{BLACK}Dags.:
 STR_MAPGEN_NUMBER_OF_INDUSTRIES                                 :{BLACK}Fjöldi iðnaða:
 STR_MAPGEN_SNOW_LINE_HEIGHT                                     :{BLACK}Hæð snjólínu:
@@ -2705,6 +2681,29 @@ STR_MAPGEN_QUANTITY_OF_RIVERS                                   :{BLACK}Ár:
 STR_MAPGEN_SMOOTHNESS                                           :{BLACK}Sléttleiki lands:
 STR_MAPGEN_VARIETY                                              :{BLACK}Fjölbreytileikadreifing:
 STR_MAPGEN_GENERATE                                             :{WHITE}Mynda land
+
+###length 21
+STR_MAPGEN_TOWN_NAME_ORIGINAL_ENGLISH                           :Ensk (Upphafleg)
+STR_MAPGEN_TOWN_NAME_FRENCH                                     :Frönsk
+STR_MAPGEN_TOWN_NAME_GERMAN                                     :Þýsk
+STR_MAPGEN_TOWN_NAME_ADDITIONAL_ENGLISH                         :Ensk (Aukaleg)
+STR_MAPGEN_TOWN_NAME_LATIN_AMERICAN                             :Rómönsk-Amerísk
+STR_MAPGEN_TOWN_NAME_SILLY                                      :Fáránleg
+STR_MAPGEN_TOWN_NAME_SWEDISH                                    :Sænsk
+STR_MAPGEN_TOWN_NAME_DUTCH                                      :Hollensk
+STR_MAPGEN_TOWN_NAME_FINNISH                                    :Finnsk
+STR_MAPGEN_TOWN_NAME_POLISH                                     :Pólsk
+STR_MAPGEN_TOWN_NAME_SLOVAK                                     :Slóvakísk
+STR_MAPGEN_TOWN_NAME_NORWEGIAN                                  :Norsk
+STR_MAPGEN_TOWN_NAME_HUNGARIAN                                  :Ungversk
+STR_MAPGEN_TOWN_NAME_AUSTRIAN                                   :Austurrísk
+STR_MAPGEN_TOWN_NAME_ROMANIAN                                   :Rúmensk
+STR_MAPGEN_TOWN_NAME_CZECH                                      :Tékknesk
+STR_MAPGEN_TOWN_NAME_SWISS                                      :Svissnesk
+STR_MAPGEN_TOWN_NAME_DANISH                                     :Dönsk
+STR_MAPGEN_TOWN_NAME_TURKISH                                    :Tyrknesk
+STR_MAPGEN_TOWN_NAME_ITALIAN                                    :Ítölsk
+STR_MAPGEN_TOWN_NAME_CATALAN                                    :Katalónsk
 
 # Strings for map borders at game generation
 STR_MAPGEN_BORDER_TYPE                                          :{BLACK}Hliðar korts:
@@ -3089,8 +3088,10 @@ STR_EDIT_WAYPOINT_NAME                                          :{WHITE}Breyta n
 
 # Finances window
 STR_FINANCES_CAPTION                                            :{WHITE}{COMPANY} Fjármál {BLACK}{COMPANY_NUM}
-STR_FINANCES_EXPENDITURE_INCOME_TITLE                           :{WHITE}Útgjöld/Tekjur
 STR_FINANCES_YEAR                                               :{WHITE}{NUM}
+
+###length 3
+
 
 ###length 13
 STR_FINANCES_SECTION_CONSTRUCTION                               :{GOLD}Framkvæmdir
@@ -3099,17 +3100,11 @@ STR_FINANCES_SECTION_TRAIN_RUNNING_COSTS                        :{GOLD}Rekstur l
 STR_FINANCES_SECTION_ROAD_VEHICLE_RUNNING_COSTS                 :{GOLD}Rekstrarkostnaður bifreiða
 STR_FINANCES_SECTION_AIRCRAFT_RUNNING_COSTS                     :{GOLD}Rekstur flugvéla
 STR_FINANCES_SECTION_SHIP_RUNNING_COSTS                         :{GOLD}Rekstur skipa
-STR_FINANCES_SECTION_PROPERTY_MAINTENANCE                       :{GOLD}Viðhald eigna
-STR_FINANCES_SECTION_TRAIN_INCOME                               :{GOLD}Tekjur lesta
-STR_FINANCES_SECTION_ROAD_VEHICLE_INCOME                        :{GOLD}Tekjur bifreiða
-STR_FINANCES_SECTION_AIRCRAFT_INCOME                            :{GOLD}Tekjur flugvéla
-STR_FINANCES_SECTION_SHIP_INCOME                                :{GOLD}Tekjur skipa
 STR_FINANCES_SECTION_LOAN_INTEREST                              :{GOLD}Vextir lána
 STR_FINANCES_SECTION_OTHER                                      :{GOLD}Annað
 
 STR_FINANCES_NEGATIVE_INCOME                                    :{BLACK}-{CURRENCY_LONG}
 STR_FINANCES_POSITIVE_INCOME                                    :{BLACK}+{CURRENCY_LONG}
-STR_FINANCES_TOTAL_CAPTION                                      :{WHITE}Summa:
 STR_FINANCES_BANK_BALANCE_TITLE                                 :{WHITE}Bankainnistæða
 STR_FINANCES_LOAN_TITLE                                         :{WHITE}Lán
 STR_FINANCES_MAX_LOAN                                           :{WHITE}Hámarkslán: {BLACK}{CURRENCY_LONG}
@@ -3290,6 +3285,7 @@ STR_PURCHASE_INFO_RUNNINGCOST                                   :{BLACK}Rekstrar
 STR_PURCHASE_INFO_CAPACITY                                      :{BLACK}Burðargeta: {GOLD}{CARGO_LONG} {STRING}
 STR_PURCHASE_INFO_REFITTABLE                                    :(breytanlegt)
 STR_PURCHASE_INFO_DESIGNED_LIFE                                 :{BLACK}Hönnun: {GOLD}{NUM}{BLACK} Endingartími: {GOLD}{COMMA} ár
+STR_PURCHASE_INFO_DESIGNED                                      :{BLACK}Hönnun: {GOLD}{NUM}
 STR_PURCHASE_INFO_RELIABILITY                                   :{BLACK}Hámarks áreiðanleiki: {GOLD}{COMMA}%
 STR_PURCHASE_INFO_COST                                          :{BLACK}Verð: {GOLD}{CURRENCY_LONG}
 STR_PURCHASE_INFO_WEIGHT_CWEIGHT                                :{BLACK}Þyngd: {GOLD}{WEIGHT_SHORT} ({WEIGHT_SHORT})
@@ -3909,6 +3905,7 @@ STR_AI_CONFIG_AILIST_TOOLTIP                                    :{BLACK}Gervigre
 STR_AI_CONFIG_HUMAN_PLAYER                                      :Mennskur leikmaður
 STR_AI_CONFIG_RANDOM_AI                                         :Gervigreind af handahófi
 STR_AI_CONFIG_NONE                                              :(engin)
+STR_AI_CONFIG_MAX_COMPETITORS                                   :{LTBLUE}Hámarksfjöldi keppinauta: {ORANGE}{COMMA}
 
 STR_AI_CONFIG_MOVE_UP                                           :{BLACK}Færa upp
 STR_AI_CONFIG_MOVE_UP_TOOLTIP                                   :{BLACK}Færa valda gerfigreind upp listann

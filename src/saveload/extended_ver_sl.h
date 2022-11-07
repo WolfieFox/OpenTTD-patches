@@ -35,6 +35,7 @@ enum SlXvFeatureIndex {
 	XSLFI_TRACE_RESTRICT_CTGRYCND,                ///< Trace restrict: category conditionals
 	XSLFI_TRACE_RESTRICT_PENCTRL,                 ///< Trace restrict: PF penalty control
 	XSLFI_TRACE_RESTRICT_TUNBRIDGE,               ///< Trace restrict: restricted signalled tunnel/bridge support
+	XSLFI_TRACE_RESTRICT_SPDADAPTCTRL,            ///< Trace restrict: speed adaptation control
 	XSLFI_PROG_SIGS,                              ///< programmable pre-signals patch
 	XSLFI_ADJACENT_CROSSINGS,                     ///< Adjacent level crossings closure patch
 	XSLFI_SAFER_CROSSINGS,                        ///< Safer level crossings
@@ -119,8 +120,20 @@ enum SlXvFeatureIndex {
 	XSLFI_COMPANY_PW,                             ///< Company passwords
 	XSLFI_ST_INDUSTRY_CARGO_MODE,                 ///< Station industry cargo mode setting
 	XSLFI_TL_SPEED_LIMIT,                         ///< Through load maximum speed setting
+	XSLFI_WAYPOINT_FLAGS,                         ///< Waypoint flags
+	XSLFI_ROAD_WAYPOINTS,                         ///< Road waypoints
+	XSLFI_MORE_STATION_TYPES,                     ///< More station types (field widening)
+	XSLFI_RV_ORDER_EXTRA_FLAGS,                   ///< Road vehicle order extra flags
+	XSLFI_GRF_ROADSTOPS,                          ///< NewGRF road stops
+	XSLFI_INDUSTRY_ANIM_MASK,                     ///< Industry tile animation masking
+	XSLFI_NEW_SIGNAL_STYLES,                      ///< New signal styles
+	XSLFI_NO_TREE_COUNTER,                        ///< No tree counter
+	XSLFI_TOWN_SETTING_OVERRIDE,                  ///< Town setting overrides
 
 	XSLFI_SCRIPT_INT64,                           ///< See: SLV_SCRIPT_INT64
+	XSLFI_U64_TICK_COUNTER,                       ///< See: SLV_U64_TICK_COUNTER
+	XSLFI_LINKGRAPH_TRAVEL_TIME,                  ///< See: SLV_LINKGRAPH_TRAVEL_TIME
+	XSLFI_LAST_LOADING_TICK,                      ///< See: SLV_LAST_LOADING_TICK
 
 	XSLFI_RIFF_HEADER_60_BIT,                     ///< Size field in RIFF chunk header is 60 bit
 	XSLFI_HEIGHT_8_BIT,                           ///< Map tile height is 8 bit instead of 4 bit, but savegame version may be before this became true in trunk
@@ -136,6 +149,7 @@ enum SlXvFeatureIndex {
 };
 
 extern uint16 _sl_xv_feature_versions[XSLFI_SIZE];
+extern uint16 _sl_xv_feature_static_versions[XSLFI_SIZE];
 
 /**
  * Operator to use when combining traditional savegame number test with an extended feature version test
@@ -149,7 +163,7 @@ enum SlXvFeatureTestOperator {
  * Structure to describe an extended feature version test, and how it combines with a traditional savegame version test
  */
 struct SlXvFeatureTest {
-	using TestFunctorPtr = bool (*)(uint16, bool);  ///< Return true if feature present, first parameter is standard savegame version, second is whether standard savegame version is within bounds
+	using TestFunctorPtr = bool (*)(uint16, bool, uint16[XSLFI_SIZE]);  ///< Return true if feature present, first parameter is standard savegame version, second is whether standard savegame version is within bounds
 
 	private:
 	uint16 min_version;
@@ -168,10 +182,20 @@ struct SlXvFeatureTest {
 	SlXvFeatureTest(TestFunctorPtr functor_)
 			: min_version(0), max_version(0), feature(XSLFI_NULL), op(XSLFTO_OR), functor(functor_) { }
 
-	bool IsFeaturePresent(SaveLoadVersion savegame_version, SaveLoadVersion savegame_version_from, SaveLoadVersion savegame_version_to) const;
+	bool IsFeaturePresent(uint16 feature_versions[XSLFI_SIZE], SaveLoadVersion savegame_version, SaveLoadVersion savegame_version_from, SaveLoadVersion savegame_version_to) const;
+
+	inline bool IsFeaturePresent(SaveLoadVersion savegame_version, SaveLoadVersion savegame_version_from, SaveLoadVersion savegame_version_to) const
+	{
+		return this->IsFeaturePresent(_sl_xv_feature_versions, savegame_version, savegame_version_from, savegame_version_to);
+	}
 };
 
-bool SlXvIsFeaturePresent(SlXvFeatureIndex feature, uint16 min_version = 1, uint16 max_version = 0xFFFF);
+bool SlXvIsFeaturePresent(uint16 feature_versions[XSLFI_SIZE], SlXvFeatureIndex feature, uint16 min_version = 1, uint16 max_version = 0xFFFF);
+
+inline bool SlXvIsFeaturePresent(SlXvFeatureIndex feature, uint16 min_version = 1, uint16 max_version = 0xFFFF)
+{
+	return SlXvIsFeaturePresent(_sl_xv_feature_versions, feature, min_version, max_version);
+}
 
 /**
  * Returns true if @p feature is missing (i.e. has a version of 0, or less than the specified minimum version)
@@ -179,6 +203,14 @@ bool SlXvIsFeaturePresent(SlXvFeatureIndex feature, uint16 min_version = 1, uint
 inline bool SlXvIsFeatureMissing(SlXvFeatureIndex feature, uint16 min_version = 1)
 {
 	return !SlXvIsFeaturePresent(feature, min_version);
+}
+
+/**
+ * Returns true if @p feature is missing (i.e. has a version of 0, or less than the specified minimum version)
+ */
+inline bool SlXvIsFeatureMissing(uint16 feature_versions[XSLFI_SIZE], SlXvFeatureIndex feature, uint16 min_version = 1)
+{
+	return !SlXvIsFeaturePresent(feature_versions, feature, min_version);
 }
 
 const char *SlXvGetFeatureName(SlXvFeatureIndex feature);
@@ -218,6 +250,7 @@ struct SlxiSubChunkInfo {
 void SlXvResetState();
 
 void SlXvSetCurrentState();
+void SlXvSetStaticCurrentVersions();
 
 bool SlXvCheckSpecialSavegameVersions();
 

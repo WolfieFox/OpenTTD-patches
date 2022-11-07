@@ -803,15 +803,11 @@ STR_GAME_OPTIONS_CAPTION                                        :{WHITE}Опци
 
 ###length 42
 
-###length 2
-
-
-###length 21
-
 
 # Autosave dropdown
 ###length 5
 STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_EVERY_1_MONTH                :Секој месец
+
 
 
 
@@ -835,7 +831,6 @@ STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_EVERY_1_MONTH                :Секој ме
 
 
 
-
 STR_NUM_CUSTOM_NUMBER                                           :Прилагодено ({NUM})
 
 
@@ -851,9 +846,11 @@ STR_SEA_LEVEL_CUSTOM_PERCENTAGE                                 :Прилаго�
 
 ###length 4
 
+###length 4
+
 ###length 7
 
-###length 3
+###length 4
 
 
 # Settings tree window
@@ -969,10 +966,14 @@ STR_CONFIG_SETTING_GRAPH_LINE_THICKNESS                         :Дебелин�
 
 ###length 2
 
+###length 2
+
 
 
 
 ###length 3
+
+###length 4
 
 ###length 4
 
@@ -1003,7 +1004,6 @@ STR_CONFIG_SETTING_GRAPH_LINE_THICKNESS                         :Дебелин�
 
 
 ###length 3
-
 
 
 
@@ -1187,8 +1187,6 @@ STR_ABANDON_GAME_QUERY                                          :{YELLOW}Дал�
 
 # Cheat window
 
-###length 4
-
 # Livery window
 
 
@@ -1280,6 +1278,8 @@ STR_CONTENT_TYPE_GS_LIBRARY                                     :ГШ библи
 # Linkgraph legend window
 
 # Linkgraph legend window and linkgraph legend in smallmap
+
+# Linkgraph tooltip
 
 # Base for station construction window(s)
 STR_STATION_BUILD_ACCEPTS_CARGO                                 :{BLACK}Прифаќа: {GOLD}{CARGO_LIST}
@@ -1455,6 +1455,8 @@ STR_SAVELOAD_DETAIL_GRFSTATUS                                   :{SILVER}Нов�
 STR_MAPGEN_MAPSIZE                                              :{BLACK}Големина на мапа:
 STR_MAPGEN_BY                                                   :{BLACK}*
 
+###length 21
+
 # Strings for map borders at game generation
 
 
@@ -1605,6 +1607,9 @@ STR_WAYPOINT_VIEW_CAPTION                                       :{WHITE}{WAYPOIN
 
 # Finances window
 STR_FINANCES_YEAR                                               :{WHITE}{NUM}
+
+###length 3
+
 
 ###length 13
 

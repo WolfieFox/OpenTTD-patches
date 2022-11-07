@@ -461,8 +461,9 @@ size_t BoolSettingDesc::ParseValue(const char *str) const
 	return this->def;
 }
 
-static bool ValidateEnumSetting(const IntSettingDesc *sdb, int32 val)
+static bool ValidateEnumSetting(const IntSettingDesc *sdb, int32 &val)
 {
+	if (sdb->flags & SF_ENUM_PRE_CB_VALIDATE && sdb->pre_check != nullptr && !sdb->pre_check(val)) return false;
 	for (const SettingDescEnumEntry *enumlist = sdb->enumlist; enumlist != nullptr && enumlist->str != STR_NULL; enumlist++) {
 		if (enumlist->val == val) {
 			return true;
@@ -526,7 +527,11 @@ void IntSettingDesc::MakeValueValid(int32 &val) const
 			uint32 uval = (uint32)val;
 			if (!(this->flags & SF_GUI_0_IS_SPECIAL) || uval != 0) {
 				if (this->flags & SF_ENUM) {
-					if (!ValidateEnumSetting(this, val)) uval = (uint32)(size_t)this->def;
+					if (!ValidateEnumSetting(this, val)) {
+						uval = (uint32)(size_t)this->def;
+					} else {
+						uval = (uint32)val;
+					}
 				} else if (!(this->flags & SF_GUI_DROPDOWN)) {
 					/* Clamp value-type setting to its valid range */
 					uval = ClampU(uval, this->min, this->max);
@@ -832,7 +837,7 @@ static void IniSaveSettingList(IniFile &ini, const char *grpname, StringList &li
  * Load a WindowDesc from config.
  * @param ini IniFile handle to the ini file with the source data
  * @param grpname character string identifying the section-header of the ini file that will be parsed
- * @param desc Destination WindowDesc
+ * @param desc Destination WindowDescPreferences
  */
 void IniLoadWindowSettings(IniFile &ini, const char *grpname, void *desc)
 {
@@ -843,7 +848,7 @@ void IniLoadWindowSettings(IniFile &ini, const char *grpname, void *desc)
  * Save a WindowDesc to config.
  * @param ini IniFile handle to the ini file where the destination data is saved
  * @param grpname character string identifying the section-header of the ini file
- * @param desc Source WindowDesc
+ * @param desc Source WindowDescPreferences
  */
 void IniSaveWindowSettings(IniFile &ini, const char *grpname, void *desc)
 {
@@ -933,6 +938,8 @@ static void StationSpreadChanged(int32 new_value)
 {
 	InvalidateWindowData(WC_SELECT_STATION, 0);
 	InvalidateWindowData(WC_BUILD_STATION, 0);
+	InvalidateWindowData(WC_BUS_STATION, 0);
+	InvalidateWindowData(WC_TRUCK_STATION, 0);
 }
 
 static void UpdateConsists(int32 new_value)
@@ -1131,6 +1138,7 @@ static void TrainBrakingModelChanged(int32 new_value)
 	UpdateAllBlockSignals();
 
 	InvalidateWindowData(WC_BUILD_SIGNAL, 0);
+	InvalidateWindowClassesData(WC_GAME_OPTIONS);
 }
 
 /**
@@ -1244,6 +1252,7 @@ static void ZoomMinMaxChanged(int32 new_value)
 		/* Restrict GUI zoom if it is no longer available. */
 		_gui_zoom = _settings_client.gui.zoom_min;
 		UpdateCursorSize();
+		UpdateRouteStepSpriteSize();
 		UpdateFontHeightCache();
 		LoadStringWidthTable();
 	}
@@ -1254,11 +1263,6 @@ static void SpriteZoomMinChanged(int32 new_value)
 	GfxClearSpriteCache();
 	/* Force all sprites to redraw at the new chosen zoom level */
 	MarkWholeScreenDirty();
-}
-
-static void InvalidateSettingsWindow(int32 new_value)
-{
-	InvalidateWindowClassesData(WC_GAME_OPTIONS);
 }
 
 static void DeveloperModeChanged(int32 new_value)
@@ -1430,6 +1434,12 @@ static void ValidateSettings()
 	}
 }
 
+static bool TownCouncilToleranceAdjust(int32 &new_value)
+{
+	if (new_value == 255) new_value = TOWN_COUNCIL_PERMISSIVE;
+	return true;
+}
+
 static void DifficultyNoiseChange(int32 new_value)
 {
 	if (_game_mode == GM_NORMAL) {
@@ -1450,6 +1460,11 @@ static void DifficultyRenameTownsMultiplayerChange(int32 new_value)
 	SetWindowClassesDirty(WC_TOWN_VIEW);
 }
 
+static void DifficultyOverrideTownSettingsMultiplayerChange(int32 new_value)
+{
+	SetWindowClassesDirty(WC_TOWN_AUTHORITY);
+}
+
 static void MaxNoAIsChange(int32 new_value)
 {
 	if (GetGameSettings().difficulty.max_no_competitors != 0 &&
@@ -1468,8 +1483,8 @@ static void MaxNoAIsChange(int32 new_value)
  */
 static bool CheckRoadSide(int32 &new_value)
 {
-	extern bool RoadVehiclesAreBuilt();
-	return (_game_mode == GM_MENU || !RoadVehiclesAreBuilt());
+	extern bool RoadVehiclesExistOutsideDepots();
+	return (_game_mode == GM_MENU || !RoadVehiclesExistOutsideDepots());
 }
 
 static void RoadSideChanged(int32 new_value)
@@ -1603,7 +1618,7 @@ static void StationCatchmentChanged(int32 new_value)
 
 static bool CheckSharingRail(int32 &new_value)
 {
-	return CheckSharingChangePossible(VEH_TRAIN);
+	return CheckSharingChangePossible(VEH_TRAIN, new_value);
 }
 
 static void SharingRailChanged(int32 new_value)
@@ -1613,17 +1628,17 @@ static void SharingRailChanged(int32 new_value)
 
 static bool CheckSharingRoad(int32 &new_value)
 {
-	return CheckSharingChangePossible(VEH_ROAD);
+	return CheckSharingChangePossible(VEH_ROAD, new_value);
 }
 
 static bool CheckSharingWater(int32 &new_value)
 {
-	return CheckSharingChangePossible(VEH_SHIP);
+	return CheckSharingChangePossible(VEH_SHIP, new_value);
 }
 
 static bool CheckSharingAir(int32 &new_value)
 {
-	return CheckSharingChangePossible(VEH_AIRCRAFT);
+	return CheckSharingChangePossible(VEH_AIRCRAFT, new_value);
 }
 
 static void MaxVehiclesChanged(int32 new_value)
@@ -1673,6 +1688,17 @@ static void DayLengthChanged(int32 new_value)
 	AdjustAllSignalSpeedRestrictionTickValues(_scaled_date_ticks - old_scaled_date_ticks);
 
 	MarkWholeScreenDirty();
+}
+
+static void TownZoneModeChanged(int32 new_value)
+{
+	InvalidateWindowClassesData(WC_GAME_OPTIONS);
+	UpdateTownRadii();
+}
+
+static void TownZoneCustomValueChanged(int32 new_value)
+{
+	if (_settings_game.economy.town_zone_calc_mode) UpdateTownRadii();
 }
 
 /**
@@ -1766,6 +1792,19 @@ static bool LinkGraphDistributionSettingGUI(SettingOnGuiCtrlData &data)
 		case SOGCT_DESCRIPTION_TEXT:
 			SetDParam(0, data.text);
 			data.text = STR_CONFIG_SETTING_DISTRIBUTION_HELPTEXT_EXTRA;
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+static bool AllowRoadStopsUnderBridgesSettingGUI(SettingOnGuiCtrlData &data)
+{
+	switch (data.type) {
+		case SOGCT_DESCRIPTION_TEXT:
+			SetDParam(0, data.text);
+			data.text = STR_CONFIG_SETTING_ALLOW_ROAD_STATIONS_UNDER_BRIDGES_HELPTEXT_EXTRA;
 			return true;
 
 		default:
@@ -1980,7 +2019,7 @@ static GRFConfig *GRFLoadConfig(IniFile &ini, const char *grpname, bool is_stati
 				SetDParam(1, STR_CONFIG_ERROR_INVALID_GRF_UNKNOWN);
 			}
 
-			SetDParamStr(0, StrEmpty(filename) ? item->name : filename);
+			SetDParamStr(0, StrEmpty(filename) ? item->name.c_str() : filename);
 			ShowErrorMessage(STR_CONFIG_ERROR, STR_CONFIG_ERROR_INVALID_GRF, WL_CRITICAL);
 			delete c;
 			continue;
@@ -2587,6 +2626,7 @@ void SyncCompanySettings()
 	const void *new_object = &_settings_client.company;
 	for (auto &sd : _company_settings) {
 		if (!sd->IsIntSetting()) continue;
+		if (!SlIsObjectCurrentlyValid(sd->save.version_from, sd->save.version_to, sd->save.ext_feature_test)) continue;
 		uint32 old_value = (uint32)sd->AsIntSetting()->Read(new_object);
 		uint32 new_value = (uint32)sd->AsIntSetting()->Read(old_object);
 		if (old_value != new_value) NetworkSendCommand(0, 0, new_value, 0, CMD_CHANGE_COMPANY_SETTING, nullptr, sd->name, _local_company, 0);

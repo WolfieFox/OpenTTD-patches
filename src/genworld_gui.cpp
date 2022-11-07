@@ -130,7 +130,7 @@ static const NWidgetPart _nested_generate_landscape_widgets[] = {
 						NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_MAPGEN_DATE, STR_NULL), SetFill(1, 1),
 						NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_MAPGEN_SMOOTHNESS, STR_NULL), SetFill(1, 1),
 						NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_MAPGEN_QUANTITY_OF_RIVERS, STR_NULL), SetFill(1, 1),
-						NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_GAME_OPTIONS_TOWN_NAMES_FRAME, STR_NULL), SetFill(1, 1),
+						NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_MAPGEN_TOWN_NAME_LABEL, STR_NULL), SetFill(1, 1),
 					EndContainer(),
 					NWidget(NWID_VERTICAL, NC_EQUALSIZE), SetPIP(0, 4, 0),
 						NWidget(NWID_SELECTION, INVALID_COLOUR, WID_GL_CLIMATE_SEL_SELECTOR),
@@ -167,7 +167,7 @@ static const NWidgetPart _nested_generate_landscape_widgets[] = {
 						EndContainer(),
 						NWidget(WWT_DROPDOWN, COLOUR_ORANGE, WID_GL_SMOOTHNESS_PULLDOWN), SetDataTip(STR_JUST_STRING, STR_NULL), SetFill(1, 0),
 						NWidget(WWT_DROPDOWN, COLOUR_ORANGE, WID_GL_RIVER_PULLDOWN), SetDataTip(STR_JUST_STRING, STR_NULL), SetFill(1, 0),
-						NWidget(WWT_DROPDOWN, COLOUR_ORANGE, WID_GL_TOWNNAME_DROPDOWN), SetDataTip(STR_BLACK_STRING, STR_GAME_OPTIONS_TOWN_NAMES_DROPDOWN_TOOLTIP), SetFill(1, 0),
+						NWidget(WWT_DROPDOWN, COLOUR_ORANGE, WID_GL_TOWNNAME_DROPDOWN), SetDataTip(STR_BLACK_STRING, STR_MAPGEN_TOWN_NAME_DROPDOWN_TOOLTIP), SetFill(1, 0),
 					EndContainer(),
 				EndContainer(),
 				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_GL_GENERATE_BUTTON), SetMinimalSize(84, 0), SetDataTip(STR_MAPGEN_GENERATE, STR_NULL), SetFill(1, 1),
@@ -238,7 +238,7 @@ static const NWidgetPart _nested_heightmap_load_widgets[] = {
 			EndContainer(),
 			/* Widgets at the right of the labels. */
 			NWidget(NWID_VERTICAL), SetPIP(0, 4, 0),
-				NWidget(WWT_EMPTY, COLOUR_ORANGE, WID_GL_HEIGHTMAP_NAME_TEXT), SetFill(1, 0),
+				NWidget(WWT_TEXT, COLOUR_ORANGE, WID_GL_HEIGHTMAP_NAME_TEXT), SetTextColour(TC_ORANGE), SetDataTip(STR_JUST_RAW_STRING, STR_EMPTY), SetFill(1, 0),
 				NWidget(NWID_HORIZONTAL), SetPIP(0, 5, 0),
 					NWidget(NWID_VERTICAL, NC_EQUALSIZE), SetPIP(0, 4, 0),
 						NWidget(WWT_TEXT, COLOUR_ORANGE, WID_GL_HEIGHTMAP_SIZE_TEXT), SetDataTip(STR_MAPGEN_HEIGHTMAP_SIZE, STR_NULL), SetFill(1, 0),
@@ -264,7 +264,7 @@ static const NWidgetPart _nested_heightmap_load_widgets[] = {
 									NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_MAPGEN_RAINFOREST_LINE_HEIGHT, STR_NULL), SetFill(1, 1),
 								EndContainer(),
 								NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_MAPGEN_DATE, STR_NULL), SetFill(1, 1),
-								NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_GAME_OPTIONS_TOWN_NAMES_FRAME, STR_NULL), SetFill(1, 1),
+								NWidget(WWT_TEXT, COLOUR_ORANGE), SetDataTip(STR_MAPGEN_TOWN_NAME_LABEL, STR_NULL), SetFill(1, 1),
 							EndContainer(),
 							NWidget(NWID_VERTICAL, NC_EQUALSIZE), SetPIP(0, 4, 0),
 								NWidget(NWID_HORIZONTAL),
@@ -301,7 +301,7 @@ static const NWidgetPart _nested_heightmap_load_widgets[] = {
 									NWidget(WWT_PUSHTXTBTN, COLOUR_ORANGE, WID_GL_START_DATE_TEXT), SetDataTip(STR_BLACK_DATE_LONG, STR_NULL), SetFill(1, 0),
 									NWidget(WWT_IMGBTN, COLOUR_ORANGE, WID_GL_START_DATE_UP), SetDataTip(SPR_ARROW_UP, STR_SCENEDIT_TOOLBAR_TOOLTIP_MOVE_THE_STARTING_DATE_FORWARD), SetFill(0, 1),
 								EndContainer(),
-								NWidget(WWT_DROPDOWN, COLOUR_ORANGE, WID_GL_TOWNNAME_DROPDOWN), SetDataTip(STR_BLACK_STRING, STR_GAME_OPTIONS_TOWN_NAMES_DROPDOWN_TOOLTIP), SetFill(1, 0),
+								NWidget(WWT_DROPDOWN, COLOUR_ORANGE, WID_GL_TOWNNAME_DROPDOWN), SetDataTip(STR_BLACK_STRING, STR_MAPGEN_TOWN_NAME_DROPDOWN_TOOLTIP), SetFill(1, 0),
 							EndContainer(),
 						EndContainer(),
 						NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_GL_GENERATE_BUTTON), SetMinimalSize(84, 0), SetDataTip(STR_MAPGEN_GENERATE, STR_NULL), SetFill(1, 1),
@@ -394,7 +394,7 @@ static DropDownList BuildTownNameDropDown()
 
 	/* Add and sort original townnames generators */
 	for (uint i = 0; i < BUILTIN_TOWNNAME_GENERATOR_COUNT; i++) {
-		list.emplace_back(new DropDownListStringItem(STR_GAME_OPTIONS_TOWN_NAME_ORIGINAL_ENGLISH + i, i, false));
+		list.emplace_back(new DropDownListStringItem(STR_MAPGEN_TOWN_NAME_ORIGINAL_ENGLISH + i, i, false));
 	}
 	std::sort(list.begin() + newgrf_size, list.end(), DropDownListStringItem::NatSortFunc);
 
@@ -477,7 +477,7 @@ struct GenerateLandscapeWindow : public Window {
 			case WID_GL_TOWNNAME_DROPDOWN: {
 				uint gen = _settings_newgame.game_creation.town_name;
 				StringID name = gen < BUILTIN_TOWNNAME_GENERATOR_COUNT ?
-						STR_GAME_OPTIONS_TOWN_NAME_ORIGINAL_ENGLISH + gen :
+						STR_MAPGEN_TOWN_NAME_ORIGINAL_ENGLISH + gen :
 						GetGRFTownNameName(gen - BUILTIN_TOWNNAME_GENERATOR_COUNT);
 				SetDParam(0, name);
 				break;
@@ -513,6 +513,7 @@ struct GenerateLandscapeWindow : public Window {
 				}
 				break;
 
+			case WID_GL_HEIGHTMAP_NAME_TEXT: SetDParamStr(0, this->name); break;
 			case WID_GL_RIVER_PULLDOWN:      SetDParam(0, _rivers[_settings_newgame.game_creation.amount_of_rivers]); break;
 			case WID_GL_SMOOTHNESS_PULLDOWN: SetDParam(0, _smoothness[_settings_newgame.game_creation.tgen_smoothness]); break;
 			case WID_GL_VARIETY_PULLDOWN:    SetDParam(0, _variety[_settings_newgame.game_creation.variety]); break;
@@ -716,16 +717,6 @@ struct GenerateLandscapeWindow : public Window {
 		}
 		size->width += padding.width;
 		size->height = std::max(size->height, (uint)(FONT_HEIGHT_NORMAL + WD_DROPDOWNTEXT_TOP + WD_DROPDOWNTEXT_BOTTOM));
-	}
-
-	void DrawWidget(const Rect &r, int widget) const override
-	{
-		switch (widget) {
-			case WID_GL_HEIGHTMAP_NAME_TEXT: {
-				DrawString(r.left, r.right, r.top, this->name, TC_ORANGE);
-				break;
-			}
-		}
 	}
 
 	void OnClick(Point pt, int widget, int click_count) override

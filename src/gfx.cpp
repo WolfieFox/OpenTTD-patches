@@ -17,6 +17,7 @@
 #include "settings_type.h"
 #include "network/network.h"
 #include "network/network_func.h"
+#include "window_gui.h"
 #include "window_func.h"
 #include "newgrf_debug.h"
 #include "thread.h"
@@ -25,6 +26,7 @@
 #include "framerate_type.h"
 #include "transparency.h"
 #include "core/backup_type.hpp"
+#include "viewport_func.h"
 
 #include "table/palettes.h"
 #include "table/string_colours.h"
@@ -53,6 +55,7 @@ std::atomic<bool> _exit_game;
 GameMode _game_mode;
 SwitchMode _switch_mode;  ///< The next mainloop command.
 PauseMode _pause_mode;
+uint32 _pause_countdown;
 Palette _cur_palette;
 std::mutex _cur_palette_mutex;
 std::string _switch_baseset;
@@ -226,8 +229,9 @@ static std::vector<LineSegment> MakePolygonSegments(const std::vector<Point> &sh
  *         FILLRECT_OPAQUE:   Fill the polygon with the specified colour.
  *         FILLRECT_CHECKER:  Fill every other pixel with the specified colour, in a checkerboard pattern.
  *         FILLRECT_RECOLOUR: Apply a recolour sprite to every pixel in the polygon.
+ *         FILLRECT_FUNCTOR:  Apply a functor to a line of pixels.
  */
-void GfxFillPolygon(const std::vector<Point> &shape, int colour, FillRectMode mode)
+void GfxFillPolygon(const std::vector<Point> &shape, int colour, FillRectMode mode, GfxFillRectModeFunctor *fill_functor)
 {
 	Blitter *blitter = BlitterFactory::GetCurrentBlitter();
 	const DrawPixelInfo *dpi = _cur_dpi;
@@ -307,6 +311,10 @@ void GfxFillPolygon(const std::vector<Point> &shape, int colour, FillRectMode mo
 					for (int x = (x1 + y) & 1; x < x2 - x1; x += 2) {
 						blitter->SetPixel(dst, x, 0, (uint8)colour);
 					}
+					break;
+				case FILLRECT_FUNCTOR:
+					/* Call the provided fill functor. */
+					fill_functor(dst, x2 - x1);
 					break;
 			}
 		}
@@ -476,7 +484,7 @@ static void SetColourRemap(TextColour colour)
 
 	/* Black strings have no shading ever; the shading is black, so it
 	 * would be invisible at best, but it actually makes it illegible. */
-	bool no_shade   = (colour & TC_NO_SHADE) != 0 || colour == TC_BLACK;
+	bool no_shade   = (colour & TC_NO_SHADE) != 0 || (colour & ~TC_FORCED) == TC_BLACK;
 	bool raw_colour = (colour & TC_IS_PALETTE_COLOUR) != 0;
 	colour &= ~(TC_NO_SHADE | TC_IS_PALETTE_COLOUR | TC_FORCED);
 
@@ -836,7 +844,7 @@ int DrawStringMultiLine(int left, int right, int top, int bottom, const char *st
 	for (const auto &line : layout) {
 
 		int line_height = line->GetLeading();
-		if (y >= top && y < bottom) {
+		if (y >= top && y + line_height - 1 <= bottom) {
 			last_line = y + line_height;
 			if (first_line > y) first_line = y;
 
@@ -930,12 +938,12 @@ Dimension GetStringBoundingBox(const std::string &str, FontSize start_fontsize)
  * @param strid String to examine.
  * @return Width and height of the bounding box for the string in pixels.
  */
-Dimension GetStringBoundingBox(StringID strid)
+Dimension GetStringBoundingBox(StringID strid, FontSize start_fontsize)
 {
 	char buffer[DRAW_STRING_BUFFER];
 
 	GetString(buffer, strid, lastof(buffer));
-	return GetStringBoundingBox(buffer);
+	return GetStringBoundingBox(buffer, start_fontsize);
 }
 
 /**
@@ -1284,8 +1292,16 @@ static void GfxMainBlitter(const Sprite *sprite, int x, int y, BlitterMode mode,
 
 void DoPaletteAnimations();
 
+Colour _water_palette[10];
+
 void GfxInitPalettes()
 {
+	MemCpyT<Colour>(_water_palette, (_settings_game.game_creation.landscape == LT_TOYLAND) ? _extra_palette_values.dark_water_toyland : _extra_palette_values.dark_water, 5);
+	const Colour *s = (_settings_game.game_creation.landscape == LT_TOYLAND) ? _extra_palette_values.glitter_water_toyland : _extra_palette_values.glitter_water;
+	for (int i = 0; i < 5; i++) {
+		_water_palette[i + 5] = s[i * 3];
+	}
+
 	std::lock_guard<std::mutex> lock_state(_cur_palette_mutex);
 	memcpy(&_cur_palette, &_palette, sizeof(_cur_palette));
 	DoPaletteAnimations();
@@ -2320,6 +2336,38 @@ void UpdateGUIZoom()
 	}
 
 	UpdateFontHeightCache();
+}
+
+/**
+ * Resolve GUI zoom level and adjust GUI to new zoom, if auto-suggestion is requested.
+ * @returns true when the zoom level has changed, caller must call ReInitAllWindows(true)
+ * after resizing the application's window/buffer.
+ */
+bool AdjustGUIZoom()
+{
+	auto old_zoom = _gui_zoom;
+	UpdateGUIZoom();
+	if (old_zoom == _gui_zoom) return false;
+	GfxClearSpriteCache();
+	VideoDriver::GetInstance()->ClearSystemSprites();
+	ClearFontCache();
+	GfxClearSpriteCache();
+	UpdateAllVirtCoords();
+
+	/* Adjust all window sizes to match the new zoom level, so that they don't appear
+	   to move around when the application is moved to a screen with different DPI. */
+	auto zoom_shift = old_zoom - _gui_zoom;
+	for (Window *w : Window::IterateFromBack()) {
+		w->left = AdjustByZoom(w->left, zoom_shift);
+		w->top = AdjustByZoom(w->top, zoom_shift);
+		w->width = AdjustByZoom(w->width, zoom_shift);
+		w->height = AdjustByZoom(w->height, zoom_shift);
+		if (w->viewport != nullptr) {
+			w->viewport->zoom = Clamp(ZoomLevel(w->viewport->zoom - zoom_shift), _settings_client.gui.zoom_min, _settings_client.gui.zoom_max);
+		}
+	}
+
+	return true;
 }
 
 void ChangeGameSpeed(bool enable_fast_forward)

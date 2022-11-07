@@ -10,6 +10,7 @@ add_subdirectory(3rdparty)
 add_subdirectory(ai)
 add_subdirectory(blitter)
 add_subdirectory(core)
+add_subdirectory(fontcache)
 add_subdirectory(game)
 add_subdirectory(lang)
 add_subdirectory(linkgraph)
@@ -29,11 +30,6 @@ add_files(
     viewport_sprite_sorter_sse4.cpp
     CONDITION SSE_FOUND
 )
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    set_compile_flags(
-        viewport_sprite_sorter_sse4.cpp
-        COMPILE_FLAGS -msse4.1)
-endif()
 
 add_files(
     aircraft.h
@@ -167,7 +163,6 @@ add_files(
     fios_gui.cpp
     fontcache.cpp
     fontcache.h
-    fontcache_internal.h
     fontdetection.h
     framerate_gui.cpp
     framerate_type.h
@@ -244,6 +239,8 @@ add_files(
     newgrf_airporttiles.h
     newgrf_animation_base.h
     newgrf_animation_type.h
+    newgrf_analysis.cpp
+    newgrf_analysis.h
     newgrf_cache_check.h
     newgrf_callbacks.h
     newgrf_canal.cpp
@@ -271,15 +268,22 @@ add_files(
     newgrf_industries.h
     newgrf_industrytiles.cpp
     newgrf_industrytiles.h
+    newgrf_industrytiles_analysis.h
+    newgrf_internal.h
+    newgrf_newlandscape.cpp
+    newgrf_newlandscape.h
     newgrf_newsignals.cpp
     newgrf_newsignals.h
     newgrf_object.cpp
     newgrf_object.h
+    newgrf_optimiser.cpp
     newgrf_profiling.cpp
     newgrf_profiling.h
     newgrf_properties.h
     newgrf_railtype.cpp
     newgrf_railtype.h
+    newgrf_roadstop.cpp
+    newgrf_roadstop.h
     newgrf_roadtype.cpp
     newgrf_roadtype.h
     newgrf_sound.cpp

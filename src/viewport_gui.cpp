@@ -62,8 +62,8 @@ public:
 		this->InitNested(window_number);
 
 		NWidgetViewport *nvp = this->GetWidget<NWidgetViewport>(WID_EV_VIEWPORT);
-		nvp->InitializeViewport(this, 0, ZOOM_LVL_VIEWPORT);
-		if (_settings_client.gui.zoom_min == ZOOM_LVL_VIEWPORT) this->DisableWidget(WID_EV_ZOOM_IN);
+		nvp->InitializeViewport(this, 0, ScaleZoomGUI(ZOOM_LVL_VIEWPORT));
+		if (_settings_client.gui.zoom_min == viewport->zoom) this->DisableWidget(WID_EV_ZOOM_IN);
 
 		Point pt;
 		if (tile == INVALID_TILE) {
@@ -153,7 +153,7 @@ public:
 
 	virtual void OnMouseOver(Point pt, int widget) override
 	{
-		if (pt.x != -1 && (_mouse_hovering || _settings_client.gui.hover_delay_ms == 0)) {
+		if (pt.x != -1 && (_settings_client.gui.hover_delay_ms == 0 ? _right_button_down : _mouse_hovering)) {
 			/* Show tooltip with last month production or town name */
 			const Point p = GetTileBelowCursor();
 			const TileIndex tile = TileVirtXY(p.x, p.y);

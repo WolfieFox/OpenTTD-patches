@@ -230,9 +230,9 @@ STR_UNITS_HEIGHT_METRIC                                         :{COMMA} m
 STR_UNITS_HEIGHT_SI                                             :{COMMA} m
 
 # Common window strings
-STR_LIST_FILTER_TITLE                                           :{BLACK}Filtrar texto:
-STR_LIST_FILTER_OSKTITLE                                        :{BLACK}Introducir cadea de texto a filtrar
-STR_LIST_FILTER_TOOLTIP                                         :{BLACK}Introduce unha palabra clave pola que filtra-la lista
+STR_LIST_FILTER_TITLE                                           :{BLACK}Filtrar:
+STR_LIST_FILTER_OSKTITLE                                        :{BLACK}Introducir unha ou máis palabras clave pola que filtrar a lista
+STR_LIST_FILTER_TOOLTIP                                         :{BLACK}Introduce unha ou máis palabras clave pola que filtra-la lista
 
 STR_TOOLTIP_GROUP_ORDER                                         :{BLACK}Selecciona a orde de agrupamento
 STR_TOOLTIP_SORT_ORDER                                          :{BLACK}Selecciona a ordenación (descendente/ascendente)
@@ -501,11 +501,11 @@ STR_ABOUT_MENU_SEPARATOR                                        :
 STR_ABOUT_MENU_TOGGLE_CONSOLE                                   :(Des)Activar consola
 STR_ABOUT_MENU_AI_DEBUG                                         :Depuración IA/script do xogo
 STR_ABOUT_MENU_SCREENSHOT                                       :Captura de pantalla
-STR_ABOUT_MENU_SHOW_FRAMERATE                                   :Mostrar frame rate
-STR_ABOUT_MENU_ABOUT_OPENTTD                                    :Acerca de 'OpenTTD'
+STR_ABOUT_MENU_SHOW_FRAMERATE                                   :Amosar o número de imaxes por segundo
+STR_ABOUT_MENU_ABOUT_OPENTTD                                    :Sobre 'OpenTTD'
 STR_ABOUT_MENU_SPRITE_ALIGNER                                   :Aliñador de sprites
 STR_ABOUT_MENU_TOGGLE_BOUNDING_BOXES                            :Activa/desactiva caixas delimitadoras
-STR_ABOUT_MENU_TOGGLE_DIRTY_BLOCKS                              :Activa/desactiva o coloreado de bloques modificados
+STR_ABOUT_MENU_TOGGLE_DIRTY_BLOCKS                              :Activa/desactiva a coloración de bloques modificados
 
 # Place in highscore window
 ###length 15
@@ -910,7 +910,7 @@ STR_NEWS_STATION_NOW_ACCEPTS_CARGO_AND_CARGO                    :{WHITE}{STATION
 
 STR_NEWS_OFFER_OF_SUBSIDY_EXPIRED                               :{BIG_FONT}{BLACK}Oferta de subvención expirada:{}{}{STRING} dende {STRING} ata {STRING} non será subvencionada.
 STR_NEWS_SUBSIDY_WITHDRAWN_SERVICE                              :{BIG_FONT}{BLACK}Subvención reitrada:{}{}O servizo de transporte de {STRING} dende {STRING} ata {STRING} xa non ten subvención.
-STR_NEWS_SERVICE_SUBSIDY_OFFERED                                :{BIG_FONT}{BLACK}Oferta de subvención:{}{}O primeiro servizo de transporte de {STRING} dende {STRING} ata {STRING} será subvencionado con {NUM} durante un ano pola autoridade local!
+STR_NEWS_SERVICE_SUBSIDY_OFFERED                                :{BIG_FONT}{BLACK}Oferta de subvención:{}{}O primeiro servizo de transporte de {STRING} dende {STRING} ata {STRING} será subvencionado durante {NUM} ano{P "" s} pola autoridade local!
 ###length 4
 STR_NEWS_SERVICE_SUBSIDY_AWARDED_HALF                           :{BIG_FONT}{BLACK}Subvención concedida a {STRING}!{}{}Polo servizo de transporte de {STRING} dende {STRING} ata {STRING} pagarase un 50% máis durante {NUM} ano{P "" s}!
 STR_NEWS_SERVICE_SUBSIDY_AWARDED_DOUBLE                         :{BIG_FONT}{BLACK}Subvención concedida a {STRING}!{}{}Polo servizo de transporte de {STRING} dende {STRING} ata {STRING} pagarase o dobre durante {NUM} ano{P "" s}!
@@ -977,36 +977,6 @@ STR_GAME_OPTIONS_CURRENCY_INR                                   :Rupia India (IN
 STR_GAME_OPTIONS_CURRENCY_IDR                                   :Rupia Indonesia (IDR)
 STR_GAME_OPTIONS_CURRENCY_MYR                                   :Ringgit malaio(MYR)
 
-###length 2
-STR_GAME_OPTIONS_ROAD_VEHICLES_DROPDOWN_LEFT                    :Conducir pola esquerda
-STR_GAME_OPTIONS_ROAD_VEHICLES_DROPDOWN_RIGHT                   :Conducir pola dereita
-
-STR_GAME_OPTIONS_TOWN_NAMES_FRAME                               :{BLACK}Nomes das localidades:
-STR_GAME_OPTIONS_TOWN_NAMES_DROPDOWN_TOOLTIP                    :{BLACK}Selecciona o estilo dos nomes das cidades
-
-###length 21
-STR_GAME_OPTIONS_TOWN_NAME_ORIGINAL_ENGLISH                     :Inglés (Orixinal)
-STR_GAME_OPTIONS_TOWN_NAME_FRENCH                               :Francés
-STR_GAME_OPTIONS_TOWN_NAME_GERMAN                               :Alemán
-STR_GAME_OPTIONS_TOWN_NAME_ADDITIONAL_ENGLISH                   :Inglés (Adicional)
-STR_GAME_OPTIONS_TOWN_NAME_LATIN_AMERICAN                       :Latino-Americano
-STR_GAME_OPTIONS_TOWN_NAME_SILLY                                :Parvo
-STR_GAME_OPTIONS_TOWN_NAME_SWEDISH                              :Sueco
-STR_GAME_OPTIONS_TOWN_NAME_DUTCH                                :Neerlandés
-STR_GAME_OPTIONS_TOWN_NAME_FINNISH                              :Finés
-STR_GAME_OPTIONS_TOWN_NAME_POLISH                               :Polaco
-STR_GAME_OPTIONS_TOWN_NAME_SLOVAK                               :Eslovaco
-STR_GAME_OPTIONS_TOWN_NAME_NORWEGIAN                            :Noruegués
-STR_GAME_OPTIONS_TOWN_NAME_HUNGARIAN                            :Húngaro
-STR_GAME_OPTIONS_TOWN_NAME_AUSTRIAN                             :Austríaco
-STR_GAME_OPTIONS_TOWN_NAME_ROMANIAN                             :Rumano
-STR_GAME_OPTIONS_TOWN_NAME_CZECH                                :Checo
-STR_GAME_OPTIONS_TOWN_NAME_SWISS                                :Suízo
-STR_GAME_OPTIONS_TOWN_NAME_DANISH                               :Danés
-STR_GAME_OPTIONS_TOWN_NAME_TURKISH                              :Turco
-STR_GAME_OPTIONS_TOWN_NAME_ITALIAN                              :Italiano
-STR_GAME_OPTIONS_TOWN_NAME_CATALAN                              :Catalán
-
 STR_GAME_OPTIONS_AUTOSAVE_FRAME                                 :{BLACK}Autogravado
 STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_TOOLTIP                      :{BLACK}Selecciona o intervalo entre autogravados
 
@@ -1036,6 +1006,8 @@ STR_GAME_OPTIONS_VIDEO_ACCELERATION_RESTART                     :{WHITE}O cambio
 
 STR_GAME_OPTIONS_VIDEO_VSYNC                                    :{BLACK}VSync
 STR_GAME_OPTIONS_VIDEO_VSYNC_TOOLTIP                            :{BLACK}Marca esta caixa para activar o V-sync da pantalla. O cambio só se aplicará tras reiniciar o xogo. Só funciona coa aceleración de hardware habilitada
+
+STR_GAME_OPTIONS_VIDEO_DRIVER_INFO                              :{BLACK}Controlador actual: {STRING}
 
 STR_GAME_OPTIONS_GUI_ZOOM_FRAME                                 :{BLACK}Tamaño da interface
 STR_GAME_OPTIONS_GUI_ZOOM_DROPDOWN_TOOLTIP                      :{BLACK}Seleciona o tamaño de elementos da interface a usar
@@ -1103,8 +1075,6 @@ STR_CURRENCY_PREVIEW                                            :{LTBLUE}Vista p
 STR_CURRENCY_CUSTOM_CURRENCY_PREVIEW_TOOLTIP                    :{BLACK}10000 Libras esterlinas (£) na túa moeda
 STR_CURRENCY_CHANGE_PARAMETER                                   :{BLACK}Cambiar o parámetro de moeda personalizada
 
-STR_DIFFICULTY_LEVEL_SETTING_MAXIMUM_NO_COMPETITORS             :{LTBLUE}Nº máximo de opoñentes: {ORANGE}{COMMA}
-
 STR_NONE                                                        :Ningún
 STR_FUNDING_ONLY                                                :Só fundadas
 STR_MINIMAL                                                     :Mínimo
@@ -1154,6 +1124,12 @@ STR_SUBSIDY_X2                                                  :x2
 STR_SUBSIDY_X3                                                  :x3
 STR_SUBSIDY_X4                                                  :x4
 
+###length 4
+STR_CLIMATE_TEMPERATE_LANDSCAPE                                 :Paisaxe temperada
+STR_CLIMATE_SUB_ARCTIC_LANDSCAPE                                :Paisaxe subártica
+STR_CLIMATE_SUB_TROPICAL_LANDSCAPE                              :Paisaxe subtropical
+STR_CLIMATE_TOYLAND_LANDSCAPE                                   :Paisaxe xoguetelandia
+
 ###length 7
 STR_TERRAIN_TYPE_VERY_FLAT                                      :Moi chan
 STR_TERRAIN_TYPE_FLAT                                           :Chan
@@ -1163,16 +1139,17 @@ STR_TERRAIN_TYPE_ALPINIST                                       :Alpinista
 STR_TERRAIN_TYPE_CUSTOM                                         :Altitude personalizada
 STR_TERRAIN_TYPE_CUSTOM_VALUE                                   :Altitude personalizada ({NUM})
 
-###length 3
-STR_CITY_APPROVAL_PERMISSIVE                                    :Permisiva
+###length 4
+STR_CITY_APPROVAL_LENIENT                                       :Indulxente
 STR_CITY_APPROVAL_TOLERANT                                      :Tolerante
 STR_CITY_APPROVAL_HOSTILE                                       :Hostil
+STR_CITY_APPROVAL_PERMISSIVE                                    :Permisiva (sen efecto nas accións da compañía)
 
 STR_WARNING_NO_SUITABLE_AI                                      :{WHITE}Non hai IA adecuada dispoñíbel...{}Podes descargar varias IAs a través do sistema de contidos online
 
 # Settings tree window
 STR_CONFIG_SETTING_TREE_CAPTION                                 :{WHITE}Opcións
-STR_CONFIG_SETTING_FILTER_TITLE                                 :{BLACK}Filtrar texto:
+STR_CONFIG_SETTING_FILTER_TITLE                                 :{BLACK}Filtrar:
 STR_CONFIG_SETTING_EXPAND_ALL                                   :{BLACK}Expandir todos
 STR_CONFIG_SETTING_COLLAPSE_ALL                                 :{BLACK}Minimizar todos
 STR_CONFIG_SETTING_RESET_ALL                                    :{BLACK}Restablecer todos os valores
@@ -1267,8 +1244,8 @@ STR_CONFIG_SETTING_TRAIN_REVERSING_HELPTEXT                     :Se está activa
 STR_CONFIG_SETTING_DISASTERS                                    :Desastres: {STRING}
 STR_CONFIG_SETTING_DISASTERS_HELPTEXT                           :Activa os desastres, que ocasionalmente poderían bloquear ou destruír vehículos ou infraestrutura
 
-STR_CONFIG_SETTING_CITY_APPROVAL                                :Actitude das autoridades locáis cara a restruturacións de áreas: {STRING}
-STR_CONFIG_SETTING_CITY_APPROVAL_HELPTEXT                       :Escolle ata que punto o ruido e danos medioambientais producidos polas compañias afectan á súa valoración municipal e ás próximas actividades construtivas na súa área
+STR_CONFIG_SETTING_CITY_APPROVAL                                :Actitude das autoridades locáis: {STRING}
+STR_CONFIG_SETTING_CITY_APPROVAL_HELPTEXT                       :Escolle ata que punto o ruido e danos medioambientais producidos polas compañias afectan á súa valoración municipal e ás próximas actividades construtivas na cidade
 
 STR_CONFIG_SETTING_MAP_HEIGHT_LIMIT                             :Altitude máxima do mapa: {STRING}
 STR_CONFIG_SETTING_MAP_HEIGHT_LIMIT_HELPTEXT                    :Establece a altitude máxima do terreo do mapa. Con "(auto)" collerase un bo valor despois da xeración do terreo.
@@ -1512,6 +1489,10 @@ STR_CONFIG_SETTING_TREE_PLACER_IMPROVED                         :Mellorado
 STR_CONFIG_SETTING_ROAD_SIDE                                    :Vehículos rodados: {STRING}
 STR_CONFIG_SETTING_ROAD_SIDE_HELPTEXT                           :Escolle o senso de circulación
 
+###length 2
+STR_CONFIG_SETTING_ROAD_SIDE_LEFT                               :Conducir pola esquerda
+STR_CONFIG_SETTING_ROAD_SIDE_RIGHT                              :Conducir pola dereita
+
 STR_CONFIG_SETTING_HEIGHTMAP_ROTATION                           :Rotación do mapa de alturas: {STRING}
 ###length 2
 STR_CONFIG_SETTING_HEIGHTMAP_ROTATION_COUNTER_CLOCKWISE         :Antihorario
@@ -1537,6 +1518,14 @@ STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_HELPTEXT                :Cor do terreo n
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_GREEN                   :Verde
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_DARK_GREEN              :Verde escuro
 STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_VIOLET                  :Violeta
+
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS                            :Cores superpostas do fluxo de carga: {STRING}
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_HELPTEXT                   :Fixa o esquema de cor utilizado para a superposición do fluxo de carga.
+###length 4
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREEN_TO_RED               :Verde a vermello(orixinal)
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREEN_TO_BLUE              :Verde a azul
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREY_TO_RED                :Gris a vermello
+STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREYSCALE                  :Escala de grises
 
 STR_CONFIG_SETTING_SCROLLMODE                                   :Comportamento do desprazamento das xanelas: {STRING}
 STR_CONFIG_SETTING_SCROLLMODE_HELPTEXT                          :Comportamento cando te desplazas polo mapa
@@ -1645,9 +1634,6 @@ STR_CONFIG_SETTING_SHOW_TRACK_RESERVATION_HELPTEXT              :Usa unha cor di
 
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS                     :Mante-las ferramentas de construcción activas tralo uso: {STRING}
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS_HELPTEXT            :Mante-las ferramentas de construción abertas para pontes, túneis, etc. tralo uso
-
-STR_CONFIG_SETTING_EXPENSES_LAYOUT                              :Agrupa-los gastos na ventá de finanzas da compañía: {STRING}
-STR_CONFIG_SETTING_EXPENSES_LAYOUT_HELPTEXT                     :Define a apariencia da ventá de gastos da compañía
 
 STR_CONFIG_SETTING_AUTO_REMOVE_SIGNALS                          :orrar automáticamente as sinais durante a construción de ferrocarrís: {STRING}
 STR_CONFIG_SETTING_AUTO_REMOVE_SIGNALS_HELPTEXT                 :Borrar automáticamente as sinais durante a construción de ferrocarrís se as sinais están no medio. Teña en conta que isto pode levar a accidentes de tren.
@@ -2041,7 +2027,7 @@ STR_CONFIG_SETTING_REVERSE_AT_SIGNALS                           :Cambio de senti
 STR_CONFIG_SETTING_REVERSE_AT_SIGNALS_HELPTEXT                  :Permite aos trens cambiar de sentido nun sinal, se agardaron durante moito tempo
 ###length 2
 STR_CONFIG_SETTING_PATHFINDER_NPF                               :NPF
-STR_CONFIG_SETTING_PATHFINDER_YAPF_RECOMMENDED                  :YAPF {BLUE}(Recomendado)
+STR_CONFIG_SETTING_PATHFINDER_YAPF                              :YAPF {BLUE}(Recomendado)
 
 STR_CONFIG_SETTING_QUERY_CAPTION                                :{WHITE}Cambia-lo valor
 
@@ -2119,7 +2105,7 @@ STR_QUIT_NO                                                     :{BLACK}Non
 # Abandon game
 STR_ABANDON_GAME_CAPTION                                        :{WHITE}Saír da partida
 STR_ABANDON_GAME_QUERY                                          :{YELLOW}Estás seguro de que queres saír desta partida?
-STR_ABANDON_SCENARIO_QUERY                                      :{YELLOW}Estás seguro de que desexas saír deste escenario?
+STR_ABANDON_SCENARIO_QUERY                                      :{YELLOW}Estás seguro de que queres saír deste escenario?
 
 # Cheat window
 STR_CHEATS                                                      :{WHITE}Trampulladas
@@ -2135,12 +2121,6 @@ STR_CHEAT_EDIT_MAX_HL_QUERY_CAPT                                :{WHITE}Trocar a
 STR_CHEAT_CHANGE_DATE                                           :{LTBLUE}Cambiar data: {ORANGE}{DATE_SHORT}
 STR_CHEAT_CHANGE_DATE_QUERY_CAPT                                :{WHITE}Cambiar o ano actual
 STR_CHEAT_SETUP_PROD                                            :{LTBLUE}Permitir a modificación dos valores de producción: {ORANGE}{STRING}
-
-###length 4
-STR_CHEAT_SWITCH_CLIMATE_TEMPERATE_LANDSCAPE                    :Paisaxe temperada
-STR_CHEAT_SWITCH_CLIMATE_SUB_ARCTIC_LANDSCAPE                   :Paisaxe subártica
-STR_CHEAT_SWITCH_CLIMATE_SUB_TROPICAL_LANDSCAPE                 :Paisaxe subtropical
-STR_CHEAT_SWITCH_CLIMATE_TOYLAND_LANDSCAPE                      :Paisaxe xoguetelandia
 
 # Livery window
 STR_LIVERY_CAPTION                                              :{WHITE}{COMPANY} - Novo esquema de cor
@@ -2621,6 +2601,8 @@ STR_LINKGRAPH_LEGEND_UNUSED                                     :{TINY_FONT}{BLA
 STR_LINKGRAPH_LEGEND_SATURATED                                  :{TINY_FONT}{BLACK}saturado
 STR_LINKGRAPH_LEGEND_OVERLOADED                                 :{TINY_FONT}{BLACK}exceso de carga
 
+# Linkgraph tooltip
+
 # Base for station construction window(s)
 STR_STATION_BUILD_COVERAGE_AREA_TITLE                           :{BLACK}Resaltar área de cobertura
 STR_STATION_BUILD_COVERAGE_OFF                                  :{BLACK}Off
@@ -2807,7 +2789,7 @@ STR_AIRPORT_HELISTATION                                         :Heliestación
 STR_AIRPORT_CLASS_SMALL                                         :Aeroportos pequenos
 STR_AIRPORT_CLASS_LARGE                                         :Aeroportos grandes
 STR_AIRPORT_CLASS_HUB                                           :Aeroportos centrais
-STR_AIRPORT_CLASS_HELIPORTS                                     :Aeroportos para helicópteros
+STR_AIRPORT_CLASS_HELIPORTS                                     :Heliportos
 
 STR_STATION_BUILD_NOISE                                         :{BLACK}Ruído xerado: {GOLD}{COMMA}
 
@@ -3049,11 +3031,11 @@ STR_ABOUT_VERSION                                               :{BLACK}OpenTTD 
 STR_ABOUT_COPYRIGHT_OPENTTD                                     :{BLACK}OpenTTD {COPYRIGHT}2002-{STRING} O equipo de OpenTTD
 
 # Framerate display window
-STR_FRAMERATE_CAPTION                                           :{WHITE}Frame rate
+STR_FRAMERATE_CAPTION                                           :{WHITE}Imaxes por segundo
 STR_FRAMERATE_CAPTION_SMALL                                     :{STRING}{WHITE} ({DECIMAL}x)
 STR_FRAMERATE_RATE_GAMELOOP                                     :{BLACK}Velocidade de simulación: {STRING}
 STR_FRAMERATE_RATE_GAMELOOP_TOOLTIP                             :{BLACK}Número de ticks do xogo simulados por segundo.
-STR_FRAMERATE_RATE_BLITTER                                      :{BLACK}Velocidade de refresco: {STRING}
+STR_FRAMERATE_RATE_BLITTER                                      :{BLACK}Imaxes por segundo: {STRING}
 STR_FRAMERATE_RATE_BLITTER_TOOLTIP                              :{BLACK}Número de frames renderizados por segundo.
 STR_FRAMERATE_SPEED_FACTOR                                      :{BLACK}Factor de velocidade do xogo actual: {DECIMAL}x
 STR_FRAMERATE_SPEED_FACTOR_TOOLTIP                              :{BLACK}Como de rápido está a correr o xogo, comparado coa velocidade esperada a unha velocidade de simulación normal.
@@ -3128,7 +3110,7 @@ STR_SAVELOAD_DETAIL_CAPTION                                     :{BLACK}Detalles
 STR_SAVELOAD_DETAIL_NOT_AVAILABLE                               :{BLACK}Non hai información dispoñíbel
 STR_SAVELOAD_DETAIL_COMPANY_INDEX                               :{SILVER}{COMMA}: {WHITE}{STRING}
 STR_SAVELOAD_DETAIL_GRFSTATUS                                   :{SILVER}NewGRF: {WHITE}{STRING}
-STR_SAVELOAD_FILTER_TITLE                                       :{BLACK}String de filtrado:
+STR_SAVELOAD_FILTER_TITLE                                       :{BLACK}Filtro:
 STR_SAVELOAD_OVERWRITE_TITLE                                    :{WHITE}Sobrescribir arquivo
 STR_SAVELOAD_OVERWRITE_WARNING                                  :{YELLOW}Estás seguro de que queres rescribir este arquivo?
 STR_SAVELOAD_DIRECTORY                                          :{STRING} (Directorio)
@@ -3142,6 +3124,8 @@ STR_MAPGEN_MAPSIZE                                              :{BLACK}Tamaño 
 STR_MAPGEN_MAPSIZE_TOOLTIP                                      :{BLACK} Selecciona o tamaño do mapa en cadros. O número de cadros dispoñíbeis será sensiblemente menor
 STR_MAPGEN_BY                                                   :{BLACK}*
 STR_MAPGEN_NUMBER_OF_TOWNS                                      :{BLACK}Nº de cidades:
+STR_MAPGEN_TOWN_NAME_LABEL                                      :{BLACK}Nomes das localidades:
+STR_MAPGEN_TOWN_NAME_DROPDOWN_TOOLTIP                           :{BLACK}Selecciona o estilo dos nomes das cidades
 STR_MAPGEN_DATE                                                 :{BLACK}Data:
 STR_MAPGEN_NUMBER_OF_INDUSTRIES                                 :{BLACK}Nº de industrias:
 STR_MAPGEN_HEIGHTMAP_HEIGHT                                     :{BLACK}Maior pico:
@@ -3165,6 +3149,29 @@ STR_MAPGEN_QUANTITY_OF_RIVERS                                   :{BLACK}Ríos:
 STR_MAPGEN_SMOOTHNESS                                           :{BLACK}Suavidade:
 STR_MAPGEN_VARIETY                                              :{BLACK}Variedade:
 STR_MAPGEN_GENERATE                                             :{WHITE}Xerar
+
+###length 21
+STR_MAPGEN_TOWN_NAME_ORIGINAL_ENGLISH                           :Inglés (Orixinal)
+STR_MAPGEN_TOWN_NAME_FRENCH                                     :Francés
+STR_MAPGEN_TOWN_NAME_GERMAN                                     :Alemán
+STR_MAPGEN_TOWN_NAME_ADDITIONAL_ENGLISH                         :Inglés (Adicional)
+STR_MAPGEN_TOWN_NAME_LATIN_AMERICAN                             :Latino-Americano
+STR_MAPGEN_TOWN_NAME_SILLY                                      :Parvo
+STR_MAPGEN_TOWN_NAME_SWEDISH                                    :Sueco
+STR_MAPGEN_TOWN_NAME_DUTCH                                      :Neerlandés
+STR_MAPGEN_TOWN_NAME_FINNISH                                    :Finés
+STR_MAPGEN_TOWN_NAME_POLISH                                     :Polaco
+STR_MAPGEN_TOWN_NAME_SLOVAK                                     :Eslovaco
+STR_MAPGEN_TOWN_NAME_NORWEGIAN                                  :Noruegués
+STR_MAPGEN_TOWN_NAME_HUNGARIAN                                  :Húngaro
+STR_MAPGEN_TOWN_NAME_AUSTRIAN                                   :Austríaco
+STR_MAPGEN_TOWN_NAME_ROMANIAN                                   :Rumano
+STR_MAPGEN_TOWN_NAME_CZECH                                      :Checo
+STR_MAPGEN_TOWN_NAME_SWISS                                      :Suízo
+STR_MAPGEN_TOWN_NAME_DANISH                                     :Danés
+STR_MAPGEN_TOWN_NAME_TURKISH                                    :Turco
+STR_MAPGEN_TOWN_NAME_ITALIAN                                    :Italiano
+STR_MAPGEN_TOWN_NAME_CATALAN                                    :Catalán
 
 # Strings for map borders at game generation
 STR_MAPGEN_BORDER_TYPE                                          :{BLACK}Bordes do mapa:
@@ -3224,7 +3231,7 @@ STR_NEWGRF_SETTINGS_INFO_TITLE                                  :{WHITE}Informac
 STR_NEWGRF_SETTINGS_ACTIVE_LIST                                 :{WHITE}Arquivos NewGRF activos
 STR_NEWGRF_SETTINGS_INACTIVE_LIST                               :{WHITE}Arquivos NewGRF inactivos
 STR_NEWGRF_SETTINGS_SELECT_PRESET                               :{ORANGE}Seleccionar perfil
-STR_NEWGRF_FILTER_TITLE                                         :{ORANGE}Filtrar cadea de caracteres
+STR_NEWGRF_FILTER_TITLE                                         :{ORANGE}Filtrar:
 STR_NEWGRF_SETTINGS_PRESET_LIST_TOOLTIP                         :{BLACK}Carga-lo perfil seleccionado
 STR_NEWGRF_SETTINGS_PRESET_SAVE                                 :{BLACK}Gravar perfil
 STR_NEWGRF_SETTINGS_PRESET_SAVE_TOOLTIP                         :{BLACK}Grava-la lista actual coma un perfil
@@ -3462,7 +3469,7 @@ STR_LOCAL_AUTHORITY_ACTION_SMALL_ADVERTISING_CAMPAIGN           :Pequena campañ
 STR_LOCAL_AUTHORITY_ACTION_MEDIUM_ADVERTISING_CAMPAIGN          :Campaña publicitaria mediana
 STR_LOCAL_AUTHORITY_ACTION_LARGE_ADVERTISING_CAMPAIGN           :Gran campaña publicitaria
 STR_LOCAL_AUTHORITY_ACTION_ROAD_RECONSTRUCTION                  :Financia-la reparación das fochancas nas rúas da cidade
-STR_LOCAL_AUTHORITY_ACTION_STATUE_OF_COMPANY                    :Construír unha estatua a Manuel Fraga
+STR_LOCAL_AUTHORITY_ACTION_STATUE_OF_COMPANY                    :Construír unha estatua ao propietario da compañía
 STR_LOCAL_AUTHORITY_ACTION_NEW_BUILDINGS                        :Financiar novos edificios
 STR_LOCAL_AUTHORITY_ACTION_EXCLUSIVE_TRANSPORT                  :Compra-los dereitos exclusivos de transporte
 STR_LOCAL_AUTHORITY_ACTION_BRIBE                                :Suborna-la autoridade local
@@ -3625,29 +3632,36 @@ STR_EDIT_WAYPOINT_NAME                                          :{WHITE}Editar o
 
 # Finances window
 STR_FINANCES_CAPTION                                            :{WHITE}{COMPANY} Finanzas {BLACK}{COMPANY_NUM}
-STR_FINANCES_EXPENDITURE_INCOME_TITLE                           :{WHITE}Gastos/Ingresos
 STR_FINANCES_YEAR                                               :{WHITE}{NUM}
+
+###length 3
+STR_FINANCES_REVENUE_TITLE                                      :{WHITE}Ingresos
+STR_FINANCES_OPERATING_EXPENSES_TITLE                           :{WHITE}Custos operativos
+STR_FINANCES_CAPITAL_EXPENSES_TITLE                             :{WHITE}Custos de capital
+
 
 ###length 13
 STR_FINANCES_SECTION_CONSTRUCTION                               :{GOLD}Construción
 STR_FINANCES_SECTION_NEW_VEHICLES                               :{GOLD}Novos vehículos
-STR_FINANCES_SECTION_TRAIN_RUNNING_COSTS                        :{GOLD}Custo operativo dos trens
-STR_FINANCES_SECTION_ROAD_VEHICLE_RUNNING_COSTS                 :{GOLD}Custo operativo dos vehículos de estrada
-STR_FINANCES_SECTION_AIRCRAFT_RUNNING_COSTS                     :{GOLD}Custo operativo das aeronaves
-STR_FINANCES_SECTION_SHIP_RUNNING_COSTS                         :{GOLD}Custo operativo dos barcos
-STR_FINANCES_SECTION_PROPERTY_MAINTENANCE                       :{GOLD}Mantemento de propiedades
-STR_FINANCES_SECTION_TRAIN_INCOME                               :{GOLD}Ingresos dos trens
-STR_FINANCES_SECTION_ROAD_VEHICLE_INCOME                        :{GOLD}Ingresos dos vehículos de estrada
-STR_FINANCES_SECTION_AIRCRAFT_INCOME                            :{GOLD}Ingresos das aeronaves
-STR_FINANCES_SECTION_SHIP_INCOME                                :{GOLD}Ingresos dos barcos
+STR_FINANCES_SECTION_TRAIN_RUNNING_COSTS                        :{GOLD}Trens
+STR_FINANCES_SECTION_ROAD_VEHICLE_RUNNING_COSTS                 :{GOLD}Vehículos de estrada
+STR_FINANCES_SECTION_AIRCRAFT_RUNNING_COSTS                     :{GOLD}Aeronaves
+STR_FINANCES_SECTION_SHIP_RUNNING_COSTS                         :{GOLD}Barcos
+STR_FINANCES_SECTION_INFRASTRUCTURE                             :{GOLD}Infraestrutura
+STR_FINANCES_SECTION_TRAIN_REVENUE                              :{GOLD}Trens
+STR_FINANCES_SECTION_ROAD_VEHICLE_REVENUE                       :{GOLD}Vehículos de estrada
+STR_FINANCES_SECTION_AIRCRAFT_REVENUE                           :{GOLD}Aeronaves
+STR_FINANCES_SECTION_SHIP_REVENUE                               :{GOLD}Barcos
 STR_FINANCES_SECTION_LOAN_INTEREST                              :{GOLD}Interese do préstamo
 STR_FINANCES_SECTION_OTHER                                      :{GOLD}Outros
 
-STR_FINANCES_NEGATIVE_INCOME                                    :{BLACK}-{CURRENCY_LONG}
-STR_FINANCES_POSITIVE_INCOME                                    :{BLACK}+{CURRENCY_LONG}
-STR_FINANCES_TOTAL_CAPTION                                      :{WHITE}Total:
+STR_FINANCES_NEGATIVE_INCOME                                    :-{CURRENCY_LONG}
+STR_FINANCES_POSITIVE_INCOME                                    :+{CURRENCY_LONG}
+STR_FINANCES_NET_PROFIT                                         :{WHITE}Beneficio neto
 STR_FINANCES_BANK_BALANCE_TITLE                                 :{WHITE}Balance bancario
+STR_FINANCES_OWN_FUNDS_TITLE                                    :{WHITE}Fondos propios
 STR_FINANCES_LOAN_TITLE                                         :{WHITE}Préstamo
+STR_FINANCES_INTEREST_RATE                                      :{WHITE}Interese do préstamo: {BLACK}{NUM}%
 STR_FINANCES_MAX_LOAN                                           :{WHITE}Préstamo máximo: {BLACK}{CURRENCY_LONG}
 STR_FINANCES_TOTAL_CURRENCY                                     :{BLACK}{CURRENCY_LONG}
 STR_FINANCES_BORROW_BUTTON                                      :{BLACK}Pedir {CURRENCY_LONG}
@@ -3854,6 +3868,7 @@ STR_PURCHASE_INFO_RUNNINGCOST                                   :{BLACK}Custo op
 STR_PURCHASE_INFO_CAPACITY                                      :{BLACK}Capacidade: {GOLD}{CARGO_LONG} {STRING}
 STR_PURCHASE_INFO_REFITTABLE                                    :(reformábel)
 STR_PURCHASE_INFO_DESIGNED_LIFE                                 :{BLACK}Deseñado: {GOLD}{NUM}{BLACK} Vida útil: {GOLD}{COMMA} ano{P "" s}
+STR_PURCHASE_INFO_DESIGNED                                      :{BLACK}Deseñado: {GOLD}{NUM}
 STR_PURCHASE_INFO_RELIABILITY                                   :{BLACK}Fiabilidade máxima: {GOLD}{COMMA}%
 STR_PURCHASE_INFO_COST                                          :{BLACK}Custo: {GOLD}{CURRENCY_LONG}
 STR_PURCHASE_INFO_COST_REFIT                                    :{BLACK}Custo: {GOLD}{CURRENCY_LONG}{BLACK} (Custo da reforma: {GOLD}{CURRENCY_LONG}{BLACK})
@@ -4229,8 +4244,8 @@ STR_VEHICLE_DETAILS_TRAIN_ENGINE_BUILT_AND_VALUE                :{LTBLUE}{ENGINE
 STR_VEHICLE_DETAILS_TRAIN_WAGON_VALUE                           :{LTBLUE}{ENGINE}{BLACK}   Valor: {LTBLUE}{CURRENCY_LONG}
 
 STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_TEXT                   :{BLACK}Capacidade total de carga deste tren:
-STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY                        :{LTBLUE}- {CARGO_LONG} ({CARGO_SHORT})
-STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_MULT                   :{LTBLUE}- {CARGO_LONG} ({CARGO_SHORT}) (x{NUM})
+STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY                        :{LTBLUE}{CARGO_LONG} ({CARGO_SHORT})
+STR_VEHICLE_DETAILS_TRAIN_TOTAL_CAPACITY_MULT                   :{LTBLUE}{CARGO_LONG} ({CARGO_SHORT}) (x{NUM})
 
 STR_VEHICLE_DETAILS_CARGO_EMPTY                                 :{LTBLUE}Baleiro
 STR_VEHICLE_DETAILS_CARGO_FROM                                  :{LTBLUE}{CARGO_LONG} dende {STATION}
@@ -4469,7 +4484,7 @@ STR_TIMETABLE_STATUS_NOT_STARTED                                :{BLACK}Este hor
 STR_TIMETABLE_STATUS_START_AT                                   :{BLACK}Este horario comezará o {STRING}
 
 STR_TIMETABLE_STARTING_DATE                                     :{BLACK}Data comezo
-STR_TIMETABLE_STARTING_DATE_TOOLTIP                             :{BLACK}Selecciona unha data coma punto de inicio para este horario. Ctrl + click determina o punto de partida deste horario e distribúe uniformemente tódolos vehículos que compartan esta orde baséandose na súa orde relativa. se a orde está completamente tabulada nos horarios
+STR_TIMETABLE_STARTING_DATE_TOOLTIP                             :{BLACK}Selecciona unha data coma punto de inicio para este horario. Ctrl + click distribúe uniformemente tódolos vehículos que compartan esta orde baséandose na súa orde relativa. se a orde está completamente tabulada nos horarios
 
 STR_TIMETABLE_CHANGE_TIME                                       :{BLACK}Cambiar Tempo
 STR_TIMETABLE_WAIT_TIME_TOOLTIP                                 :{BLACK}Cambiar o tempo que debería levar a orde seleccionada
@@ -4521,7 +4536,7 @@ STR_AI_DEBUG_BREAK_STR_TOOLTIP                                  :{BLACK}Cando un
 STR_AI_DEBUG_MATCH_CASE                                         :{BLACK}Coincidir maiúsculas
 STR_AI_DEBUG_MATCH_CASE_TOOLTIP                                 :{BLACK}Alterna a coincidencia de maiúsculas ao comparar as mensaxes no log da IA coa cadea de parada
 STR_AI_DEBUG_CONTINUE                                           :{BLACK}Continuar
-STR_AI_DEBUG_CONTINUE_TOOLTIP                                   :{BLACK}Quita-la pausa e continua-la IA
+STR_AI_DEBUG_CONTINUE_TOOLTIP                                   :{BLACK}Quitar a pausa e continuar a IA
 STR_AI_DEBUG_SELECT_AI_TOOLTIP                                  :{BLACK}Ve-la saída da depuración desta IA
 STR_AI_GAME_SCRIPT                                              :{BLACK}Script do xogo
 STR_AI_GAME_SCRIPT_TOOLTIP                                      :{BLACK}Comproba o log do script do xogo
@@ -4537,6 +4552,7 @@ STR_AI_CONFIG_AILIST_TOOLTIP                                    :{BLACK}As IAs q
 STR_AI_CONFIG_HUMAN_PLAYER                                      :Xogador humano
 STR_AI_CONFIG_RANDOM_AI                                         :IA aleatoria
 STR_AI_CONFIG_NONE                                              :(ningunha)
+STR_AI_CONFIG_MAX_COMPETITORS                                   :{LTBLUE}Nº máximo de opoñentes: {ORANGE}{COMMA}
 
 STR_AI_CONFIG_MOVE_UP                                           :{BLACK}Subir
 STR_AI_CONFIG_MOVE_UP_TOOLTIP                                   :{BLACK}Mover a IA seleccionada cara arriba na lista
@@ -4552,7 +4568,7 @@ STR_AI_CONFIG_CHANGE_AI                                         :IA
 STR_AI_CONFIG_CHANGE_GAMESCRIPT                                 :Script do xogo
 STR_AI_CONFIG_CHANGE_TOOLTIP                                    :{BLACK}Cargar outro script
 STR_AI_CONFIG_CONFIGURE                                         :{BLACK}Configurar
-STR_AI_CONFIG_CONFIGURE_TOOLTIP                                 :{BLACK}Configura-los parámetros do script
+STR_AI_CONFIG_CONFIGURE_TOOLTIP                                 :{BLACK}Configurar os parámetros do script
 
 # Available AIs window
 STR_AI_LIST_CAPTION                                             :{WHITE}Dispoñíbel {STRING}
@@ -5121,7 +5137,7 @@ STR_INDUSTRY_NAME_BANK_TROPIC_ARCTIC                            :Banco
 STR_INDUSTRY_NAME_DIAMOND_MINE                                  :Mina de diamante
 STR_INDUSTRY_NAME_IRON_ORE_MINE                                 :Mina de ferro
 STR_INDUSTRY_NAME_FRUIT_PLANTATION                              :Plantación de froita
-STR_INDUSTRY_NAME_RUBBER_PLANTATION                             :Plantación de sobreiras
+STR_INDUSTRY_NAME_RUBBER_PLANTATION                             :Plantación de caucho
 STR_INDUSTRY_NAME_WATER_SUPPLY                                  :Abastecemento de auga
 STR_INDUSTRY_NAME_WATER_TOWER                                   :Torre de auga
 STR_INDUSTRY_NAME_FACTORY_2                                     :Fábrica
@@ -5529,6 +5545,7 @@ STR_JUST_DATE_SHORT                                             :{DATE_SHORT}
 STR_JUST_DATE_LONG                                              :{DATE_LONG}
 STR_JUST_DATE_ISO                                               :{DATE_ISO}
 STR_JUST_STRING                                                 :{STRING}
+STR_JUST_STRING2                                                :{STRING}
 STR_JUST_STRING_STRING                                          :{STRING}{STRING}
 
 # Slightly 'raw' stringcodes with colour or size
@@ -5577,7 +5594,7 @@ STR_TOOLBAR_RAILTYPE_VELOCITY                                   :{STRING} ({VELO
 ##### JGR's PATCH STRINGS
 #########################
 # Obtained with: ../../build/src/strgen/strgen -w galician.txt 2>&1 >/dev/null | cut -d"'" -f 2 > galician_missing.txt
-# Obtained translations strings with: ../../build/src/strgen/strgen -w galician.txt 2>&1 >/dev/null | cut -d"'" -f 2 | xargs -I U grep U  english.txt  >> galician_missing_trans.txt
+# Obtained translations strings with: ../../build/src/strgen/strgen -w galician.txt 2>&1 >/dev/null | cut -d"'" -f 2 | xargs -I U grep -w "U"  english.txt  >> galician_missing_trans.txt
 #########################
 
 STR_UNIT_NAME_VELOCITY_GAMEUNITS                                :cadros/día
@@ -5605,7 +5622,6 @@ STR_NEWS_VEHICLE_NO_DEPOT_ORDER                                 :{WHITE}{VEHICLE
 STR_NEWS_TRAIN_OVERSHOT_STATION                                 :{WHITE}{VEHICLE} non puido parar en {STRING} polo exceso de velocidade
 STR_RIVERS_VERY_MANY                                            :{RED}Moitísimos
 STR_RIVERS_EXTREMELY_MANY                                       :{RED}Extremadamente moitos
-STR_CITY_APPROVAL_INDIFFERENT                                   :Indiferente
 STR_CONFIG_SETTING_TRAIN_BRAKING_REALISTIC                      :Realista {PUSH_COLOUR}{RED}(Experto){POP_COLOUR}
 STR_CONFIG_SETTING_REALISTIC_BRAKING_SIGNALS_NOT_ALLOWED        :{WHITE}O Freo realista non se pode habilitar. Polo menos unha pre-sinal ou sinais de ambos os sentidos están presentes.
 STR_CONFIG_SETTING_RUNNING_COSTS_IN_DEPOT                       :Costos de matemento dos vehículos no depósito: {STRING}
@@ -5681,12 +5697,6 @@ STR_CONFIG_SETTING_SHOW_DEPOT_SELL_GUI                          :Amosar a caract
 STR_CONFIG_SETTING_SHOW_DEPOT_SELL_GUI_HELPTEXT                 :Amosar a característica de ir o depósito/hangar e vender a chegada. Cando se habilita, cámbiase o comportamento do botón de ir ao depósito do vehículo.
 STR_CONFIG_SETTING_OPEN_VEHICLE_GUI_CLONE_SHARE                 :Abrir unha nova fiestra do vehículo ao clonar-compartido: {STRING}
 STR_CONFIG_SETTING_OPEN_VEHICLE_GUI_CLONE_SHARE_HELPTEXT        :Cando se habilita, abre unha fiestra do vehículo novo clonado  cando se clona un vehículo con ordes compartidas dende a fiestra do depósito.
-STR_CONFIG_SETTING_LINKGRAPH_COLOURS                            :Cores de superposición do fluxo de carga: {STRING}
-STR_CONFIG_SETTING_LINKGRAPH_COLOURS_HELPTEXT                   :Escolle a cor do esquema usado para a superposición do fluxo de carga.
-STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREEN_TO_RED               :Verde a vermello (orixinal)
-STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREEN_TO_BLUE              :Verde a azul
-STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREY_TO_RED                :Gris a vermello
-STR_CONFIG_SETTING_LINKGRAPH_COLOURS_GREYSCALE                  :Escala de grises
 STR_CONFIG_SETTING_VEHICLE_NAMES                                :Nomes dos vehículos: {STRING}
 STR_CONFIG_SETTING_VEHICLE_NAMES_HELPTEXT                       :Escolle o esquema de nomeado usado para os vehículos. Isto non aplica a vehículos que teñan un nome personalizado.
 STR_CONFIG_SETTING_VEHICLE_NAMES_TRADITIONAL                    :Tradicional
@@ -6018,7 +6028,6 @@ STR_TRACE_RESTRICT_VARIABLE_PBS_ENTRY_SIGNAL                    :Sinal de entrad
 STR_TRACE_RESTRICT_VARIABLE_PBS_ENTRY_SIGNAL_LONG               :entrou nun sinal de entrada a cantón
 STR_TRACE_RESTRICT_VARIABLE_PBS_RES_END_SIGNAL                  :Sinal de saída de ruta
 STR_TRACE_RESTRICT_VARIABLE_PBS_RES_END_SIGNAL_LONG             :sinal no final da reserva actual de ruta
-STR_TRACE_RESTRICT_VARIABLE_PBS_RES_END_SIGNAL_LONG_WARN        :sinal no final da reserva actual de ruta {PUSH_COLOUR}{RED}(require freo realista){POP_COLOUR}
 STR_TRACE_RESTRICT_VARIABLE_TRAIN_GROUP                         :o grupo de tren
 STR_TRACE_RESTRICT_VARIABLE_TRAIN_SLOT                          :tren no slot
 STR_TRACE_RESTRICT_VARIABLE_SLOT_OCCUPANCY                      :ocupación de slots
@@ -6037,7 +6046,7 @@ STR_TRACE_RESTRICT_VARIABLE_TRAIN_OWNER                         :propietario do 
 STR_TRACE_RESTRICT_VARIABLE_TRAIN_STATUS                        :estado do tren
 STR_TRACE_RESTRICT_VARIABLE_TRAIN_ENGINE_CLASS                  :clase do motor
 STR_TRACE_RESTRICT_VARIABLE_UNDEFINED                           :indefinido
-STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED                       :{RED}indefinido
+STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED                       :{PUSH_COLOUR}{RED}indefinido{POP_COLOUR}
 STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_INTEGER                  :{STRING} {STRING} {STRING} {COMMA} then
 STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_SPEED                    :{STRING} {STRING} {STRING} {VELOCITY} then
 STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_WEIGHT                   :{STRING} {STRING} {STRING} {WEIGHT_SHORT} then
@@ -6131,11 +6140,11 @@ STR_TRACE_RESTRICT_SLOT_LIST_HEADER                             :{BLACK}Slot{CON
 STR_TRACE_RESTRICT_SLOT_LIST_SEPARATOR                          :{BLACK}, {LTBLUE}
 STR_TRACE_RESTRICT_COUNTER_NAME                                 :{TRCOUNTER}
 STR_TRACE_RESTRICT_COUNTER_INCREASE                             :Incrementar
-STR_TRACE_RESTRICT_COUNTER_INCREASE_ITEM                        :Incrementar contador: {STRING}{BLACK}{STRING} en {COMMA}
+STR_TRACE_RESTRICT_COUNTER_INCREASE_ITEM                        :Incrementar contador: {STRING} en {COMMA}
 STR_TRACE_RESTRICT_COUNTER_DECREASE                             :Disminuir
-STR_TRACE_RESTRICT_COUNTER_DECREASE_ITEM                        :Disminuir contador: {STRING}{BLACK}{STRING} en {COMMA}
+STR_TRACE_RESTRICT_COUNTER_DECREASE_ITEM                        :Disminuir contador: {STRING} en {COMMA}
 STR_TRACE_RESTRICT_COUNTER_SET                                  :Fixar
-STR_TRACE_RESTRICT_COUNTER_SET_ITEM                             :Fixar contador: {STRING}{BLACK}{STRING} a {COMMA}
+STR_TRACE_RESTRICT_COUNTER_SET_ITEM                             :Fixar contador: {STRING} a {COMMA}
 STR_TRACE_RESTRICT_COUNTER_SET_VALUE                            :{BLACK}Fixar valor
 STR_TRACE_RESTRICT_COUNTER_SET_VALUE_TOOLTIP                    :{BLACK}Fixar o valor do contador seleccionado
 STR_TRACE_RESTRICT_COUNTER_SET_VALUE_CAPTION                    :{BLACK}Fixar o valor do contador
@@ -6230,6 +6239,7 @@ STR_TRACE_RESTRICT_SELECT_TARGET                                :{BLACK}Seleccio
 STR_TRACE_RESTRICT_SELECT_SIGNAL                                :{BLACK}Seleccionar sinal
 STR_TRACE_RESTRICT_SIGNAL_GUI_TOOLTIP                           :{BLACK}Restrición de busca de ruta
 STR_TRACE_RESTRICT_INSTRUCTION_LIST_TOOLTIP                     :{BLACK}Fai click nunha instrución para seleccionala{}Ctrl+Click para desplazarte ata o obxectivo da instrución(se o hai)
+STR_TRACE_RESTRICT_WARNING_REQUIRES_REALISTIC_BRAKING           :{STRING} {PUSH_COLOUR}{RED}(require freo realista){POP_COLOUR}
 STR_TRACE_RESTRICT_ERROR_CAN_T_INSERT_ITEM                      :{WHITE}Non se pode insertar a instrución
 STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM                      :{WHITE}Non se pode modificar a instrución
 STR_TRACE_RESTRICT_ERROR_CAN_T_REMOVE_ITEM                      :{WHITE}Non se pode eliminar a instrución
@@ -6570,7 +6580,9 @@ STR_RUNNING                                                     :{LTBLUE}Funcion
 STR_NEED_REPAIR                                                 :{ORANGE}O vehículo precisa reparacións - velocidade máxima reducida a {VELOCITY}
 STR_CURRENT_STATUS                                              :{BLACK}Estado actual: {STRING}
 STR_VEHICLE_INFO_TRAIN_LENGTH                                   :{BLACK}Lonxitude do tren {LTBLUE}{DECIMAL} cadro{P "" s} {STRING}
-STR_VEHICLE_INFO_WEIGHT_RATIOS                                  :{BLACK}Potencia / peso: {LTBLUE}{POWER_WEIGHT_RATIO} {BLACK} Esforzo máximo de tracción / peso: {LTBLUE}{FORCE_WEIGHT_RATIO}
+STR_VEHICLE_INFO_WEIGHT_RATIOS                                  :{STRING} {STRING}
+STR_VEHICLE_INFO_POWER_WEIGHT_RATIO                             :{BLACK}Potencia / peso: {LTBLUE}{POWER_WEIGHT_RATIO}
+STR_VEHICLE_INFO_TE_WEIGHT_RATIO                                :{BLACK}Esforzo máximo de tracción / peso: {LTBLUE}{FORCE_WEIGHT_RATIO}
 STR_VEHICLE_INFO_FULL_WEIGHT_WITH_RATIOS                        :{BLACK}Peso total: {LTBLUE}{WEIGHT_SHORT} {STRING}
 STR_VEHICLE_INFO_MAX_SPEED_LOADED                               :{BLACK}Velocidade máxima (cheo): {LTBLUE}{VELOCITY}
 STR_VEHICLE_INFO_PROFIT_THIS_YEAR_LAST_YEAR_LIFETIME            :{STRING} (vida útil: {CURRENCY_LONG})
@@ -6682,7 +6694,7 @@ STR_TIMETABLE_CLEAR_TIME_TOOLTIP_EXTRA                          :{BLACK}{STRING}
 STR_TIMETABLE_CHANGE_SPEED_TOOLTIP_EXTRA                        :{BLACK}{STRING} (Ctrl+Click fixa a velocidade para todas as ordes)
 STR_TIMETABLE_CLEAR_SPEED_TOOLTIP_EXTRA                         :{BLACK}{STRING} (Ctrl+Click despexa a velocidade para todas as ordes)
 STR_TIMETABLE_AUTOMATE                                          :{BLACK}Automatizar
-STR_TIMETABLE_AUTOMATE_TOOLTIP                                  :{BLACK}Xestiona os horarios automáticamente actualizando os valores para cada viaxe (Ctrl+Click cando se deshabilita para manter o horario actual)
+STR_TIMETABLE_AUTOMATE_TOOLTIP                                  :{BLACK}Xestiona os horarios automáticamente actualizando os valores para cada viaxe
 STR_TIMETABLE_AUTO_SEPARATION                                   :{BLACK}Auto Separation
 STR_TIMETABLE_AUTO_SEPARATION_TOOLTIP                           :{BLACK}Automáticamente axusta a hora de comezo dos horarios para asegurar a separación dos vehículos
 STR_TIMETABLE_SCHEDULED_DISPATCH                                :{BLACK}Saída programada
@@ -6808,7 +6820,6 @@ STR_VIEWPORT_TOWN_TINY_MEDIOCRE_RATING                          :{TINY_FONT}{ORA
 STR_VIEWPORT_TOWN_TINY_GOOD_RATING                              :{TINY_FONT}{YELLOW}{TOWN}
 STR_VIEWPORT_TOWN_TINY_EXCELLENT_RATING                         :{TINY_FONT}{GREEN}{TOWN}
 STR_JUST_STRING1                                                :{STRING}
-STR_JUST_STRING2                                                :{STRING}
 STR_JUST_RAW_STRING                                             :{STRING}
 STR_JUST_BIG_RAW_STRING                                         :{BIG_FONT}{STRING}
 STR_JUST_DECIMAL                                                :{DECIMAL}
@@ -6988,3 +6999,223 @@ STR_SHIFT_KEY_NAME                                              :{BLACK}Shift
 STR_CTRL_KEY_NAME                                               :{BLACK}Ctrl
 STR_MODIFIER_TOGGLE_SHIFT_TOOLTIP                               :{BLACK}Click para invertir o estado da tecla Shift
 STR_MODIFIER_TOGGLE_CTRL_TOOLTIP                                :{BLACK}Click para invertir o estado da tecla Ctrl
+
+STR_SORT_BY_CARGO_CAPACITY_VS_RUNNING_COST                      :Capacidade de carga/Coste de mantemento
+STR_SETTINGS_MENU_SHOW_HIDDEN_SIGNS                             :Sinais ocultas e nomes mostrados
+STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_EVERY_DAYS_CUSTOM_LABEL      :Intervalo personalizado (días)
+STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_EVERY_MINUTES_CUSTOM_LABEL   :Intervalo personalizado (minutos reais)
+STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_EVERY_DAYS_CUSTOM            :Cada {COMMA}{NBSP}días
+STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_EVERY_DAYS_CUSTOM_SINGULAR   :Todos os días
+STR_GAME_OPTIONS_AUTOSAVE_DROPDOWN_EVERY_MINUTES_CUSTOM         :Cada {COMMA} minutos reais
+STR_GAME_OPTIONS_AUTOSAVE_DAYS_QUERY_CAPT                       :{WHITE}Intervalo de autogardado en días
+STR_GAME_OPTIONS_AUTOSAVE_MINUTES_QUERY_CAPT                    :{WHITE}Intervalo de autogardado en minutos reais
+STR_CONFIG_SETTING_ADVISED_LEAVE_DEFAULT                        :Aconsellámoste deixar esta opción no valor por defecto
+STR_CONFIG_SETTING_DELIVERY_BALANCED                            :Equilibrado
+STR_CONFIG_SETTING_CARGO_DELIVERY_MODE                          :Modo de distribución da entrega de carga: {STRING}
+STR_CONFIG_SETTING_CARGO_DELIVERY_MODE_HELPTEXT                 :O método utilizado para entregar mercadoría as industrias que rodean a estación
+STR_CONFIG_SETTING_THROUGH_LOAD_SPEED_LIMIT                     :Velocidade máxima de carga en movemento do tren: {STRING}
+STR_CONFIG_SETTING_THROUGH_LOAD_SPEED_LIMIT_HELPTEXT            :A velocidade máxima permitida os trens cando están cargando en movemento
+STR_CONFIG_SETTING_THROUGH_LOAD_SPEED_LIMIT_VAL                 :{VELOCITY}
+STR_CONFIG_SETTING_SHOW_ALL_SIG_DEF                             :Amosar todos os sinais cos gráficos por defecto: {STRING}
+STR_CONFIG_SETTING_SHOW_ALL_SIG_DEF_HELPTEXT                    :Amosar todos os sinais usando os sinais gráficos por defecto, en lugar de usar sinais de NewGRF. Isto é para que sexa máis sinxelo ver o estado e tipo de sinais cando os NewGRF non están claros ou non teñen gráficos.
+STR_CONFIG_SETTING_ALLOW_HIDE_WAYPOINT_LABEL                    :Permitir agochar as etiquetas de vista dos puntos de ruta: {STRING}
+STR_CONFIG_SETTING_ALLOW_HIDE_WAYPOINT_LABEL_HELPTEXT           :Cando se habilita, os puntos de ruta poden ter as súas etiquetas individualmente agochadas.{}Isto é util cando se utilizan decorativamente ou non requiren unha etiqueta.
+STR_CONFIG_SETTING_LAKE_TROPICS_WIDTH                           :Ancho da zona tropical arredor das lagoas: {STRING}
+STR_CONFIG_SETTING_LAKE_TROPICS_WIDTH_HELPTEXT                  :Controla o ancho da zona tropical que bordea as lagoas nas paisaxes subtropicais.{}Isto é o ancho total da zona en ambos lados da lagoa
+STR_CONFIG_SETTING_COAST_TROPICS_WIDTH                          :Ancho da zona tropical arredor da costa: {STRING}
+STR_CONFIG_SETTING_COAST_TROPICS_WIDTH_HELPTEXT                 :Controla o ancho da zona tropical que bordea a costa nas paisaxes subtropicais.
+STR_CONFIG_SETTING_COAST_TROPICS_WIDTH_DEFAULT                  :Por defecto
+STR_CONFIG_SETTING_COAST_TROPICS_WIDTH_MEDIUM                   :Medio
+STR_CONFIG_SETTING_COAST_TROPICS_WIDTH_LARGE                    :Grande
+STR_CONFIG_SETTING_COAST_TROPICS_WIDTH_EXTRALARGE               :Extra Grande
+STR_CONFIG_SETTING_AUTOSAVE_CUSTOM_DAYS                         :Intervalo de autogardado en días: {STRING}
+STR_CONFIG_SETTING_AUTOSAVE_CUSTOM_DAYS_HELPTEXT                :Fixa o intervalo personalizado en días entre gardados de partidas
+STR_CONFIG_SETTING_AUTOSAVE_CUSTOM_MINUTES                      :Intervalo de autogardado en minutos reais: {STRING}
+STR_CONFIG_SETTING_AUTOSAVE_CUSTOM_MINUTES_HELPTEXT             :Fixa o intervalo personalizado en minutos reais entre gardados de partidas
+STR_CONFIG_SETTING_AIRCRAFT_PATH_COST                           :Escalar a distancia das rutas que usan os avións: {STRING}
+STR_CONFIG_SETTING_AIRCRAFT_PATH_COST_HELPTEXT                  :Isto escala o coste (distancia métrica) das rutas que usan os avións de tal xeito que parezan máis longas/menos directas do que son en realidade. Isto reduce a tendencia de sobresaturación das liñas directas.
+STR_CONFIG_SETTING_SYNC_LOCALE_SETTINGS_NETWORK_SERVER          :Sincronizar as opcións de localización coas do servidor en multixogador: {STRING}
+STR_CONFIG_SETTING_SYNC_LOCALE_SETTINGS_NETWORK_SERVER_HELPTEXT :Cando te unes a un servidor multixogador como cliente, cambiar a localización para collere a do servidor.
+STR_CONFIG_SETTING_ALLOW_ROAD_STATIONS_UNDER_BRIDGES_HELPTEXT_EXTRA :{STRING}{}{}As paradas de estrada/tranvía poden sobrescribir esta opción e permitir ou prohibir as paradas personalizadas baixo as pontes e establecer requisitos de altura mínimos.
+STR_TRACE_RESTRICT_SPEED_ADAPTATION_CONTROL                     :Control adaptativo de veleocidade
+STR_TRACE_RESTRICT_SLOT_NAME_PREFIXED                           :[{STRING}] {TRSLOT}
+STR_TRACE_RESTRICT_MAKE_TRAIN_SPEED_ADAPTATION_EXEMPT           :Engadir excepción de tren na adaptación automática de velocidade
+STR_TRACE_RESTRICT_REMOVE_TRAIN_SPEED_ADAPTATION_EXEMPT         :Retirar excepción de tren na adaptación automática de velocidade
+STR_TRACE_RESTRICT_MAKE_TRAIN_SPEED_ADAPTATION_EXEMPT_SHORT     :Engadir excepción
+STR_TRACE_RESTRICT_REMOVE_TRAIN_SPEED_ADAPTATION_EXEMPT_SHORT   :Retirar excepción
+STR_ROAD_TOOLBAR_TOOLTIP_CONVERT_ROAD_TO_WAYPOINT               :{BLACK}Convertir estrada en punto de ruta. Ctrl permite unir puntos de ruta. Shift alterna entre construír ou amosar o coste estimado
+STR_ROAD_TOOLBAR_TOOLTIP_CONVERT_TRAM_TO_WAYPOINT               :{BLACK}Convertir tranvía en punto de ruta. Ctrl permite unir puntos de ruta. Shift alterna entre construír ou amosar o coste estimado
+STR_NEWGRF_ERROR_UNIMPLEMETED_MAPPED_FEATURE_ID                 :Característica non implementada remapeada ID: nome: {2:STRING}, mapeada a: {5:HEX} (sprite {3:NUM})
+STR_WAYPOINT_VIEW_HIDE_VIEWPORT_LABEL                           :{BLACK}Agochar a etiqueta de nome deste punto de ruta
+STR_VEHICLE_INFO_SPEED_ADAPTATION_EXEMPT                        :{BLACK}Eximir da adaptación de velocidade
+STR_ORDER_CONDITIONAL_VEHICLE_IN_SLOT                           :Vehículo en slot
+STR_ORDER_CONDITIONAL_COMPARATOR_VEHICLE_IN_SLOT                :Vehículo está en
+STR_ORDER_CONDITIONAL_COMPARATOR_VEHICLE_NOT_IN_SLOT            :Vehículo non está en
+STR_ORDER_CONDITIONAL_COMPARATOR_VEHICLE_IN_ACQUIRE_SLOT        :Vehículo está en/adquire
+STR_ORDER_CONDITIONAL_COMPARATOR_VEHICLE_NOT_IN_ACQUIRE_SLOT    :Vehículo non está not en/non podo adquirir
+STR_ORDER_RV_DIR_NE                                             :[dirección nordeste]
+STR_ORDER_RV_DIR_SE                                             :[dirección sueste]
+STR_ORDER_RV_DIR_SW                                             :[dirección suroeste]
+STR_ORDER_RV_DIR_NW                                             :[dirección noroeste]
+STR_TIMETABLE_SCHEDULED_DISPATCH_ORDER_SCHEDULE_INDEX           :{NUM}{NBSP}-{NBSP}
+STR_TIMETABLE_ASSIGN_SCHEDULE_DROP_DOWN                         :{BLACK}Asignar programa
+STR_TIMETABLE_ASSIGN_SCHEDULE_DROP_DOWN_TOOLTIP                 :{BLACK}Asigna ou elimina unha saída programada o programa da orde seleccionada
+STR_TIMETABLE_ASSIGN_SCHEDULE_NONE                              :Sen programa
+STR_TIMETABLE_ASSIGN_SCHEDULE_ID                                :Programa {NUM}
+STR_TIMETABLE_WARNING_NO_SCHEDULED_DISPATCH_ORDER_ASSIGNED      :{BLACK}A saída programada non está asignada a unha orde
+STR_TIMETABLE_WARNING_SCHEDULE_ID                               :{BLACK}Programa {NUM}: {STRING}
+STR_TIMETABLE_WARNINGS_OMITTED                                  :{BLACK}{NUM} avisos máis omitidos...
+STR_ERROR_CAN_T_BUILD_ROAD_WAYPOINT                             :{WHITE}Non se pode construír un punto de ruta de estrada aqui...
+STR_ERROR_CAN_T_REMOVE_ROAD_WAYPOINT                            :{WHITE}Non se pode eliminar o punto de ruta aqui...
+STR_ERROR_MUST_REMOVE_ROADWAYPOINT_FIRST                        :{WHITE}Debes eliminar o punto de ruta de estrada primeiro
+STR_SCHDISPATCH_CLEAR                                           :{BLACK}Limpar slots de saídas
+STR_SCHDISPATCH_CLEAR_TOOLTIP                                   :{BLACK}Limpar todos os slots de saídas do programa
+STR_SCHDISPATCH_MANAGE                                          :{BLACK}Xestionar programa
+STR_SCHDISPATCH_MANAGE_TOOLTIP                                  :{STRING}{}{}{STRING}{}{}{STRING}
+STR_SCHDISPATCH_PREV_SCHEDULE                                   :{BLACK}Anterior
+STR_SCHDISPATCH_PREV_SCHEDULE_TOOLTIP                           :{BLACK}Ir a saída programada anterior
+STR_SCHDISPATCH_NEXT_SCHEDULE                                   :{BLACK}Seguinte
+STR_SCHDISPATCH_NEXT_SCHEDULE_TOOLTIP                           :{BLACK}Ir a saída programada seguinte
+STR_SCHDISPATCH_ADD_SCHEDULE                                    :{BLACK}Engadir
+STR_SCHDISPATCH_ADD_SCHEDULE_TOOLTIP                            :{BLACK}Engadir unha nova saída programada
+STR_SCHDISPATCH_REMOVE_SCHEDULE                                 :{BLACK}Eliminar a programación actual
+STR_SCHDISPATCH_REMOVE_SCHEDULE_TOOLTIP                         :{BLACK}Eliminar por completeo esta saída programada.
+STR_SCHDISPATCH_NO_SCHEDULES                                    :{BLACK}Sen programas
+STR_SCHDISPATCH_SCHEDULE_ID                                     :{BLACK}Programa {NUM} de {NUM}
+STR_SCHDISPATCH_NOT_ASSIGNED_TO_ORDER                           :{BLACK}Esta saída programada non está asignada a unha orde.
+STR_SCHDISPATCH_ASSIGNED_TO_ORDER                               :{BLACK}Esta saída programada está asignada a orde {NUM}: {STRING}.
+STR_SCHDISPATCH_QUERY_CLEAR_SCHEDULE_CAPTION                    :{WHITE}Limpar slots de saídas
+STR_SCHDISPATCH_QUERY_CLEAR_SCHEDULE_TEXT                       :{WHITE}Seguro que queres limpar {NUM} slot{P "" s} de saída deste programa?
+STR_SCHDISPATCH_QUERY_REMOVE_SCHEDULE_CAPTION                   :{WHITE}Eliminar programa
+STR_SCHDISPATCH_QUERY_REMOVE_SCHEDULE_TEXT                      :{WHITE}Seguro que queres eliminar este programa (contendo {NUM} slot{P "" s} de saída)?
+
+######################### Update 2022-09-14
+# Remember to first update the project and rebuild it all to have the latest instance of strgen.
+# Obtained translations strings with: ../../build/src/strgen/strgen -w galician.txt 2>&1 | cut -d\' -f 2 | head -n-1 | xargs -I $ grep -w $ english.txt >> galician.txt
+#########################
+STR_HIERARCHY_SEPARATOR                                         :{SP}/{SP}
+STR_GRAPH_CARGO_PAYMENT_RATES_TITLE_AVG_SPEED                   :{TINY_FONT}{BLACK}Pago pola entrega de 1 unidade (ou 1.000 litros) de carga nunha distancia de 200 cadros
+STR_CONFIG_SETTING_TRAIN_BRAKING_ASPECT_LIMITED_ON              :Habilitado {PUSH_COLOUR}{RED}(Experto, dificil){POP_COLOUR}
+STR_CONFIG_SETTING_REALISTIC_BRAKING_ASPECT_LIMITED             :Limitación da reserva no freado realista dos trens: {STRING}
+STR_CONFIG_SETTING_REALISTIC_BRAKING_ASPECT_LIMITED_HELPTEXT    :No modelo de freado realista, limita a anticipación dos trens o aspecto das sinais (é dicir, non permitir reservar un número ilimitado de sinais).{} Isto require dun NewGRF que permite sinais multi-aspecto.{}{}Esta é unha configuración experta que probablemente aumentará a dificultade de xogo e require darlle outra volta a hora de poñer os sinais (tipo e lugar).
+STR_CONFIG_SETTING_SHOW_WAGON_INTRO_YEAR                        :Amosar o ano de introdución do vagón na fiestra de construción do vehículo: {STRING}
+STR_CONFIG_SETTING_SHOW_WAGON_INTRO_YEAR_HELPTEXT               :Engade unha liña na fiestra de construción do vehículo, amosando o ano de introdución dos vagóns.
+STR_CONFIG_SETTING_DISABLE_WATER_ANIMATION                      :Deshabilitar animacións da auga: {STRING}
+STR_CONFIG_SETTING_DISABLE_WATER_ANIMATION_HELPTEXT             :Cando se habilita, desactiva as animacións da auga cando o nivel de zoom está no punto establecido ou superior ó especificado.{}Isto pode ser util para evitar artefactos visuais coa auga animada nalgúns sets gráficos cando se fai moito zoom.
+STR_CONFIG_SETTING_DISABLE_WATER_ANIMATION_8X                   :8x zoom e superior
+STR_CONFIG_SETTING_DISABLE_WATER_ANIMATION_16X                  :16x zoom e superior
+STR_CONFIG_SETTING_DISABLE_WATER_ANIMATION_32X                  :32x zoom e superior
+STR_CONFIG_SETTING_SHOW_ORDER_OCCUPANCY_BY_DEFAULT              :Amosar a orde de ocupación por defecto: {STRING}
+STR_CONFIG_SETTING_SHOW_ORDER_OCCUPANCY_BY_DEFAULT_HELPTEXT     :Amosar a ocupación detallada por defecto cando se abre a fiestra de ordes do vehículo.
+STR_CONFIG_SETTING_SHOW_GROUP_HIERARCHY_NAME                    :Amosar a xerarquía de grupo no nome: {STRING}
+STR_CONFIG_SETTING_SHOW_GROUP_HIERARCHY_NAME_HELPTEXT           :Cando se habilita, os nomes dos grupos incluen a xerarquía completa de grupos superiores.
+STR_CONFIG_SETTING_SHOW_VEHICLE_GROUP_HIERARCHY_NAME            :Amosar a xerarquía de grupo no nome dos vehículos: {STRING}
+STR_CONFIG_SETTING_SHOW_VEHICLE_GROUP_HIERARCHY_NAME_HELPTEXT   :Cando se habilita, e amosar a xerarquía do grupo no nome está activo, os nomes de vehículos que teñen un nome de grupo inclúen toda a xerarquía superior
+STR_CONFIG_SETTING_TREES_AROUND_SNOWLINE_DYNAMIC_RANGE          :Anchura da liña de neve para árbores árticas: {STRING}
+STR_CONFIG_SETTING_TREES_AROUND_SNOWLINE_DYNAMIC_RANGE_HELPTEXT :Cando se utiliza unha liña de neve variable por temporada, que porcentaxe da variación de liña de neve utilízase para colocar árbores árticas. 0% utiliza a liña de neve máis baixa (inverno), 100% utiliza todo o rango entre verán e inverno.
+STR_CONFIG_SETTING_NO_EXPIRE_OBJECTS_AFTER                      :Non expirar obxectos despois de: {STRING}
+STR_CONFIG_SETTING_NO_EXPIRE_OBJECTS_AFTER_HELPTEXT             :Obxectos que doutro xeito expirarían despois deste ano permanecen dispoñibles para sempre
+STR_CONFIG_SETTING_NO_EXPIRE_OBJECTS_AFTER_VALUE                :{NUM}
+STR_CONFIG_SETTING_NO_EXPIRE_OBJECTS_AFTER_ZERO                 :Deshabilitado
+STR_CONFIG_SETTING_IGNORE_OBJECT_INTRO_DATES                    :Ignorar a data de introdución dos obxectos: {STRING}
+STR_CONFIG_SETTING_IGNORE_OBJECT_INTRO_DATES_HELPTEXT           :Establece se os xogadores poden construír obxectos antes da súa data de introdución.{}Non aplica ao bxectos construídos durante a xeración do mapa.
+STR_BUILD_SIGNAL_DEFAULT_STYLE                                  :Por defecto
+STR_BUILD_SIGNAL_STYLE_TOOLTIP                                  :{BLACK}Escolle o estilo de sinal
+STR_TRACE_RESTRICT_VARIABLE_PBS_RES_END_TILE                    :cadro de fin da reserva PBS
+STR_TRACE_RESTRICT_VARIABLE_PBS_RES_END_TILE_LONG               :cadro o final da reserva de PBS dende este sinal
+STR_TRACE_RESTRICT_VARIABLE_ORDER_TARGET_DIRECTION              :dirección do obxectivo da orde
+STR_TRACE_RESTRICT_CONDITIONAL_TARGET_DIRECTION                 :{STRING} cadro de {STRING} {STRING} máis lonxe que {STRING} ca este sinal entón
+STR_TRACE_RESTRICT_SIGNAL_MODE_CONTROL                          :Control do modo de sinal
+STR_TRACE_RESTRICT_USE_NORMAL_ASPECT_MODE                       :Utiliza o aspecto de sinal normal (aspecto de sinal combinado normal/desvío)
+STR_TRACE_RESTRICT_USE_SHUNT_ASPECT_MODE                        :Utiliza o aspecto de sinal de desvío  (aspecto de sinal combinado normal/desvío)
+STR_TRACE_RESTRICT_USE_NORMAL_ASPECT_MODE_SHORT                 :Utilzia o aspecto de sinal normal
+STR_TRACE_RESTRICT_USE_SHUNT_ASPECT_MODE_SHORT                  :Utiliza o aspecto de sinal de desvío
+STR_TRACE_RESTRICT_DISPATCH_SLOT_NEXT                           :seguinte slot de saída
+STR_TRACE_RESTRICT_DISPATCH_SLOT_LAST                           :último slot de saída
+STR_TRACE_RESTRICT_DISPATCH_SLOT_SHORT_NEXT                     :seguinte
+STR_TRACE_RESTRICT_DISPATCH_SLOT_SHORT_LAST                     :último
+STR_TRACE_RESTRICT_SELECT_TILE                                  :{BLACK}Selecciona cadro
+STR_TRACE_RESTRICT_HIGHLIGHT_TOOLTIP                            :{BLACK}Alterna destacar todos os sinais compartindo este programa
+STR_TRACE_RESTRICT_WARNING_SIGNAL_MODE_CONTROL_ONLY             :{STRING} {PUSH_COLOUR}{RED}(só para as accions de control de modo de sinais){POP_COLOUR}
+STR_TRACE_RESTRICT_WARNING_NO_SIGNAL_MODE_CONTROL               :{STRING} {PUSH_COLOUR}{RED}(non para as accións de control de modo de sinais){POP_COLOUR}
+STR_WATERWAYS_TOOLBAR_CREATE_RIVER_IN_GAME_TOOLTIP              :{BLACK}Colocar ríos
+STR_INDUSTRY_CARGOES_NOTIFY_SMALLMAP_ALL                        :Todas as industrias
+STR_LAI_RAIL_DESCRIPTION_TRACK_WITH_NOENTRY2SIGNALS             :Vía de ferrocarrís con sinais de non-entrada
+STR_LAI_RAIL_DESCRIPTION_TRACK_WITH_NORMAL_NOENTRY2SIGNALS      :Vía de ferrocarrís con sinais de non-entrada e bloque
+STR_LAI_RAIL_DESCRIPTION_TRACK_WITH_PRE_NOENTRY2SIGNALS         :Vía de ferrocarrís con sinais de non-entrada e pre-
+STR_LAI_RAIL_DESCRIPTION_TRACK_WITH_EXIT_NOENTRY2SIGNALS        :Vía de ferrocarrís con sinais de non entrada e saída-
+STR_LAI_RAIL_DESCRIPTION_TRACK_WITH_COMBO_NOENTRY2SIGNALS       :Vía de ferrocarrís con sinais de non-entrada e combo-
+STR_LAI_RAIL_DESCRIPTION_TRACK_WITH_PBS_NOENTRY2SIGNALS         :Vía de ferrocarrís con sinais de non-entrada e ruta
+STR_LAI_RAIL_DESCRIPTION_TRACK_WITH_NOENTRY_NOENTRY2SIGNALS     :Vía de ferrocarrís con sinais de non-entrada e ruta dun só sentido
+STR_LAI_RAIL_DESCRIPTION_TRACK_WITH_PROG_NOENTRY2SIGNALS        :Vía de ferrocarrís con sinais de non-entrada e pre- programábeis
+STR_LAI_RAIL_DESCRIPTION_TRACK_SIGNAL_STYLE                     :{STRING}: ({STRING})
+STR_LAI_RAIL_DESCRIPTION_TRACK_SIGNAL_STYLE2                    :{STRING}: ({STRING} e {STRING})
+STR_NEWGRF_INSPECT_DUPLICATE                                    :{BLACK}D
+STR_NEWGRF_INSPECT_DUPLICATE_TOOLTIP                            :{BLACK}Duplicar esta fiestra
+STR_NEWGRF_INSPECT_SPRITE_DUMP_UNOPT                            :{BLACK}U
+STR_NEWGRF_INSPECT_SPRITE_DUMP_UNOPT_TOOLTIP                    :{BLACK}Amosar grupos de sprites sen ter ningunha aplicación optimizada.{}{}Require recargar NewGRFs se non estaba previamente habilitado (misc_debug 10).
+STR_NEWGRF_INSPECT_SPRITE_DUMP_GOTO                             :{BLACK}G
+STR_NEWGRF_INSPECT_SPRITE_DUMP_GOTO_TOOLTIP                     :{BLACK}Desprazarse o sprite número
+STR_NEWGRF_INSPECT_SPRITE_DUMP_PANEL_TOOLTIP                    :{BLACK}Click para destacar o grupo de sprites{}Shift+Click para compactar o grupo de sprites{}Ctrl+Click para destacar o rexistro de almacenamento temporal
+STR_NEWGRF_INSPECT_CAPTION_OBJECT_AT_SIGNALS                    :Sinais
+STR_ORDER_CONDITIONAL_DISPATCH_SLOT                             :Slot de despacho
+STR_ORDER_CONDITIONAL_SCHED_SELECT_TOOLTIP                      :{BLACK}O programa de despachos a usar
+STR_ORDER_CONDITIONAL_SCHED_TEST_TOOLTIP                        :{BLACK}A condición do programa de despachos a probar
+STR_ORDER_CONDITIONAL_COMPARATOR_DISPATCH_SLOT_IS_FIRST         :é o primeiro slot
+STR_ORDER_CONDITIONAL_COMPARATOR_DISPATCH_SLOT_IS_NOT_FIRST     :non é o primeiro slot
+STR_ORDER_CONDITIONAL_COMPARATOR_DISPATCH_SLOT_IS_LAST          :é o último slot
+STR_ORDER_CONDITIONAL_COMPARATOR_DISPATCH_SLOT_IS_NOT_LAST      :non é o último slot
+STR_ORDER_CONDITIONAL_DISPATCH_SLOT_DISPLAY                     :Saltar a orde {COMMA} cando {STRING} {STRING} {STRING}
+STR_WARNING_LOADGAME_REMOVED_UNCORRECTABLE_VEHICLES             :{WHITE}Eliminados {NUM} vehículos que se atoparon inválidos durante a carga
+STR_ERROR_UNSUITABLE_SIGNAL_TYPE                                :{WHITE}... tipo de sinal non axeitado
+STR_ERROR_NO_RAIL_STATION                                       :{WHITE}Non hai estación de ferrocarril...
+STR_ERROR_NO_BUS_STATION                                        :{WHITE}Non hai estación de bus...
+STR_ERROR_NO_TRUCK_STATION                                      :{WHITE}Non hai estación de camións...
+STR_ERROR_NO_DOCK                                               :{WHITE}Non hai porto...
+STR_ERROR_NO_AIRPORT                                            :{WHITE}Non hai aeroporto/heliporto...
+STR_ERROR_NO_STOP_COMPATIBLE_ROAD_TYPE                          :{WHITE}Non hai paradas con un tipo de estrada/tranvía compatible...
+STR_ERROR_NO_STOP_ARTIC_VEH                                     :{WHITE}Non hai paradas axeitadas para vehículos articulados de estrada.{}Os vehículos de estrada articulados requiren unha parada de vía, non unha estación terminal/baía.
+STR_ERROR_AIRPORT_NO_PLANES                                     :{WHITE}Este avión non pode aterrar neste heliporto...
+STR_ERROR_AIRPORT_NO_HELIS                                      :{WHITE}Este helicóptero non pode aterrar neste aeroporto...
+STR_ERROR_NO_RAIL_WAYPOINT                                      :{WHITE}Non hai punto de ruta de ferrocarril...
+STR_ERROR_NO_ROAD_WAYPOINT                                      :{WHITE}Non hai punto de ruta de estrada...
+STR_ERROR_NO_BUOY                                               :{WHITE}Non hai boia...
+STR_BLACK_STRING1                                               :{BLACK}{STRING}
+STR_TMPL_WARNING_VEH_NO_COMPATIBLE_RAIL_TYPE                    :{RED}Tren non construíble: A cadea non é compatible con ningún tipo de ferrocarril
+STR_CONFIG_SETTING_SHARING_FEE_HELPTEXT                         :Esta taxa é por dia sen escalar (por exemplo, cunha duración dun día por defecto, 74 ticks).
+STR_FINANCES_ZERO_INCOME                                        :{CURRENCY_LONG}
+STR_CONFIG_SETTING_OVERRIDE_TOWN_SETTINGS_MULTIPLAYER           :Permitir os clientes multixogador sobreescribir as opcións das vilas: {STRING}
+STR_CONFIG_SETTING_OVERRIDE_TOWN_SETTINGS_MULTIPLAYER_HELPTEXT  :Se se permite, os xogadores non-admins que non estean de espectadores poden sobrescribir os axustes das vilas, por separado en cada unha. Sobreescribir estes axustes no modo Un-Xogador sempre está activo, así como para os administradores no multixogador.
+STR_CONFIG_SETTING_SHOW_ORDER_MANAGEMENT_BY_DEFAULT             :Amosar o botón de xestión de ordes: {STRING}
+STR_CONFIG_SETTING_SHOW_ORDER_MANAGEMENT_BY_DEFAULT_HELPTEXT    :Amosa un botón para a xestión de ordes na ventá de ordes do vehículo
+STR_CONFIG_SETTING_TOWN_TUNNELS                                 :Permitir as vilas construír túneis: {STRING}
+STR_CONFIG_SETTING_TOWN_TUNNELS_HELPTEXT                        :Baixo que condicións poden construír túneis de estrada as vilas
+STR_CONFIG_SETTING_TOWN_TUNNELS_FORBIDDEN                       :Prohibido
+STR_CONFIG_SETTING_TOWN_TUNNELS_ALLOWED_OBSTRUCTION             :Permitido só para pequenas obstrucións
+STR_CONFIG_SETTING_TOWN_TUNNELS_ALLOWED                         :Permitido
+STR_CONFIG_SETTING_TOWN_MAX_ROAD_SLOPE                          :Limitar a construción de estradas en pendente polas vilas: {STRING}
+STR_CONFIG_SETTING_TOWN_MAX_ROAD_SLOPE_HELPTEXT                 :Limita a cantidade de cadros consecutivos de estrada en pendente que as vilas poden construír. Isto úsase para previr que as vilas fagan largos segmentos de estrada subindo ou baixando grandes desniveis.
+STR_CONFIG_SETTING_TOWN_MAX_ROAD_SLOPE_VALUE                    :{NUM} cadro{P "" s}
+STR_CONFIG_SETTING_TOWN_MAX_ROAD_SLOPE_ZERO                     :Sen límite
+STR_LINKGRAPH_STATS_TOOLTIP                                     :{BLACK}{CARGO_LONG} transportaranse cada mes dende {STATION} a {STATION} ({COMMA}% da capacidade){STRING}
+STR_LINKGRAPH_STATS_TOOLTIP_RETURN_EXTENSION                    :{}{CARGO_LONG} transportaranse de volta ({COMMA}% da capacidade)
+STR_LINKGRAPH_STATS_TOOLTIP_TIME_EXTENSION                      :{}Tempo medio de viaxe: {NUM}{NBSP}día{P "" s}
+STR_LINKGRAPH_STATS_TOOLTIP_TIME_EXTENSION_GENERAL              :{}Tempo medio de viaxe: {STRING}
+STR_STATION_BUILD_INFRASTRUCTURE_COST                           :{BLACK}Custo de mantemento: {GOLD}{CURRENCY_SHORT}/ano
+STR_LOCAL_AUTHORITY_SETTING_OVERRIDE_ALLOW_ROADS                :Permitido construír estradas
+STR_LOCAL_AUTHORITY_SETTING_OVERRIDE_ALLOW_LEVEL_CROSSINGS      :Permitido construír pasos a nivel
+STR_LOCAL_AUTHORITY_SETTING_OVERRIDE_TUNNELS                    :Permitido construír túneis
+STR_LOCAL_AUTHORITY_SETTING_OVERRIDE_MAX_ROAD_SLOPE             :Limitar a construción contínua de estradas en pendente
+STR_LOCAL_AUTHORITY_SETTING_OVERRIDE_DEFAULT                    :Por defecto ({STRING})
+STR_LOCAL_AUTHORITY_SETTING_OVERRIDE_STR                        :{STRING}: {PUSH_COLOUR}{YELLOW}{STRING}{POP_COLOUR}
+STR_LOCAL_AUTHORITY_SETTING_OVERRIDE_TEXT                       :{YELLOW}Sobrescribir o seguinte axuste para esta vila en concreto:{}{STRING}{}{STRING}
+STR_LOCAL_AUTHORITY_SETTING_OVERRIDE_TOOLTIP                    :{BLACK}Modificar o axuste sobrescrito
+STR_ORDERS_TOGGLE_MANAGEMENT_BUTTON_TOOLTIP                     :{BLACK}Alternar amosar o botón de xestión de ordes
+STR_ORDERS_MANAGE_ORDER                                         :{BLACK}Xestionar orde
+STR_ORDERS_MANAGE_ORDER_TOOLTIP                                 :{BLACK}Xestionar esta orde
+STR_ORDER_DUPLICATE_ORDER                                       :Duplicar orde
+STR_ORDER_CHANGE_JUMP_TARGET                                    :Modificar obxectivo de salto
+STR_ORDER_CHANGE_COUNTER_BUTTON                                 :Modificar contador
+STR_ORDER_CHANGE_COUNTER_TOOLTIP                                :{BLACK}O contador a modificar
+STR_TIMETABLE_FILL_TIMETABLE_SUGGESTION                         :{BLACK}Activa 'automático' para encher e actualizar automáticamente os tempos de espera e viaxe.
+STR_TIMETABLE_FILL_TIMETABLE_SUGGESTION_2                       :{BLACK}(Alternativamente, activa 'Autorecheo' ou cubreo manualmente nos campos da táboa de horarios).

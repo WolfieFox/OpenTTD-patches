@@ -1,5 +1,3 @@
-/* $Id$ */
-
 /*
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
@@ -36,6 +34,17 @@ void Blitter_40bppAnim::SetPixel(void *video, int x, int y, uint8 colour)
 		*((Colour *)video + x + y * _screen.pitch) = _black_colour;
 
 		VideoDriver::GetInstance()->GetAnimBuffer()[((uint32 *)video - (uint32 *)_screen.dst_ptr) + x + y * _screen.pitch] = colour;
+	}
+}
+
+void Blitter_40bppAnim::SetPixel32(void *video, int x, int y, uint8 colour, uint32 colour32)
+{
+	if (_screen_disable_anim) {
+		Blitter_32bppOptimized::SetPixel32(video, x, y, colour, colour32);
+	} else {
+		*((Colour *)video + x + y * _screen.pitch) = colour32;
+
+		VideoDriver::GetInstance()->GetAnimBuffer()[((uint32 *)video - (uint32 *)_screen.dst_ptr) + x + y * _screen.pitch] = 0;
 	}
 }
 

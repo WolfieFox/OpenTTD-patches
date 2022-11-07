@@ -160,7 +160,8 @@ void AfterLoadCompanyStats()
 						break;
 
 					case STATION_BUS:
-					case STATION_TRUCK: {
+					case STATION_TRUCK:
+					case STATION_ROADWAYPOINT: {
 						/* Iterate all present road types as each can have a different owner. */
 						for (RoadTramType rtt : _roadtramtypes) {
 							RoadType rt = GetRoadType(tile, rtt);
@@ -205,9 +206,10 @@ void AfterLoadCompanyStats()
 				break;
 
 			case MP_TUNNELBRIDGE: {
-				/* Only count the tunnel/bridge if we're on the northern end tile. */
-				TileIndex other_end = GetOtherTunnelBridgeEnd(tile);
-				if (tile < other_end) {
+				/* Only count the tunnel/bridge if we're on the western end tile. */
+				if (GetTunnelBridgeDirection(tile) < DIAGDIR_SW) {
+					TileIndex other_end = GetOtherTunnelBridgeEnd(tile);
+
 					/* Count each tunnel/bridge TUNNELBRIDGE_TRACKBIT_FACTOR times to simulate
 					 * the higher structural maintenance needs, and don't forget the end tiles. */
 					const uint middle_len = GetTunnelBridgeLength(tile, other_end) * TUNNELBRIDGE_TRACKBIT_FACTOR;
@@ -281,6 +283,7 @@ static const SaveLoad _company_desc[] = {
 
 	    SLE_VAR(CompanyProperties, months_of_bankruptcy,  SLE_UINT8),
 	SLE_CONDVAR_X(CompanyProperties, bankrupt_last_asked, SLE_UINT8,         SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_BANKRUPTCY_EXTRA)),
+	SLE_CONDVAR_X(CompanyProperties, bankrupt_flags,      SLE_UINT8,         SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_BANKRUPTCY_EXTRA, 2)),
 	SLE_CONDVAR(CompanyProperties, bankrupt_asked,        SLE_FILE_U8  | SLE_VAR_U16,  SL_MIN_VERSION, SLV_104),
 	SLE_CONDVAR(CompanyProperties, bankrupt_asked,        SLE_UINT16,                SLV_104, SL_MAX_VERSION),
 	    SLE_VAR(CompanyProperties, bankrupt_timeout,      SLE_INT16),

@@ -167,7 +167,16 @@ CommandCost CmdBuildVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, uint
 			value.AddCost(CmdRefitVehicle(tile, flags, v->index, cargo | (1 << 16), nullptr));
 		} else {
 			/* Fill in non-refitted capacities */
-			_returned_refit_capacity = e->GetDisplayDefaultCapacity(&_returned_mail_refit_capacity);
+			if (e->type == VEH_TRAIN || e->type == VEH_ROAD) {
+				_returned_vehicle_capacities = GetCapacityOfArticulatedParts(eid);
+				_returned_refit_capacity = _returned_vehicle_capacities[default_cargo];
+				_returned_mail_refit_capacity = 0;
+			} else {
+				_returned_refit_capacity = e->GetDisplayDefaultCapacity(&_returned_mail_refit_capacity);
+				_returned_vehicle_capacities.Clear();
+				_returned_vehicle_capacities[default_cargo] = _returned_refit_capacity;
+				_returned_vehicle_capacities[CT_MAIL] = _returned_mail_refit_capacity;
+			}
 		}
 
 		if (flags & DC_EXEC) {
@@ -236,9 +245,9 @@ CommandCost CmdSellVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, uint3
 
 	/* Can we actually make the order backup, i.e. are there enough orders? */
 	if (p1 & MAKE_ORDER_BACKUP_FLAG &&
-			front->orders.list != nullptr &&
-			!front->orders.list->IsShared() &&
-			!Order::CanAllocateItem(front->orders.list->GetNumOrders())) {
+			front->orders != nullptr &&
+			!front->orders->IsShared() &&
+			!Order::CanAllocateItem(front->orders->GetNumOrders())) {
 		/* Only happens in exceptional cases when there aren't enough orders anyhow.
 		 * Thus it should be safe to just drop the orders in that case. */
 		p1 &= ~MAKE_ORDER_BACKUP_FLAG;
@@ -256,6 +265,14 @@ CommandCost CmdSellVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, uint3
 	}
 
 	return ret;
+}
+
+CommandCost CmdSellVirtualVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+{
+	Train *v = Train::GetIfValid(GB(p1, 0, 20));
+	if (v == nullptr || !v->IsVirtual()) return CMD_ERROR;
+
+	return CmdSellVehicle(tile, flags, p1, p2, text);
 }
 
 /**
@@ -362,6 +379,7 @@ static CommandCost RefitVehicle(Vehicle *v, bool only_this, uint8 num_vehicles, 
 	uint total_capacity = 0;
 	uint total_mail_capacity = 0;
 	num_vehicles = num_vehicles == 0 ? UINT8_MAX : num_vehicles;
+	_returned_vehicle_capacities.Clear();
 
 	VehicleSet vehicles_to_refit;
 	if (!only_this) {
@@ -386,7 +404,11 @@ static CommandCost RefitVehicle(Vehicle *v, bool only_this, uint8 num_vehicles, 
 		/* If the vehicle is not refittable, or does not allow automatic refitting,
 		 * count its capacity nevertheless if the cargo matches */
 		bool refittable = HasBit(e->info.refit_mask, new_cid) && (!auto_refit || HasBit(e->info.misc_flags, EF_AUTO_REFIT));
-		if (!refittable && v->cargo_type != new_cid) continue;
+		if (!refittable && v->cargo_type != new_cid) {
+			uint amount = e->DetermineCapacity(v, nullptr);
+			if (amount > 0) _returned_vehicle_capacities[v->cargo_type] += amount;
+			continue;
+		}
 
 		/* Determine best fitting subtype if requested */
 		if (actual_subtype == 0xFF) {
@@ -406,6 +428,9 @@ static CommandCost RefitVehicle(Vehicle *v, bool only_this, uint8 num_vehicles, 
 		total_capacity += amount;
 		/* mail_capacity will always be zero if the vehicle is not an aircraft. */
 		total_mail_capacity += mail_capacity;
+
+		_returned_vehicle_capacities[new_cid] += amount;
+		_returned_vehicle_capacities[CT_MAIL] += mail_capacity;
 
 		if (!refittable) continue;
 
@@ -696,6 +721,7 @@ CommandCost CmdMassStartStopVehicle(TileIndex tile, DoCommandFlag flags, uint32 
 	if (vehicle_list_window) {
 		if (!GenerateVehicleSortList(&list, vli)) return CMD_ERROR;
 	} else {
+		if (!IsDepotTile(tile) || !IsTileOwner(tile, _current_company)) return CMD_ERROR;
 		/* Get the list of vehicles in the depot */
 		BuildDepotVehicleList(vli.vtype, tile, &list, nullptr);
 	}
@@ -731,6 +757,7 @@ CommandCost CmdDepotSellAllVehicles(TileIndex tile, DoCommandFlag flags, uint32 
 	VehicleType vehicle_type = Extract<VehicleType, 0, 3>(p1);
 
 	if (!IsCompanyBuildableVehicleType(vehicle_type)) return CMD_ERROR;
+	if (!IsDepotTile(tile) || !IsTileOwner(tile, _current_company)) return CMD_ERROR;
 
 	uint sell_command = GetCmdSellVeh(vehicle_type);
 
@@ -993,6 +1020,46 @@ CommandCost CmdVirtualTrainFromTemplateVehicle(TileIndex tile, DoCommandFlag fla
 
 CommandCost CmdDeleteVirtualTrain(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text);
 
+template <typename T>
+void UpdateNewVirtualTrainFromSource(Train *v, const T *src)
+{
+	struct helper {
+		static bool IsTrainPartReversed(const Train *src) { return HasBit(src->flags, VRF_REVERSE_DIRECTION); }
+		static bool IsTrainPartReversed(const TemplateVehicle *src) { return HasBit(src->ctrl_flags, TVCF_REVERSED); }
+		static const Train *GetTrainMultiheadOtherPart(const Train *src) { return src->other_multiheaded_part; }
+		static const TemplateVehicle *GetTrainMultiheadOtherPart(const TemplateVehicle *src) { return src; }
+	};
+
+	SB(v->flags, VRF_REVERSE_DIRECTION, 1, helper::IsTrainPartReversed(src) ? 1 : 0);
+
+	if (v->IsMultiheaded()) {
+		const T *other = helper::GetTrainMultiheadOtherPart(src);
+		/* For template vehicles, just use the front part, fix any discrepancy later */
+		v->other_multiheaded_part->cargo_type = other->cargo_type;
+		v->other_multiheaded_part->cargo_subtype = other->cargo_subtype;
+	}
+
+	while (true) {
+		v->cargo_type = src->cargo_type;
+		v->cargo_subtype = src->cargo_subtype;
+
+		if (v->HasArticulatedPart()) {
+			v = v->Next();
+		} else {
+			break;
+		}
+
+		if (src->HasArticulatedPart()) {
+			src = src->Next();
+		} else {
+			break;
+		}
+	}
+
+	v->First()->ConsistChanged(CCF_ARRANGE);
+	InvalidateVehicleTickCaches();
+}
+
 Train* VirtualTrainFromTemplateVehicle(const TemplateVehicle* tv, StringID &err, uint32 user)
 {
 	CommandCost c;
@@ -1001,17 +1068,21 @@ Train* VirtualTrainFromTemplateVehicle(const TemplateVehicle* tv, StringID &err,
 
 	assert(tv->owner == _current_company);
 
-	head = CmdBuildVirtualRailVehicle(tv->engine_type, err, user);
+	head = BuildVirtualRailVehicle(tv->engine_type, err, user, true);
 	if (!head) return nullptr;
+
+	UpdateNewVirtualTrainFromSource(head, tv);
 
 	tail = head;
 	tv = tv->GetNextUnit();
 	while (tv) {
-		tmp = CmdBuildVirtualRailVehicle(tv->engine_type, err, user);
+		tmp = BuildVirtualRailVehicle(tv->engine_type, err, user, true);
 		if (!tmp) {
 			CmdDeleteVirtualTrain(INVALID_TILE, DC_EXEC, head->index, 0, nullptr);
 			return nullptr;
 		}
+
+		UpdateNewVirtualTrainFromSource(tmp, tv);
 
 		CmdMoveRailVehicle(INVALID_TILE, DC_EXEC, (1 << 21) | tmp->index, tail->index, 0);
 		tail = tmp;
@@ -1022,7 +1093,6 @@ Train* VirtualTrainFromTemplateVehicle(const TemplateVehicle* tv, StringID &err,
 	for (tv = tv_head, tmp = head; tv != nullptr && tmp != nullptr; tv = tv->Next(), tmp = tmp->Next()) {
 		tmp->cargo_type = tv->cargo_type;
 		tmp->cargo_subtype = tv->cargo_subtype;
-		SB(tmp->flags, VRF_REVERSE_DIRECTION, 1, HasBit(tv->ctrl_flags, TVCF_REVERSED) ? 1 : 0);
 	}
 
 	_new_vehicle_id = head->index;
@@ -1057,21 +1127,22 @@ CommandCost CmdVirtualTrainFromTrain(TileIndex tile, DoCommandFlag flags, uint32
 		Train *tmp, *head, *tail;
 		StringID err = INVALID_STRING_ID;
 
-		head = CmdBuildVirtualRailVehicle(train->engine_type, err, p2);
+		head = BuildVirtualRailVehicle(train->engine_type, err, p2, true);
 		if (!head) return_cmd_error(err);
+
+		UpdateNewVirtualTrainFromSource(head, train);
 
 		tail = head;
 		train = train->GetNextUnit();
 		while (train) {
-			tmp = CmdBuildVirtualRailVehicle(train->engine_type, err, p2);
+			tmp = BuildVirtualRailVehicle(train->engine_type, err, p2, true);
 			if (!tmp) {
 				CmdDeleteVirtualTrain(tile, flags, head->index, 0, nullptr);
 				return_cmd_error(err);
 			}
 
-			tmp->cargo_type = train->cargo_type;
-			tmp->cargo_subtype = train->cargo_subtype;
-			SB(tmp->flags, VRF_REVERSE_DIRECTION, 1, HasBit(train->flags, VRF_REVERSE_DIRECTION) ? 1 : 0);
+			UpdateNewVirtualTrainFromSource(tmp, train);
+
 			CmdMoveRailVehicle(0, DC_EXEC, (1 << 21) | tmp->index, tail->index, 0);
 			tail = tmp;
 

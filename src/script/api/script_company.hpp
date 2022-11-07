@@ -97,23 +97,24 @@ public:
 
 	/**
 	 * Types of expenses.
-	 * @api -ai
 	 */
 	enum ExpensesType : byte {
-		EXPENSES_CONSTRUCTION = ::EXPENSES_CONSTRUCTION, ///< Construction costs.
-		EXPENSES_NEW_VEHICLES = ::EXPENSES_NEW_VEHICLES, ///< New vehicles.
-		EXPENSES_TRAIN_RUN    = ::EXPENSES_TRAIN_RUN,    ///< Running costs trains.
-		EXPENSES_ROADVEH_RUN  = ::EXPENSES_ROADVEH_RUN,  ///< Running costs road vehicles.
-		EXPENSES_AIRCRAFT_RUN = ::EXPENSES_AIRCRAFT_RUN, ///< Running costs aircraft.
-		EXPENSES_SHIP_RUN     = ::EXPENSES_SHIP_RUN,     ///< Running costs ships.
-		EXPENSES_PROPERTY     = ::EXPENSES_PROPERTY,     ///< Property costs.
-		EXPENSES_TRAIN_INC    = ::EXPENSES_TRAIN_INC,    ///< Income from trains.
-		EXPENSES_ROADVEH_INC  = ::EXPENSES_ROADVEH_INC,  ///< Income from road vehicles.
-		EXPENSES_AIRCRAFT_INC = ::EXPENSES_AIRCRAFT_INC, ///< Income from aircraft.
-		EXPENSES_SHIP_INC     = ::EXPENSES_SHIP_INC,     ///< Income from ships.
-		EXPENSES_LOAN_INT     = ::EXPENSES_LOAN_INT,     ///< Interest payments over the loan.
-		EXPENSES_OTHER        = ::EXPENSES_OTHER,        ///< Other expenses.
-		EXPENSES_INVALID      = ::INVALID_EXPENSES,      ///< Invalid expense type.
+		EXPENSES_CONSTRUCTION = ::EXPENSES_CONSTRUCTION,     ///< Construction costs.
+		EXPENSES_NEW_VEHICLES = ::EXPENSES_NEW_VEHICLES,     ///< New vehicles.
+		EXPENSES_TRAIN_RUN    = ::EXPENSES_TRAIN_RUN,        ///< Running costs trains.
+		EXPENSES_ROADVEH_RUN  = ::EXPENSES_ROADVEH_RUN,      ///< Running costs road vehicles.
+		EXPENSES_AIRCRAFT_RUN = ::EXPENSES_AIRCRAFT_RUN,     ///< Running costs aircraft.
+		EXPENSES_SHIP_RUN     = ::EXPENSES_SHIP_RUN,         ///< Running costs ships.
+		EXPENSES_PROPERTY     = ::EXPENSES_PROPERTY,         ///< Property costs.
+		EXPENSES_TRAIN_INC    = ::EXPENSES_TRAIN_REVENUE,    ///< Revenue from trains.
+		EXPENSES_ROADVEH_INC  = ::EXPENSES_ROADVEH_REVENUE,  ///< Revenue from road vehicles.
+		EXPENSES_AIRCRAFT_INC = ::EXPENSES_AIRCRAFT_REVENUE, ///< Revenue from aircraft.
+		EXPENSES_SHIP_INC     = ::EXPENSES_SHIP_REVENUE,     ///< Revenue from ships.
+		EXPENSES_LOAN_INT     = ::EXPENSES_LOAN_INTEREST,    ///< Interest payments over the loan.
+		EXPENSES_OTHER        = ::EXPENSES_OTHER,            ///< Other expenses.
+		EXPENSES_SHARING_COST = ::EXPENSES_SHARING_COST,     ///< Infrastructure sharing costs.
+		EXPENSES_SHARING_INC  = ::EXPENSES_SHARING_INC,      ///< Infrastructure sharing income.
+		EXPENSES_INVALID      = ::INVALID_EXPENSES,          ///< Invalid expense type.
 	};
 
 	/**
@@ -309,6 +310,17 @@ public:
 	 * @return The value of the company in the given quarter.
 	 */
 	static Money GetQuarterlyCompanyValue(CompanyID company, uint32 quarter);
+
+	/**
+	 * Get the expense category value of the company in the given year (relative to the current year).
+	 * @param company The company to get the value of.
+	 * @param year_offset The year, relative to the current year (value values are 0, 1, and 2).
+	 * @param expenses_type The expense category to return.
+	 * @pre ResolveCompanyID(company) != COMPANY_INVALID.
+	 * @pre year_offset <= 2.
+	 * @return The value of the company in the given quarter.
+	 */
+	static Money GetAnnualExpenseValue(CompanyID company, uint32 year_offset, ExpensesType expenses_type);
 
 	/**
 	 * Build your company's HQ on the given tile.

@@ -27,7 +27,7 @@
 extern TileIndex _cur_tileloop_tile;
 extern uint16 _disaster_delay;
 extern byte _trees_tick_ctr;
-extern uint8 _extra_aspects;
+extern uint64 _aspect_cfg_hash;
 
 /* Keep track of current game position */
 int _saved_scrollpos_x;
@@ -76,7 +76,8 @@ static const SaveLoad _date_desc[] = {
 	SLEG_CONDVAR(_date,                   SLE_FILE_U16 | SLE_VAR_I32,  SL_MIN_VERSION,  SLV_31),
 	SLEG_CONDVAR(_date,                   SLE_INT32,                  SLV_31, SL_MAX_VERSION),
 	    SLEG_VAR(_date_fract,             SLE_UINT16),
-	    SLEG_VAR(_tick_counter,           SLE_UINT16),
+	SLEG_CONDVAR_X(_tick_counter,         SLE_FILE_U16 | SLE_VAR_U64,  SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_U64_TICK_COUNTER, 0, 0)),
+	SLEG_CONDVAR_X(_tick_counter,         SLE_UINT64,                  SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_U64_TICK_COUNTER)),
 	SLEG_CONDVAR_X(_tick_skip_counter,    SLE_UINT8,                   SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_VARIABLE_DAY_LENGTH)),
 	SLE_CONDNULL(2, SL_MIN_VERSION, SLV_157), // _vehicle_id_ctr_day
 	SLEG_CONDVAR(_age_cargo_skip_counter, SLE_UINT8,                   SL_MIN_VERSION, SLV_162),
@@ -97,7 +98,8 @@ static const SaveLoad _date_desc[] = {
 	SLEG_CONDVAR(_pause_mode,             SLE_UINT8,                   SLV_4, SL_MAX_VERSION),
 	SLEG_CONDVAR_X(_game_events_overall,  SLE_UINT32,         SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_GAME_EVENTS)),
 	SLEG_CONDVAR_X(_road_layout_change_counter, SLE_UINT32,   SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_ROAD_LAYOUT_CHANGE_CTR)),
-	SLEG_CONDVAR_X(_extra_aspects,        SLE_UINT8,          SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_REALISTIC_TRAIN_BRAKING, 4)),
+	SLE_CONDNULL_X(1, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_REALISTIC_TRAIN_BRAKING, 4, 6)), // _extra_aspects
+	SLEG_CONDVAR_X(_aspect_cfg_hash,      SLE_UINT64,         SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_REALISTIC_TRAIN_BRAKING, 7)),
 	SLE_CONDNULL(4, SLV_11, SLV_120),
 };
 
@@ -105,7 +107,8 @@ static const SaveLoad _date_check_desc[] = {
 	SLEG_CONDVAR(_load_check_data.current_date,  SLE_FILE_U16 | SLE_VAR_I32,  SL_MIN_VERSION,  SLV_31),
 	SLEG_CONDVAR(_load_check_data.current_date,  SLE_INT32,                  SLV_31, SL_MAX_VERSION),
 	    SLE_NULL(2),                       // _date_fract
-	    SLE_NULL(2),                       // _tick_counter
+	SLE_CONDNULL_X(2, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_U64_TICK_COUNTER, 0, 0)), // _tick_counter
+	SLE_CONDNULL_X(8, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_U64_TICK_COUNTER)),       // _tick_counter
 	SLE_CONDNULL_X(1, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_VARIABLE_DAY_LENGTH)), // _tick_skip_counter
 	SLE_CONDNULL(2, SL_MIN_VERSION, SLV_157),               // _vehicle_id_ctr_day
 	SLE_CONDNULL(1, SL_MIN_VERSION, SLV_162),               // _age_cargo_skip_counter
@@ -126,7 +129,8 @@ static const SaveLoad _date_check_desc[] = {
 	SLE_CONDNULL(1, SLV_4, SL_MAX_VERSION),    // _pause_mode
 	SLE_CONDNULL_X(4, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_GAME_EVENTS)), // _game_events_overall
 	SLE_CONDNULL_X(4, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_ROAD_LAYOUT_CHANGE_CTR)), // _road_layout_change_counter
-	SLE_CONDNULL_X(1, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_REALISTIC_TRAIN_BRAKING, 4)), // _extra_aspects
+	SLE_CONDNULL_X(1, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_REALISTIC_TRAIN_BRAKING, 4, 6)), // _extra_aspects
+	SLE_CONDNULL_X(8, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_REALISTIC_TRAIN_BRAKING, 7)), // _aspect_cfg_hash
 	SLE_CONDNULL(4, SLV_11, SLV_120),
 };
 
