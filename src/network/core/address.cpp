@@ -35,7 +35,7 @@ const char *NetworkAddress::GetHostname()
  * Get the port.
  * @return the port.
  */
-uint16 NetworkAddress::GetPort() const
+uint16_t NetworkAddress::GetPort() const
 {
 	switch (this->address.ss_family) {
 		case AF_UNSPEC:
@@ -54,7 +54,7 @@ uint16 NetworkAddress::GetPort() const
  * Set the port.
  * @param port set the port number.
  */
-void NetworkAddress::SetPort(uint16 port)
+void NetworkAddress::SetPort(uint16_t port)
 {
 	switch (this->address.ss_family) {
 		case AF_UNSPEC:
@@ -120,10 +120,9 @@ const char *NetworkAddressDumper::GetAddressAsString(NetworkAddress *addr, bool 
 
 /**
  * Helper function to resolve without opening a socket.
- * @param runp information about the socket to try not
  * @return the opened socket or INVALID_SOCKET
  */
-static SOCKET ResolveLoopProc(addrinfo *runp)
+static SOCKET ResolveLoopProc(addrinfo *)
 {
 	/* We just want the first 'entry', so return a valid socket. */
 	return !INVALID_SOCKET;
@@ -192,17 +191,17 @@ bool NetworkAddress::IsInNetmask(const char *netmask)
 
 	if (mask_address.GetAddressLength() == 0) return false;
 
-	uint32 *ip;
-	uint32 *mask;
+	uint32_t *ip;
+	uint32_t *mask;
 	switch (this->address.ss_family) {
 		case AF_INET:
-			ip = (uint32*)&((struct sockaddr_in*)&this->address)->sin_addr.s_addr;
-			mask = (uint32*)&((struct sockaddr_in*)&mask_address.address)->sin_addr.s_addr;
+			ip = (uint32_t*)&((struct sockaddr_in*)&this->address)->sin_addr.s_addr;
+			mask = (uint32_t*)&((struct sockaddr_in*)&mask_address.address)->sin_addr.s_addr;
 			break;
 
 		case AF_INET6:
-			ip = (uint32*)&((struct sockaddr_in6*)&this->address)->sin6_addr;
-			mask = (uint32*)&((struct sockaddr_in6*)&mask_address.address)->sin6_addr;
+			ip = (uint32_t*)&((struct sockaddr_in6*)&this->address)->sin6_addr;
+			mask = (uint32_t*)&((struct sockaddr_in6*)&mask_address.address)->sin6_addr;
 			break;
 
 		default:
@@ -210,7 +209,7 @@ bool NetworkAddress::IsInNetmask(const char *netmask)
 	}
 
 	while (cidr > 0) {
-		uint32 msk = cidr >= 32 ? (uint32)-1 : htonl(-(1 << (32 - cidr)));
+		uint32_t msk = cidr >= 32 ? (uint32_t)-1 : htonl(-(1 << (32 - cidr)));
 		if ((*mask++ & msk) != (*ip++ & msk)) return false;
 
 		cidr -= 32;
@@ -282,7 +281,7 @@ SOCKET NetworkAddress::Resolve(int family, int socktype, int flags, SocketList *
 		 * of course totally unneeded ;) */
 		if (sockets != nullptr) {
 			NetworkAddress address(runp->ai_addr, (int)runp->ai_addrlen);
-			if (sockets->Contains(address)) continue;
+			if (std::any_of(sockets->begin(), sockets->end(), [&address](const auto &p) { return p.second == address; })) continue;
 		}
 		sock = func(runp);
 		if (sock == INVALID_SOCKET) continue;
@@ -307,7 +306,7 @@ SOCKET NetworkAddress::Resolve(int family, int socktype, int flags, SocketList *
 		}
 
 		NetworkAddress addr(runp->ai_addr, (int)runp->ai_addrlen);
-		(*sockets)[addr] = sock;
+		(*sockets)[sock] = addr;
 		sock = INVALID_SOCKET;
 	}
 	freeaddrinfo (ai);
@@ -340,13 +339,11 @@ static SOCKET ListenLoopProc(addrinfo *runp)
 		DEBUG(net, 0, "Setting reuse-address mode failed: %s", NetworkError::GetLast().AsString());
 	}
 
-#ifndef __OS2__
 	int on = 1;
 	if (runp->ai_family == AF_INET6 &&
 			setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, (const char*)&on, sizeof(on)) == -1) {
 		DEBUG(net, 3, "Could not disable IPv4 over IPv6: %s", NetworkError::GetLast().AsString());
 	}
-#endif
 
 	if (bind(sock, runp->ai_addr, (int)runp->ai_addrlen) != 0) {
 		DEBUG(net, 0, "Could not bind socket on %s: %s", address.c_str(), NetworkError::GetLast().AsString());
@@ -474,14 +471,14 @@ void NetworkAddress::Listen(int socktype, SocketList *sockets)
  * @param company Pointer to the company variable to set iff indicated.
  * @return A valid ServerAddress of the parsed information.
  */
-/* static */ ServerAddress ServerAddress::Parse(const std::string &connection_string, uint16 default_port, CompanyID *company_id)
+/* static */ ServerAddress ServerAddress::Parse(const std::string &connection_string, uint16_t default_port, CompanyID *company_id)
 {
-	if (StrStartsWith(connection_string, "+")) {
+	if (connection_string.starts_with("+")) {
 		std::string_view invite_code = ParseCompanyFromConnectionString(connection_string, company_id);
 		return ServerAddress(SERVER_ADDRESS_INVITE_CODE, std::string(invite_code));
 	}
 
-	uint16 port = default_port;
+	uint16_t port = default_port;
 	std::string_view ip = ParseFullConnectionString(connection_string, port, company_id);
 	return ServerAddress(SERVER_ADDRESS_DIRECT, std::string(ip) + ":" + std::to_string(port));
 }

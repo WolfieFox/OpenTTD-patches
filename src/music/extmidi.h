@@ -14,9 +14,10 @@
 
 class MusicDriver_ExtMidi : public MusicDriver {
 private:
-	char **params;
-	char song[MAX_PATH];
+	std::vector<std::string> command_tokens;
+	std::string song;
 	pid_t pid;
+	bool failed = false;
 
 	void DoPlay();
 	void DoStop();
@@ -34,6 +35,8 @@ public:
 
 	void SetVolume(byte vol) override;
 	const char *GetName() const override { return "extmidi"; }
+
+	bool IsInFailedState() override { return this->failed; }
 };
 
 class FMusicDriver_ExtMidi : public DriverFactoryBase {

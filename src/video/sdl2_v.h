@@ -11,16 +11,14 @@
 #define VIDEO_SDL_H
 
 #include <condition_variable>
-#if defined(__MINGW32__)
-#include "../3rdparty/mingw-std-threads/mingw.condition_variable.h"
-#endif
 
 #include "video_driver.hpp"
+#include <vector>
 
 /** The SDL video driver. */
 class VideoDriver_SDL_Base : public VideoDriver {
 public:
-	VideoDriver_SDL_Base() : sdl_window(nullptr), buffer_locked(false), driver_info(this->GetName()) {}
+	VideoDriver_SDL_Base(bool uses_hardware_acceleration = false) : VideoDriver(uses_hardware_acceleration), sdl_window(nullptr), buffer_locked(false) {}
 
 	const char *Start(const StringList &param) override;
 
@@ -43,8 +41,6 @@ public:
 	void EditBoxLostFocus() override;
 
 	std::vector<int> GetListOfMonitorRefreshRates() override;
-
-	const char *GetName() const override { return "sdl"; }
 
 	const char *GetInfoString() const override { return this->driver_info.c_str(); }
 

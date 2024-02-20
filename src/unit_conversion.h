@@ -7,16 +7,21 @@
 
 /** @file unit_conversion.h Functions related to unit conversion. */
 
-uint ConvertSpeedToDisplaySpeed(uint speed);
-uint ConvertSpeedToUnitDisplaySpeed(uint speed);
-uint ConvertDisplaySpeedToSpeed(uint speed);
+#ifndef UNIT_CONVERSION_H
+#define UNIT_CONVERSION_H
+
+uint ConvertSpeedToDisplaySpeed(uint speed, VehicleType type);
+uint ConvertSpeedToUnitDisplaySpeed(uint speed, VehicleType type);
+uint ConvertDisplaySpeedToSpeed(uint speed, VehicleType type);
 uint ConvertWeightToDisplayWeight(uint weight);
 uint ConvertDisplayWeightToWeight(uint weight);
 uint ConvertPowerToDisplayPower(uint power);
 uint ConvertDisplayPowerToPower(uint power);
-uint ConvertForceToDisplayForce(uint force);
-uint ConvertDisplayForceToForce(uint force);
-void ConvertPowerWeightRatioToDisplay(uint ratio, int64 &value, int64 &decimals);
-void ConvertForceWeightRatioToDisplay(uint ratio, int64 &value, int64 &decimals);
+int64_t ConvertForceToDisplayForce(int64_t force);
+int64_t ConvertDisplayForceToForce(int64_t force);
+void ConvertPowerWeightRatioToDisplay(int64_t ratio, int64_t &value, int64_t &decimals);
+void ConvertForceWeightRatioToDisplay(int64_t ratio, int64_t &value, int64_t &decimals);
 uint ConvertDisplayToPowerWeightRatio(double in);
 uint ConvertDisplayToForceWeightRatio(double in);
+
+#endif /* UNIT_CONVERSION_H */

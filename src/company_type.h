@@ -35,6 +35,7 @@ enum Owner : byte {
 	COMPANY_SPECTATOR       = 255, ///< The client is spectating
 };
 DECLARE_POSTFIX_INCREMENT(Owner)
+DECLARE_ENUM_AS_ADDABLE(Owner)
 
 static const uint MAX_LENGTH_PRESIDENT_NAME_CHARS = 32; ///< The maximum length of a president name in characters including '\0'
 static const uint MAX_LENGTH_COMPANY_NAME_CHARS   = 32; ///< The maximum length of a company name in characters including '\0'
@@ -42,15 +43,18 @@ static const uint MAX_LENGTH_COMPANY_NAME_CHARS   = 32; ///< The maximum length 
 static const uint MAX_HISTORY_QUARTERS            = 24; ///< The maximum number of quarters kept as performance's history
 static const uint MAX_COMPANY_SHARE_OWNERS        =  4; ///< The maximum number of shares of a company that can be owned by another company.
 
+static const uint MIN_COMPETITORS_INTERVAL = 0;   ///< The minimum interval (in minutes) between competitors.
+static const uint MAX_COMPETITORS_INTERVAL = 500; ///< The maximum interval (in minutes) between competitors.
+
 /** Define basic enum properties */
 template <> struct EnumPropsT<Owner> : MakeEnumPropsT<Owner, byte, OWNER_BEGIN, OWNER_END, INVALID_OWNER> {};
 
 typedef Owner CompanyID;
 
-typedef uint16 CompanyMask;
+typedef uint16_t CompanyMask;
 
 struct Company;
-typedef uint32 CompanyManagerFace; ///< Company manager face bits, info see in company_manager_face.h
+typedef uint32_t CompanyManagerFace; ///< Company manager face bits, info see in company_manager_face.h
 
 /** The reason why the company was removed. */
 enum CompanyRemoveReason {

@@ -5,15 +5,18 @@
  * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/** @file gamelog.h Functions to be called to log possibly unsafe game events */
+/** @file gamelog.h Functions to be called to log fundamental changes to the game */
 
 #ifndef GAMELOG_H
 #define GAMELOG_H
 
 #include "newgrf_config.h"
+#include <vector>
+
+struct LoggedAction;
 
 /** The actions we log. */
-enum GamelogActionType : uint8 {
+enum GamelogActionType : uint8_t {
 	GLAT_START,        ///< Game created
 	GLAT_LOAD,         ///< Game loaded
 	GLAT_GRF,          ///< GRF changed
@@ -29,7 +32,7 @@ void GamelogStartAction(GamelogActionType at);
 void GamelogStopAction();
 void GamelogStopAnyAction();
 
-void GamelogFree(struct LoggedAction *gamelog_action, uint gamelog_actions);
+void GamelogFree(std::vector<LoggedAction> &gamelog_actions);
 void GamelogReset();
 
 /**
@@ -48,19 +51,20 @@ bool GamelogTestEmergency();
 void GamelogRevision();
 void GamelogMode();
 void GamelogOldver();
-void GamelogSetting(const char *name, int32 oldval, int32 newval);
+void GamelogSetting(const char *name, int32_t oldval, int32_t newval);
 
 void GamelogGRFUpdate(const GRFConfig *oldg, const GRFConfig *newg);
 void GamelogGRFAddList(const GRFConfig *newg);
-void GamelogGRFRemove(uint32 grfid);
+void GamelogGRFRemove(uint32_t grfid);
 void GamelogGRFAdd(const GRFConfig *newg);
 void GamelogGRFCompatible(const GRFIdentifier *newg);
 
 void GamelogTestRevision();
 void GamelogTestMode();
 
-bool GamelogGRFBugReverse(uint32 grfid, uint16 internal_id);
+bool GamelogGRFBugReverse(uint32_t grfid, uint16_t internal_id);
 
-void GamelogInfo(struct LoggedAction *gamelog_action, uint gamelog_actions, uint32 *last_ottd_rev, byte *ever_modified, bool *removed_newgrfs);
+void GamelogInfo(const std::vector<LoggedAction> &gamelog_actions, uint32_t *last_ottd_rev, byte *ever_modified, bool *removed_newgrfs);
+const char *GamelogGetLastRevision(const std::vector<LoggedAction> &gamelog_actions);
 
 #endif /* GAMELOG_H */

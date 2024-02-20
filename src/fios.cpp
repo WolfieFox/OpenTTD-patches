@@ -20,9 +20,10 @@
 #include "string_func_extra.h"
 #include "strings_func.h"
 #include "tar_type.h"
+#include "core/container_func.hpp"
 #include <sys/stat.h>
 #include <functional>
-#include "3rdparty/optional/ottd_optional.h"
+#include <optional>
 
 #ifndef _WIN32
 # include <unistd.h>
@@ -36,12 +37,11 @@
 static std::string *_fios_path = nullptr;
 SortingBits _savegame_sort_order = SORT_BY_DATE | SORT_DESCENDING;
 
-/* OS-specific functions are taken from their respective files (win32/unix/os2 .c) */
+/* OS-specific functions are taken from their respective files (win32/unix .c) */
 extern bool FiosIsRoot(const char *path);
 extern bool FiosIsValidFile(const char *path, const struct dirent *ent, struct stat *sb);
 extern bool FiosIsHiddenFile(const struct dirent *ent);
 extern void FiosGetDrives(FileList &file_list);
-extern bool FiosGetDiskFreeSpace(const char *path, uint64 *tot);
 
 /* get the name of an oldstyle savegame */
 extern void GetOldSaveGameName(const std::string &file, char *title, const char *last);
@@ -56,9 +56,9 @@ bool FiosItem::operator< (const FiosItem &other) const
 	int r = false;
 
 	if ((_savegame_sort_order & SORT_BY_NAME) == 0 && (*this).mtime != other.mtime) {
-		r = (*this).mtime - other.mtime;
+		r = this->mtime - other.mtime;
 	} else {
-		r = strnatcmp((*this).title, other.title);
+		r = StrNaturalCompare((*this).title, other.title);
 	}
 	if (r == 0) return false;
 	return (_savegame_sort_order & SORT_DESCENDING) ? r > 0 : r < 0;
@@ -68,8 +68,9 @@ bool FiosItem::operator< (const FiosItem &other) const
  * Construct a file list with the given kind of files, for the stated purpose.
  * @param abstract_filetype Kind of files to collect.
  * @param fop Purpose of the collection, either #SLO_LOAD or #SLO_SAVE.
+ * @param show_dirs Whether to show directories.
  */
-void FileList::BuildFileList(AbstractFileType abstract_filetype, SaveLoadOperation fop)
+void FileList::BuildFileList(AbstractFileType abstract_filetype, SaveLoadOperation fop, bool show_dirs)
 {
 	this->clear();
 
@@ -79,15 +80,15 @@ void FileList::BuildFileList(AbstractFileType abstract_filetype, SaveLoadOperati
 			break;
 
 		case FT_SAVEGAME:
-			FiosGetSavegameList(fop, *this);
+			FiosGetSavegameList(fop, show_dirs, *this);
 			break;
 
 		case FT_SCENARIO:
-			FiosGetScenarioList(fop, *this);
+			FiosGetScenarioList(fop, show_dirs, *this);
 			break;
 
 		case FT_HEIGHTMAP:
-			FiosGetHeightmapList(fop, *this);
+			FiosGetHeightmapList(fop, show_dirs, *this);
 			break;
 
 		default:
@@ -101,59 +102,54 @@ void FileList::BuildFileList(AbstractFileType abstract_filetype, SaveLoadOperati
  *             or a numbered entry into the filename list.
  * @return The information on the file, or \c nullptr if the file is not available.
  */
-const FiosItem *FileList::FindItem(const char *file)
+const FiosItem *FileList::FindItem(const std::string_view file)
 {
 	for (const auto &it : *this) {
 		const FiosItem *item = &it;
-		if (strcmp(file, item->name) == 0) return item;
-		if (strcmp(file, item->title) == 0) return item;
+		if (file == item->name) return item;
+		if (file == item->title) return item;
 	}
 
 	/* If no name matches, try to parse it as number */
 	char *endptr;
-	int i = strtol(file, &endptr, 10);
-	if (file == endptr || *endptr != '\0') i = -1;
+	int i = std::strtol(file.data(), &endptr, 10);
+	if (file.data() == endptr || *endptr != '\0') i = -1;
 
 	if (IsInsideMM(i, 0, this->size())) return &this->at(i);
 
 	/* As a last effort assume it is an OpenTTD savegame and
 	 * that the ".sav" part was not given. */
-	char long_file[MAX_PATH];
-	seprintf(long_file, lastof(long_file), "%s.sav", file);
+	std::string long_file(file);
+	long_file += ".sav";
 	for (const auto &it : *this) {
 		const FiosItem *item = &it;
-		if (strcmp(long_file, item->name) == 0) return item;
-		if (strcmp(long_file, item->title) == 0) return item;
+		if (long_file == item->name) return item;
+		if (long_file == item->title) return item;
 	}
 
 	return nullptr;
 }
 
 /**
- * Get descriptive texts. Returns the path and free space
- * left on the device
- * @param path string describing the path
- * @param total_free total free space in megabytes, optional (can be nullptr)
- * @return StringID describing the path (free space or failure)
+ * Get the current path/working directory.
  */
-StringID FiosGetDescText(const char **path, uint64 *total_free)
+std::string FiosGetCurrentPath()
 {
-	*path = _fios_path->c_str();
-	return FiosGetDiskFreeSpace(*path, total_free) ? STR_SAVELOAD_BYTES_FREE : STR_ERROR_UNABLE_TO_READ_DRIVE;
+	return *_fios_path;
 }
 
 /**
  * Browse to a new path based on the passed \a item, starting at #_fios_path.
  * @param *item Item telling us what to do.
- * @return A filename w/path if we reached a file, otherwise \c nullptr.
+ * @return \c true when the path got changed.
  */
-const char *FiosBrowseTo(const FiosItem *item)
+bool FiosBrowseTo(const FiosItem *item)
 {
 	switch (item->type) {
 		case FIOS_TYPE_DRIVE:
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32)
 			assert(_fios_path != nullptr);
-			*_fios_path = std::string{ item->title[0] } + ":" PATHSEP;
+			*_fios_path = std::string{ item->title, 0, 1 } + ":" PATHSEP;
 #endif
 			break;
 
@@ -191,10 +187,10 @@ const char *FiosBrowseTo(const FiosItem *item)
 		case FIOS_TYPE_OLD_SCENARIO:
 		case FIOS_TYPE_PNG:
 		case FIOS_TYPE_BMP:
-			return item->name;
+			return false;
 	}
 
-	return nullptr;
+	return true;
 }
 
 /**
@@ -216,7 +212,7 @@ static std::string FiosMakeFilename(const std::string *path, const char *name, c
 
 	/* Don't append the extension if it is already there */
 	const char *period = strrchr(name, '.');
-	if (period != nullptr && strcasecmp(period, ext) == 0) ext = "";
+	if (period != nullptr && StrEqualsIgnoreCase(period, ext)) ext = "";
 
 	return buf + PATHSEP + name + ext;
 }
@@ -285,17 +281,16 @@ public:
 /**
  * Try to add a fios item set with the given filename.
  * @param filename        the full path to the file to read
- * @param basepath_length amount of characters to chop of before to get a relative filename
  * @return true if the file is added.
  */
-bool FiosFileScanner::AddFile(const std::string &filename, size_t basepath_length, const std::string &tar_filename)
+bool FiosFileScanner::AddFile(const std::string &filename, size_t, const std::string &)
 {
 	auto sep = filename.rfind('.');
 	if (sep == std::string::npos) return false;
 	std::string ext = filename.substr(sep);
 
 	char fios_title[64];
-	fios_title[0] = '\0'; // reset the title;
+	fios_title[0] = '\0'; // reset the title
 
 	FiosType type = this->callback_proc(this->fop, filename, ext.c_str(), fios_title, lastof(fios_title));
 	if (type == FIOS_TYPE_INVALID) return false;
@@ -334,7 +329,7 @@ bool FiosFileScanner::AddFile(const std::string &filename, size_t basepath_lengt
 	}
 
 	fios->type = type;
-	strecpy(fios->name, filename.c_str(), lastof(fios->name));
+	fios->name = filename;
 
 	/* If the file doesn't have a title, use its filename */
 	const char *t = fios_title;
@@ -342,8 +337,7 @@ bool FiosFileScanner::AddFile(const std::string &filename, size_t basepath_lengt
 		auto ps = filename.rfind(PATHSEPCHAR);
 		t = filename.c_str() + (ps == std::string::npos ? 0 : ps + 1);
 	}
-	strecpy(fios->title, t, lastof(fios->title));
-	StrMakeValidInPlace(fios->title, lastof(fios->title));
+	fios->title = StrMakeValid(t);
 
 	return true;
 }
@@ -352,57 +346,55 @@ bool FiosFileScanner::AddFile(const std::string &filename, size_t basepath_lengt
 /**
  * Fill the list of the files in a directory, according to some arbitrary rule.
  * @param fop Purpose of collecting the list.
+ * @param show_dirs Whether to list directories.
  * @param callback_proc The function that is called where you need to do the filtering.
  * @param subdir The directory from where to start (global) searching.
  * @param file_list Destination of the found files.
  */
-static void FiosGetFileList(SaveLoadOperation fop, fios_getlist_callback_proc *callback_proc, Subdirectory subdir, FileList &file_list)
+static void FiosGetFileList(SaveLoadOperation fop, bool show_dirs, fios_getlist_callback_proc *callback_proc, Subdirectory subdir, FileList &file_list)
 {
 	struct stat sb;
 	struct dirent *dirent;
 	DIR *dir;
 	FiosItem *fios;
 	size_t sort_start;
-	char d_name[sizeof(fios->name)];
 
 	file_list.clear();
 
 	assert(_fios_path != nullptr);
 
 	/* A parent directory link exists if we are not in the root directory */
-	if (!FiosIsRoot(_fios_path->c_str())) {
+	if (show_dirs && !FiosIsRoot(_fios_path->c_str())) {
 		fios = &file_list.emplace_back();
 		fios->type = FIOS_TYPE_PARENT;
 		fios->mtime = 0;
-		strecpy(fios->name, "..", lastof(fios->name));
+		fios->name = "..";
 		SetDParamStr(0, "..");
-		GetString(fios->title, STR_SAVELOAD_PARENT_DIRECTORY, lastof(fios->title));
+		fios->title = GetString(STR_SAVELOAD_PARENT_DIRECTORY);
 	}
 
 	/* Show subdirectories */
-	if ((dir = ttd_opendir(_fios_path->c_str())) != nullptr) {
+	if (show_dirs && (dir = ttd_opendir(_fios_path->c_str())) != nullptr) {
 		while ((dirent = readdir(dir)) != nullptr) {
-			strecpy(d_name, FS2OTTD(dirent->d_name).c_str(), lastof(d_name));
+			std::string d_name = FS2OTTD(dirent->d_name);
 
 			/* found file must be directory, but not '.' or '..' */
 			if (FiosIsValidFile(_fios_path->c_str(), dirent, &sb) && S_ISDIR(sb.st_mode) &&
-					(!FiosIsHiddenFile(dirent) || strncasecmp(d_name, PERSONAL_DIR, strlen(d_name)) == 0) &&
-					strcmp(d_name, ".") != 0 && strcmp(d_name, "..") != 0) {
+					(!FiosIsHiddenFile(dirent) || StrStartsWithIgnoreCase(PERSONAL_DIR, d_name)) &&
+					d_name != "." && d_name != "..") {
 				fios = &file_list.emplace_back();
 				fios->type = FIOS_TYPE_DIR;
 				fios->mtime = 0;
-				strecpy(fios->name, d_name, lastof(fios->name));
-				std::string dirname = std::string(d_name) + PATHSEP;
-				SetDParamStr(0, dirname);
-				GetString(fios->title, STR_SAVELOAD_DIRECTORY, lastof(fios->title));
-				StrMakeValidInPlace(fios->title, lastof(fios->title));
+				fios->name = d_name;
+				SetDParamStr(0, fios->name + PATHSEP);
+				fios->title = GetString(STR_SAVELOAD_DIRECTORY);
 			}
 		}
 		closedir(dir);
 	}
 
 	/* Sort the subdirs always by name, ascending, remember user-sorting order */
-	{
+	if (show_dirs) {
 		SortingBits order = _savegame_sort_order;
 		_savegame_sort_order = SORT_BY_NAME | SORT_ASCENDING;
 		std::sort(file_list.begin(), file_list.end());
@@ -415,7 +407,7 @@ static void FiosGetFileList(SaveLoadOperation fop, fios_getlist_callback_proc *c
 	/* Show files */
 	FiosFileScanner scanner(fop, callback_proc, file_list);
 	if (subdir == NO_DIRECTORY) {
-		scanner.Scan(nullptr, _fios_path->c_str(), false);
+		scanner.Scan(nullptr, *_fios_path, false);
 	} else {
 		scanner.Scan(nullptr, subdir, true, true);
 	}
@@ -471,16 +463,16 @@ FiosType FiosGetSavegameListCallback(SaveLoadOperation fop, const std::string &f
 	 * .SV2 Transport Tycoon Deluxe (Patch) saved 2-player game */
 
 	/* Don't crash if we supply no extension */
-	if (ext == nullptr) return FIOS_TYPE_INVALID;
+	if (ext == nullptr) ext = "";
 
-	if (strcasecmp(ext, ".sav") == 0) {
+	if (StrEqualsIgnoreCase(ext, ".sav")) {
 		GetFileTitle(file, title, last, SAVE_DIR);
 		return FIOS_TYPE_FILE;
 	}
 
 	if (fop == SLO_LOAD) {
-		if (strcasecmp(ext, ".ss1") == 0 || strcasecmp(ext, ".sv1") == 0 ||
-				strcasecmp(ext, ".sv2") == 0) {
+		if (StrEqualsIgnoreCase(ext, ".ss1") || StrEqualsIgnoreCase(ext, ".sv1") ||
+				StrEqualsIgnoreCase(ext, ".sv2")) {
 			if (title != nullptr) GetOldSaveGameName(file, title, last);
 			return FIOS_TYPE_OLDFILE;
 		}
@@ -492,18 +484,19 @@ FiosType FiosGetSavegameListCallback(SaveLoadOperation fop, const std::string &f
 /**
  * Get a list of savegames.
  * @param fop Purpose of collecting the list.
+ * @param show_dirs Whether to show directories.
  * @param file_list Destination of the found files.
  * @see FiosGetFileList
  */
-void FiosGetSavegameList(SaveLoadOperation fop, FileList &file_list)
+void FiosGetSavegameList(SaveLoadOperation fop, bool show_dirs, FileList &file_list)
 {
-	static opt::optional<std::string> fios_save_path;
+	static std::optional<std::string> fios_save_path;
 
 	if (!fios_save_path) fios_save_path = FioFindDirectory(SAVE_DIR);
 
 	_fios_path = &(*fios_save_path);
 
-	FiosGetFileList(fop, &FiosGetSavegameListCallback, NO_DIRECTORY, file_list);
+	FiosGetFileList(fop, show_dirs, &FiosGetSavegameListCallback, NO_DIRECTORY, file_list);
 }
 
 /**
@@ -517,19 +510,19 @@ void FiosGetSavegameList(SaveLoadOperation fop, FileList &file_list)
  * @see FiosGetFileList
  * @see FiosGetScenarioList
  */
-static FiosType FiosGetScenarioListCallback(SaveLoadOperation fop, const std::string &file, const char *ext, char *title, const char *last)
+FiosType FiosGetScenarioListCallback(SaveLoadOperation fop, const std::string &file, const char *ext, char *title, const char *last)
 {
 	/* Show scenario files
 	 * .SCN OpenTTD style scenario file
 	 * .SV0 Transport Tycoon Deluxe (Patch) scenario
 	 * .SS0 Transport Tycoon Deluxe preset scenario */
-	if (strcasecmp(ext, ".scn") == 0) {
+	if (StrEqualsIgnoreCase(ext, ".scn")) {
 		GetFileTitle(file, title, last, SCENARIO_DIR);
 		return FIOS_TYPE_SCENARIO;
 	}
 
 	if (fop == SLO_LOAD) {
-		if (strcasecmp(ext, ".sv0") == 0 || strcasecmp(ext, ".ss0") == 0 ) {
+		if (StrEqualsIgnoreCase(ext, ".sv0") || StrEqualsIgnoreCase(ext, ".ss0")) {
 			GetOldSaveGameName(file, title, last);
 			return FIOS_TYPE_OLD_SCENARIO;
 		}
@@ -541,12 +534,13 @@ static FiosType FiosGetScenarioListCallback(SaveLoadOperation fop, const std::st
 /**
  * Get a list of scenarios.
  * @param fop Purpose of collecting the list.
+ * @param show_dirs Whether to show directories.
  * @param file_list Destination of the found files.
  * @see FiosGetFileList
  */
-void FiosGetScenarioList(SaveLoadOperation fop, FileList &file_list)
+void FiosGetScenarioList(SaveLoadOperation fop, bool show_dirs, FileList &file_list)
 {
-	static opt::optional<std::string> fios_scn_path;
+	static std::optional<std::string> fios_scn_path;
 
 	/* Copy the default path on first run or on 'New Game' */
 	if (!fios_scn_path) fios_scn_path = FioFindDirectory(SCENARIO_DIR);
@@ -555,10 +549,10 @@ void FiosGetScenarioList(SaveLoadOperation fop, FileList &file_list)
 
 	std::string base_path = FioFindDirectory(SCENARIO_DIR);
 	Subdirectory subdir = (fop == SLO_LOAD && base_path == *_fios_path) ? SCENARIO_DIR : NO_DIRECTORY;
-	FiosGetFileList(fop, &FiosGetScenarioListCallback, subdir, file_list);
+	FiosGetFileList(fop, show_dirs, &FiosGetScenarioListCallback, subdir, file_list);
 }
 
-static FiosType FiosGetHeightmapListCallback(SaveLoadOperation fop, const std::string &file, const char *ext, char *title, const char *last)
+FiosType FiosGetHeightmapListCallback(SaveLoadOperation fop, const std::string &file, const char *ext, char *title, const char *last)
 {
 	/* Show heightmap files
 	 * .PNG PNG Based heightmap files
@@ -568,10 +562,10 @@ static FiosType FiosGetHeightmapListCallback(SaveLoadOperation fop, const std::s
 	FiosType type = FIOS_TYPE_INVALID;
 
 #ifdef WITH_PNG
-	if (strcasecmp(ext, ".png") == 0) type = FIOS_TYPE_PNG;
+	if (StrEqualsIgnoreCase(ext, ".png")) type = FIOS_TYPE_PNG;
 #endif /* WITH_PNG */
 
-	if (strcasecmp(ext, ".bmp") == 0) type = FIOS_TYPE_BMP;
+	if (StrEqualsIgnoreCase(ext, ".bmp")) type = FIOS_TYPE_BMP;
 
 	if (type == FIOS_TYPE_INVALID) return FIOS_TYPE_INVALID;
 
@@ -603,11 +597,12 @@ static FiosType FiosGetHeightmapListCallback(SaveLoadOperation fop, const std::s
 /**
  * Get a list of heightmaps.
  * @param fop Purpose of collecting the list.
+ * @param show_dirs Whether to show directories.
  * @param file_list Destination of the found files.
  */
-void FiosGetHeightmapList(SaveLoadOperation fop, FileList &file_list)
+void FiosGetHeightmapList(SaveLoadOperation fop, bool show_dirs, FileList &file_list)
 {
-	static opt::optional<std::string> fios_hmap_path;
+	static std::optional<std::string> fios_hmap_path;
 
 	if (!fios_hmap_path) fios_hmap_path = FioFindDirectory(HEIGHTMAP_DIR);
 
@@ -615,7 +610,7 @@ void FiosGetHeightmapList(SaveLoadOperation fop, FileList &file_list)
 
 	std::string base_path = FioFindDirectory(HEIGHTMAP_DIR);
 	Subdirectory subdir = base_path == *_fios_path ? HEIGHTMAP_DIR : NO_DIRECTORY;
-	FiosGetFileList(fop, &FiosGetHeightmapListCallback, subdir, file_list);
+	FiosGetFileList(fop, show_dirs, &FiosGetHeightmapListCallback, subdir, file_list);
 }
 
 /**
@@ -624,7 +619,7 @@ void FiosGetHeightmapList(SaveLoadOperation fop, FileList &file_list)
  */
 const char *FiosGetScreenshotDir()
 {
-	static opt::optional<std::string> fios_screenshot_path;
+	static std::optional<std::string> fios_screenshot_path;
 
 	if (!fios_screenshot_path) fios_screenshot_path = FioFindDirectory(SCREENSHOT_DIR);
 
@@ -633,14 +628,13 @@ const char *FiosGetScreenshotDir()
 
 /** Basic data to distinguish a scenario. Used in the server list window */
 struct ScenarioIdentifier {
-	uint32 scenid;           ///< ID for the scenario (generated by content).
-	uint8 md5sum[16];        ///< MD5 checksum of file.
-	char filename[MAX_PATH]; ///< filename of the file.
+	uint32_t scenid;           ///< ID for the scenario (generated by content).
+	MD5Hash md5sum;          ///< MD5 checksum of file.
+	std::string filename;    ///< filename of the file.
 
 	bool operator == (const ScenarioIdentifier &other) const
 	{
-		return this->scenid == other.scenid &&
-				memcmp(this->md5sum, other.md5sum, sizeof(this->md5sum)) == 0;
+		return this->scenid == other.scenid && this->md5sum == other.md5sum;
 	}
 
 	bool operator != (const ScenarioIdentifier &other) const
@@ -670,7 +664,7 @@ public:
 		this->scanned = true;
 	}
 
-	bool AddFile(const std::string &filename, size_t basepath_length, const std::string &tar_filename) override
+	bool AddFile(const std::string &filename, size_t, const std::string &) override
 	{
 		FILE *f = FioFOpenFile(filename, "r", SCENARIO_DIR);
 		if (f == nullptr) return false;
@@ -679,10 +673,10 @@ public:
 		int fret = fscanf(f, "%u", &id.scenid);
 		FioFCloseFile(f);
 		if (fret != 1) return false;
-		strecpy(id.filename, filename.c_str(), lastof(id.filename));
+		id.filename = filename;
 
 		Md5 checksum;
-		uint8 buffer[1024];
+		uint8_t buffer[1024];
 		size_t len, size;
 
 		/* open the scenario file, but first get the name.
@@ -719,9 +713,9 @@ const char *FindScenario(const ContentInfo *ci, bool md5sum)
 	_scanner.Scan(false);
 
 	for (ScenarioIdentifier &id : _scanner) {
-		if (md5sum ? (memcmp(id.md5sum, ci->md5sum, sizeof(id.md5sum)) == 0)
+		if (md5sum ? (id.md5sum == ci->md5sum)
 		           : (id.scenid == ci->unique_id)) {
-			return id.filename;
+			return id.filename.c_str();
 		}
 	}
 
@@ -750,17 +744,17 @@ void ScanScenarios()
 /**
  * Constructs FiosNumberedSaveName. Initial number is the most recent save, or -1 if not found.
  * @param prefix The prefix to use to generate a filename.
-*/
+ */
 FiosNumberedSaveName::FiosNumberedSaveName(const std::string &prefix) : prefix(prefix), number(-1)
 {
-	static opt::optional<std::string> _autosave_path;
+	static std::optional<std::string> _autosave_path;
 	if (!_autosave_path) _autosave_path = FioFindDirectory(AUTOSAVE_DIR);
 
 	static std::string _prefix; ///< Static as the lambda needs access to it.
 
 	/* Callback for FiosFileScanner. */
 	static fios_getlist_callback_proc *proc = [](SaveLoadOperation fop, const std::string &file, const char *ext, char *title, const char *last) {
-		if (strcasecmp(ext, ".sav") == 0 && StrStartsWith(file, _prefix)) return FIOS_TYPE_FILE;
+		if (StrEqualsIgnoreCase(ext, ".sav") && file.starts_with(_prefix)) return FIOS_TYPE_FILE;
 		return FIOS_TYPE_INVALID;
 	};
 
@@ -787,10 +781,19 @@ FiosNumberedSaveName::FiosNumberedSaveName(const std::string &prefix) : prefix(p
 /**
  * Generate a savegame name and number according to _settings_client.gui.max_num_autosaves.
  * @return A filename in format "<prefix><number>.sav".
-*/
+ */
 std::string FiosNumberedSaveName::Filename()
 {
-	if (++this->number >= _settings_client.gui.max_num_autosaves) this->number = 0;
+	return this->FilenameUsingMaxSaves(_settings_client.gui.max_num_autosaves);
+}
+
+/**
+ * Generate a savegame name and number according to max_saves.
+ * @return A filename in format "<prefix><number>.sav".
+*/
+std::string FiosNumberedSaveName::FilenameUsingMaxSaves(int max_saves)
+{
+	if (++this->number >= max_saves) this->number = 0;
 	return this->FilenameUsingNumber(this->number, "");
 }
 
@@ -802,7 +805,7 @@ std::string FiosNumberedSaveName::FilenameUsingNumber(int num, const char *suffi
 /**
  * Generate an extension for a savegame name.
  * @return An extension in format "-<prefix>.sav".
-*/
+ */
 std::string FiosNumberedSaveName::Extension()
 {
 	return stdstr_fmt("-%s.sav", this->prefix.c_str());

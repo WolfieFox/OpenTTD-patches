@@ -24,7 +24,6 @@
 
 #include "../../openttd.h"
 #include "../../debug.h"
-#include "../../rev.h"
 #include "cocoa_v.h"
 #include "cocoa_wnd.h"
 #include "../../settings_type.h"
@@ -33,6 +32,7 @@
 #include "../../window_func.h"
 #include "../../window_gui.h"
 #include "../../spritecache.h"
+#include "../../textbuf_type.h"
 #include "../../toolbar_gui.h"
 #include <array>
 
@@ -109,7 +109,7 @@ static NSUInteger CountUtf16Units(const char *from, const char *to)
 	NSUInteger i = 0;
 
 	while (from < to) {
-		WChar c;
+		char32_t c;
 		size_t len = Utf8Decode(&c, from);
 		i += len < 4 ? 1 : 2; // Watch for surrogate pairs.
 		from += len;
@@ -127,7 +127,7 @@ static NSUInteger CountUtf16Units(const char *from, const char *to)
 static const char *Utf8AdvanceByUtf16Units(const char *str, NSUInteger count)
 {
 	for (NSUInteger i = 0; i < count && *str != '\0'; ) {
-		WChar c;
+		char32_t c;
 		size_t len = Utf8Decode(&c, str);
 		i += len < 4 ? 1 : 2; // Watch for surrogates.
 		str += len;
@@ -141,9 +141,9 @@ static const char *Utf8AdvanceByUtf16Units(const char *str, NSUInteger count)
  * @param s String to convert.
  * @return Vector of UTF-32 characters.
  */
-static std::vector<WChar> NSStringToUTF32(NSString *s)
+static std::vector<char32_t> NSStringToUTF32(NSString *s)
 {
-	std::vector<WChar> unicode_str;
+	std::vector<char32_t> unicode_str;
 
 	unichar lead = 0;
 	for (NSUInteger i = 0; i < s.length; i++) {
@@ -164,7 +164,7 @@ static std::vector<WChar> NSStringToUTF32(NSString *s)
 #ifdef HAVE_TOUCHBAR_SUPPORT
 static void CGDataFreeCallback(void *, const void *data, size_t)
 {
-	delete[] (const uint32 *)data;
+	delete[] (const uint32_t *)data;
 }
 
 /**
@@ -179,7 +179,7 @@ static NSImage *NSImageFromSprite(SpriteID sprite_id, ZoomLevel zoom)
 
 	/* Fetch the sprite and create a new bitmap */
 	Dimension dim = GetSpriteSize(sprite_id, nullptr, zoom);
-	std::unique_ptr<uint32[]> buffer = DrawSpriteToRgbaBuffer(sprite_id, zoom);
+	std::unique_ptr<uint32_t[]> buffer = DrawSpriteToRgbaBuffer(sprite_id, zoom);
 	if (!buffer) return nullptr; // Failed to blit sprite for some reason.
 
 	CFAutoRelease<CGDataProvider> data(CGDataProviderCreateWithData(nullptr, buffer.release(), dim.width * dim.height * 4, &CGDataFreeCallback));
@@ -459,7 +459,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 
 		[ self setContentMinSize:NSMakeSize(64.0f, 64.0f) ];
 
-		std::string caption = std::string{"OpenTTD "} + _openttd_revision;
+		std::string caption = VideoDriver::GetCaption();
 		NSString *nsscaption = [ [ NSString alloc ] initWithUTF8String:caption.c_str() ];
 		[ self setTitle:nsscaption ];
 		[ self setMiniwindowTitle:nsscaption ];
@@ -661,7 +661,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 		_cursor.UpdateCursorPositionRelative(event.deltaX * self.getContentsScale, event.deltaY * self.getContentsScale);
 	} else {
 		NSPoint pt = [ self mousePositionFromEvent:event ];
-		_cursor.UpdateCursorPosition(pt.x, pt.y, false);
+		_cursor.UpdateCursorPosition(pt.x, pt.y);
 	}
 
 	HandleMouseEvents();
@@ -678,7 +678,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 
 - (BOOL)emulateRightButton:(NSEvent *)event
 {
-	uint32 keymask = 0;
+	uint32_t keymask = 0;
 	if (_settings_client.gui.right_mouse_btn_emulation == RMBE_COMMAND) keymask |= NSEventModifierFlagCommand;
 	if (_settings_client.gui.right_mouse_btn_emulation == RMBE_CONTROL) keymask |= NSEventModifierFlagControl;
 
@@ -784,7 +784,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 }
 
 
-- (BOOL)internalHandleKeycode:(unsigned short)keycode unicode:(WChar)unicode pressed:(BOOL)down modifiers:(NSUInteger)modifiers
+- (BOOL)internalHandleKeycode:(unsigned short)keycode unicode:(char32_t)unicode pressed:(BOOL)down modifiers:(NSUInteger)modifiers
 {
 	switch (keycode) {
 		case QZ_UP:    SB(_dirkeys, 1, 1, down); break;
@@ -817,7 +817,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 	if (down) {
 		/* Map keycode to OTTD code. */
 		auto vk = std::find_if(std::begin(_vk_mapping), std::end(_vk_mapping), [=](const CocoaVkMapping &m) { return m.vk_from == keycode; });
-		uint32 pressed_key = vk != std::end(_vk_mapping) ? vk->map_to : 0;
+		uint32_t pressed_key = vk != std::end(_vk_mapping) ? vk->map_to : 0;
 
 		if (modifiers & NSEventModifierFlagShift)   pressed_key |= WKC_SHIFT;
 		if (modifiers & NSEventModifierFlagControl) pressed_key |= (_settings_client.gui.right_mouse_btn_emulation != RMBE_CONTROL ? WKC_CTRL : WKC_META);
@@ -865,7 +865,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 	}
 
 	/* Convert UTF-16 characters to UCS-4 chars. */
-	std::vector<WChar> unicode_str = NSStringToUTF32([ event characters ]);
+	std::vector<char32_t> unicode_str = NSStringToUTF32([ event characters ]);
 	if (unicode_str.empty()) unicode_str.push_back(0);
 
 	if (EditBoxInGlobalFocus()) {
@@ -894,7 +894,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 	}
 
 	/* Convert UTF-16 characters to UCS-4 chars. */
-	std::vector<WChar> unicode_str = NSStringToUTF32([ event characters ]);
+	std::vector<char32_t> unicode_str = NSStringToUTF32([ event characters ]);
 	if (unicode_str.empty()) unicode_str.push_back(0);
 
 	[ self internalHandleKeycode:event.keyCode unicode:unicode_str[0] pressed:NO modifiers:event.modifierFlags ];
@@ -932,16 +932,16 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 
 	NSString *s = [ aString isKindOfClass:[ NSAttributedString class ] ] ? [ aString string ] : (NSString *)aString;
 
-	const char *insert_point = NULL;
-	const char *replace_range = NULL;
+	const char *insert_point = nullptr;
+	const char *replace_range = nullptr;
 	if (replacementRange.location != NSNotFound) {
 		/* Calculate the part to be replaced. */
-		insert_point = Utf8AdvanceByUtf16Units(_focused_window->GetFocusedText(), replacementRange.location);
+		insert_point = Utf8AdvanceByUtf16Units(_focused_window->GetFocusedTextbuf()->GetText(), replacementRange.location);
 		replace_range = Utf8AdvanceByUtf16Units(insert_point, replacementRange.length);
 	}
 
-	HandleTextInput(NULL, true);
-	HandleTextInput([ s UTF8String ], false, NULL, insert_point, replace_range);
+	HandleTextInput(nullptr, true);
+	HandleTextInput([ s UTF8String ], false, nullptr, insert_point, replace_range);
 }
 
 /** Insert the given text at the caret. */
@@ -958,13 +958,13 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 	NSString *s = [ aString isKindOfClass:[ NSAttributedString class ] ] ? [ aString string ] : (NSString *)aString;
 
 	const char *utf8 = [ s UTF8String ];
-	if (utf8 != NULL) {
-		const char *insert_point = NULL;
-		const char *replace_range = NULL;
+	if (utf8 != nullptr) {
+		const char *insert_point = nullptr;
+		const char *replace_range = nullptr;
 		if (replacementRange.location != NSNotFound) {
 			/* Calculate the part to be replaced. */
 			NSRange marked = [ self markedRange ];
-			insert_point = Utf8AdvanceByUtf16Units(_focused_window->GetFocusedText(), replacementRange.location + (marked.location != NSNotFound ? marked.location : 0u));
+			insert_point = Utf8AdvanceByUtf16Units(_focused_window->GetFocusedTextbuf()->GetText(), replacementRange.location + (marked.location != NSNotFound ? marked.location : 0u));
 			replace_range = Utf8AdvanceByUtf16Units(insert_point, replacementRange.length);
 		}
 
@@ -992,7 +992,9 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 {
 	if (!EditBoxInGlobalFocus()) return NSMakeRange(NSNotFound, 0);
 
-	NSUInteger start = CountUtf16Units(_focused_window->GetFocusedText(), _focused_window->GetCaret());
+	const Textbuf *text_buf = _focused_window->GetFocusedTextbuf();
+	const char *text = text_buf->GetText();
+	NSUInteger start = CountUtf16Units(text, text + text_buf->caretpos);
 	return NSMakeRange(start, 0);
 }
 
@@ -1001,11 +1003,12 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 {
 	if (!EditBoxInGlobalFocus()) return NSMakeRange(NSNotFound, 0);
 
-	size_t mark_len;
-	const char *mark = _focused_window->GetMarkedText(&mark_len);
-	if (mark != nullptr) {
-		NSUInteger start = CountUtf16Units(_focused_window->GetFocusedText(), mark);
-		NSUInteger len = CountUtf16Units(mark, mark + mark_len);
+	const Textbuf *text_buf = _focused_window->GetFocusedTextbuf();
+	if (text_buf->markend != 0) {
+		const char *text = text_buf->GetText();
+		const char *mark = text + text_buf->markpos;
+		NSUInteger start = CountUtf16Units(text, mark);
+		NSUInteger len = CountUtf16Units(mark, text + text_buf->markend);
 
 		return NSMakeRange(start, len);
 	}
@@ -1018,8 +1021,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 {
 	if (!EditBoxInGlobalFocus()) return NO;
 
-	size_t len;
-	return _focused_window->GetMarkedText(&len) != nullptr;
+	return _focused_window->GetFocusedTextbuf()->markend != 0;
 }
 
 /** Get a string corresponding to the given range. */
@@ -1027,7 +1029,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 {
 	if (!EditBoxInGlobalFocus()) return nil;
 
-	NSString *s = [ NSString stringWithUTF8String:_focused_window->GetFocusedText() ];
+	NSString *s = [ NSString stringWithUTF8String:_focused_window->GetFocusedTextbuf()->GetText() ];
 	NSRange valid_range = NSIntersectionRange(NSMakeRange(0, [ s length ]), theRange);
 
 	if (actualRange != nullptr) *actualRange = valid_range;
@@ -1047,7 +1049,7 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 {
 	if (!EditBoxInGlobalFocus()) return [ [ [ NSAttributedString alloc ] initWithString:@"" ] autorelease ];
 
-	return [ [ [ NSAttributedString alloc ] initWithString:[ NSString stringWithUTF8String:_focused_window->GetFocusedText() ] ] autorelease ];
+	return [ [ [ NSAttributedString alloc ] initWithString:[ NSString stringWithUTF8String:_focused_window->GetFocusedTextbuf()->GetText() ] ] autorelease ];
 }
 
 /** Get the character that is rendered at the given point. */
@@ -1059,10 +1061,11 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 
 	Point pt = { (int)view_pt.x, (int)[ self frame ].size.height - (int)view_pt.y };
 
-	const char *ch = _focused_window->GetTextCharacterAtPosition(pt);
-	if (ch == nullptr) return NSNotFound;
+	auto index = _focused_window->GetTextCharacterAtPosition(pt);
+	if (index == -1) return NSNotFound;
 
-	return CountUtf16Units(_focused_window->GetFocusedText(), ch);
+	auto text = _focused_window->GetFocusedTextbuf()->GetText();
+	return CountUtf16Units(text, text + index);
 }
 
 /** Get the bounding rect for the given range. */
@@ -1070,9 +1073,10 @@ void CocoaDialog(const char *title, const char *message, const char *buttonLabel
 {
 	if (!EditBoxInGlobalFocus()) return NSMakeRect(0, 0, 0, 0);
 
+	const char *focused_text = _focused_window->GetFocusedTextbuf()->GetText();
 	/* Convert range to UTF-8 string pointers. */
-	const char *start = Utf8AdvanceByUtf16Units(_focused_window->GetFocusedText(), aRange.location);
-	const char *end = aRange.length != 0 ? Utf8AdvanceByUtf16Units(_focused_window->GetFocusedText(), aRange.location + aRange.length) : start;
+	const char *start = Utf8AdvanceByUtf16Units(focused_text, aRange.location);
+	const char *end = aRange.length != 0 ? Utf8AdvanceByUtf16Units(focused_text, aRange.location + aRange.length) : start;
 
 	/* Get the bounding rect for the text range.*/
 	Rect r = _focused_window->GetTextBoundingRect(start, end);

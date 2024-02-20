@@ -17,6 +17,7 @@ uint GetBestTunnelBridgeSignalSimulationSpacing(TileIndex begin, TileIndex end, 
 uint GetTunnelBridgeSignalSimulationSignalCount(TileIndex begin, TileIndex end);
 
 void MarkTunnelBridgeSignalDirty(TileIndex tile, bool exit);
+int GetTunnelBridgeSignalZ(TileIndex tile, bool exit);
 
 /**
  * Calculates the length of a tunnel or a bridge (without end tiles)
@@ -24,7 +25,7 @@ void MarkTunnelBridgeSignalDirty(TileIndex tile, bool exit);
  * @param end   The end of the tunnel or bridge.
  * @return length of bridge/tunnel middle
  */
-static inline uint GetTunnelBridgeLength(TileIndex begin, TileIndex end)
+inline uint GetTunnelBridgeLength(TileIndex begin, TileIndex end)
 {
 	int x1 = TileX(begin);
 	int y1 = TileY(begin);
@@ -40,7 +41,7 @@ static inline uint GetTunnelBridgeLength(TileIndex begin, TileIndex end)
  * @param end   The end of the tunnel or bridge.
  * @param owner The new owner to set
  */
-static inline void SetTunnelBridgeOwner(TileIndex begin, TileIndex end, Owner owner)
+inline void SetTunnelBridgeOwner(TileIndex begin, TileIndex end, Owner owner)
 {
 	SetTileOwner(begin, owner);
 	SetTileOwner(end, owner);

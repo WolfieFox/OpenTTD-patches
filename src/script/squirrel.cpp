@@ -34,7 +34,7 @@
  * If changing the call paths into the scripting engine, define this symbol to enable full debugging of allocations.
  * This lets you track whether the allocator context is being switched correctly in all call paths.
 #define SCRIPT_DEBUG_ALLOCATIONS
-*/
+ */
 
 struct ScriptAllocator {
 	size_t allocated_size;   ///< Sum of allocated data size
@@ -177,7 +177,7 @@ struct ScriptAllocator {
 	~ScriptAllocator()
 	{
 #ifdef SCRIPT_DEBUG_ALLOCATIONS
-		assert(this->allocations.size() == 0);
+		assert(this->allocations.empty());
 #endif
 	}
 };
@@ -459,13 +459,12 @@ bool Squirrel::CallMethod(HSQOBJECT instance, const char *method_name, HSQOBJECT
 	return true;
 }
 
-bool Squirrel::CallStringMethodStrdup(HSQOBJECT instance, const char *method_name, const char **res, int suspend)
+bool Squirrel::CallStringMethod(HSQOBJECT instance, const char *method_name, std::string *res, int suspend)
 {
 	HSQOBJECT ret;
 	if (!this->CallMethod(instance, method_name, &ret, suspend)) return false;
 	if (ret._type != OT_STRING) return false;
-	*res = stredup(ObjectToString(&ret));
-	StrMakeValidInPlace(const_cast<char *>(*res));
+	*res = StrMakeValid(ObjectToString(&ret));
 	return true;
 }
 
@@ -487,7 +486,7 @@ bool Squirrel::CallBoolMethod(HSQOBJECT instance, const char *method_name, bool 
 	return true;
 }
 
-/* static */ bool Squirrel::CreateClassInstanceVM(HSQUIRRELVM vm, const char *class_name, void *real_instance, HSQOBJECT *instance, SQRELEASEHOOK release_hook, bool prepend_API_name)
+/* static */ bool Squirrel::CreateClassInstanceVM(HSQUIRRELVM vm, const std::string &class_name, void *real_instance, HSQOBJECT *instance, SQRELEASEHOOK release_hook, bool prepend_API_name)
 {
 	Squirrel *engine = (Squirrel *)sq_getforeignptr(vm);
 
@@ -497,24 +496,22 @@ bool Squirrel::CallBoolMethod(HSQOBJECT instance, const char *method_name, bool 
 	sq_pushroottable(vm);
 
 	if (prepend_API_name) {
-		size_t len = strlen(class_name) + strlen(engine->GetAPIName()) + 1;
-		char *class_name2 = (char *)alloca(len);
-		seprintf(class_name2, class_name2 + len - 1, "%s%s", engine->GetAPIName(), class_name);
-
-		sq_pushstring(vm, class_name2, -1);
+		std::string prepended_class_name = engine->GetAPIName();
+		prepended_class_name += class_name;
+		sq_pushstring(vm, prepended_class_name, -1);
 	} else {
 		sq_pushstring(vm, class_name, -1);
 	}
 
 	if (SQ_FAILED(sq_get(vm, -2))) {
-		DEBUG(misc, 0, "[squirrel] Failed to find class by the name '%s%s'", prepend_API_name ? engine->GetAPIName() : "", class_name);
+		DEBUG(misc, 0, "[squirrel] Failed to find class by the name '%s%s'", prepend_API_name ? engine->GetAPIName() : "", class_name.c_str());
 		sq_settop(vm, oldtop);
 		return false;
 	}
 
 	/* Create the instance */
 	if (SQ_FAILED(sq_createinstance(vm, -1))) {
-		DEBUG(misc, 0, "[squirrel] Failed to create instance for class '%s%s'", prepend_API_name ? engine->GetAPIName() : "", class_name);
+		DEBUG(misc, 0, "[squirrel] Failed to create instance for class '%s%s'", prepend_API_name ? engine->GetAPIName() : "", class_name.c_str());
 		sq_settop(vm, oldtop);
 		return false;
 	}
@@ -537,7 +534,7 @@ bool Squirrel::CallBoolMethod(HSQOBJECT instance, const char *method_name, bool 
 	return true;
 }
 
-bool Squirrel::CreateClassInstance(const char *class_name, void *real_instance, HSQOBJECT *instance)
+bool Squirrel::CreateClassInstance(const std::string &class_name, void *real_instance, HSQOBJECT *instance)
 {
 	ScriptAllocatorScope alloc_scope(this);
 	return Squirrel::CreateClassInstanceVM(this->vm, class_name, real_instance, instance, nullptr);
@@ -573,6 +570,10 @@ void Squirrel::Initialize()
 
 	sq_pushroottable(this->vm);
 	squirrel_register_global_std(this);
+
+	/* Set consts table as delegate of root table, so consts/enums defined via require() are accessible */
+	sq_pushconsttable(this->vm);
+	sq_setdelegate(this->vm, -2);
 }
 
 class SQFile {
@@ -597,14 +598,14 @@ public:
 	}
 };
 
-static WChar _io_file_lexfeed_ASCII(SQUserPointer file)
+static char32_t _io_file_lexfeed_ASCII(SQUserPointer file)
 {
 	unsigned char c;
 	if (((SQFile *)file)->Read(&c, sizeof(c), 1) > 0) return c;
 	return 0;
 }
 
-static WChar _io_file_lexfeed_UTF8(SQUserPointer file)
+static char32_t _io_file_lexfeed_UTF8(SQUserPointer file)
 {
 	char buffer[5];
 
@@ -617,25 +618,25 @@ static WChar _io_file_lexfeed_UTF8(SQUserPointer file)
 	if (len > 1 && ((SQFile *)file)->Read(buffer + 1, sizeof(buffer[0]), len - 1) != len - 1) return 0;
 
 	/* Convert the character, and when definitely invalid, bail out as well. */
-	WChar c;
+	char32_t c;
 	if (Utf8Decode(&c, buffer) != len) return -1;
 
 	return c;
 }
 
-static WChar _io_file_lexfeed_UCS2_no_swap(SQUserPointer file)
+static char32_t _io_file_lexfeed_UCS2_no_swap(SQUserPointer file)
 {
 	unsigned short c;
-	if (((SQFile *)file)->Read(&c, sizeof(c), 1) > 0) return (WChar)c;
+	if (((SQFile *)file)->Read(&c, sizeof(c), 1) > 0) return (char32_t)c;
 	return 0;
 }
 
-static WChar _io_file_lexfeed_UCS2_swap(SQUserPointer file)
+static char32_t _io_file_lexfeed_UCS2_swap(SQUserPointer file)
 {
 	unsigned short c;
 	if (((SQFile *)file)->Read(&c, sizeof(c), 1) > 0) {
 		c = ((c >> 8) & 0x00FF)| ((c << 8) & 0xFF00);
-		return (WChar)c;
+		return (char32_t)c;
 	}
 	return 0;
 }
@@ -647,7 +648,7 @@ static SQInteger _io_file_read(SQUserPointer file, SQUserPointer buf, SQInteger 
 	return ret;
 }
 
-SQRESULT Squirrel::LoadFile(HSQUIRRELVM vm, const char *filename, SQBool printerror)
+SQRESULT Squirrel::LoadFile(HSQUIRRELVM vm, const std::string &filename, SQBool printerror)
 {
 	ScriptAllocatorScope alloc_scope(this);
 
@@ -725,7 +726,7 @@ SQRESULT Squirrel::LoadFile(HSQUIRRELVM vm, const char *filename, SQBool printer
 	}
 
 	SQFile f(file, size);
-	if (SQ_SUCCEEDED(sq_compile(vm, func, &f, filename, printerror))) {
+	if (SQ_SUCCEEDED(sq_compile(vm, func, &f, filename.c_str(), printerror))) {
 		FioFCloseFile(file);
 		return SQ_OK;
 	}
@@ -733,7 +734,7 @@ SQRESULT Squirrel::LoadFile(HSQUIRRELVM vm, const char *filename, SQBool printer
 	return SQ_ERROR;
 }
 
-bool Squirrel::LoadScript(HSQUIRRELVM vm, const char *script, bool in_root)
+bool Squirrel::LoadScript(HSQUIRRELVM vm, const std::string &script, bool in_root)
 {
 	ScriptAllocatorScope alloc_scope(this);
 
@@ -753,11 +754,11 @@ bool Squirrel::LoadScript(HSQUIRRELVM vm, const char *script, bool in_root)
 	}
 
 	vm->_ops_till_suspend = ops_left;
-	DEBUG(misc, 0, "[squirrel] Failed to compile '%s'", script);
+	DEBUG(misc, 0, "[squirrel] Failed to compile '%s'", script.c_str());
 	return false;
 }
 
-bool Squirrel::LoadScript(const char *script)
+bool Squirrel::LoadScript(const std::string &script)
 {
 	return LoadScript(this->vm, script);
 }
@@ -770,6 +771,12 @@ Squirrel::~Squirrel()
 void Squirrel::Uninitialize()
 {
 	ScriptAllocatorScope alloc_scope(this);
+
+	/* Remove the delegation */
+	sq_pushroottable(this->vm);
+	sq_pushnull(this->vm);
+	sq_setdelegate(this->vm, -2);
+	sq_pop(this->vm, 1);
 
 	/* Clean up the stuff */
 	sq_pop(this->vm, 1);

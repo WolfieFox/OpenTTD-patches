@@ -24,7 +24,7 @@ protected:
 	template<class Tannotation, class Tedge_iterator>
 	void Dijkstra(NodeID from, PathVector &paths);
 
-	uint PushFlow(AnnoEdge &edge, Path *path, uint min_step_size, uint accuracy, uint max_saturation);
+	uint PushFlow(DemandAnnotation &anno, Path *path, uint min_step_size, uint accuracy, uint max_saturation);
 
 	void CleanupPaths(NodeID source, PathVector &paths);
 
@@ -81,19 +81,7 @@ public:
 	 * Run the calculation.
 	 * @param graph Component to be calculated.
 	 */
-	virtual void Run(LinkGraphJob &job) const { Tpass pass(job); }
-
-	/**
-	 * Destructor. Has to be given because of virtual Run().
-	 */
-	virtual ~MCFHandler() {}
+	void Run(LinkGraphJob &job) const override { Tpass pass(job); }
 };
-
-inline bool IsLinkGraphCargoExpress(CargoID cargo)
-{
-	return IsCargoInClass(cargo, CC_PASSENGERS) ||
-			IsCargoInClass(cargo, CC_MAIL) ||
-			IsCargoInClass(cargo, CC_EXPRESS);
-}
 
 #endif /* MCF_H */

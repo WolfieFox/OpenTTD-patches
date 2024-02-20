@@ -11,10 +11,9 @@
 #define PLANS_TYPE_H
 
 #include "stdafx.h"
-#include "core/smallvec_type.hpp"
 #include "tile_type.h"
 
-typedef uint16 PlanID;
+typedef uint16_t PlanID;
 struct PlanLine;
 struct Plan;
 

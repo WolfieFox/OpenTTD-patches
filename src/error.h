@@ -14,6 +14,8 @@
 #include "company_type.h"
 #include "core/geometry_type.hpp"
 #include "guitimer_func.h"
+#include <list>
+#include <vector>
 
 struct GRFFile;
 
@@ -29,11 +31,10 @@ enum WarningLevel {
 class ErrorMessageData {
 protected:
 	GUITimer display_timer;         ///< Timer before closing the message.
-	uint64 decode_params[20];       ///< Parameters of the message strings.
-	const char *strings[20];        ///< Copies of raw strings that were used.
+	std::vector<StringParameterBackup> params; ///< Backup of parameters of the message strings.
 	const GRFFile *textref_stack_grffile; ///< NewGRF that filled the #TextRefStack for the error message.
-	uint textref_stack_size;        ///< Number of uint32 values to put on the #TextRefStack for the error message.
-	uint32 textref_stack[16];       ///< Values to put on the #TextRefStack for the error message.
+	uint textref_stack_size;        ///< Number of uint32_t values to put on the #TextRefStack for the error message.
+	uint32_t textref_stack[16];     ///< Values to put on the #TextRefStack for the error message.
 	StringID summary_msg;           ///< General error message showed in first line. Must be valid.
 	StringID detailed_msg;          ///< Detailed error message showed in second line. Can be #INVALID_STRING_ID.
 	StringID extra_msg;             ///< Extra error message shown in third line. Can be #INVALID_STRING_ID.
@@ -42,8 +43,7 @@ protected:
 
 public:
 	ErrorMessageData(const ErrorMessageData &data);
-	~ErrorMessageData();
-	ErrorMessageData(StringID summary_msg, StringID detailed_msg, uint duration = 0, int x = 0, int y = 0, const GRFFile *textref_stack_grffile = nullptr, uint textref_stack_size = 0, const uint32 *textref_stack = nullptr, StringID extra_msg = INVALID_STRING_ID);
+	ErrorMessageData(StringID summary_msg, StringID detailed_msg, uint duration = 0, int x = 0, int y = 0, const GRFFile *textref_stack_grffile = nullptr, uint textref_stack_size = 0, const uint32_t *textref_stack = nullptr, StringID extra_msg = INVALID_STRING_ID);
 
 	/* Remove the copy assignment, as the default implementation will not do the right thing. */
 	ErrorMessageData &operator=(ErrorMessageData &rhs) = delete;
@@ -51,16 +51,20 @@ public:
 	/** Check whether error window shall display a company manager face */
 	bool HasFace() const { return face != INVALID_COMPANY; }
 
-	void SetDParam(uint n, uint64 v);
+	void SetDParam(uint n, uint64_t v);
 	void SetDParamStr(uint n, const char *str);
 	void SetDParamStr(uint n, const std::string &str);
 
 	void CopyOutDParams();
 };
 
+/** Define a queue with errors. */
+typedef std::list<ErrorMessageData> ErrorList;
+
+void ScheduleErrorMessage(ErrorList &datas);
 void ScheduleErrorMessage(const ErrorMessageData &data);
 
-void ShowErrorMessage(StringID summary_msg, StringID detailed_msg, WarningLevel wl, int x = 0, int y = 0, const GRFFile *textref_stack_grffile = nullptr, uint textref_stack_size = 0, const uint32 *textref_stack = nullptr, StringID extra_msg = INVALID_STRING_ID);
+void ShowErrorMessage(StringID summary_msg, StringID detailed_msg, WarningLevel wl, int x = 0, int y = 0, const GRFFile *textref_stack_grffile = nullptr, uint textref_stack_size = 0, const uint32_t *textref_stack = nullptr, StringID extra_msg = INVALID_STRING_ID);
 bool HideActiveErrorMessage();
 void ClearErrorMessages();
 void ShowFirstError();

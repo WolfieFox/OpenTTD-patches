@@ -10,19 +10,28 @@
 #ifndef SETTINGS_FUNC_H
 #define SETTINGS_FUNC_H
 
-#include "core/smallvec_type.hpp"
 #include "company_type.h"
 #include "string_type.h"
 
 struct IniFile;
 
 void IConsoleSetSetting(const char *name, const char *value, bool force_newgame = false);
-void IConsoleSetSetting(const char *name, int32 value);
+void IConsoleSetSetting(const char *name, int32_t value);
 void IConsoleGetSetting(const char *name, bool force_newgame = false);
-void IConsoleListSettings(const char *prefilter);
+void IConsoleListSettings(const char *prefilter, bool show_defaults);
 
 void LoadFromConfig(bool minimal = false);
-void SaveToConfig();
+
+enum SaveToConfigFlags : uint32_t {
+	STCF_NONE = 0,
+	STCF_GENERIC = 1 << 0,
+	STCF_PRIVATE = 1 << 1,
+	STCF_SECRETS = 1 << 2,
+	STCF_ALL     = STCF_GENERIC | STCF_PRIVATE | STCF_SECRETS,
+};
+DECLARE_ENUM_AS_BIT_SET(SaveToConfigFlags)
+
+void SaveToConfig(SaveToConfigFlags flags);
 
 void IniLoadWindowSettings(IniFile &ini, const char *grpname, void *desc);
 void IniSaveWindowSettings(IniFile &ini, const char *grpname, void *desc);
@@ -38,7 +47,6 @@ void SyncCompanySettings();
 
 void SetupTimeSettings();
 
-const char *GetSettingNameByIndex(uint32 idx);
-const char *GetCompanySettingNameByIndex(uint32 idx);
+const char *GetCompanySettingNameByIndex(uint32_t idx);
 
 #endif /* SETTINGS_FUNC_H */

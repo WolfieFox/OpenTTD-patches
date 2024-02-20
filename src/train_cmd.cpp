@@ -46,11 +46,14 @@
 #include "debug_settings.h"
 #include "train_speed_adaptation.h"
 #include "event_logs.h"
+#include "3rdparty/cpp-btree/btree_map.h"
 
 #include "table/strings.h"
 #include "table/train_cmd.h"
 
 #include "safeguards.h"
+
+extern btree::btree_multimap<VehicleID, PendingSpeedRestrictionChange> _pending_speed_restriction_change_map;
 
 enum {
 	REALISTIC_BRAKING_MIN_SPEED = 5,
@@ -64,7 +67,7 @@ enum ChooseTrainTrackLookAheadStateFlags {
 
 struct ChooseTrainTrackLookAheadState {
 	uint          order_items_start = 0;  ///< Order items start for VehicleOrderSaver
-	uint16        flags = 0;              ///< Flags
+	uint16_t        flags = 0;            ///< Flags
 	DestinationID reverse_dest = 0;       ///< Reverse station ID when CTTLASF_REVERSE_FOUND is set
 };
 
@@ -78,7 +81,7 @@ enum ChooseTrainTrackFlags {
 };
 DECLARE_ENUM_AS_BIT_SET(ChooseTrainTrackFlags)
 
-std::unordered_map<SignalSpeedKey, SignalSpeedValue, SignalSpeedKeyHashFunc> _signal_speeds(1 << 16);
+btree::btree_map<SignalSpeedKey, SignalSpeedValue> _signal_speeds;
 
 static void TryLongReserveChooseTrainTrackFromReservationEnd(Train *v, bool no_reserve_vehicle_tile = false);
 static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, TrackBits tracks, ChooseTrainTrackFlags flags, bool *p_got_reservation, ChooseTrainTrackLookAheadState lookahead_state = {});
@@ -98,23 +101,17 @@ static bool CheckTrainStayInWormHolePathReserve(Train *t, TileIndex tile);
 
 /** Return the scaled date ticks by which the speed restriction
  *  at the current position of the train is going to be invalid */
-static DateTicksScaled GetSpeedRestrictionTimeout(const Train *t)
+static StateTicks GetSpeedRestrictionTimeout(const Train *t)
 {
-	const int64 velocity = std::max<int64>(25, t->cur_speed);
-	const int64 look_ahead_distance = Clamp(t->cur_speed / 8, 4, 16); // In tiles, varying between 4 and 16 depending on current speed
+	const int64_t velocity = std::max<int64_t>(25, t->cur_speed);
+	const int64_t look_ahead_distance = Clamp(t->cur_speed / 8, 4, 16); // In tiles, varying between 4 and 16 depending on current speed
 
 	// This assumes travel along the X or Y map axis, not diagonally. See GetAdvanceDistance, GetAdvanceSpeed.
-	const int64 ticks_per_tile = (192 * 16 * 4 / 3) / velocity;
+	const int64_t ticks_per_tile = (192 * 16 * 4 / 3) / velocity;
 
-	const int64 ticks = ticks_per_tile * look_ahead_distance;
+	const int64_t ticks = ticks_per_tile * look_ahead_distance;
 
-	return _scaled_date_ticks + ticks;
-}
-
-/** Checks if the timeout of the specified signal speed restriction value has passed */
-static bool IsOutOfDate(const SignalSpeedValue& value)
-{
-	return _scaled_date_ticks > value.time_stamp;
+	return _state_ticks + ticks;
 }
 
 /** Removes all speed restrictions from all signals */
@@ -123,7 +120,7 @@ void ClearAllSignalSpeedRestrictions()
 	_signal_speeds.clear();
 }
 
-void AdjustAllSignalSpeedRestrictionTickValues(DateTicksScaled delta)
+void AdjustAllSignalSpeedRestrictionTickValues(StateTicksDelta delta)
 {
 	for (auto &it : _signal_speeds) {
 		it.second.time_stamp += delta;
@@ -134,7 +131,7 @@ void AdjustAllSignalSpeedRestrictionTickValues(DateTicksScaled delta)
 void ClearOutOfDateSignalSpeedRestrictions()
 {
 	for (auto key_value_pair = _signal_speeds.begin(); key_value_pair != _signal_speeds.end(); ) {
-		if (IsOutOfDate(key_value_pair->second)) {
+		if (key_value_pair->second.IsOutOfDate()) {
 			key_value_pair = _signal_speeds.erase(key_value_pair);
 		} else {
 			++key_value_pair;
@@ -151,7 +148,7 @@ static const byte _vehicle_initial_x_fract[4] = {10, 8, 4,  8};
 static const byte _vehicle_initial_y_fract[4] = { 8, 4, 8, 10};
 
 template <>
-bool IsValidImageIndex<VEH_TRAIN>(uint8 image_index)
+bool IsValidImageIndex<VEH_TRAIN>(uint8_t image_index)
 {
 	return image_index < lengthof(_engine_sprite_base);
 }
@@ -226,21 +223,21 @@ void CheckBreakdownFlags(Train *v)
 	}
 }
 
-uint16 GetTrainVehicleMaxSpeed(const Train *u, const RailVehicleInfo *rvi_u, const Train *front)
+uint16_t GetTrainVehicleMaxSpeed(const Train *u, const RailVehicleInfo *rvi_u, const Train *front)
 {
-	const uint16 base_speed = GetVehicleProperty(u, PROP_TRAIN_SPEED, rvi_u->max_speed);
-	uint16 speed = base_speed;
+	const uint16_t base_speed = GetVehicleProperty(u, PROP_TRAIN_SPEED, rvi_u->max_speed);
+	uint16_t speed = base_speed;
 	if (HasBit(u->flags, VRF_NEED_REPAIR) && front->IsFrontEngine()) {
 		for (uint i = 0; i < u->critical_breakdown_count; i++) {
-			speed = std::min<uint16>(speed - (speed / (front->tcache.cached_num_engines + 2)) + 1, speed);
+			speed = std::min<uint16_t>(speed - (speed / (front->tcache.cached_num_engines + 2)) + 1, speed);
 		}
 	}
 
 	/* clamp speed to be no less than lower of 5mph and 1/8 of base speed */
-	speed = std::max<uint16>(speed, std::min<uint16>(5, (base_speed + 7) >> 3));
+	speed = std::max<uint16_t>(speed, std::min<uint16_t>(5, (base_speed + 7) >> 3));
 
 	if (HasBit(u->flags, VRF_HAS_HIT_RV) && front->IsFrontEngine()) {
-		speed = std::min<uint16>(speed, 30);
+		speed = std::min<uint16_t>(speed, 30);
 	}
 	return speed;
 }
@@ -253,7 +250,7 @@ uint16 GetTrainVehicleMaxSpeed(const Train *u, const RailVehicleInfo *rvi_u, con
  */
 void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 {
-	uint16 max_speed = UINT16_MAX;
+	uint16_t max_speed = UINT16_MAX;
 
 	dbg_assert(this->IsFrontEngine() || this->IsFreeWagon());
 
@@ -364,12 +361,12 @@ void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 
 			/* max speed is the minimum of the speed limits of all vehicles in the consist */
 			if ((rvi_u->railveh_type != RAILVEH_WAGON || _settings_game.vehicle.wagon_speed_limits) && !UsesWagonOverride(u)) {
-				uint16 speed = GetTrainVehicleMaxSpeed(u, rvi_u, this);
+				uint16_t speed = GetTrainVehicleMaxSpeed(u, rvi_u, this);
 				if (speed != 0) max_speed = std::min(speed, max_speed);
 			}
 		}
 
-		uint16 new_cap = e_u->DetermineCapacity(u);
+		uint16_t new_cap = e_u->DetermineCapacity(u);
 		if (allowed_changes & CCF_CAPACITY) {
 			/* Update vehicle capacity. */
 			if (u->cargo_cap > new_cap) u->cargo.Truncate(new_cap);
@@ -382,7 +379,7 @@ void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 		u->vcache.cached_cargo_age_period = GetVehicleProperty(u, PROP_TRAIN_CARGO_AGE_PERIOD, e_u->info.cargo_age_period);
 
 		/* check the vehicle length (callback) */
-		uint16 veh_len = CALLBACK_FAILED;
+		uint16_t veh_len = CALLBACK_FAILED;
 		if (e_u->GetGRF() != nullptr && e_u->GetGRF()->grf_version >= 8) {
 			/* Use callback 36 */
 			veh_len = GetVehicleProperty(u, PROP_TRAIN_SHORTEN_FACTOR, CALLBACK_FAILED);
@@ -602,11 +599,10 @@ int GetTrainStopLocation(StationID station_id, TileIndex tile, Train *v, bool up
 			/* Determine the non-diagonal direction in which we will exit this tile */
 			DiagDirection dir = VehicleExitDir(front->direction, front->track);
 			/* Calculate next tile */
-			TileIndex tile = front->tile + TileOffsByDiagDir(dir);
+			TileIndex next_tile = front->tile + TileOffsByDiagDir(dir);
 
 			/* Determine the track status on the next tile */
-			TrackStatus ts = GetTileTrackStatus(tile, TRANSPORT_RAIL, 0, ReverseDiagDir(dir));
-			TrackdirBits trackdirbits = TrackStatusToTrackdirBits(ts) & DiagdirReachesTrackdirs(dir);
+			TrackdirBits trackdirbits = GetTileTrackdirBits(next_tile, TRANSPORT_RAIL, 0, ReverseDiagDir(dir)) & DiagdirReachesTrackdirs(dir);
 
 			/* mask unreachable track bits if we are forbidden to do 90deg turns */
 			TrackBits bits = TrackdirBitsToTrackBits(trackdirbits);
@@ -614,8 +610,8 @@ int GetTrainStopLocation(StationID station_id, TileIndex tile, Train *v, bool up
 				bits &= ~TrackCrossesTracks(FindFirstTrack(front->track));
 			}
 
-			if (bits == TRACK_BIT_NONE || !CheckCompatibleRail(front, tile, dir) || IsRailDepotTile(tile) ||
-					(KillFirstBit(trackdirbits) == TRACKDIR_BIT_NONE && HasOnewaySignalBlockingTrackdir(tile, FindFirstTrackdir(trackdirbits)))) {
+			if (bits == TRACK_BIT_NONE || !CheckCompatibleRail(front, next_tile, dir) || IsRailDepotTile(next_tile) ||
+					(KillFirstBit(trackdirbits) == TRACKDIR_BIT_NONE && HasOnewaySignalBlockingTrackdir(next_tile, FindFirstTrackdir(trackdirbits)))) {
 				/* next tile is an effective dead end */
 				int current_platform_remaining = *station_ahead - TILE_SIZE + GetTileMarginInFrontOfTrain(v);
 				int limit = GetTileMarginInFrontOfTrain(front) + (*station_length - current_platform_remaining) - ((v->gcache.cached_veh_length + 1) / 2);
@@ -685,7 +681,7 @@ int Train::GetCurveSpeedLimit() const
 
 	if (max_speed != absolute_max_speed) {
 		/* Apply the current railtype's curve speed advantage */
-		const RailtypeInfo *rti = GetRailTypeInfo(GetRailTypeByTrackBit(this->tile, this->track));
+		const RailTypeInfo *rti = GetRailTypeInfo(GetRailTypeByTrackBit(this->tile, this->track));
 		max_speed += (max_speed / 2) * rti->curve_speed;
 
 		if (this->tcache.cached_tflags & TCF_TILT) {
@@ -717,7 +713,7 @@ void AdvanceOrderIndex(const Vehicle *v, VehicleOrderID &index)
 			case OT_GOTO_DEPOT:
 				/* Skip service in depot orders when the train doesn't need service. */
 				if ((order->GetDepotOrderType() & ODTFB_SERVICE) && !v->NeedsServicing()) break;
-				FALLTHROUGH;
+				[[fallthrough]];
 			case OT_GOTO_STATION:
 			case OT_GOTO_WAYPOINT:
 				return;
@@ -837,21 +833,21 @@ TrainDecelerationStats::TrainDecelerationStats(const Train *t, int z_pos)
 	this->t = t;
 }
 
-static int64 GetRealisticBrakingDistanceForSpeed(const TrainDecelerationStats &stats, int start_speed, int end_speed, int z_delta)
+static int64_t GetRealisticBrakingDistanceForSpeed(const TrainDecelerationStats &stats, int start_speed, int end_speed, int z_delta)
 {
 	/* v^2 = u^2 + 2as */
 
-	auto sqr = [](int64 speed) -> int64 { return speed * speed; };
+	auto sqr = [](int64_t speed) -> int64_t { return speed * speed; };
 
-	int64 ke_delta = sqr(start_speed) - sqr(end_speed);
+	int64_t ke_delta = sqr(start_speed) - sqr(end_speed);
 
-	int64 dist = ke_delta / stats.deceleration_x2;
+	int64_t dist = ke_delta / stats.deceleration_x2;
 
 	if (z_delta < 0 && _settings_game.vehicle.train_acceleration_model != AM_ORIGINAL) {
 		/* descending */
 		/* (5/18) is due to KE being in km/h derived units instead of m/s */
-		int64 slope_dist = (ke_delta - (z_delta * ((400 * 5) / 18) * _settings_game.vehicle.train_slope_steepness)) / stats.uncapped_deceleration_x2;
-		dist = std::max<int64>(dist, slope_dist);
+		int64_t slope_dist = (ke_delta - (z_delta * ((400 * 5) / 18) * _settings_game.vehicle.train_slope_steepness)) / stats.uncapped_deceleration_x2;
+		dist = std::max<int64_t>(dist, slope_dist);
 	}
 	return dist;
 }
@@ -860,25 +856,25 @@ static int GetRealisticBrakingSpeedForDistance(const TrainDecelerationStats &sta
 {
 	/* v^2 = u^2 + 2as */
 
-	auto sqr = [](int64 speed) -> int64 { return speed * speed; };
+	auto sqr = [](int64_t speed) -> int64_t { return speed * speed; };
 
-	int64 target_ke = sqr(end_speed);
-	int64 speed_sqr = target_ke + ((int64)stats.deceleration_x2 * (int64)distance);
+	int64_t target_ke = sqr(end_speed);
+	int64_t speed_sqr = target_ke + ((int64_t)stats.deceleration_x2 * (int64_t)distance);
 
 	if (speed_sqr <= REALISTIC_BRAKING_MIN_SPEED * REALISTIC_BRAKING_MIN_SPEED) return REALISTIC_BRAKING_MIN_SPEED;
 
 	if (z_delta < 0 && _settings_game.vehicle.train_acceleration_model != AM_ORIGINAL) {
 		/* descending */
 		/* (5/18) is due to KE being in km/h derived units instead of m/s */
-		int64 sloped_ke = target_ke + (z_delta * ((400 * 5) / 18) * _settings_game.vehicle.train_slope_steepness);
-		int64 slope_speed_sqr = sloped_ke + ((int64)stats.uncapped_deceleration_x2 * (int64)distance);
+		int64_t sloped_ke = target_ke + (z_delta * ((400 * 5) / 18) * _settings_game.vehicle.train_slope_steepness);
+		int64_t slope_speed_sqr = sloped_ke + ((int64_t)stats.uncapped_deceleration_x2 * (int64_t)distance);
 		if (slope_speed_sqr < speed_sqr &&
 				_settings_game.vehicle.train_acceleration_model == AM_REALISTIC && GetRailTypeInfo(stats.t->railtype)->acceleration_type != 2) {
 			/* calculate speed at which braking would be sufficient */
 
 			uint weight = stats.t->gcache.cached_weight;
-			int64 power_w = (stats.t->gcache.cached_power * 746ll) + (stats.t->tcache.cached_braking_length * (int64)RBC_BRAKE_POWER_PER_LENGTH);
-			int64 min_braking_force = (stats.t->tcache.cached_braking_length * (int64)RBC_BRAKE_FORCE_PER_LENGTH) + stats.t->gcache.cached_axle_resistance + (weight * 16);
+			int64_t power_w = (stats.t->gcache.cached_power * 746ll) + (stats.t->tcache.cached_braking_length * (int64_t)RBC_BRAKE_POWER_PER_LENGTH);
+			int64_t min_braking_force = (stats.t->tcache.cached_braking_length * (int64_t)RBC_BRAKE_FORCE_PER_LENGTH) + stats.t->gcache.cached_axle_resistance + (weight * 16);
 
 			/* F = (7/8) * (F_min + ((power_w * 18) / (5 * v)))
 			 * v^2 = sloped_ke + F * s / (4 * m)
@@ -893,25 +889,25 @@ static int GetRealisticBrakingSpeedForDistance(const TrainDecelerationStats &sta
 			 * let l = k / 3
 			 * v = cbrt(r + sqrt(r^2 - l^3)) + cbrt(r - sqrt(r^2 - l^3))
 			 */
-			int64 l = (sloped_ke + ((7 * min_braking_force * (int64)distance) / (8 * weight))) / 3;
-			int64 r = (7 * 9 * power_w * (int64)distance) / (160 * weight);
-			int64 sqrt_factor = (r * r) - (l * l * l);
+			int64_t l = (sloped_ke + ((7 * min_braking_force * (int64_t)distance) / (8 * weight))) / 3;
+			int64_t r = (7 * 9 * power_w * (int64_t)distance) / (160 * weight);
+			int64_t sqrt_factor = (r * r) - (l * l * l);
 			if (sqrt_factor >= 0) {
-				int64 part = IntSqrt64(sqrt_factor);
-				int32 v_calc = IntCbrt(r + part);
+				int64_t part = IntSqrt64(sqrt_factor);
+				int32_t v_calc = IntCbrt(r + part);
 				int cb2 = r - part;
 				if (cb2 > 0) {
 					v_calc += IntCbrt(cb2);
 				} else if (cb2 < 0) {
 					v_calc -= IntCbrt(-cb2);
 				}
-				int64 v_calc_sq = sqr(v_calc);
+				int64_t v_calc_sq = sqr(v_calc);
 				if (v_calc_sq < speed_sqr && v_calc_sq > slope_speed_sqr) {
 					return std::max((int)REALISTIC_BRAKING_MIN_SPEED, v_calc);
 				}
 			}
 		}
-		speed_sqr = std::min<int64>(speed_sqr, slope_speed_sqr);
+		speed_sqr = std::min<int64_t>(speed_sqr, slope_speed_sqr);
 	}
 	if (speed_sqr <= REALISTIC_BRAKING_MIN_SPEED * REALISTIC_BRAKING_MIN_SPEED) return REALISTIC_BRAKING_MIN_SPEED;
 	if (speed_sqr > UINT_MAX) speed_sqr = UINT_MAX;
@@ -924,7 +920,7 @@ void LimitSpeedFromLookAhead(int &max_speed, const TrainDecelerationStats &stats
 	if (position <= current_position) {
 		max_speed = std::min(max_speed, std::max(15, end_speed));
 	} else if (end_speed < max_speed) {
-		int64 distance = GetRealisticBrakingDistanceForSpeed(stats, max_speed, end_speed, z_delta);
+		int64_t distance = GetRealisticBrakingDistanceForSpeed(stats, max_speed, end_speed, z_delta);
 		if (distance + current_position > position) {
 			/* Speed is too fast, we would overshoot */
 			if (z_delta < 0 && (position - current_position) < stats.t->gcache.cached_total_length) {
@@ -963,8 +959,8 @@ static void ApplyLookAheadItem(const Train *v, const TrainReservationLookAheadIt
 				current_order_index++;
 				AdvanceOrderIndex(v, current_order_index);
 				order = v->GetOrder(current_order_index);
-				uint16 max_speed = order->GetMaxSpeed();
-				if (max_speed < UINT16_MAX) limit_advisory_speed(item.start, max_speed, item.z_pos);
+				uint16_t order_max_speed = order->GetMaxSpeed();
+				if (order_max_speed < UINT16_MAX) limit_advisory_speed(item.start, order_max_speed, item.z_pos);
 			}
 			break;
 		}
@@ -991,6 +987,9 @@ static void ApplyLookAheadItem(const Train *v, const TrainReservationLookAheadIt
 		case TRLIT_CURVE_SPEED:
 			if (_settings_game.vehicle.train_acceleration_model != AM_ORIGINAL) limit_speed(item.start, item.data_id, item.z_pos);
 			break;
+
+		case TRLIT_SPEED_ADAPTATION:
+			break;
 	}
 }
 
@@ -999,7 +998,7 @@ static void AdvanceLookAheadPosition(Train *v)
 	v->lookahead->current_position++;
 	if (v->lookahead->zpos_refresh_remaining > 0) v->lookahead->zpos_refresh_remaining--;
 
-	if (v->lookahead->current_position > v->lookahead->reservation_end_position + 8) {
+	if (v->lookahead->current_position > v->lookahead->reservation_end_position + 8 && v->track != TRACK_BIT_DEPOT) {
 		/* Beyond end of lookahead, delete it, it will be recreated later with a new reservation */
 		v->lookahead.reset();
 		return;
@@ -1007,7 +1006,7 @@ static void AdvanceLookAheadPosition(Train *v)
 
 	if (unlikely(v->lookahead->current_position >= (1 << 30))) {
 		/* Prevent signed overflow by rebasing all position values */
-		const int32 old_position = v->lookahead->current_position;
+		const int32_t old_position = v->lookahead->current_position;
 		v->lookahead->current_position = 0;
 		v->lookahead->reservation_end_position -= old_position;
 		v->lookahead->lookahead_end_position -= old_position;
@@ -1038,7 +1037,11 @@ static void AdvanceLookAheadPosition(Train *v)
 
 	if (v->lookahead->current_position == v->lookahead->next_extend_position) {
 		SetTrainReservationLookaheadEnd(v);
+
+		/* This may clear the lookahead if it has become invalid */
 		TryLongReserveChooseTrainTrackFromReservationEnd(v, true);
+		if (v->lookahead == nullptr) return;
+
 		v->lookahead->SetNextExtendPositionIfUnset();
 	}
 }
@@ -1096,7 +1099,7 @@ Train::MaxSpeedInfo Train::GetCurrentMaxSpeedInfoInternal(bool update_state) con
 			if (u->track == TRACK_BIT_DEPOT) {
 				SetBit(const_cast<Train *>(this)->flags, VRF_CONSIST_SPEED_REDUCTION);
 				if (_settings_game.vehicle.train_acceleration_model == AM_REALISTIC) {
-					max_speed = std::min(max_speed, 61);
+					max_speed = std::min<int>(max_speed, _settings_game.vehicle.rail_depot_speed_limit);
 				}
 				continue;
 			}
@@ -1119,7 +1122,7 @@ Train::MaxSpeedInfo Train::GetCurrentMaxSpeedInfoInternal(bool update_state) con
 	if (this->signal_speed_restriction != 0 && _settings_game.vehicle.train_speed_adaptation && !HasBit(this->flags, VRF_SPEED_ADAPTATION_EXEMPT)) {
 		advisory_max_speed = std::min<int>(advisory_max_speed, this->signal_speed_restriction);
 	}
-	if (this->reverse_distance > 1) {
+	if (this->reverse_distance >= 1) {
 		advisory_max_speed = std::min<int>(advisory_max_speed, ReversingDistanceTargetSpeed(this));
 	}
 
@@ -1131,9 +1134,11 @@ Train::MaxSpeedInfo Train::GetCurrentMaxSpeedInfoInternal(bool update_state) con
 			}
 			TrainDecelerationStats stats(this, this->lookahead->cached_zpos);
 			if (HasBit(this->lookahead->flags, TRLF_DEPOT_END)) {
-				LimitSpeedFromLookAhead(max_speed, stats, this->lookahead->current_position, this->lookahead->reservation_end_position - TILE_SIZE, 61, this->lookahead->reservation_end_z - stats.z_pos);
+				LimitSpeedFromLookAhead(max_speed, stats, this->lookahead->current_position, this->lookahead->reservation_end_position - TILE_SIZE,
+						_settings_game.vehicle.rail_depot_speed_limit, this->lookahead->reservation_end_z - stats.z_pos);
 			} else {
-				LimitSpeedFromLookAhead(max_speed, stats, this->lookahead->current_position, this->lookahead->reservation_end_position, 0, this->lookahead->reservation_end_z - stats.z_pos);
+				LimitSpeedFromLookAhead(max_speed, stats, this->lookahead->current_position, this->lookahead->reservation_end_position,
+						0, this->lookahead->reservation_end_z - stats.z_pos);
 			}
 			VehicleOrderID current_order_index = this->cur_real_order_index;
 			const Order *order = &(this->current_order);
@@ -1162,12 +1167,12 @@ int Train::GetCurrentMaxSpeed() const
 	return std::min(info.strict_max_speed, info.advisory_max_speed);
 }
 
-uint32 Train::CalculateOverallZPos() const
+uint32_t Train::CalculateOverallZPos() const
 {
 	if (likely(HasBit(this->vcache.cached_veh_flags, VCF_GV_ZERO_SLOPE_RESIST))) {
 		return this->z_pos;
 	} else {
-		int64 sum = 0;
+		int64_t sum = 0;
 		for (const Train *u = this; u != nullptr; u = u->Next()) {
 			sum += ((int)u->z_pos * (int)u->tcache.cached_veh_weight);
 		}
@@ -1197,7 +1202,7 @@ void Train::UpdateAcceleration()
 			case AM_REALISTIC: {
 				int acceleration_type = this->GetAccelerationType();
 				bool maglev = (acceleration_type == 2);
-				int64 power_w = power * 746ll;
+				int64_t power_w = power * 746ll;
 
 				/* Increase the effective length used for brake force/power value when using the freight weight multiplier */
 				uint length = this->gcache.cached_total_length;
@@ -1212,7 +1217,7 @@ void Train::UpdateAcceleration()
 				}
 				this->tcache.cached_braking_length = length;
 
-				int64 min_braking_force = (int64)length * (int64)RBC_BRAKE_FORCE_PER_LENGTH;
+				int64_t min_braking_force = (int64_t)length * (int64_t)RBC_BRAKE_FORCE_PER_LENGTH;
 				if (!maglev) {
 					/* From GroundVehicle::GetAcceleration()
 					 * force = power * 18 / (speed * 5);
@@ -1231,9 +1236,9 @@ void Train::UpdateAcceleration()
 					 */
 					int evaluation_speed = this->vcache.cached_max_speed;
 					int area = 14;
-					int64 power_b = power_w + ((int64)length * RBC_BRAKE_POWER_PER_LENGTH);
+					int64_t power_b = power_w + ((int64_t)length * RBC_BRAKE_POWER_PER_LENGTH);
 					if (this->gcache.cached_air_drag > 0) {
-						uint64 v_3 = 1800 * (uint64)power_b / (area * this->gcache.cached_air_drag);
+						uint64_t v_3 = 1800 * (uint64_t)power_b / (area * this->gcache.cached_air_drag);
 						evaluation_speed = std::min<int>(evaluation_speed, IntCbrt(v_3));
 					}
 					if (evaluation_speed > 0) {
@@ -1314,7 +1319,7 @@ int Train::GetDisplayImageWidth(Point *offset) const
 
 	if (offset != nullptr) {
 		if (HasBit(this->flags, VRF_REVERSE_DIRECTION) && !HasBit(EngInfo(this->engine_type)->misc_flags, EF_RAIL_FLIPS)) {
-			offset->x = ScaleSpriteTrad((this->gcache.cached_veh_length - VEHICLE_LENGTH / 2) * reference_width / VEHICLE_LENGTH);
+			offset->x = ScaleSpriteTrad(((int)this->gcache.cached_veh_length - (int)VEHICLE_LENGTH / 2) * reference_width / (int)VEHICLE_LENGTH);
 		} else {
 			offset->x = ScaleSpriteTrad(reference_width) / 2;
 		}
@@ -1323,7 +1328,7 @@ int Train::GetDisplayImageWidth(Point *offset) const
 	return ScaleSpriteTrad(this->gcache.cached_veh_length * reference_width / VEHICLE_LENGTH);
 }
 
-static SpriteID GetDefaultTrainSprite(uint8 spritenum, Direction direction)
+static SpriteID GetDefaultTrainSprite(uint8_t spritenum, Direction direction)
 {
 	dbg_assert(IsValidImageIndex<VEH_TRAIN>(spritenum));
 	return ((direction + _engine_sprite_add[spritenum]) & _engine_sprite_and[spritenum]) + _engine_sprite_base[spritenum];
@@ -1337,7 +1342,7 @@ static SpriteID GetDefaultTrainSprite(uint8 spritenum, Direction direction)
  */
 void Train::GetImage(Direction direction, EngineImageType image_type, VehicleSpriteSeq *result) const
 {
-	uint8 spritenum = this->spritenum;
+	uint8_t spritenum = this->spritenum;
 
 	if (HasBit(this->flags, VRF_REVERSE_DIRECTION)) direction = ReverseDir(direction);
 
@@ -1360,7 +1365,7 @@ static void GetRailIcon(EngineID engine, bool rear_head, int &y, EngineImageType
 {
 	const Engine *e = Engine::Get(engine);
 	Direction dir = rear_head ? DIR_E : DIR_W;
-	uint8 spritenum = e->u.rail.image_index;
+	uint8_t spritenum = e->u.rail.image_index;
 
 	if (is_custom_sprite(spritenum)) {
 		GetCustomVehicleIcon(engine, dir, image_type, result);
@@ -1403,7 +1408,7 @@ void DrawTrainEngine(int left, int right, int preferred_x, int y, EngineID engin
 		GetRailIcon(engine, false, y, image_type, &seq);
 
 		Rect16 rect = seq.GetBounds();
-		preferred_x = Clamp(preferred_x,
+		preferred_x = SoftClamp(preferred_x,
 				left - UnScaleGUI(rect.left),
 				right - UnScaleGUI(rect.right));
 
@@ -1479,7 +1484,7 @@ static CommandCost CmdBuildRailWagon(TileIndex tile, DoCommandFlag flags, const 
 
 		v->x_pos = x;
 		v->y_pos = y;
-		v->z_pos = GetSlopePixelZ(x, y);
+		v->z_pos = GetSlopePixelZ(x, y, true);
 		v->owner = _current_company;
 		v->track = TRACK_BIT_DEPOT;
 		v->vehstatus = VS_HIDDEN | VS_DEFPAL;
@@ -1493,18 +1498,21 @@ static CommandCost CmdBuildRailWagon(TileIndex tile, DoCommandFlag flags, const 
 		InvalidateWindowData(WC_VEHICLE_DEPOT, v->tile);
 
 		v->cargo_type = e->GetDefaultCargoType();
+		assert(IsValidCargoID(v->cargo_type));
 		v->cargo_cap = rvi->capacity;
 		v->refit_cap = 0;
 
 		v->railtype = rvi->railtype;
 
-		v->date_of_last_service = _date;
-		v->build_year = _cur_year;
+		v->date_of_last_service = EconTime::CurDate();
+		v->date_of_last_service_newgrf = CalTime::CurDate();
+		v->build_year = CalTime::CurYear();
 		v->sprite_seq.Set(SPR_IMG_QUERY);
-		v->random_bits = VehicleRandomBits();
+		v->random_bits = Random();
 
 		v->group_id = DEFAULT_GROUP;
 
+		if (TestVehicleBuildProbability(v, v->engine_type, BuildProbabilityType::Reversed)) SetBit(v->flags, VRF_REVERSE_DIRECTION);
 		AddArticulatedParts(v);
 
 		_new_vehicle_id = v->index;
@@ -1537,8 +1545,9 @@ static CommandCost CmdBuildRailWagon(TileIndex tile, DoCommandFlag flags, const 
 }
 
 /** Move all free vehicles in the depot to the train */
-static void NormalizeTrainVehInDepot(const Train *u)
+void NormalizeTrainVehInDepot(const Train *u)
 {
+	assert(u->IsEngine());
 	for (const Train *v : Train::Iterate()) {
 		if (v->IsFreeWagon() && v->tile == u->tile &&
 				v->track == TRACK_BIT_DEPOT &&
@@ -1574,13 +1583,15 @@ static void AddRearEngineToMultiheadedTrain(Train *v)
 	u->reliability = v->reliability;
 	u->reliability_spd_dec = v->reliability_spd_dec;
 	u->date_of_last_service = v->date_of_last_service;
+	u->date_of_last_service_newgrf = v->date_of_last_service_newgrf;
 	u->build_year = v->build_year;
 	u->sprite_seq.Set(SPR_IMG_QUERY);
-	u->random_bits = VehicleRandomBits();
+	u->random_bits = Random();
 	v->SetMultiheaded();
 	u->SetMultiheaded();
 	if (v->IsVirtual()) u->SetVirtual();
 	v->SetNext(u);
+	if (TestVehicleBuildProbability(u, u->engine_type, BuildProbabilityType::Reversed)) SetBit(u->flags, VRF_REVERSE_DIRECTION);
 	u->UpdatePosition();
 
 	/* Now we need to link the front and rear engines together */
@@ -1593,11 +1604,10 @@ static void AddRearEngineToMultiheadedTrain(Train *v)
  * @param tile     tile of the depot where rail-vehicle is built.
  * @param flags    type of operation.
  * @param e        the engine to build.
- * @param data     bit 0 prevents any free cars from being added to the train.
  * @param[out] ret the vehicle that has been built.
  * @return the cost of this operation or an error.
  */
-CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlag flags, const Engine *e, uint16 data, Vehicle **ret)
+CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlag flags, const Engine *e, Vehicle **ret)
 {
 	const RailVehicleInfo *rvi = &e->u.rail;
 
@@ -1619,12 +1629,13 @@ CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlag flags, const Engin
 		v->owner = _current_company;
 		v->x_pos = x;
 		v->y_pos = y;
-		v->z_pos = GetSlopePixelZ(x, y);
+		v->z_pos = GetSlopePixelZ(x, y, true);
 		v->track = TRACK_BIT_DEPOT;
 		SetBit(v->flags, VRF_CONSIST_SPEED_REDUCTION);
 		v->vehstatus = VS_HIDDEN | VS_STOPPED | VS_DEFPAL;
 		v->spritenum = rvi->image_index;
 		v->cargo_type = e->GetDefaultCargoType();
+		assert(IsValidCargoID(v->cargo_type));
 		v->cargo_cap = rvi->capacity;
 		v->refit_cap = 0;
 		v->last_station_visited = INVALID_STATION;
@@ -1643,10 +1654,11 @@ CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlag flags, const Engin
 		_new_vehicle_id = v->index;
 
 		v->SetServiceInterval(Company::Get(_current_company)->settings.vehicle.servint_trains);
-		v->date_of_last_service = _date;
-		v->build_year = _cur_year;
+		v->date_of_last_service = EconTime::CurDate();
+		v->date_of_last_service_newgrf = CalTime::CurDate();
+		v->build_year = CalTime::CurYear();
 		v->sprite_seq.Set(SPR_IMG_QUERY);
-		v->random_bits = VehicleRandomBits();
+		v->random_bits = Random();
 
 		if (e->flags & ENGINE_EXCLUSIVE_PREVIEW) SetBit(v->vehicle_flags, VF_BUILT_AS_PROTOTYPE);
 		v->SetServiceIntervalIsPercent(Company::Get(_current_company)->settings.vehicle.servint_ispercent);
@@ -1658,6 +1670,7 @@ CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlag flags, const Engin
 		v->SetFrontEngine();
 		v->SetEngine();
 
+		if (TestVehicleBuildProbability(v, v->engine_type, BuildProbabilityType::Reversed)) SetBit(v->flags, VRF_REVERSE_DIRECTION);
 		v->UpdatePosition();
 
 		if (rvi->railveh_type == RAILVEH_MULTIHEAD) {
@@ -1668,10 +1681,6 @@ CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlag flags, const Engin
 
 		v->ConsistChanged(CCF_ARRANGE);
 		UpdateTrainGroupID(v);
-
-		if (!HasBit(data, 0) && !(flags & DC_AUTOREPLACE)) { // check if the cars should be added to the new vehicle
-			NormalizeTrainVehInDepot(v);
-		}
 
 		CheckConsistencyOfArticulatedVehicle(v);
 
@@ -1720,7 +1729,7 @@ static void MakeTrainBackup(TrainList &list, Train *t)
 static void RestoreTrainBackup(TrainList &list)
 {
 	/* No train, nothing to do. */
-	if (list.size() == 0) return;
+	if (list.empty()) return;
 
 	Train *prev = nullptr;
 	/* Iterate over the list and rebuild it. */
@@ -1900,7 +1909,7 @@ static CommandCost CheckTrainAttachment(Train *t)
 			 * the loop and after each callback does not need to be cleared here. */
 			t->InvalidateNewGRFCache();
 
-			uint16 callback = GetVehicleCallbackParent(CBID_TRAIN_ALLOW_WAGON_ATTACH, 0, 0, head->engine_type, t, head);
+			uint16_t callback = GetVehicleCallbackParent(CBID_TRAIN_ALLOW_WAGON_ATTACH, 0, 0, head->engine_type, t, head);
 
 			/* Restore original first_engine data */
 			t->gcache.first_engine = first_engine;
@@ -2041,7 +2050,7 @@ static void NormaliseTrainHead(Train *head)
 	head->unitnumber = GetFreeUnitNumber(VEH_TRAIN);
 }
 
-CommandCost CmdMoveVirtualRailVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+CommandCost CmdMoveVirtualRailVehicle(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
 	Train *src = Train::GetIfValid(GB(p1, 0, 20));
 	if (src == nullptr || !src->IsVirtual()) return CMD_ERROR;
@@ -2064,7 +2073,7 @@ CommandCost CmdMoveVirtualRailVehicle(TileIndex tile, DoCommandFlag flags, uint3
  * @param text unused
  * @return the cost of this operation or an error
  */
-CommandCost CmdMoveRailVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+CommandCost CmdMoveRailVehicle(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
 	VehicleID s = GB(p1, 0, 20);
 	VehicleID d = GB(p2, 0, 20);
@@ -2178,7 +2187,7 @@ CommandCost CmdMoveRailVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, u
 		/* If the autoreplace flag is set we do not need to test for the validity
 		 * because we are going to revert the train to its original state. As we
 		 * assume the original state was correct autoreplace can skip this. */
-		CommandCost ret = ValidateTrains(original_dst_head, dst_head, original_src_head, src_head, true);
+		ret = ValidateTrains(original_dst_head, dst_head, original_src_head, src_head, true);
 		if (ret.Failed()) {
 			/* Restore the train we had. */
 			RestoreTrainBackup(original_src);
@@ -2219,24 +2228,33 @@ CommandCost CmdMoveRailVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, u
 		 */
 		if (src == original_src_head && src->IsEngine() && (!src->IsFrontEngine() || new_head)) {
 			/* Cases #2 and #3: the front engine gets trashed. */
-			DeleteWindowById(WC_VEHICLE_VIEW, src->index);
-			DeleteWindowById(WC_VEHICLE_ORDERS, src->index);
-			DeleteWindowById(WC_VEHICLE_REFIT, src->index);
-			DeleteWindowById(WC_VEHICLE_DETAILS, src->index);
-			DeleteWindowById(WC_VEHICLE_TIMETABLE, src->index);
-			DeleteWindowById(WC_SCHDISPATCH_SLOTS, src->index);
+			CloseWindowById(WC_VEHICLE_VIEW, src->index);
+			CloseWindowById(WC_VEHICLE_ORDERS, src->index);
+			CloseWindowById(WC_VEHICLE_REFIT, src->index);
+			CloseWindowById(WC_VEHICLE_DETAILS, src->index);
+			CloseWindowById(WC_VEHICLE_TIMETABLE, src->index);
+			CloseWindowById(WC_SCHDISPATCH_SLOTS, src->index);
 			DeleteNewGRFInspectWindow(GSF_TRAINS, src->index);
 			SetWindowDirty(WC_COMPANY, _current_company);
 
-			/* Delete orders, group stuff and the unit number as we're not the
-			 * front of any vehicle anymore. */
+			if (src_head != nullptr && src_head->IsFrontEngine()) {
+				/* Cases #?b: Transfer order, unit number and other stuff
+				 * to the new front engine. */
+				src_head->orders = src->orders;
+				if (src_head->orders != nullptr) src_head->AddToShared(src);
+				src_head->CopyVehicleConfigAndStatistics(src);
+			}
+			/* Remove stuff not valid anymore for non-front engines. */
 			DeleteVehicleOrders(src);
-			RemoveVehicleFromGroup(src);
 			src->unitnumber = 0;
+			if (!_settings_game.vehicle.non_leading_engines_keep_name) {
+				src->name.clear();
+			}
 			if (HasBit(src->vehicle_flags, VF_HAVE_SLOT)) {
 				TraceRestrictRemoveVehicleFromAllSlots(src->index);
 				ClrBit(src->vehicle_flags, VF_HAVE_SLOT);
 			}
+			ClrBit(src->vehicle_flags, VF_REPLACEMENT_PENDING);
 			OrderBackup::ClearVehicle(src);
 		}
 
@@ -2302,7 +2320,7 @@ CommandCost CmdMoveRailVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, u
  * @param user  the user for the order backup.
  * @return the cost of this operation or an error
  */
-CommandCost CmdSellRailWagon(DoCommandFlag flags, Vehicle *t, uint16 data, uint32 user)
+CommandCost CmdSellRailWagon(DoCommandFlag flags, Vehicle *t, uint16_t data, uint32_t user)
 {
 	/* Sell a chain of vehicles or not? */
 	bool sell_chain = HasBit(data, 0);
@@ -2346,18 +2364,20 @@ CommandCost CmdSellRailWagon(DoCommandFlag flags, Vehicle *t, uint16 data, uint3
 		/* First normalise the sub types of the chain. */
 		NormaliseSubtypes(new_head);
 
-		if (v == first && v->IsEngine() && !sell_chain && new_head != nullptr && new_head->IsFrontEngine()) {
-			/* We are selling the front engine. In this case we want to
-			 * 'give' the order, unit number and such to the new head. */
-			new_head->orders = first->orders;
-			new_head->AddToShared(first);
-			DeleteVehicleOrders(first);
+		if (v == first && !sell_chain && new_head != nullptr && new_head->IsFrontEngine()) {
+			if (v->IsEngine()) {
+				/* We are selling the front engine. In this case we want to
+				 * 'give' the order, unit number and such to the new head. */
+				new_head->orders = first->orders;
+				new_head->AddToShared(first);
+				DeleteVehicleOrders(first);
 
-			/* Copy other important data from the front engine */
-			new_head->CopyVehicleConfigAndStatistics(first);
-			new_head->speed_restriction = first->speed_restriction;
-			SB(Train::From(new_head)->flags, VRF_SPEED_ADAPTATION_EXEMPT, 1, GB(Train::From(first)->flags, VRF_SPEED_ADAPTATION_EXEMPT, 1));
-			GroupStatistics::CountVehicle(new_head, 1); // after copying over the profit
+				/* Copy other important data from the front engine */
+				new_head->CopyVehicleConfigAndStatistics(first);
+				new_head->speed_restriction = first->speed_restriction;
+				SB(Train::From(new_head)->flags, VRF_SPEED_ADAPTATION_EXEMPT, 1, GB(Train::From(first)->flags, VRF_SPEED_ADAPTATION_EXEMPT, 1));
+			}
+			GroupStatistics::CountVehicle(new_head, 1); // after copying over the profit, if required
 		} else if (v->IsPrimaryVehicle() && data & (MAKE_ORDER_BACKUP_FLAG >> 20)) {
 			OrderBackup::Backup(v, user);
 		}
@@ -2488,10 +2508,10 @@ static void MarkTrainAsStuck(Train *v, bool waiting_restriction = false)
  * @param[in,out] swap_flag1 First train flag.
  * @param[in,out] swap_flag2 Second train flag.
  */
-static void SwapTrainFlags(uint16 *swap_flag1, uint16 *swap_flag2)
+static void SwapTrainFlags(uint16_t *swap_flag1, uint16_t *swap_flag2)
 {
-	uint16 flag1 = *swap_flag1;
-	uint16 flag2 = *swap_flag2;
+	uint16_t flag1 = *swap_flag1;
+	uint16_t flag2 = *swap_flag2;
 
 	/* Clear the flags */
 	ClrBit(*swap_flag1, GVF_GOINGUP_BIT);
@@ -2577,7 +2597,7 @@ void ReverseTrainSwapVeh(Train *v, int l, int r)
 	if (a != b) {
 		/* swap the hidden bits */
 		{
-			uint16 tmp = (a->vehstatus & ~VS_HIDDEN) | (b->vehstatus & VS_HIDDEN);
+			uint16_t tmp = (a->vehstatus & ~VS_HIDDEN) | (b->vehstatus & VS_HIDDEN);
 			b->vehstatus = (b->vehstatus & ~VS_HIDDEN) | (a->vehstatus & VS_HIDDEN);
 			a->vehstatus = tmp;
 		}
@@ -2611,6 +2631,19 @@ void ReverseTrainSwapVeh(Train *v, int l, int r)
 static Vehicle *TrainOnTileEnum(Vehicle *v, void *)
 {
 	return v;
+}
+
+/**
+ * Check if a level crossing tile has a train on it
+ * @param tile tile to test
+ * @return true if a train is on the crossing
+ * @pre tile is a level crossing
+ */
+bool TrainOnCrossing(TileIndex tile)
+{
+	assert(IsLevelCrossingTile(tile));
+
+	return HasVehicleOnPos(tile, VEH_TRAIN, nullptr, &TrainOnTileEnum);
 }
 
 
@@ -2662,7 +2695,7 @@ static bool TrainApproachingCrossing(TileIndex tile)
 static inline bool CheckLevelCrossing(TileIndex tile)
 {
 	/* reserved || train on crossing || train approaching crossing */
-	return HasCrossingReservation(tile) || HasVehicleOnPos(tile, VEH_TRAIN, nullptr, &TrainOnTileEnum) || TrainApproachingCrossing(tile);
+	return HasCrossingReservation(tile) || TrainOnCrossing(tile) || TrainApproachingCrossing(tile);
 }
 
 /**
@@ -2727,7 +2760,7 @@ void UpdateLevelCrossing(TileIndex tile, bool sound, bool force_close)
 	}
 }
 
-void MarkDirtyAdjacentLevelCrossingTilesOnAddRemove(TileIndex tile, Axis road_axis)
+void MarkDirtyAdjacentLevelCrossingTilesOnAdd(TileIndex tile, Axis road_axis)
 {
 	if (!_settings_game.vehicle.adjacent_crossings) return;
 
@@ -2741,6 +2774,39 @@ void MarkDirtyAdjacentLevelCrossingTilesOnAddRemove(TileIndex tile, Axis road_ax
 	}
 }
 
+void UpdateAdjacentLevelCrossingTilesOnRemove(TileIndex tile, Axis road_axis)
+{
+	const DiagDirection dir1 = AxisToDiagDir(road_axis);
+	const DiagDirection dir2 = ReverseDiagDir(dir1);
+	for (DiagDirection dir : { dir1, dir2 }) {
+		const TileIndexDiff diff = TileOffsByDiagDir(dir);
+		bool occupied = false;
+		for (TileIndex t = tile + diff; IsValidTile(t) && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == road_axis; t += diff) {
+			occupied |= CheckLevelCrossing(t);
+		}
+		if (occupied) {
+			/* Mark the immediately adjacent tile dirty */
+			const TileIndex t = tile + diff;
+			if (IsValidTile(t) && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == road_axis) {
+				MarkTileDirtyByTile(t, VMDF_NOT_MAP_MODE);
+			}
+		} else {
+			/* Unbar the crossing tiles in this direction as necessary */
+			for (TileIndex t = tile + diff; IsValidTile(t) && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == road_axis; t += diff) {
+				if (IsCrossingBarred(t)) {
+					/* The crossing tile is barred, unbar it and continue to check the next tile */
+					SetCrossingBarred(t, false);
+					MarkTileDirtyByTile(t, VMDF_NOT_MAP_MODE);
+				} else {
+					/* The crossing tile is already unbarred, mark the tile dirty and stop checking */
+					MarkTileDirtyByTile(t, VMDF_NOT_MAP_MODE);
+					break;
+				}
+			}
+		}
+	}
+}
+
 /**
  * Check if the level crossing is occupied by road vehicle(s).
  * @param t The tile to query.
@@ -2750,7 +2816,7 @@ void MarkDirtyAdjacentLevelCrossingTilesOnAddRemove(TileIndex tile, Axis road_ax
 bool IsCrossingOccupiedByRoadVehicle(TileIndex t)
 {
 	if (!IsCrossingPossiblyOccupiedByRoadVehicle(t)) return false;
-	const bool occupied = EnsureNoRoadVehicleOnGround(t).Failed();
+	const bool occupied = IsTrainCollidableRoadVehicleOnGround(t);
 	SetCrossingOccupiedByRoadVehicle(t, occupied);
 	return occupied;
 }
@@ -2997,12 +3063,11 @@ void ReverseTrainDirection(Train *v)
 	if (crossing != INVALID_TILE) MaybeBarCrossingWithSound(crossing);
 
 	if (HasBit(v->flags, VRF_PENDING_SPEED_RESTRICTION)) {
-		auto range = pending_speed_restriction_change_map.equal_range(v->index);
-		for (auto it = range.first; it != range.second;) {
+		for (auto it = _pending_speed_restriction_change_map.lower_bound(v->index); it != _pending_speed_restriction_change_map.end() && it->first == v->index;) {
 			it->second.distance = (v->gcache.cached_total_length + (HasBit(it->second.flags, PSRCF_DIAGONAL) ? 8 : 4)) - it->second.distance;
 			if (it->second.distance == 0) {
 				v->speed_restriction = it->second.prev_speed;
-				it = pending_speed_restriction_change_map.erase(it);
+				it = _pending_speed_restriction_change_map.erase(it);
 			} else {
 				std::swap(it->second.prev_speed, it->second.new_speed);
 				++it;
@@ -3038,7 +3103,7 @@ void ReverseTrainDirection(Train *v)
 			 * Prevent setting the wrong signals by making wait_counter a non-integer multiple of TILE_SIZE.
 			 * Use a huge value so that the train will reverse again if there is another vehicle coming the other way.
 			 */
-			t->wait_counter = static_cast<uint16>(-((int)TILE_SIZE / 2));
+			t->wait_counter = static_cast<uint16_t>(-((int)TILE_SIZE / 2));
 			t->tunnel_bridge_signal_num = 0;
 		}
 	};
@@ -3100,7 +3165,7 @@ void ReverseTrainDirection(Train *v)
  * @param text unused
  * @return the cost of this operation or an error
  */
-CommandCost CmdReverseTrainDirection(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+CommandCost CmdReverseTrainDirection(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
 	Train *v = Train::GetIfValid(p1);
 	if (v == nullptr) return CMD_ERROR;
@@ -3162,6 +3227,9 @@ CommandCost CmdReverseTrainDirection(TileIndex tile, DoCommandFlag flags, uint32
 				HideFillingPercent(&v->fill_percent_te_id);
 				ReverseTrainDirection(v);
 			}
+
+			/* Unbunching data is no longer valid. */
+			v->ResetDepotUnbunching();
 		}
 	}
 	return CommandCost();
@@ -3176,7 +3244,7 @@ CommandCost CmdReverseTrainDirection(TileIndex tile, DoCommandFlag flags, uint32
  * @param text unused
  * @return the cost of this operation or an error
  */
-CommandCost CmdForceTrainProceed(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+CommandCost CmdForceTrainProceed(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
 	Train *t = Train::GetIfValid(p1);
 	if (t == nullptr) return CMD_ERROR;
@@ -3195,6 +3263,9 @@ CommandCost CmdForceTrainProceed(TileIndex tile, DoCommandFlag flags, uint32 p1,
 		 * next signal we encounter. */
 		t->force_proceed = t->force_proceed == TFP_SIGNAL ? TFP_NONE : HasBit(t->flags, VRF_TRAIN_STUCK) || t->IsChainInDepot() ? TFP_STUCK : TFP_SIGNAL;
 		SetWindowDirty(WC_VEHICLE_VIEW, t->index);
+
+		/* Unbunching data is no longer valid. */
+		t->ResetDepotUnbunching();
 	}
 
 	return CommandCost();
@@ -3226,23 +3297,12 @@ static FindDepotData FindClosestTrainDepot(Train *v, int max_distance)
 	}
 }
 
-/**
- * Locate the closest depot for this consist, and return the information to the caller.
- * @param[out] location    If not \c nullptr and a depot is found, store its location in the given address.
- * @param[out] destination If not \c nullptr and a depot is found, store its index in the given address.
- * @param[out] reverse     If not \c nullptr and a depot is found, store reversal information in the given address.
- * @return A depot has been found.
- */
-bool Train::FindClosestDepot(TileIndex *location, DestinationID *destination, bool *reverse)
+ClosestDepot Train::FindClosestDepot()
 {
 	FindDepotData tfdd = FindClosestTrainDepot(this, 0);
-	if (tfdd.best_length == UINT_MAX) return false;
+	if (tfdd.best_length == UINT_MAX) return ClosestDepot();
 
-	if (location    != nullptr) *location    = tfdd.tile;
-	if (destination != nullptr) *destination = GetDepotIndex(tfdd.tile);
-	if (reverse     != nullptr) *reverse     = tfdd.reverse;
-
-	return true;
+	return ClosestDepot(tfdd.tile, GetDepotIndex(tfdd.tile), tfdd.reverse);
 }
 
 /** Play a sound for a train leaving the station. */
@@ -3357,6 +3417,9 @@ static bool CheckTrainStayInDepot(Train *v)
 		return true;
 	}
 
+	/* Check if we should wait here for unbunching. */
+	if (v->IsWaitingForUnbunching()) return true;
+
 	if (v->reverse_distance > 0) {
 		v->reverse_distance--;
 		if (v->reverse_distance == 0) SetWindowWidgetDirty(WC_VEHICLE_VIEW, v->index, WID_VV_START_STOP);
@@ -3453,6 +3516,7 @@ static bool CheckTrainStayInDepot(Train *v)
 	if (_settings_client.gui.show_track_reservation) MarkTileDirtyByTile(v->tile, VMDF_NOT_MAP_MODE);
 
 	VehicleServiceInDepot(v);
+	v->LeaveUnbunchingDepot();
 	DirtyVehicleListWindowForVehicle(v);
 	v->PlayLeaveStationSound();
 
@@ -3474,7 +3538,7 @@ static bool CheckTrainStayInDepot(Train *v)
 
 static int GetAndClearLastBridgeEntranceSetSignalIndex(TileIndex bridge_entrance)
 {
-	uint16 m = _m[bridge_entrance].m2;
+	uint16_t m = _m[bridge_entrance].m2;
 	if (m & BRIDGE_M2_SIGNAL_STATE_EXT_FLAG) {
 		auto it = _long_bridge_signal_sim_map.find(bridge_entrance);
 		if (it != _long_bridge_signal_sim_map.end()) {
@@ -3482,18 +3546,18 @@ static int GetAndClearLastBridgeEntranceSetSignalIndex(TileIndex bridge_entrance
 			uint slot = (uint)lbss.signal_red_bits.size();
 			while (slot > 0) {
 				slot--;
-				uint64 &slot_bits = lbss.signal_red_bits[slot];
+				uint64_t &slot_bits = lbss.signal_red_bits[slot];
 				if (slot_bits) {
-					uint8 i = FindLastBit(slot_bits);
+					uint8_t i = FindLastBit(slot_bits);
 					ClrBit(slot_bits, i);
 					return 1 + BRIDGE_M2_SIGNAL_STATE_COUNT + (64 * slot) + i;
 				}
 			}
 		}
 	}
-	uint16 m_masked = GB(m & (~BRIDGE_M2_SIGNAL_STATE_EXT_FLAG), BRIDGE_M2_SIGNAL_STATE_OFFSET, BRIDGE_M2_SIGNAL_STATE_FIELD_SIZE);
+	uint16_t m_masked = GB(m & (~BRIDGE_M2_SIGNAL_STATE_EXT_FLAG), BRIDGE_M2_SIGNAL_STATE_OFFSET, BRIDGE_M2_SIGNAL_STATE_FIELD_SIZE);
 	if (m_masked) {
-		uint8 i = FindLastBit(m_masked);
+		uint8_t i = FindLastBit(m_masked);
 		ClrBit(_m[bridge_entrance].m2, BRIDGE_M2_SIGNAL_STATE_OFFSET + i);
 		return 1 + i;
 	}
@@ -3504,8 +3568,8 @@ static int GetAndClearLastBridgeEntranceSetSignalIndex(TileIndex bridge_entrance
 static void UpdateTunnelBridgeEntranceSignalAspect(TileIndex tile)
 {
 	Trackdir trackdir = GetTunnelBridgeEntranceTrackdir(tile);
-	uint8 aspect = GetForwardAspectFollowingTrackAndIncrement(tile, trackdir);
-	uint8 old_aspect = GetTunnelBridgeEntranceSignalAspect(tile);
+	uint8_t aspect = GetForwardAspectFollowingTrackAndIncrement(tile, trackdir);
+	uint8_t old_aspect = GetTunnelBridgeEntranceSignalAspect(tile);
 	if (aspect != old_aspect) {
 		SetTunnelBridgeEntranceSignalAspect(tile, aspect);
 		MarkTunnelBridgeSignalDirty(tile, false);
@@ -3608,7 +3672,7 @@ static void ClearPathReservation(const Train *v, TileIndex tile, Trackdir track_
 				/* Are we just leaving a tunnel/bridge? */
 				if (TrackdirExitsTunnelBridge(tile, track_dir)) {
 					TileIndex end = GetOtherTunnelBridgeEnd(tile);
-					bool free = TunnelBridgeIsFree(tile, end, v, true).Succeeded();
+					bool free = TunnelBridgeIsFree(tile, end, v, TBIFM_ACROSS_ONLY).Succeeded();
 					HandleLastTunnelBridgeSignals(tile, end, ReverseDiagDir(GetTunnelBridgeDirection(tile)), free);
 				}
 			} else if (tunbridge_clear_unsignaled_other_end) {
@@ -3723,7 +3787,7 @@ void FreeTrainTrackReservation(Train *v, TileIndex origin, Trackdir orig_td)
 					break;
 				} else {
 					/* Turn the signal back to red. */
-					if (GetSignalType(tile, TrackdirToTrack(td)) == SIGTYPE_NORMAL) {
+					if (GetSignalType(tile, TrackdirToTrack(td)) == SIGTYPE_BLOCK) {
 						update_signal = true;
 					} else {
 						SetSignalStateByTrackdir(tile, td, SIGNAL_STATE_RED);
@@ -3735,7 +3799,7 @@ void FreeTrainTrackReservation(Train *v, TileIndex origin, Trackdir orig_td)
 			}
 		} else if (IsTunnelBridgeWithSignalSimulation(tile) && TrackdirExitsTunnelBridge(tile, td)) {
 			TileIndex end = GetOtherTunnelBridgeEnd(tile);
-			bool free = TunnelBridgeIsFree(tile, end, v, true).Succeeded();
+			bool free = TunnelBridgeIsFree(tile, end, v, TBIFM_ACROSS_ONLY).Succeeded();
 			if (!free) break;
 		}
 
@@ -3791,9 +3855,10 @@ static Track DoTrainPathfind(const Train *v, TileIndex tile, DiagDirection enter
  * @param origin The tile from which the reservation have to be extended
  * @param new_tracks [out] Tracks to choose from when encountering a choice
  * @param enterdir [out] The direction from which the choice tile is to be entered
+ * @param temporary_slot_state The temporary slot to use (will be activated/deactivated as necessary if it isn't already)
  * @return INVALID_TILE indicates that the reservation failed.
  */
-static PBSTileInfo ExtendTrainReservation(const Train *v, const PBSTileInfo &origin, TrackBits *new_tracks, DiagDirection *enterdir)
+static PBSTileInfo ExtendTrainReservation(const Train *v, const PBSTileInfo &origin, TrackBits *new_tracks, DiagDirection *enterdir, TraceRestrictSlotTemporaryState &temporary_slot_state)
 {
 	CFollowTrackRail ft(v);
 
@@ -3835,20 +3900,42 @@ static PBSTileInfo ExtendTrainReservation(const Train *v, const PBSTileInfo &ori
 		cur_td = FindFirstTrackdir(ft.m_new_td_bits);
 
 		if (IsSafeWaitingPosition(v, tile, cur_td, true, _settings_game.pf.forbid_90_deg)) {
-			PBSWaitingPositionRestrictedSignalInfo restricted_signal_info;
-			bool wp_free = IsWaitingPositionFree(v, tile, cur_td, _settings_game.pf.forbid_90_deg, &restricted_signal_info);
+			PBSWaitingPositionRestrictedSignalState restricted_signal_state;
+			bool wp_free = IsWaitingPositionFree(v, tile, cur_td, _settings_game.pf.forbid_90_deg, &restricted_signal_state);
 			if (!(wp_free && TryReserveRailTrackdir(v, tile, cur_td))) break;
 			/* Safe position is all good, path valid and okay. */
-			if (restricted_signal_info.tile != INVALID_TILE) {
-				const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(restricted_signal_info.tile, TrackdirToTrack(restricted_signal_info.trackdir));
-				if (prog && prog->actions_used_flags & TRPAUF_PBS_RES_END_SLOT) {
-					TraceRestrictProgramResult out;
-					TraceRestrictProgramInput input(restricted_signal_info.tile, restricted_signal_info.trackdir, &VehiclePosTraceRestrictPreviousSignalCallback, nullptr);
-					input.permitted_slot_operations = TRPISP_PBS_RES_END_ACQUIRE | TRPISP_PBS_RES_END_RELEASE;
-					prog->Execute(v, input, out);
+			restricted_signal_state.TraceRestrictExecuteResEndSlot(v);
+			return PBSTileInfo(tile, cur_td, true);
+		}
+
+		if (IsTileType(tile, MP_RAILWAY) && HasSignals(tile) && IsRestrictedSignal(tile) && HasSignalOnTrack(tile, TrackdirToTrack(cur_td))) {
+			const bool front_side = HasSignalOnTrackdir(tile, cur_td);
+
+			TraceRestrictProgramActionsUsedFlags au_flags = TRPAUF_SLOT_ACQUIRE;
+			if (front_side) {
+				/* Passing through a signal from the front side */
+				au_flags |= TRPAUF_WAIT_AT_PBS;
+			}
+
+			const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(tile, TrackdirToTrack(cur_td));
+			if (prog != nullptr && prog->actions_used_flags & au_flags) {
+				TraceRestrictProgramInput input(tile, cur_td, &VehiclePosTraceRestrictPreviousSignalCallback, nullptr);
+				if (prog->actions_used_flags & TRPAUF_SLOT_ACQUIRE) {
+					input.permitted_slot_operations = TRPISP_ACQUIRE_TEMP_STATE;
+
+					if (!temporary_slot_state.IsActive()) {
+						/* The temporary slot state needs to be be pushed because permission to use it is granted by TRPISP_ACQUIRE_TEMP_STATE */
+						temporary_slot_state.PushToChangeStack();
+					}
+				}
+
+				TraceRestrictProgramResult out;
+				prog->Execute(v, input, out);
+				if (front_side && (out.flags & TRPRF_WAIT_AT_PBS)) {
+					/* Wait at PBS is set, take this as waiting at the start signal, handle as a reservation failure */
+					break;
 				}
 			}
-			return PBSTileInfo(tile, cur_td, true);
 		}
 
 		if (!TryReserveRailTrackdir(v, tile, cur_td)) break;
@@ -3878,6 +3965,8 @@ static PBSTileInfo ExtendTrainReservation(const Train *v, const PBSTileInfo &ori
 
 		UnreserveRailTrackdir(tile, cur_td);
 	}
+
+	if (temporary_slot_state.IsActive()) temporary_slot_state.PopFromChangeStackRevertTemporaryChanges(v->index);
 
 	/* Path invalid. */
 	return PBSTileInfo();
@@ -3987,7 +4076,7 @@ public:
 				case OT_GOTO_DEPOT:
 					/* Skip service in depot orders when the train doesn't need service. */
 					if ((order->GetDepotOrderType() & ODTFB_SERVICE) && !this->v->NeedsServicing()) break;
-					FALLTHROUGH;
+					[[fallthrough]];
 				case OT_GOTO_STATION:
 				case OT_GOTO_WAYPOINT:
 					this->v->current_order = *order;
@@ -4086,7 +4175,7 @@ static bool IsReservationLookAheadLongEnough(const Train *v, const ChooseTrainTr
 
 	if (HasBit(lookahead_state.flags, CTTLASF_STOP_FOUND) || HasBit(v->lookahead->flags, TRLF_DEPOT_END)) return true;
 
-	if (v->reverse_distance > 1) {
+	if (v->reverse_distance >= 1) {
 		if (v->lookahead->reservation_end_position >= v->lookahead->current_position + v->reverse_distance - 1) return true;
 	}
 
@@ -4101,6 +4190,7 @@ static bool IsReservationLookAheadLongEnough(const Train *v, const ChooseTrainTr
 	int signal_speed = 0;
 	int signal_position = 0;
 	int signal_z = 0;
+	bool signal_limited_lookahead_check = false;
 
 	for (const TrainReservationLookAheadItem &item : v->lookahead->items) {
 		if (item.type == TRLIT_REVERSE) {
@@ -4120,12 +4210,27 @@ static bool IsReservationLookAheadLongEnough(const Train *v, const ChooseTrainTr
 			signal_z = item.z_pos;
 			found_signal = true;
 		}
+
+		if (item.type == TRLIT_SIGNAL && _settings_game.vehicle.realistic_braking_aspect_limited == TRBALM_ON && item.start <= v->lookahead->current_position + 24) {
+			if (HasBit(item.data_aux, TRSLAI_NO_ASPECT_INC) || HasBit(item.data_aux, TRSLAI_NEXT_ONLY) || HasBit(item.data_aux, TRSLAI_COMBINED_SHUNT)) {
+				signal_limited_lookahead_check = true;
+			}
+		}
+	}
+
+	if (signal_limited_lookahead_check) {
+		/* Do not unnecessarily extend the reservation when passing a signal within the reservation which could not display an aspect
+		 * beyond the current end of the reservation, e.g. banner repeaters and shunt signals */
+		if (AdvanceTrainReservationLookaheadEnd(v, v->lookahead->current_position + 24) <= v->lookahead->reservation_end_position &&
+				v->lookahead->reservation_end_position > v->lookahead->current_position + 24) {
+			return true;
+		}
 	}
 
 	if (found_signal) {
 		int delta_z = v->lookahead->reservation_end_z - signal_z;
 		delta_z += (delta_z >> 2); // Slightly overestimate slope changes to compensate for non-uniform descents
-		int64 distance = GetRealisticBrakingDistanceForSpeed(stats, signal_speed, 0, delta_z);
+		int64_t distance = GetRealisticBrakingDistanceForSpeed(stats, signal_speed, 0, delta_z);
 		if (signal_position + distance <= v->lookahead->reservation_end_position) return true;
 	}
 
@@ -4137,7 +4242,7 @@ static bool LookaheadWithinCurrentTunnelBridge(const Train *t)
 	return t->lookahead->current_position >= t->lookahead->reservation_end_position - ((int)TILE_SIZE * t->lookahead->tunnel_bridge_reserved_tiles) && !HasBit(t->lookahead->flags, TRLF_TB_EXIT_FREE);
 }
 
-static bool HasLongReservePbsSignalOnTrackdir(Train* v, TileIndex tile, Trackdir trackdir, bool default_value)
+static bool HasLongReservePbsSignalOnTrackdir(Train* v, TileIndex tile, Trackdir trackdir, bool default_value, uint16_t lookahead_state_flags)
 {
 	if (HasPbsSignalOnTrackdir(tile, trackdir)) {
 		if (IsNoEntrySignal(tile, TrackdirToTrack(trackdir))) return false;
@@ -4146,7 +4251,9 @@ static bool HasLongReservePbsSignalOnTrackdir(Train* v, TileIndex tile, Trackdir
 			if (prog && prog->actions_used_flags & TRPAUF_LONG_RESERVE) {
 				TraceRestrictProgramResult out;
 				if (default_value) out.flags |= TRPRF_LONG_RESERVE;
-				prog->Execute(v, TraceRestrictProgramInput(tile, trackdir, &VehiclePosTraceRestrictPreviousSignalCallback, nullptr), out);
+				TraceRestrictProgramInput input(tile, trackdir, &VehiclePosTraceRestrictPreviousSignalCallback, nullptr);
+				if (HasBit(lookahead_state_flags, CTTLASF_STOP_FOUND)) input.input_flags |= TRPIF_PASSED_STOP;
+				prog->Execute(v, input, out);
 				return (out.flags & TRPRF_LONG_RESERVE);
 			}
 		}
@@ -4202,17 +4309,27 @@ static void TryLongReserveChooseTrainTrack(Train *v, TileIndex tile, Trackdir td
 
 				bool long_reserve = !long_enough;
 				if (IsTunnelBridgeRestrictedSignal(exit_tile)) {
+					/* Test for TRPRF_LONG_RESERVE in a separate execution from TRPRF_WAIT_AT_PBS/slot operations.
+					 * This is to avoid prematurely acquiring slots on the exit signal before we try to make an exit reservation.
+					 */
 					const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(exit_tile, TrackdirToTrack(exit_td));
-					if (prog && prog->actions_used_flags & (TRPAUF_WAIT_AT_PBS | TRPAUF_SLOT_ACQUIRE | TRPAUF_SLOT_ACQUIRE_ON_RES | TRPAUF_LONG_RESERVE)) {
+					if (prog != nullptr && (prog->actions_used_flags & TRPAUF_LONG_RESERVE)) {
 						TraceRestrictProgramResult out;
 						if (long_reserve) out.flags |= TRPRF_LONG_RESERVE;
 						TraceRestrictProgramInput input(exit_tile, exit_td, nullptr, nullptr);
-						input.permitted_slot_operations = TRPISP_ACQUIRE | TRPISP_ACQUIRE_ON_RES;
+						if (HasBit(lookahead_state.flags, CTTLASF_STOP_FOUND)) input.input_flags |= TRPIF_PASSED_STOP;
+						prog->Execute(v, input, out);
+						long_reserve = (out.flags & TRPRF_LONG_RESERVE);
+					}
+					if (!long_reserve) return;
+					if (prog != nullptr && prog->actions_used_flags & (TRPAUF_WAIT_AT_PBS | TRPAUF_SLOT_ACQUIRE)) {
+						TraceRestrictProgramResult out;
+						TraceRestrictProgramInput input(exit_tile, exit_td, nullptr, nullptr);
+						input.permitted_slot_operations = TRPISP_ACQUIRE;
 						prog->Execute(v, input, out);
 						if (out.flags & TRPRF_WAIT_AT_PBS) {
 							return;
 						}
-						long_reserve = (out.flags & TRPRF_LONG_RESERVE);
 					}
 				}
 				if (!long_reserve) return;
@@ -4250,7 +4367,7 @@ static void TryLongReserveChooseTrainTrack(Train *v, TileIndex tile, Trackdir td
 	}
 
 	CFollowTrackRail ft(v);
-	if (ft.Follow(tile, td) && HasLongReservePbsSignalOnTrackdir(v, ft.m_new_tile, FindFirstTrackdir(ft.m_new_td_bits), !long_enough)) {
+	if (ft.Follow(tile, td) && HasLongReservePbsSignalOnTrackdir(v, ft.m_new_tile, FindFirstTrackdir(ft.m_new_td_bits), !long_enough, lookahead_state.flags)) {
 		// We reserved up to a LR signal, reserve past it as well. recursion
 		ChooseTrainTrack(v, ft.m_new_tile, ft.m_exitdir, TrackdirBitsToTrackBits(ft.m_new_td_bits), CTTF_NO_LOOKAHEAD_VALIDATE | (force_res ? CTTF_FORCE_RES : CTTF_NONE), nullptr, lookahead_state);
 	}
@@ -4314,10 +4431,10 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 		if (track != INVALID_TRACK && HasPbsSignalOnTrackdir(tile, TrackEnterdirToTrackdir(track, enterdir)) && !IsNoEntrySignal(tile, track)) {
 			if (IsRestrictedSignal(tile) && v->force_proceed != TFP_SIGNAL) {
 				const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(tile, track);
-				if (prog && prog->actions_used_flags & (TRPAUF_WAIT_AT_PBS | TRPAUF_SLOT_ACQUIRE | TRPAUF_SLOT_ACQUIRE_ON_RES | TRPAUF_TRAIN_NOT_STUCK)) {
+				if (prog && prog->actions_used_flags & (TRPAUF_WAIT_AT_PBS | TRPAUF_SLOT_ACQUIRE | TRPAUF_TRAIN_NOT_STUCK)) {
 					TraceRestrictProgramResult out;
 					TraceRestrictProgramInput input(tile, TrackEnterdirToTrackdir(track, enterdir), nullptr, nullptr);
-					input.permitted_slot_operations = TRPISP_ACQUIRE | TRPISP_ACQUIRE_ON_RES;
+					input.permitted_slot_operations = TRPISP_ACQUIRE;
 					prog->Execute(v, input, out);
 					if (out.flags & TRPRF_TRAIN_NOT_STUCK && !(v->track & TRACK_BIT_WORMHOLE) && !(v->track == TRACK_BIT_DEPOT)) {
 						v->wait_counter = 0;
@@ -4353,11 +4470,19 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 		ClearLookAheadIfInvalid(v);
 	}
 
+	/* The temporary slot state only needs to be pushed to the stack (i.e. activated) on first use */
+	TraceRestrictSlotTemporaryState temporary_slot_state;
+
+	/* All exit paths except success should revert the temporary slot state if required */
+	auto slot_state_guard = scope_guard([&]() {
+		if (temporary_slot_state.IsActive()) temporary_slot_state.PopFromChangeStackRevertTemporaryChanges(v->index);
+	});
+
 	PBSTileInfo   origin = FollowTrainReservation(v, nullptr, FTRF_OKAY_UNUSED);
 	PBSTileInfo   res_dest(tile, INVALID_TRACKDIR, false);
 	DiagDirection dest_enterdir = enterdir;
 	if (do_track_reservation) {
-		res_dest = ExtendTrainReservation(v, origin, &tracks, &dest_enterdir);
+		res_dest = ExtendTrainReservation(v, origin, &tracks, &dest_enterdir, temporary_slot_state);
 		if (res_dest.tile == INVALID_TILE) {
 			/* Reservation failed? */
 			if (mark_stuck) MarkTrainAsStuck(v);
@@ -4365,12 +4490,13 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 			return FindFirstTrack(tracks);
 		}
 		if (res_dest.okay) {
+			if (temporary_slot_state.IsActive()) temporary_slot_state.PopFromChangeStackApplyTemporaryChanges(v);
 			bool long_reserve = (CheckLongReservePbsTunnelBridgeOnTrackdir(v, res_dest.tile, res_dest.trackdir) != INVALID_TILE);
 			if (!long_reserve) {
 				CFollowTrackRail ft(v);
 				if (ft.Follow(res_dest.tile, res_dest.trackdir)) {
 					Trackdir  new_td = FindFirstTrackdir(ft.m_new_td_bits);
-					long_reserve = HasLongReservePbsSignalOnTrackdir(v, ft.m_new_tile, new_td, _settings_game.vehicle.train_braking_model == TBM_REALISTIC);
+					long_reserve = HasLongReservePbsSignalOnTrackdir(v, ft.m_new_tile, new_td, _settings_game.vehicle.train_braking_model == TBM_REALISTIC, lookahead_state.flags);
 				}
 			}
 
@@ -4389,7 +4515,7 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 		 * the destination but instead to the next one if service isn't needed. */
 		CheckIfTrainNeedsService(v);
 		if (v->current_order.IsType(OT_DUMMY) || v->current_order.IsType(OT_CONDITIONAL) || v->current_order.IsType(OT_GOTO_DEPOT) ||
-				v->current_order.IsType(OT_RELEASE_SLOT) || v->current_order.IsType(OT_COUNTER)) {
+				v->current_order.IsType(OT_SLOT) || v->current_order.IsType(OT_COUNTER) || v->current_order.IsType(OT_LABEL)) {
 			ProcessOrders(v);
 		}
 	}
@@ -4409,7 +4535,7 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 
 		Track next_track = DoTrainPathfind(v, new_tile, dest_enterdir, tracks, path_found, do_track_reservation, &res_dest, &final_dest);
 		DEBUG_UPDATESTATECHECKSUM("ChooseTrainTrack: v: %u, path_found: %d, next_track: %d", v->index, path_found, next_track);
-		UpdateStateChecksum((((uint64) v->index) << 32) | (path_found << 16) | next_track);
+		UpdateStateChecksum((((uint64_t) v->index) << 32) | (path_found << 16) | next_track);
 		if (new_tile == tile) best_track = next_track;
 		v->HandlePathfindingResult(path_found);
 	}
@@ -4429,6 +4555,7 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 		/* Try to find any safe destination. */
 		PBSTileInfo path_end = FollowTrainReservation(v, nullptr, FTRF_OKAY_UNUSED);
 		if (TryReserveSafeTrack(v, path_end.tile, path_end.trackdir, false)) {
+			if (temporary_slot_state.IsActive()) temporary_slot_state.PopFromChangeStackApplyTemporaryChanges(v);
 			TrackBits res = GetReservedTrackbits(tile) & DiagdirReachesTracks(enterdir);
 			best_track = FindFirstTrack(res);
 			if (!HasBit(lookahead_state.flags, CTTLASF_NO_RES_VEH_TILE)) TryReserveRailTrack(v->tile, TrackdirToTrack(v->GetVehicleTrackdir()));
@@ -4465,7 +4592,7 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 		/* Extend reservation until we have found a safe position. */
 		DiagDirection exitdir = TrackdirToExitdir(res_dest.trackdir);
 		TileIndex     next_tile = TileAddByDiagDir(res_dest.tile, exitdir);
-		TrackBits     reachable = TrackdirBitsToTrackBits((TrackdirBits)(GetTileTrackStatus(next_tile, TRANSPORT_RAIL, 0))) & DiagdirReachesTracks(exitdir);
+		TrackBits     reachable = TrackdirBitsToTrackBits(GetTileTrackdirBits(next_tile, TRANSPORT_RAIL, 0)) & DiagdirReachesTracks(exitdir);
 		if (Rail90DegTurnDisallowedTilesFromDiagDir(res_dest.tile, next_tile, exitdir)) {
 			reachable &= ~TrackCrossesTracks(TrackdirToTrack(res_dest.trackdir));
 		}
@@ -4486,6 +4613,7 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 				if (mark_stuck) MarkTrainAsStuck(v);
 				got_reservation = false;
 				changed_signal = INVALID_TRACKDIR;
+				if (temporary_slot_state.IsActive()) temporary_slot_state.PopFromChangeStackRevertTemporaryChanges(v->index);
 				break;
 			}
 		}
@@ -4495,11 +4623,13 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 			if (mark_stuck) MarkTrainAsStuck(v);
 			got_reservation = false;
 			changed_signal = INVALID_TRACKDIR;
+			if (temporary_slot_state.IsActive()) temporary_slot_state.PopFromChangeStackRevertTemporaryChanges(v->index);
 		}
 		break;
 	}
 
 	if (got_reservation) {
+		if (temporary_slot_state.IsActive()) temporary_slot_state.PopFromChangeStackApplyTemporaryChanges(v);
 		if (v->current_order.IsBaseStationOrder() && HasStationTileRail(res_dest.tile) && v->current_order.GetDestination() == GetStationIndex(res_dest.tile)) {
 			if (v->current_order.ShouldStopAtStation(v, v->current_order.GetDestination(), v->current_order.IsType(OT_GOTO_WAYPOINT))) {
 				v->last_station_visited = v->current_order.GetDestination();
@@ -4629,7 +4759,7 @@ bool TryPathReserve(Train *v, bool mark_as_stuck, bool first_tile_okay)
 	} else {
 		new_tile = TileAddByDiagDir(origin.tile, exitdir);
 	}
-	TrackBits reachable = TrackdirBitsToTrackBits(TrackStatusToTrackdirBits(GetTileTrackStatus(new_tile, TRANSPORT_RAIL, 0)) & DiagdirReachesTrackdirs(exitdir));
+	TrackBits reachable = TrackdirBitsToTrackBits(GetTileTrackdirBits(new_tile, TRANSPORT_RAIL, 0) & DiagdirReachesTrackdirs(exitdir));
 
 	if (Rail90DegTurnDisallowedTilesFromDiagDir(origin.tile, new_tile, exitdir)) reachable &= ~TrackCrossesTracks(TrackdirToTrack(origin.trackdir));
 
@@ -4835,7 +4965,7 @@ static inline void AffectSpeedByZChange(Train *v, int old_z)
 	if (old_z < v->z_pos) {
 		v->cur_speed -= (v->cur_speed * asp->z_up >> 8);
 	} else {
-		uint16 spd = v->cur_speed + asp->z_down;
+		uint16_t spd = v->cur_speed + asp->z_down;
 		if (spd <= v->gcache.cached_max_track_speed) v->cur_speed = spd;
 	}
 }
@@ -4856,7 +4986,7 @@ static TrainMovedChangeSignalEnum TrainMovedChangeSignal(Train* v, TileIndex til
 			/* A PBS block with a non-PBS signal facing us? */
 			if (!IsPbsSignal(GetSignalType(tile, TrackdirToTrack(trackdir)))) return CHANGED_NORMAL_TO_PBS_BLOCK;
 
-			if (front && HasLongReservePbsSignalOnTrackdir(v, tile, trackdir, _settings_game.vehicle.train_braking_model == TBM_REALISTIC)) return CHANGED_LR_PBS;
+			if (front && HasLongReservePbsSignalOnTrackdir(v, tile, trackdir, _settings_game.vehicle.train_braking_model == TBM_REALISTIC, 0)) return CHANGED_LR_PBS;
 		}
 	}
 	if (IsTileType(tile, MP_TUNNELBRIDGE) && IsTunnelBridgeSignalSimulationExit(tile) && GetTunnelBridgeDirection(tile) == ReverseDiagDir(dir)) {
@@ -5060,8 +5190,8 @@ static Vehicle *CheckTrainAtSignal(Vehicle *v, void *data)
 }
 
 struct FindSpaceBetweenTrainsChecker {
-	int32 pos;
-	uint16 distance;
+	int32_t pos;
+	uint16_t distance;
 	DiagDirection direction;
 };
 
@@ -5077,7 +5207,7 @@ static Vehicle *FindSpaceBetweenTrainsEnum(Vehicle *v, void *data)
 	}
 
 	const FindSpaceBetweenTrainsChecker *checker = (FindSpaceBetweenTrainsChecker*) data;
-	int32 a, b = 0;
+	int32_t a, b = 0;
 
 	switch (checker->direction) {
 		default: NOT_REACHED();
@@ -5091,7 +5221,7 @@ static Vehicle *FindSpaceBetweenTrainsEnum(Vehicle *v, void *data)
 	return nullptr;
 }
 
-static bool IsTooCloseBehindTrain(Train *t, TileIndex tile, uint16 distance, bool check_endtile)
+static bool IsTooCloseBehindTrain(Train *t, TileIndex tile, uint16_t distance, bool check_endtile)
 {
 	if (t->force_proceed != 0) return false;
 
@@ -5186,10 +5316,10 @@ static bool CheckTrainStayInWormHolePathReserve(Train *t, TileIndex tile)
 	auto try_exit_reservation = [&]() -> bool {
 		if (IsTunnelBridgeRestrictedSignal(tile)) {
 			const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(tile, TrackdirToTrack(td));
-			if (prog && prog->actions_used_flags & (TRPAUF_WAIT_AT_PBS | TRPAUF_SLOT_ACQUIRE | TRPAUF_SLOT_ACQUIRE_ON_RES)) {
+			if (prog && prog->actions_used_flags & (TRPAUF_WAIT_AT_PBS | TRPAUF_SLOT_ACQUIRE)) {
 				TraceRestrictProgramResult out;
 				TraceRestrictProgramInput input(tile, td, nullptr, nullptr);
-				input.permitted_slot_operations = TRPISP_ACQUIRE | TRPISP_ACQUIRE_ON_RES;
+				input.permitted_slot_operations = TRPISP_ACQUIRE;
 				prog->Execute(t, input, out);
 				if (out.flags & TRPRF_WAIT_AT_PBS) {
 					return false;
@@ -5228,12 +5358,14 @@ static bool CheckTrainStayInWormHolePathReserve(Train *t, TileIndex tile)
 				t->UpdatePosition();
 			}
 
-			bool ok = try_exit_reservation();
-			if (!ok && (t->lookahead->reservation_end_position >= t->lookahead->current_position && t->lookahead->reservation_end_position > t->lookahead->current_position + tile_margin)) {
+			bool ok;
+			if (t->lookahead->reservation_end_position >= t->lookahead->current_position && t->lookahead->reservation_end_position > t->lookahead->current_position + tile_margin) {
 				/* Reservation was made previously and was valid then.
 				 * To avoid unexpected braking due to stopping short of the lookahead end,
 				 * just carry on even if the end is not a safe waiting point now. */
 				ok = true;
+			} else {
+				ok = try_exit_reservation();
 			}
 			if (ok) {
 				if (_extra_aspects > 0) {
@@ -5352,10 +5484,6 @@ inline void DecreaseReverseDistance(Train *v)
 {
 	if (v->reverse_distance > 1) {
 		v->reverse_distance--;
-		if (unlikely(v->reverse_distance == 1 && v->cur_speed > 15 && _settings_game.vehicle.train_acceleration_model == AM_REALISTIC)) {
-			/* Train is still moving too fast, extend the reversing point */
-			v->reverse_distance++;
-		}
 	}
 }
 
@@ -5376,30 +5504,30 @@ int ReversingDistanceTargetSpeed(const Train *v)
 
 void DecrementPendingSpeedRestrictions(Train *v)
 {
-	auto range = pending_speed_restriction_change_map.equal_range(v->index);
-	if (range.first == range.second) ClrBit(v->flags, VRF_PENDING_SPEED_RESTRICTION);
-	for (auto it = range.first; it != range.second;) {
+	bool remaining = false;
+	for (auto it = _pending_speed_restriction_change_map.lower_bound(v->index); it != _pending_speed_restriction_change_map.end() && it->first == v->index;) {
 		if (--it->second.distance == 0) {
 			v->speed_restriction = it->second.new_speed;
-			it = pending_speed_restriction_change_map.erase(it);
+			it = _pending_speed_restriction_change_map.erase(it);
 		} else {
 			++it;
+			remaining = true;
 		}
 	}
+	if (!remaining) ClrBit(v->flags, VRF_PENDING_SPEED_RESTRICTION);
 }
 
 void HandleTraceRestrictSpeedRestrictionAction(const TraceRestrictProgramResult &out, Train *v, Trackdir signal_td)
 {
 	if (out.flags & TRPRF_SPEED_RESTRICTION_SET) {
 		SetBit(v->flags, VRF_PENDING_SPEED_RESTRICTION);
-		auto range = pending_speed_restriction_change_map.equal_range(v->index);
-		for (auto it = range.first; it != range.second; ++it) {
-			if ((uint16) (out.speed_restriction + 0xFFFF) < (uint16) (it->second.new_speed + 0xFFFF)) it->second.new_speed = out.speed_restriction;
+		for (auto it = _pending_speed_restriction_change_map.lower_bound(v->index); it != _pending_speed_restriction_change_map.end() && it->first == v->index; ++it) {
+			if ((uint16_t) (out.speed_restriction + 0xFFFF) < (uint16_t) (it->second.new_speed + 0xFFFF)) it->second.new_speed = out.speed_restriction;
 		}
-		uint16 flags = 0;
+		uint16_t flags = 0;
 		if (IsDiagonalTrack(TrackdirToTrack(signal_td))) SetBit(flags, PSRCF_DIAGONAL);
-		pending_speed_restriction_change_map.insert({ v->index, { (uint16) (v->gcache.cached_total_length + (HasBit(flags, PSRCF_DIAGONAL) ? 8 : 4)), out.speed_restriction, v->speed_restriction, flags } });
-		if ((uint16) (out.speed_restriction + 0xFFFF) < (uint16) (v->speed_restriction + 0xFFFF)) v->speed_restriction = out.speed_restriction;
+		_pending_speed_restriction_change_map.insert({ v->index, { (uint16_t) (v->gcache.cached_total_length + (HasBit(flags, PSRCF_DIAGONAL) ? 8 : 4)), out.speed_restriction, v->speed_restriction, flags } });
+		if ((uint16_t) (out.speed_restriction + 0xFFFF) < (uint16_t) (v->speed_restriction + 0xFFFF)) v->speed_restriction = out.speed_restriction;
 	}
 	if (out.flags & TRPRF_SPEED_ADAPT_EXEMPT && !HasBit(v->flags, VRF_SPEED_ADAPTATION_EXEMPT)) {
 		SetBit(v->flags, VRF_SPEED_ADAPTATION_EXEMPT);
@@ -5409,6 +5537,30 @@ void HandleTraceRestrictSpeedRestrictionAction(const TraceRestrictProgramResult 
 		ClrBit(v->flags, VRF_SPEED_ADAPTATION_EXEMPT);
 		SetWindowDirty(WC_VEHICLE_DETAILS, v->index);
 	}
+}
+
+template <typename AllowSlotAcquireT, typename PostProcessResultT>
+void TrainControllerTraceRestrictFrontEvaluation(TileIndex tile, Trackdir dir, Train *v, TraceRestrictProgramActionsUsedFlags extra_action_used_flags, AllowSlotAcquireT allow_slot_acquire, PostProcessResultT post_process_result)
+{
+	const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(tile, TrackdirToTrack(dir));
+	if (prog == nullptr) return;
+
+	TraceRestrictProgramActionsUsedFlags actions_used_flags = extra_action_used_flags | TRPAUF_SLOT_RELEASE_FRONT | TRPAUF_SPEED_RESTRICTION | TRPAUF_SPEED_ADAPTATION | TRPAUF_CHANGE_COUNTER;
+
+	const bool slot_acquire_allowed = allow_slot_acquire();
+	if (slot_acquire_allowed) actions_used_flags |= TRPAUF_SLOT_ACQUIRE;
+
+	if ((prog->actions_used_flags & actions_used_flags) == 0) return;
+
+	TraceRestrictProgramResult out;
+	TraceRestrictProgramInput input(tile, dir, nullptr, nullptr);
+	input.permitted_slot_operations = TRPISP_RELEASE_FRONT | TRPISP_CHANGE_COUNTER;
+	if (slot_acquire_allowed) input.permitted_slot_operations |= TRPISP_ACQUIRE;
+
+	prog->Execute(v, input, out);
+
+	HandleTraceRestrictSpeedRestrictionAction(out, v, dir);
+	post_process_result(out);
 }
 
 /**
@@ -5427,7 +5579,7 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 	bool update_signal_tunbridge_exit = false;
 	Direction old_direction = INVALID_DIR;
 	TrackBits old_trackbits = INVALID_TRACK_BIT;
-	uint16 old_gv_flags = 0;
+	uint16_t old_gv_flags = 0;
 
 	auto notify_direction_changed = [&](Direction old_direction, Direction new_direction) {
 		if (prev == nullptr && _settings_game.vehicle.train_acceleration_model == AM_ORIGINAL) {
@@ -5438,7 +5590,8 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 		direction_changed = true;
 	};
 
-	if (reverse && v->reverse_distance == 1) {
+	if (reverse && v->reverse_distance == 1 && (v->cur_speed <= 15 || !v->UsingRealisticBraking())) {
+		/* Train is not moving too fast and reversing distance has been reached */
 		goto reverse_train_direction;
 	}
 
@@ -5456,7 +5609,7 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 				IsRailBridgeHeadTile(gp.old_tile) && DiagdirBetweenTiles(gp.old_tile, gp.new_tile) == GetTunnelBridgeDirection(gp.old_tile)) {
 			/* left a bridge headtile into a wormhole */
 			Direction old_direction = v->direction;
-			uint32 r = VehicleEnterTile(v, gp.old_tile, gp.x, gp.y); // NB: old tile, the bridge head which the train just left
+			uint32_t r = VehicleEnterTile(v, gp.old_tile, gp.x, gp.y); // NB: old tile, the bridge head which the train just left
 			if (HasBit(r, VETS_CANNOT_ENTER)) {
 				goto invalid_rail;
 			}
@@ -5481,7 +5634,7 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 					/* Reverse when we are at the end of the track already, do not move to the new position */
 					if (v->IsFrontEngine() && !TrainCheckIfLineEnds(v, reverse)) return false;
 
-					uint32 r = VehicleEnterTile(v, gp.new_tile, gp.x, gp.y);
+					uint32_t r = VehicleEnterTile(v, gp.new_tile, gp.x, gp.y);
 					if (HasBit(r, VETS_CANNOT_ENTER)) {
 						goto invalid_rail;
 					}
@@ -5596,19 +5749,15 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 						if (IsPlainRailTile(gp.new_tile) && HasSignals(gp.new_tile) && IsRestrictedSignal(gp.new_tile)) {
 							const Trackdir dir = FindFirstTrackdir(trackdirbits);
 							if (HasSignalOnTrack(gp.new_tile, TrackdirToTrack(dir))) {
-								const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(gp.new_tile, TrackdirToTrack(dir));
-								if (prog && prog->actions_used_flags & (TRPAUF_SLOT_ACQUIRE | TRPAUF_SLOT_RELEASE_FRONT | TRPAUF_REVERSE | TRPAUF_SPEED_RESTRICTION | TRPAUF_SPEED_ADAPTATION | TRPAUF_CHANGE_COUNTER)) {
-									TraceRestrictProgramResult out;
-									TraceRestrictProgramInput input(gp.new_tile, dir, nullptr, nullptr);
-									input.permitted_slot_operations = TRPISP_ACQUIRE | TRPISP_RELEASE_FRONT | TRPISP_CHANGE_COUNTER;
-									prog->Execute(v, input, out);
+								TrainControllerTraceRestrictFrontEvaluation(gp.new_tile, dir, v, TRPAUF_REVERSE, [&]() -> bool {
+									return !IsPbsSignal(GetSignalType(gp.new_tile, TrackdirToTrack(dir)));
+								}, [&](const TraceRestrictProgramResult &out) {
 									if (out.flags & TRPRF_REVERSE && GetSignalType(gp.new_tile, TrackdirToTrack(dir)) == SIGTYPE_PBS &&
 											!HasSignalOnTrackdir(gp.new_tile, dir)) {
 										v->reverse_distance = v->gcache.cached_total_length + (IsDiagonalTrack(TrackdirToTrack(dir)) ? 16 : 8);
 										SetWindowDirty(WC_VEHICLE_VIEW, v->index);
 									}
-									HandleTraceRestrictSpeedRestrictionAction(out, v, dir);
-								}
+								});
 							}
 						}
 					}
@@ -5652,13 +5801,13 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 						chosen_track == TRACK_BIT_LEFT  || chosen_track == TRACK_BIT_RIGHT);
 
 				/* Update XY to reflect the entrance to the new tile, and select the direction to use */
-				const byte *b = _initial_tile_subcoord[FIND_FIRST_BIT(chosen_track)][enterdir];
+				const byte *b = _initial_tile_subcoord[FindFirstBit(chosen_track)][enterdir];
 				gp.x = (gp.x & ~0xF) | b[0];
 				gp.y = (gp.y & ~0xF) | b[1];
 				Direction chosen_dir = (Direction)b[2];
 
 				/* Call the landscape function and tell it that the vehicle entered the tile */
-				uint32 r = (v->track & TRACK_BIT_WORMHOLE) ? 0 : VehicleEnterTile(v, gp.new_tile, gp.x, gp.y);
+				uint32_t r = (v->track & TRACK_BIT_WORMHOLE) ? 0 : VehicleEnterTile(v, gp.new_tile, gp.x, gp.y);
 				if (HasBit(r, VETS_CANNOT_ENTER)) {
 					goto invalid_rail;
 				}
@@ -5754,14 +5903,10 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 					if (v->IsFrontEngine() && IsTunnelBridgeSignalSimulationEntrance(old_tile) && (IsTunnelBridgeRestrictedSignal(old_tile) || _settings_game.vehicle.train_speed_adaptation)) {
 						const Trackdir trackdir = GetTunnelBridgeEntranceTrackdir(old_tile);
 						if (IsTunnelBridgeRestrictedSignal(old_tile)) {
-							const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(old_tile, TrackdirToTrack(trackdir));
-							if (prog && prog->actions_used_flags & (TRPAUF_SLOT_ACQUIRE | TRPAUF_SLOT_RELEASE_FRONT | TRPAUF_SPEED_RESTRICTION | TRPAUF_SPEED_ADAPTATION | TRPAUF_CHANGE_COUNTER)) {
-								TraceRestrictProgramResult out;
-								TraceRestrictProgramInput input(old_tile, trackdir, nullptr, nullptr);
-								input.permitted_slot_operations = TRPISP_ACQUIRE | TRPISP_RELEASE_FRONT | TRPISP_CHANGE_COUNTER;
-								prog->Execute(v, input, out);
-								HandleTraceRestrictSpeedRestrictionAction(out, v, trackdir);
-							}
+							TrainControllerTraceRestrictFrontEvaluation(old_tile, trackdir, v, TRPAUF_NONE, [&]() -> bool {
+								/* Only acquire slot when not using realistic braking, as the tunnel/bridge entrance otherwise acts as a block signal */
+								return _settings_game.vehicle.train_braking_model != TBM_REALISTIC;
+							}, [&](const TraceRestrictProgramResult &out) {});
 						}
 						if (_settings_game.vehicle.train_speed_adaptation) {
 							SetSignalTrainAdaptationSpeed(v, old_tile, TrackdirToTrack(trackdir));
@@ -5793,7 +5938,7 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 
 				if (v->IsFrontEngine()) {
 					/* Check if track in front is free and see if we can leave wormhole. */
-					int z = GetSlopePixelZ(gp.x, gp.y) - v->z_pos;
+					int z = GetSlopePixelZ(gp.x, gp.y, true) - v->z_pos;
 					if (IsTileType(gp.new_tile, MP_TUNNELBRIDGE) &&	!(abs(z) > 2)) {
 						if (CheckTrainStayInWormHole(v, gp.new_tile)) {
 							v->cur_speed = 0;
@@ -5802,14 +5947,9 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 						leaving = true;
 						if (IsTunnelBridgeRestrictedSignal(gp.new_tile) && IsTunnelBridgeSignalSimulationExit(gp.new_tile)) {
 							const Trackdir trackdir = GetTunnelBridgeExitTrackdir(gp.new_tile);
-							const TraceRestrictProgram *prog = GetExistingTraceRestrictProgram(gp.new_tile, TrackdirToTrack(trackdir));
-							if (prog && prog->actions_used_flags & (TRPAUF_SLOT_ACQUIRE | TRPAUF_SLOT_RELEASE_FRONT | TRPAUF_SPEED_RESTRICTION | TRPAUF_SPEED_ADAPTATION | TRPAUF_CHANGE_COUNTER)) {
-								TraceRestrictProgramResult out;
-								TraceRestrictProgramInput input(gp.new_tile, trackdir, nullptr, nullptr);
-								input.permitted_slot_operations = TRPISP_ACQUIRE | TRPISP_RELEASE_FRONT | TRPISP_CHANGE_COUNTER;
-								prog->Execute(v, input, out);
-								HandleTraceRestrictSpeedRestrictionAction(out, v, trackdir);
-							}
+							TrainControllerTraceRestrictFrontEvaluation(gp.new_tile, trackdir, v, TRPAUF_NONE, [&]() -> bool {
+								return !IsTunnelBridgeEffectivelyPBS(gp.new_tile);
+							}, [&](const TraceRestrictProgramResult &out) {});
 						}
 					} else {
 						if (IsTooCloseBehindTrain(v, gp.new_tile, v->wait_counter, distance == 0)) {
@@ -6075,6 +6215,7 @@ reverse_train_direction:
 		v->track = old_trackbits;
 		v->direction = old_direction;
 		v->gv_flags = old_gv_flags;
+		if (!(v->track & TRACK_BIT_WORMHOLE)) v->z_pos = GetSlopePixelZ(v->x_pos, v->y_pos, true);
 	}
 	if (reverse) {
 		v->wait_counter = 0;
@@ -6122,7 +6263,7 @@ static Vehicle *CollectTrackbitsFromCrashedVehiclesEnum(Vehicle *v, void *data)
 
 static void SetSignalledBridgeTunnelGreenIfClear(TileIndex tile, TileIndex end)
 {
-	if (TunnelBridgeIsFree(tile, end, nullptr, true).Succeeded()) {
+	if (TunnelBridgeIsFree(tile, end, nullptr, TBIFM_ACROSS_ONLY).Succeeded()) {
 		auto process_tile = [](TileIndex t) {
 			if (IsTunnelBridgeSignalSimulationEntrance(t)) {
 				if (IsBridge(t)) {
@@ -6135,6 +6276,20 @@ static void SetSignalledBridgeTunnelGreenIfClear(TileIndex tile, TileIndex end)
 		process_tile(tile);
 		process_tile(end);
 	}
+}
+
+static bool IsRailStationPlatformOccupied(TileIndex tile)
+{
+	TileIndexDiff delta = (GetRailStationAxis(tile) == AXIS_X ? TileDiffXY(1, 0) : TileDiffXY(0, 1));
+
+	for (TileIndex t = tile; IsCompatibleTrainStationTile(t, tile); t -= delta) {
+		if (HasVehicleOnPos(t, VEH_TRAIN, nullptr, &TrainOnTileEnum)) return true;
+	}
+	for (TileIndex t = tile + delta; IsCompatibleTrainStationTile(t, tile); t += delta) {
+		if (HasVehicleOnPos(t, VEH_TRAIN, nullptr, &TrainOnTileEnum)) return true;
+	}
+
+	return false;
 }
 
 /**
@@ -6191,6 +6346,13 @@ static void DeleteLastWagon(Train *v)
 	/* check if the wagon was on a road/rail-crossing */
 	if (IsLevelCrossingTile(tile)) UpdateLevelCrossing(tile);
 
+	if (IsRailStationTile(tile)) {
+		bool occupied = IsRailStationPlatformOccupied(tile);
+		DiagDirection dir = AxisToDiagDir(GetRailStationAxis(tile));
+		SetRailStationPlatformReservation(tile, dir, occupied);
+		SetRailStationPlatformReservation(tile, ReverseDiagDir(dir), occupied);
+	}
+
 	/* Update signals */
 	if (IsTunnelBridgeWithSignalSimulation(tile)) {
 		TileIndex end = GetOtherTunnelBridgeEnd(tile);
@@ -6244,7 +6406,7 @@ static bool HandleCrashedTrain(Train *v)
 		CreateEffectVehicleRel(v, 4, 4, 8, EV_EXPLOSION_LARGE);
 	}
 
-	uint32 r;
+	uint32_t r;
 	if (state <= 200 && Chance16R(1, 7, r)) {
 		int index = (r * 10 >> 16);
 
@@ -6275,7 +6437,7 @@ static bool HandleCrashedTrain(Train *v)
 }
 
 /** Maximum speeds for train that is broken down or approaching line end */
-static const uint16 _breakdown_speeds[16] = {
+static const uint16_t _breakdown_speeds[16] = {
 	225, 210, 195, 180, 165, 150, 135, 120, 105, 90, 75, 60, 45, 30, 15, 15
 };
 
@@ -6298,7 +6460,7 @@ static bool TrainApproachingLineEnd(Train *v, bool signal, bool reverse)
 	 * for other directions, it will be 1, 3, 5, ..., 15 */
 	switch (v->direction) {
 		case DIR_N : x = ~x + ~y + 25; break;
-		case DIR_NW: x = y;            FALLTHROUGH;
+		case DIR_NW: x = y;            [[fallthrough]];
 		case DIR_NE: x = ~x + 16;      break;
 		case DIR_E : x = ~x + y + 9;   break;
 		case DIR_SE: x = y;            break;
@@ -6321,7 +6483,7 @@ static bool TrainApproachingLineEnd(Train *v, bool signal, bool reverse)
 
 	/* slow down */
 	v->vehstatus |= VS_TRAIN_SLOWING;
-	uint16 break_speed = _breakdown_speeds[x & 0xF];
+	uint16_t break_speed = _breakdown_speeds[x & 0xF];
 	if (break_speed < v->cur_speed) v->cur_speed = break_speed;
 
 	return true;
@@ -6483,7 +6645,7 @@ static bool TrainLocoHandler(Train *v, bool mode)
 	/* exit if train is stopped */
 	if ((v->vehstatus & VS_STOPPED) && v->cur_speed == 0) return true;
 
-	bool valid_order = !v->current_order.IsType(OT_NOTHING) && v->current_order.GetType() != OT_CONDITIONAL && !v->current_order.IsType(OT_RELEASE_SLOT) && !v->current_order.IsType(OT_COUNTER);
+	bool valid_order = !v->current_order.IsType(OT_NOTHING) && v->current_order.GetType() != OT_CONDITIONAL && !v->current_order.IsType(OT_SLOT) && !v->current_order.IsType(OT_COUNTER) && !v->current_order.IsType(OT_LABEL);
 	if (ProcessOrders(v) && CheckReverseTrain(v)) {
 		v->wait_counter = 0;
 		v->cur_speed = 0;
@@ -6566,7 +6728,7 @@ static bool TrainLocoHandler(Train *v, bool mode)
 
 		bool may_reverse = ProcessOrders(v);
 
-		if (IsRailStationTile(v->tile) && GetStationIndex(v->tile) == station_id) {
+		if (IsRailStationTile(v->tile) && GetStationIndex(v->tile) == station_id && Company::Get(v->owner)->settings.remain_if_next_order_same_station) {
 			if (v->current_order.IsType(OT_GOTO_STATION) && v->current_order.GetDestination() == station_id &&
 					!(v->current_order.GetNonStopType() & ONSF_NO_STOP_AT_DESTINATION_STATION)) {
 				v->last_station_visited = station_id;
@@ -6687,7 +6849,7 @@ Money Train::GetRunningCost() const
 bool Train::Tick()
 {
 	DEBUG_UPDATESTATECHECKSUM("Train::Tick: v: %u, x: %d, y: %d, track: %d", this->index, this->x_pos, this->y_pos, this->track);
-	UpdateStateChecksum((((uint64) this->x_pos) << 32) | (this->y_pos << 16) | this->track);
+	UpdateStateChecksum((((uint64_t) this->x_pos) << 32) | (this->y_pos << 16) | this->track);
 	if (this->IsFrontEngine()) {
 		if (!((this->vehstatus & VS_STOPPED) || this->IsWaitingInDepot()) || this->cur_speed > 0) this->running_ticks++;
 
@@ -6760,7 +6922,7 @@ static void CheckIfTrainNeedsService(Train *v)
 /** Update day counters of the train vehicle. */
 void Train::OnNewDay()
 {
-	AgeVehicle(this);
+	if (!EconTime::UsingWallclockUnits()) AgeVehicle(this);
 
 	if ((++this->day_counter & 7) == 0) DecreaseVehicleValue(this);
 }
@@ -6846,6 +7008,7 @@ void DeleteVisibleTrain(Train *v)
 	/* delete train from back to front */
 	Train *u;
 	Train *prev = v->Last();
+	FreeTrainStationPlatformReservation(v);
 	do {
 		u = prev;
 		prev = u->Previous();
@@ -6884,7 +7047,7 @@ void DeleteVisibleTrain(Train *v)
 	UpdateSignalsInBuffer();
 }
 
-Train* CmdBuildVirtualRailWagon(const Engine *e, uint32 user, bool no_consist_change)
+Train* CmdBuildVirtualRailWagon(const Engine *e, uint32_t user, bool no_consist_change)
 {
 	const RailVehicleInfo *rvi = &e->u.rail;
 
@@ -6916,9 +7079,9 @@ Train* CmdBuildVirtualRailWagon(const Engine *e, uint32 user, bool no_consist_ch
 
 	v->railtype = rvi->railtype;
 
-	v->build_year = _cur_year;
+	v->build_year = CalTime::CurYear();
 	v->sprite_seq.Set(SPR_IMG_QUERY);
-	v->random_bits = VehicleRandomBits();
+	v->random_bits = Random();
 
 	v->group_id = DEFAULT_GROUP;
 
@@ -6942,7 +7105,7 @@ Train* CmdBuildVirtualRailWagon(const Engine *e, uint32 user, bool no_consist_ch
 	return v;
 }
 
-Train* BuildVirtualRailVehicle(EngineID eid, StringID &error, uint32 user, bool no_consist_change)
+Train* BuildVirtualRailVehicle(EngineID eid, StringID &error, uint32_t user, bool no_consist_change)
 {
 	const Engine *e = Engine::GetIfValid(eid);
 	if (e == nullptr || e->type != VEH_TRAIN) {
@@ -6988,12 +7151,17 @@ Train* BuildVirtualRailVehicle(EngineID eid, StringID &error, uint32 user, bool 
 	v->reliability_spd_dec = e->reliability_spd_dec;
 	v->max_age = e->GetLifeLengthInDays();
 
+	v->SetServiceInterval(Company::Get(_current_company)->settings.vehicle.servint_trains);
+	v->SetServiceIntervalIsPercent(Company::Get(_current_company)->settings.vehicle.servint_ispercent);
+	SB(v->vehicle_flags, VF_AUTOMATE_TIMETABLE, 1, Company::Get(_current_company)->settings.vehicle.auto_timetable_by_default);
+	SB(v->vehicle_flags, VF_TIMETABLE_SEPARATION, 1, Company::Get(_current_company)->settings.vehicle.auto_separation_by_default);
+
 	v->railtype = rvi->railtype;
 	_new_vehicle_id = v->index;
 
-	v->build_year = _cur_year;
+	v->build_year = CalTime::CurYear();
 	v->sprite_seq.Set(SPR_IMG_QUERY);
-	v->random_bits = VehicleRandomBits();
+	v->random_bits = Random();
 
 	v->group_id = DEFAULT_GROUP;
 
@@ -7034,7 +7202,7 @@ Train* BuildVirtualRailVehicle(EngineID eid, StringID &error, uint32 user, bool 
  * @param text unused
  * @return the cost of this operation or an error
  */
-CommandCost CmdBuildVirtualRailVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+CommandCost CmdBuildVirtualRailVehicle(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
 	EngineID eid = GB(p1, 0, 16);
 
@@ -7044,7 +7212,7 @@ CommandCost CmdBuildVirtualRailVehicle(TileIndex tile, DoCommandFlag flags, uint
 
 	/* Validate the cargo type. */
 	CargoID cargo = GB(p1, 24, 8);
-	if (cargo >= NUM_CARGO && cargo != CT_INVALID) return CMD_ERROR;
+	if (cargo >= NUM_CARGO && cargo != INVALID_CARGO) return CMD_ERROR;
 
 	bool should_execute = (flags & DC_EXEC) != 0;
 
@@ -7056,7 +7224,7 @@ CommandCost CmdBuildVirtualRailVehicle(TileIndex tile, DoCommandFlag flags, uint
 			return_cmd_error(err);
 		}
 
-		if (cargo != CT_INVALID) {
+		if (cargo != INVALID_CARGO) {
 			CargoID default_cargo = Engine::Get(eid)->GetDefaultCargoType();
 			if (default_cargo != cargo) {
 				CommandCost refit_res = CmdRefitVehicle(tile, flags, train->index, cargo, nullptr);
@@ -7071,15 +7239,26 @@ CommandCost CmdBuildVirtualRailVehicle(TileIndex tile, DoCommandFlag flags, uint
 void ClearVehicleWindows(const Train *v)
 {
 	if (v->IsPrimaryVehicle()) {
-		DeleteWindowById(WC_VEHICLE_VIEW, v->index);
-		DeleteWindowById(WC_VEHICLE_ORDERS, v->index);
-		DeleteWindowById(WC_VEHICLE_REFIT, v->index);
-		DeleteWindowById(WC_VEHICLE_DETAILS, v->index);
-		DeleteWindowById(WC_VEHICLE_TIMETABLE, v->index);
-		DeleteWindowById(WC_SCHDISPATCH_SLOTS, v->index);
-		DeleteWindowById(WC_VEHICLE_CARGO_TYPE_LOAD_ORDERS, v->index);
-		DeleteWindowById(WC_VEHICLE_CARGO_TYPE_UNLOAD_ORDERS, v->index);
+		CloseWindowById(WC_VEHICLE_VIEW, v->index);
+		CloseWindowById(WC_VEHICLE_ORDERS, v->index);
+		CloseWindowById(WC_VEHICLE_REFIT, v->index);
+		CloseWindowById(WC_VEHICLE_DETAILS, v->index);
+		CloseWindowById(WC_VEHICLE_TIMETABLE, v->index);
+		CloseWindowById(WC_SCHDISPATCH_SLOTS, v->index);
+		CloseWindowById(WC_VEHICLE_CARGO_TYPE_LOAD_ORDERS, v->index);
+		CloseWindowById(WC_VEHICLE_CARGO_TYPE_UNLOAD_ORDERS, v->index);
 	}
+}
+
+/**
+ * Issue a start/stop command
+ * @param v a vehicle
+ * @param evaluate_callback shall the start/stop callback be evaluated?
+ * @return success or error
+ */
+static inline CommandCost CmdStartStopVehicle(const Vehicle *v, bool evaluate_callback)
+{
+	return DoCommand(0, v->index, evaluate_callback ? 1 : 0, DC_EXEC | DC_AUTOREPLACE, CMD_START_STOP_VEHICLE);
 }
 
 /**
@@ -7087,91 +7266,135 @@ void ClearVehicleWindows(const Train *v)
 * @param tile unused
 * @param flags type of operation
 * @param p1 the ID of the vehicle to replace.
-* @param p2 whether the vehicle should leave (1) or stay (0) in the depot.
+* @param p2 unused
 * @param text unused
 * @return the cost of this operation or an error
 */
-CommandCost CmdTemplateReplaceVehicle(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+CommandCost CmdTemplateReplaceVehicle(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
-	VehicleID vehicle_id = p1;
+	Train *incoming = Train::GetIfValid(p1);
 
-	Vehicle* vehicle = Vehicle::GetIfValid(vehicle_id);
-
-	if (vehicle == nullptr || vehicle->type != VEH_TRAIN) {
+	if (incoming == nullptr || !incoming->IsPrimaryVehicle() || !incoming->IsChainInDepot()) {
 		return CMD_ERROR;
 	}
 
-	bool should_execute = (flags & DC_EXEC) != 0;
+	CommandCost buy(EXPENSES_NEW_VEHICLES);
 
-	if (!should_execute) {
-		return CommandCost();
+	const bool was_stopped = (incoming->vehstatus & VS_STOPPED) != 0;
+	if (!was_stopped) {
+		CommandCost cost = CmdStartStopVehicle(incoming, true);
+		if (cost.Failed()) return cost;
 	}
-
-	Train* incoming = Train::From(vehicle);
-	bool leaveDepot = (p2 != 0);
+	auto guard = scope_guard([&]() {
+		_new_vehicle_id = incoming->index;
+		if (!was_stopped) buy.AddCost(CmdStartStopVehicle(incoming, false));
+	});
 
 	Train *new_chain = nullptr;
 	Train *remainder_chain = nullptr;
-	Train *tmp_chain = nullptr;
 	TemplateVehicle *tv = GetTemplateVehicleByGroupIDRecursive(incoming->group_id);
 	if (tv == nullptr) {
-		if (leaveDepot) incoming->vehstatus &= ~VS_STOPPED;
 		return CMD_ERROR;
 	}
 	EngineID eid = tv->engine_type;
 
-	_new_vehicle_id = p1;
-
-	CommandCost buy(EXPENSES_NEW_VEHICLES);
-	CommandCost move_cost(EXPENSES_NEW_VEHICLES);
 	CommandCost tmp_result(EXPENSES_NEW_VEHICLES);
 
-
 	/* first some tests on necessity and sanity */
-	if (tv == nullptr) return buy;
-	if (tv->IsReplaceOldOnly() && !vehicle->NeedsAutorenewing(Company::Get(vehicle->owner), false)) {
-		if (leaveDepot) incoming->vehstatus &= ~VS_STOPPED;
-		return buy;
+	if (tv == nullptr) return CommandCost();
+	if (tv->IsReplaceOldOnly() && !incoming->NeedsAutorenewing(Company::Get(incoming->owner), false)) {
+		return CommandCost();
 	}
-	bool need_replacement = !TrainMatchesTemplate(incoming, tv);
-	bool need_refit = !TrainMatchesTemplateRefit(incoming, tv);
-	bool use_refit = tv->refit_as_template;
-	CargoID store_refit_ct = CT_INVALID;
-	short store_refit_csubt = 0;
+	const TBTRDiffFlags diff = TrainTemplateDifference(incoming, tv);
+	if (diff == TBTRDF_NONE) return CommandCost();
+
+	const bool need_replacement = (diff & TBTRDF_CONSIST);
+	const bool need_refit = (diff & TBTRDF_REFIT);
+	const bool refit_to_template = tv->refit_as_template;
+
+	CargoID store_refit_ct = INVALID_CARGO;
+	uint16_t store_refit_csubt = 0;
 	// if a train shall keep its old refit, store the refit setting of its first vehicle
-	if (!use_refit) {
+	if (!refit_to_template) {
 		for (Train *getc = incoming; getc != nullptr; getc = getc->GetNextUnit()) {
-			if (getc->cargo_type != CT_INVALID && getc->cargo_cap > 0) {
+			if (getc->cargo_type != INVALID_CARGO && getc->cargo_cap > 0) {
 				store_refit_ct = getc->cargo_type;
 				break;
 			}
 		}
 	}
 
-	// TODO: set result status to success/no success before returning
-	if (!need_replacement) {
-		if (!need_refit || !use_refit) {
-			/* before returning, release incoming train first if 2nd param says so */
-			if (leaveDepot) incoming->vehstatus &= ~VS_STOPPED;
-			return buy;
-		}
-	} else {
-		CommandCost buyCost = TestBuyAllTemplateVehiclesInChain(tv, tile);
-		if (!buyCost.Succeeded()) {
-			if (leaveDepot) incoming->vehstatus &= ~VS_STOPPED;
-			if (buyCost.GetErrorMessage() == INVALID_STRING_ID) return_cmd_error(STR_ERROR_CAN_T_BUY_TRAIN);
-			return buyCost;
-		} else if (!CheckCompanyHasMoney(buyCost)) {
-			if (leaveDepot) incoming->vehstatus &= ~VS_STOPPED;
-			return_cmd_error(STR_ERROR_NOT_ENOUGH_CASH_REQUIRES_CURRENCY);
+	if (need_replacement) {
+		CommandCost buy_cost = TestBuyAllTemplateVehiclesInChain(tv, tile);
+		if (buy_cost.Failed()) {
+			if (buy_cost.GetErrorMessage() == INVALID_STRING_ID) return CommandCost(STR_ERROR_CAN_T_BUY_TRAIN);
+			return buy_cost;
+		} else if (!CheckCompanyHasMoney(buy_cost)) {
+			return CommandCost(STR_ERROR_NOT_ENOUGH_CASH_REQUIRES_CURRENCY);
 		}
 	}
 
-	if (need_replacement || (need_refit && use_refit)) RegisterGameEvents(GEF_TBTR_REPLACEMENT);
+	TemplateDepotVehicles depot_vehicles;
+	if (tv->IsSetReuseDepotVehicles()) depot_vehicles.Init(tile);
 
-	/* define replacement behavior */
-	bool reuseDepot = tv->IsSetReuseDepotVehicles();
-	bool keepRemainders = tv->IsSetKeepRemainingVehicles();
+	auto refit_unit = [&](const Train *unit, CargoID cid, uint16_t csubt) {
+		CommandCost refit_cost = DoCommand(unit->tile, unit->index, cid | csubt << 8 | (1 << 16), flags, GetCmdRefitVeh(unit));
+		if (refit_cost.Succeeded()) buy.AddCost(refit_cost);
+	};
+
+	if (!(flags & DC_EXEC)) {
+		/* Simplified operation for cost estimation, this doesn't have to exactly match the actual cost due to CMD_NO_TEST */
+		if (need_replacement || need_refit) {
+			std::vector<const Train *> in;
+			for (const Train *u = incoming; u != nullptr; u = u->GetNextUnit()) {
+				in.push_back(u);
+			}
+			auto process_unit = [&](const TemplateVehicle *cur_tmpl) {
+				for (auto iter = in.begin(); iter != in.end(); ++iter) {
+					const Train *u = *iter;
+					if (u->engine_type == cur_tmpl->engine_type) {
+						/* use existing engine */
+						in.erase(iter);
+						if (refit_to_template) {
+							buy.AddCost(DoCommand(u->tile, u->index, cur_tmpl->cargo_type | cur_tmpl->cargo_subtype << 8 | (1 << 16) | (1 << 31), flags, GetCmdRefitVeh(u)));
+						} else {
+							refit_unit(u, store_refit_ct, store_refit_csubt);
+						}
+						return;
+					}
+				}
+
+				if (tv->IsSetReuseDepotVehicles()) {
+					const Train *depot_eng = depot_vehicles.ContainsEngine(cur_tmpl->engine_type, incoming);
+					if (depot_eng != nullptr) {
+						depot_vehicles.RemoveVehicle(depot_eng->index);
+						if (refit_to_template) {
+							buy.AddCost(DoCommand(depot_eng->tile, depot_eng->index, cur_tmpl->cargo_type | cur_tmpl->cargo_subtype << 8 | (1 << 16) | (1 << 31), flags, GetCmdRefitVeh(depot_eng)));
+						} else {
+							refit_unit(depot_eng, store_refit_ct, store_refit_csubt);
+						}
+						return;
+					}
+				}
+
+				CargoID refit_cargo = refit_to_template ? cur_tmpl->cargo_type : store_refit_ct;
+				uint32_t refit_cmd = (refit_cargo != INVALID_CARGO) ? (refit_cargo << 24) : 0;
+				buy.AddCost(DoCommand(tile, cur_tmpl->engine_type | (1 << 16) | refit_cmd, 0, flags, CMD_BUILD_VEHICLE));
+			};
+			for (const TemplateVehicle *cur_tmpl = tv; cur_tmpl != nullptr; cur_tmpl = cur_tmpl->GetNextUnit()) {
+				process_unit(cur_tmpl);
+			}
+			if (!tv->IsSetKeepRemainingVehicles()) {
+				/* Sell leftovers */
+				for (const Train *u : in) {
+					buy.AddCost(DoCommand(u->tile, u->index, 0, flags, CMD_SELL_VEHICLE));
+				}
+			}
+		}
+		return buy;
+	}
+
+	RegisterGameEvents(GEF_TBTR_REPLACEMENT);
 
 	if (need_replacement) {
 		// step 1: generate primary for newchain and generate remainder_chain
@@ -7181,46 +7404,70 @@ CommandCost CmdTemplateReplaceVehicle(TileIndex tile, DoCommandFlag flags, uint3
 		// 3. primary might be available as orphan vehicle in the depot
 		// 4. we need to buy a new engine for the primary
 		// all options other than 1. need to make sure to copy incoming's primary's status
-		if (eid == incoming->engine_type) {                                                                       // 1
-			new_chain = incoming;
-			remainder_chain = incoming->GetNextUnit();
-			if (remainder_chain) {
-				move_cost.AddCost(CmdMoveRailVehicle(tile, flags, remainder_chain->index | (1 << 20), INVALID_VEHICLE, 0));
+		auto setup_head = [&]() -> CommandCost {
+			/* Case 1 */
+			if (eid == incoming->engine_type) {
+				new_chain = incoming;
+				remainder_chain = incoming->GetNextUnit();
+				if (remainder_chain) {
+					CommandCost move_cost = CmdMoveRailVehicle(tile, flags, remainder_chain->index | (1 << 20), INVALID_VEHICLE, 0);
+					if (move_cost.Failed()) {
+						/* This should not fail, if it does give up immediately */
+						return move_cost;
+					}
+				}
+				return CommandCost();
 			}
-		} else if ((tmp_chain = ChainContainsEngine(eid, incoming)) && tmp_chain != nullptr) {                       // 2
-			// new_chain is the needed engine, move it to an empty spot in the depot
-			new_chain = tmp_chain;
-			if (flags & DC_EXEC) ClearVehicleWindows(tmp_chain);
-			move_cost.AddCost(DoCommand(tile, new_chain->index, INVALID_VEHICLE, flags, CMD_MOVE_RAIL_VEHICLE));
-			remainder_chain = incoming;
-		} else if (reuseDepot && (tmp_chain = DepotContainsEngine(tile, eid, incoming)) && tmp_chain != nullptr) {   // 3
-			new_chain = tmp_chain;
-			if (flags & DC_EXEC) ClearVehicleWindows(tmp_chain);
-			move_cost.AddCost(DoCommand(tile, new_chain->index, INVALID_VEHICLE, flags, CMD_MOVE_RAIL_VEHICLE));
-			remainder_chain = incoming;
-		} else {                                                                                                  // 4
-			tmp_result = DoCommand(tile, eid, 0, flags, CMD_BUILD_VEHICLE);
+
+			/* Case 2 */
+			new_chain = ChainContainsEngine(eid, incoming);
+			if (new_chain != nullptr) {
+				/* new_chain is the needed engine, move it to an empty spot in the depot */
+				CommandCost move_cost = DoCommand(tile, new_chain->index, INVALID_VEHICLE, flags, CMD_MOVE_RAIL_VEHICLE);
+				if (move_cost.Succeeded()) {
+					remainder_chain = incoming;
+					return CommandCost();
+				}
+			}
+
+			/* Case 3 */
+			if (tv->IsSetReuseDepotVehicles()) {
+				new_chain = depot_vehicles.ContainsEngine(eid, incoming);
+				if (new_chain != nullptr) {
+					ClearVehicleWindows(new_chain);
+					CommandCost move_cost = DoCommand(tile, new_chain->index, INVALID_VEHICLE, flags, CMD_MOVE_RAIL_VEHICLE);
+					if (move_cost.Succeeded()) {
+						depot_vehicles.RemoveVehicle(new_chain->index);
+						remainder_chain = incoming;
+						return CommandCost();
+					}
+				}
+			}
+
+			/* Case 4 */
+			CommandCost buy_cost = DoCommand(tile, eid | (1 << 16), 0, flags, CMD_BUILD_VEHICLE);
 			/* break up in case buying the vehicle didn't succeed */
-			if (!tmp_result.Succeeded()) {
-				return tmp_result;
+			if (buy_cost.Failed()) {
+				return buy_cost;
 			}
-			buy.AddCost(tmp_result);
+			buy.AddCost(buy_cost);
 			new_chain = Train::Get(_new_vehicle_id);
-			/* make sure the newly built engine is not attached to any free wagons inside the depot */
-			move_cost.AddCost(DoCommand(tile, new_chain->index, INVALID_VEHICLE, flags, CMD_MOVE_RAIL_VEHICLE));
 			/* prepare the remainder chain */
 			remainder_chain = incoming;
-		}
+			return CommandCost();
+		};
+		CommandCost head_result = setup_head();
+		if (head_result.Failed()) return head_result;
+
 		// If we bought a new engine or reused one from the depot, copy some parameters from the incoming primary engine
-		if (incoming != new_chain && flags == DC_EXEC) {
+		if (incoming != new_chain) {
 			CopyHeadSpecificThings(incoming, new_chain, flags);
 			NeutralizeStatus(incoming);
 
 			// additionally, if we don't want to use the template refit, refit as incoming
 			// the template refit will be set further down, if we use it at all
-			if (!use_refit) {
-				uint32 cb = GetCmdRefitVeh(new_chain);
-				DoCommand(new_chain->tile, new_chain->index, store_refit_ct | store_refit_csubt << 8 | (1 << 16) | (1 << 31), flags, cb);
+			if (!refit_to_template) {
+				refit_unit(new_chain, store_refit_ct, store_refit_csubt);
 			}
 		}
 
@@ -7229,75 +7476,87 @@ CommandCost CmdTemplateReplaceVehicle(TileIndex tile, DoCommandFlag flags, uint3
 		// 1. needed engine might be within remainder_chain already
 		// 2. needed engine might be orphaned within the depot (copy status)
 		// 3. we need to buy (again)                           (copy status)
-		TemplateVehicle *cur_tmpl = tv->GetNextUnit();
 		Train *last_veh = new_chain;
-		while (cur_tmpl) {
-			// 1. engine contained in remainder chain
-			if ((tmp_chain = ChainContainsEngine(cur_tmpl->engine_type, remainder_chain)) && tmp_chain != nullptr)	{
-				// advance remainder_chain (if necessary) to not lose track of it
-				if (tmp_chain == remainder_chain) {
-					remainder_chain = remainder_chain->GetNextUnit();
+		for (TemplateVehicle *cur_tmpl = tv->GetNextUnit(); cur_tmpl != nullptr; cur_tmpl = cur_tmpl->GetNextUnit()) {
+			Train *new_part = nullptr;
+			auto setup_chain_part = [&]() {
+				/* Case 1: engine contained in remainder chain */
+				new_part = ChainContainsEngine(cur_tmpl->engine_type, remainder_chain);
+				if (new_part != nullptr) {
+					Train *remainder_chain_next = remainder_chain;
+					if (new_part == remainder_chain) {
+						remainder_chain_next = remainder_chain->GetNextUnit();
+					}
+					CommandCost move_cost = CmdMoveRailVehicle(tile, flags, new_part->index, last_veh->index, 0);
+					if (move_cost.Succeeded()) {
+						remainder_chain = remainder_chain_next;
+						return;
+					}
 				}
-				move_cost.AddCost(CmdMoveRailVehicle(tile, flags, tmp_chain->index, last_veh->index, 0));
-			}
-			// 2. engine contained somewhere else in the depot
-			else if (reuseDepot && (tmp_chain = DepotContainsEngine(tile, cur_tmpl->engine_type, new_chain)) && tmp_chain != nullptr) {
-				move_cost.AddCost(CmdMoveRailVehicle(tile, flags, tmp_chain->index, last_veh->index, 0));
-			}
-			// 3. must buy new engine
-			else {
-				tmp_result = DoCommand(tile, cur_tmpl->engine_type, 0, flags, CMD_BUILD_VEHICLE);
-				if (!tmp_result.Succeeded()) {
-					return tmp_result;
+
+				/* Case 2: engine contained somewhere else in the depot */
+				if (tv->IsSetReuseDepotVehicles()) {
+					new_part = depot_vehicles.ContainsEngine(cur_tmpl->engine_type, new_chain);
+					if (new_part != nullptr) {
+						CommandCost move_cost = CmdMoveRailVehicle(tile, flags, new_part->index, last_veh->index, 0);
+						if (move_cost.Succeeded()) {
+							depot_vehicles.RemoveVehicle(new_part->index);
+							return;
+						}
+					}
 				}
-				buy.AddCost(tmp_result);
-				tmp_chain = Train::Get(_new_vehicle_id);
-				move_cost.AddCost(CmdMoveRailVehicle(tile, flags, tmp_chain->index, last_veh->index, 0));
-			}
-			// TODO: is this enough ? might it be that we bought a new wagon here and it now has std refit ?
-			if (need_refit && flags == DC_EXEC) {
-				if (use_refit) {
-					uint32 cb = GetCmdRefitVeh(tmp_chain);
-					DoCommand(tmp_chain->tile, tmp_chain->index, cur_tmpl->cargo_type | (cur_tmpl->cargo_subtype << 8) | (1 << 16) | (1 << 31), flags, cb);
+
+				/* Case 3: must buy new engine */
+				CommandCost buy_cost = DoCommand(tile, cur_tmpl->engine_type | (1 << 16), 0, flags, CMD_BUILD_VEHICLE);
+				if (buy_cost.Failed()) {
+					new_part = nullptr;
+					return;
+				}
+				new_part = Train::Get(_new_vehicle_id);
+				CommandCost move_cost = CmdMoveRailVehicle(tile, flags, new_part->index, last_veh->index, 0);
+				if (move_cost.Succeeded()) {
+					buy.AddCost(buy_cost);
 				} else {
-					uint32 cb = GetCmdRefitVeh(tmp_chain);
-					DoCommand(tmp_chain->tile, tmp_chain->index, store_refit_ct | (store_refit_csubt << 8) | (1 << 16) | (1 << 31), flags, cb);
+					DoCommand(tile, new_part->index, 0, flags, CMD_SELL_VEHICLE);
+					new_part = nullptr;
 				}
-				if (HasBit(tmp_chain->flags, VRF_REVERSE_DIRECTION) != HasBit(cur_tmpl->ctrl_flags, TVCF_REVERSED)) {
-					DoCommand(tmp_chain->tile, tmp_chain->index, true, flags, CMD_REVERSE_TRAIN_DIRECTION | CMD_MSG(STR_ERROR_CAN_T_REVERSE_DIRECTION_RAIL_VEHICLE));
-				}
+			};
+			setup_chain_part();
+			if (new_part != nullptr) {
+				last_veh = new_part;
 			}
-			cur_tmpl = cur_tmpl->GetNextUnit();
-			last_veh = tmp_chain;
+
+			if (!refit_to_template && new_part != nullptr) {
+				refit_unit(new_part, store_refit_ct, store_refit_csubt);
+			}
 		}
-	}
-	/* no replacement done */
-	else {
+	} else {
+		/* no replacement done */
 		new_chain = incoming;
 	}
+
 	/// step 3: reorder and neutralize the remaining vehicles from incoming
-	// wagons remaining from remainder_chain should be filled up in as few freewagonchains as possible
-	// each locos might be left as singular in the depot
+	// wagons remaining from remainder_chain should be filled up in as few free wagon chains as possible
+	// each loco might be left as singular in the depot
 	// neutralize each remaining engine's status
 
 	// refit, only if the template option is set so
-	if (use_refit && (need_refit || need_replacement)) {
+	if (refit_to_template && (need_refit || need_replacement)) {
 		buy.AddCost(CmdRefitTrainFromTemplate(new_chain, tv, flags));
 	}
 
+	buy.AddCost(CmdSetTrainUnitDirectionFromTemplate(new_chain, tv, flags));
+
 	if (new_chain && remainder_chain) {
-		for (Train *ct = remainder_chain; ct; ct = ct->GetNextUnit()) {
+		for (Train *ct = remainder_chain; ct != nullptr; ct = ct->Next()) {
 			TransferCargoForTrain(ct, new_chain);
 		}
 	}
 
-	// point incoming to the newly created train so that starting/stopping from the calling function can be done
+	// point incoming to the newly created train so that starting/stopping affects the replacement train
 	incoming = new_chain;
-	if (leaveDepot && flags == DC_EXEC) {
-		new_chain->vehstatus &= ~VS_STOPPED;
-	}
 
-	if (remainder_chain && keepRemainders && flags == DC_EXEC) {
+	if (remainder_chain && tv->IsSetKeepRemainingVehicles()) {
 		BreakUpRemainders(remainder_chain);
 	} else if (remainder_chain) {
 		buy.AddCost(DoCommand(tile, remainder_chain->index | (1 << 20), 0, flags, CMD_SELL_VEHICLE));
@@ -7305,8 +7564,6 @@ CommandCost CmdTemplateReplaceVehicle(TileIndex tile, DoCommandFlag flags, uint3
 
 	/* Redraw main gui for changed statistics */
 	SetWindowClassesDirty(WC_TEMPLATEGUI_MAIN);
-
-	_new_vehicle_id = new_chain->index;
 
 	return buy;
 }
@@ -7327,7 +7584,7 @@ void TrainBrakesOverheatedBreakdown(Vehicle *v)
 	Train *t = Train::From(v)->First();
 	if (t->breakdown_ctr != 0 || (t->vehstatus & VS_CRASHED)) return;
 
-	if (unlikely(HasBit(_misc_debug_flags, MDF_OVERHEAT_BREAKDOWN_OPEN_WIN)) && !_network_dedicated) {
+	if (unlikely(HasBit(_misc_debug_flags, MDF_OVERHEAT_BREAKDOWN_OPEN_WIN)) && !IsHeadless()) {
 		ShowVehicleViewWindow(t);
 	}
 
@@ -7341,24 +7598,24 @@ void TrainBrakesOverheatedBreakdown(Vehicle *v)
 	t->breakdown_severity = 0;
 }
 
-int GetTrainRealisticAccelerationAtSpeed(const int speed, const int mass, const uint32 cached_power, const uint32 max_te, const uint32 air_drag, const RailType railtype)
+int GetTrainRealisticAccelerationAtSpeed(const int speed, const int mass, const uint32_t cached_power, const uint32_t max_te, const uint32_t air_drag, const RailType railtype)
 {
-	const int64 power = cached_power * 746ll;
-	int64 resistance = 0;
+	const int64_t power = cached_power * 746ll;
+	int64_t resistance = 0;
 
 	const bool maglev = (GetRailTypeInfo(railtype)->acceleration_type == 2);
 
 	if (!maglev) {
 		/* Static resistance plus rolling friction. */
 		resistance = 10 * mass;
-		resistance += mass * (15 * (512 + speed) / 512);
+		resistance += (int64_t)mass * (int64_t)(15 * (512 + speed) / 512);
 	}
 
 	const int area = 14;
 
 	resistance += (area * air_drag * speed * speed) / 1000;
 
-	int64 force;
+	int64_t force;
 
 	if (speed > 0) {
 		if (!maglev) {
@@ -7372,14 +7629,14 @@ int GetTrainRealisticAccelerationAtSpeed(const int speed, const int mass, const 
 			force = power / 25;
 		}
 	} else {
-		force = (!maglev) ? std::min<uint64>(max_te, power) : power;
+		force = (!maglev) ? std::min<uint64_t>(max_te, power) : power;
 		force = std::max(force, (mass * 8) + resistance);
 	}
 
 	/* Easy way out when there is no acceleration. */
 	if (force == resistance) return 0;
 
-	int acceleration = ClampToI32((force - resistance) / (mass * 4));
+	int acceleration = ClampTo<int32_t>((force - resistance) / (mass * 4));
 	acceleration = force < resistance ? std::min(-1, acceleration) : std::max(1, acceleration);
 
 	return acceleration;
@@ -7401,44 +7658,87 @@ int GetTrainEstimatedMaxAchievableSpeed(const Train *train, int mass, const int 
 	return max_speed;
 }
 
-void SetSignalTrainAdaptationSpeed(const Train *v, TileIndex tile, uint16 track)
+void SetSignalTrainAdaptationSpeed(const Train *v, TileIndex tile, uint16_t track)
 {
-	SignalSpeedKey speed_key = {
-		speed_key.signal_tile = tile,
-		speed_key.signal_track = track,
-		speed_key.last_passing_train_dir = v->GetVehicleTrackdir()
-	};
-	SignalSpeedValue speed_value = {
-		speed_value.train_speed = v->First()->cur_speed,
-		speed_value.time_stamp = GetSpeedRestrictionTimeout(v->First())
-	};
+	SignalSpeedKey speed_key = {};
+	speed_key.signal_tile = tile;
+	speed_key.signal_track = track;
+	speed_key.last_passing_train_dir = v->GetVehicleTrackdir();
+
+	SignalSpeedValue speed_value = {};
+	speed_value.train_speed = v->First()->cur_speed;
+	speed_value.time_stamp = GetSpeedRestrictionTimeout(v->First());
+
 	_signal_speeds[speed_key] = speed_value;
 }
 
-void ApplySignalTrainAdaptationSpeed(Train *v, TileIndex tile, uint16 track)
+static uint16_t GetTrainAdaptationSpeed(TileIndex tile, uint16_t track, Trackdir last_passing_train_dir)
 {
 	SignalSpeedKey speed_key = {
 		speed_key.signal_tile = tile,
 		speed_key.signal_track = track,
-		speed_key.last_passing_train_dir = v->GetVehicleTrackdir()
+		speed_key.last_passing_train_dir = last_passing_train_dir
 	};
 	const auto found_speed_restriction = _signal_speeds.find(speed_key);
 
 	if (found_speed_restriction != _signal_speeds.end()) {
-		if (IsOutOfDate(found_speed_restriction->second)) {
+		if (found_speed_restriction->second.IsOutOfDate()) {
 			_signal_speeds.erase(found_speed_restriction);
-			v->signal_speed_restriction = 0;
+			return 0;
 		} else {
-			v->signal_speed_restriction = std::max<uint16>(25, found_speed_restriction->second.train_speed);
+			return std::max<uint16_t>(25, found_speed_restriction->second.train_speed);
 		}
 	} else {
-		v->signal_speed_restriction = 0;
+		return 0;
 	}
 }
 
-uint16 Train::GetMaxWeight() const
+void ApplySignalTrainAdaptationSpeed(Train *v, TileIndex tile, uint16_t track)
 {
-	uint16 weight = CargoSpec::Get(this->cargo_type)->WeightOfNUnitsInTrain(this->GetEngine()->DetermineCapacity(this));
+	uint16_t speed = GetTrainAdaptationSpeed(tile, track, v->GetVehicleTrackdir());
+
+	if (speed > 0 && v->lookahead != nullptr) {
+		for (const TrainReservationLookAheadItem &item : v->lookahead->items) {
+			if (item.type == TRLIT_SPEED_ADAPTATION && item.end + 1 < v->lookahead->reservation_end_position) {
+				uint16_t signal_speed = GetLowestSpeedTrainAdaptationSpeedAtSignal(item.data_id, item.data_aux);
+
+				if (signal_speed == 0) {
+					/* unrestricted signal ahead, disregard speed adaptation at earlier signal */
+					v->signal_speed_restriction = 0;
+					return;
+				}
+				if (signal_speed > speed) {
+					/* signal ahead with higher speed adaptation speed, override speed adaptation at earlier signal */
+					speed = signal_speed;
+				}
+			}
+		}
+	}
+
+	v->signal_speed_restriction = speed;
+}
+
+uint16_t GetLowestSpeedTrainAdaptationSpeedAtSignal(TileIndex tile, uint16_t track)
+{
+	uint16_t lowest_speed = 0;
+
+	SignalSpeedKey speed_key = { tile, track, (Trackdir)0 };
+	for (auto iter = _signal_speeds.lower_bound(speed_key); iter != _signal_speeds.end() && iter->first.signal_tile == tile && iter->first.signal_track == track;) {
+		if (iter->second.IsOutOfDate()) {
+			iter = _signal_speeds.erase(iter);
+		} else {
+			uint16_t adapt_speed = std::max<uint16_t>(25, iter->second.train_speed);
+			if (lowest_speed == 0 || adapt_speed < lowest_speed) lowest_speed = adapt_speed;
+			++iter;
+		}
+	}
+
+	return lowest_speed;
+}
+
+uint16_t Train::GetMaxWeight() const
+{
+	uint16_t weight = CargoSpec::Get(this->cargo_type)->WeightOfNUnitsInTrain(this->GetEngine()->DetermineCapacity(this));
 
 	/* Vehicle weight is not added for articulated parts. */
 	if (!this->IsArticulatedPart()) {

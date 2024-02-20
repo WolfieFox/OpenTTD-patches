@@ -16,15 +16,17 @@
 
 #include <vector>
 #include <string>
+#include <limits>
 
 void   BufferSend_bool  (std::vector<byte> &buffer, size_t limit, bool   data);
-void   BufferSend_uint8 (std::vector<byte> &buffer, size_t limit, uint8  data);
-void   BufferSend_uint16(std::vector<byte> &buffer, size_t limit, uint16 data);
-void   BufferSend_uint32(std::vector<byte> &buffer, size_t limit, uint32 data);
-void   BufferSend_uint64(std::vector<byte> &buffer, size_t limit, uint64 data);
+void   BufferSend_uint8 (std::vector<byte> &buffer, size_t limit, uint8_t  data);
+void   BufferSend_uint16(std::vector<byte> &buffer, size_t limit, uint16_t data);
+void   BufferSend_uint32(std::vector<byte> &buffer, size_t limit, uint32_t data);
+void   BufferSend_uint64(std::vector<byte> &buffer, size_t limit, uint64_t data);
 void   BufferSend_string(std::vector<byte> &buffer, size_t limit, const std::string_view data);
-size_t BufferSend_bytes (std::vector<byte> &buffer, size_t limit, const byte *begin, const byte *end);
-void   BufferSend_binary(std::vector<byte> &buffer, size_t limit, const char *data, const size_t size);
+size_t BufferSend_binary_until_full(std::vector<byte> &buffer, size_t limit, const byte *begin, const byte *end);
+void   BufferSend_binary(std::vector<byte> &buffer, size_t limit, const byte *data, const size_t size);
+void   BufferSend_buffer(std::vector<byte> &buffer, size_t limit, const byte *data, const size_t size);
 
 template <typename T>
 struct BufferSerialisationHelper {
@@ -34,25 +36,25 @@ struct BufferSerialisationHelper {
 		BufferSend_bool(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
 	}
 
-	void Send_uint8(uint8 data)
+	void Send_uint8(uint8_t data)
 	{
 		T *self = static_cast<T *>(this);
 		BufferSend_uint8(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
 	}
 
-	void Send_uint16(uint16 data)
+	void Send_uint16(uint16_t data)
 	{
 		T *self = static_cast<T *>(this);
 		BufferSend_uint16(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
 	}
 
-	void Send_uint32(uint32 data)
+	void Send_uint32(uint32_t data)
 	{
 		T *self = static_cast<T *>(this);
 		BufferSend_uint32(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
 	}
 
-	void Send_uint64(uint64 data)
+	void Send_uint64(uint64_t data)
 	{
 		T *self = static_cast<T *>(this);
 		BufferSend_uint64(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
@@ -64,16 +66,32 @@ struct BufferSerialisationHelper {
 		BufferSend_string(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
 	}
 
-	size_t Send_bytes(const byte *begin, const byte *end)
+	size_t Send_binary_until_full(const byte *begin, const byte *end)
 	{
 		T *self = static_cast<T *>(this);
-		return BufferSend_bytes(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), begin, end);
+		return BufferSend_binary_until_full(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), begin, end);
 	}
 
-	void Send_binary(const char *data, const size_t size)
+	void Send_binary(const byte *data, const size_t size)
 	{
 		T *self = static_cast<T *>(this);
 		BufferSend_binary(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data, size);
+	}
+
+	void Send_binary(std::span<const byte> data)
+	{
+		this->Send_binary(data.data(), data.size());
+	}
+
+	void Send_buffer(const byte *data, const size_t size)
+	{
+		T *self = static_cast<T *>(this);
+		BufferSend_buffer(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data, size);
+	}
+
+	void Send_buffer(const std::vector<byte> &data)
+	{
+		this->Send_buffer(data.data(), data.size());
 	}
 };
 
@@ -111,9 +129,9 @@ public:
 	 * Read a 8 bits integer from the packet.
 	 * @return The read data.
 	 */
-	uint8 Recv_uint8()
+	uint8_t Recv_uint8()
 	{
-		uint8 n;
+		uint8_t n;
 
 		if (!this->CanRecvBytes(sizeof(n), true)) return 0;
 
@@ -127,16 +145,16 @@ public:
 	 * Read a 16 bits integer from the packet.
 	 * @return The read data.
 	 */
-	uint16 Recv_uint16()
+	uint16_t Recv_uint16()
 	{
-		uint16 n;
+		uint16_t n;
 
 		if (!this->CanRecvBytes(sizeof(n), true)) return 0;
 
 		auto &pos = static_cast<T *>(this)->GetDeserialisationPosition();
 
-		n  = (uint16)this->GetBuffer()[pos++];
-		n += (uint16)this->GetBuffer()[pos++] << 8;
+		n  = (uint16_t)this->GetBuffer()[pos++];
+		n += (uint16_t)this->GetBuffer()[pos++] << 8;
 		return n;
 	}
 
@@ -144,18 +162,18 @@ public:
 	 * Read a 32 bits integer from the packet.
 	 * @return The read data.
 	 */
-	uint32 Recv_uint32()
+	uint32_t Recv_uint32()
 	{
-		uint32 n;
+		uint32_t n;
 
 		if (!this->CanRecvBytes(sizeof(n), true)) return 0;
 
 		auto &pos = static_cast<T *>(this)->GetDeserialisationPosition();
 
-		n  = (uint32)this->GetBuffer()[pos++];
-		n += (uint32)this->GetBuffer()[pos++] << 8;
-		n += (uint32)this->GetBuffer()[pos++] << 16;
-		n += (uint32)this->GetBuffer()[pos++] << 24;
+		n  = (uint32_t)this->GetBuffer()[pos++];
+		n += (uint32_t)this->GetBuffer()[pos++] << 8;
+		n += (uint32_t)this->GetBuffer()[pos++] << 16;
+		n += (uint32_t)this->GetBuffer()[pos++] << 24;
 		return n;
 	}
 
@@ -163,22 +181,22 @@ public:
 	 * Read a 64 bits integer from the packet.
 	 * @return The read data.
 	 */
-	uint64 Recv_uint64()
+	uint64_t Recv_uint64()
 	{
-		uint64 n;
+		uint64_t n;
 
 		if (!this->CanRecvBytes(sizeof(n), true)) return 0;
 
 		auto &pos = static_cast<T *>(this)->GetDeserialisationPosition();
 
-		n  = (uint64)this->GetBuffer()[pos++];
-		n += (uint64)this->GetBuffer()[pos++] << 8;
-		n += (uint64)this->GetBuffer()[pos++] << 16;
-		n += (uint64)this->GetBuffer()[pos++] << 24;
-		n += (uint64)this->GetBuffer()[pos++] << 32;
-		n += (uint64)this->GetBuffer()[pos++] << 40;
-		n += (uint64)this->GetBuffer()[pos++] << 48;
-		n += (uint64)this->GetBuffer()[pos++] << 56;
+		n  = (uint64_t)this->GetBuffer()[pos++];
+		n += (uint64_t)this->GetBuffer()[pos++] << 8;
+		n += (uint64_t)this->GetBuffer()[pos++] << 16;
+		n += (uint64_t)this->GetBuffer()[pos++] << 24;
+		n += (uint64_t)this->GetBuffer()[pos++] << 32;
+		n += (uint64_t)this->GetBuffer()[pos++] << 40;
+		n += (uint64_t)this->GetBuffer()[pos++] << 48;
+		n += (uint64_t)this->GetBuffer()[pos++] << 56;
 		return n;
 	}
 
@@ -235,7 +253,7 @@ public:
 	 * @param buffer The buffer to put the data into.
 	 * @param size   The size of the data.
 	 */
-	void Recv_binary(char *buffer, size_t size)
+	void Recv_binary(byte *buffer, size_t size)
 	{
 		if (!this->CanRecvBytes(size, true)) return;
 
@@ -248,17 +266,77 @@ public:
 	/**
 	 * Reads binary data.
 	 * @param buffer The buffer to put the data into.
-	 * @param size   The size of the data.
 	 */
-	void Recv_binary(std::string &buffer, size_t size)
+	void Recv_binary(std::span<byte> buffer)
 	{
-		if (!this->CanRecvBytes(size, true)) return;
+		this->Recv_binary(buffer.data(), buffer.size());
+	}
+
+	/**
+	 * Returns view of binary data.
+	 * @param size   The size of the data.
+	 * @return The view of the data.
+	 */
+	std::span<const uint8_t> Recv_binary_view(size_t size)
+	{
+		if (!this->CanRecvBytes(size, true)) return {};
 
 		auto &pos = static_cast<T *>(this)->GetDeserialisationPosition();
 
-		buffer.assign((const char *) &this->GetBuffer()[pos], size);
+		std::span<const uint8_t> view { &this->GetBuffer()[pos], size };
 		pos += (decltype(pos)) size;
+
+		return view;
 	}
+
+	/**
+	 * Reads binary data.
+	 * @param size   The size of the data.
+	 * @return The binary buffer.
+	 */
+	std::vector<uint8_t> Recv_binary(size_t size)
+	{
+		std::span<const uint8_t> view = this->Recv_binary_view(size);
+
+		return { view.begin(), view.end() };
+	}
+
+	/**
+	 * Returns a view of a length-prefixed binary buffer from the packet.
+	 * @return The binary buffer.
+	 */
+	std::span<const uint8_t> Recv_buffer_view()
+	{
+		uint16_t length = this->Recv_uint16();
+
+		if (!this->CanRecvBytes(length, true)) return {};
+
+		auto &pos = static_cast<T *>(this)->GetDeserialisationPosition();
+		std::span<const uint8_t> buffer { &this->GetBuffer()[pos], length };
+		pos += length;
+
+		return buffer;
+	}
+
+	/**
+	 * Reads a length-prefixed binary buffer from the packet.
+	 * @return The binary buffer.
+	 */
+	std::vector<uint8_t> Recv_buffer()
+	{
+		std::span<const uint8_t> view = this->Recv_buffer_view();
+
+		return { view.begin(), view.end() };
+	}
+};
+
+struct BufferSerialiser : public BufferSerialisationHelper<BufferSerialiser> {
+	std::vector<byte> &buffer;
+
+	BufferSerialiser(std::vector<byte> &buffer) : buffer(buffer) {}
+
+	std::vector<byte> &GetSerialisationBuffer() { return this->buffer; }
+	size_t GetSerialisationLimit() const { return std::numeric_limits<size_t>::max(); }
 };
 
 #endif /* SERIALISATION_HPP */

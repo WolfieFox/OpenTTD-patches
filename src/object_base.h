@@ -15,6 +15,7 @@
 #include "tilearea_type.h"
 #include "town_type.h"
 #include "date_type.h"
+#include <vector>
 
 typedef Pool<Object, ObjectID, 64, 0xFF0000> ObjectPool;
 extern ObjectPool _object_pool;
@@ -24,7 +25,7 @@ struct Object : ObjectPool::PoolItem<&_object_pool> {
 	ObjectType type;    ///< Type of the object
 	Town *town;         ///< Town the object is built in
 	TileArea location;  ///< Location of the object
-	Date build_date;    ///< Date of construction
+	CalTime::Date build_date; ///< Date of construction
 	byte colour;        ///< Colour of the object, for display purpose
 	byte view;          ///< The view setting for this object
 
@@ -43,6 +44,7 @@ struct Object : ObjectPool::PoolItem<&_object_pool> {
 	static inline void IncTypeCount(ObjectType type)
 	{
 		dbg_assert(type < NUM_OBJECTS);
+		if (type >= counts.size()) counts.resize(type + 1);
 		counts[type]++;
 	}
 
@@ -54,6 +56,7 @@ struct Object : ObjectPool::PoolItem<&_object_pool> {
 	static inline void DecTypeCount(ObjectType type)
 	{
 		dbg_assert(type < NUM_OBJECTS);
+		dbg_assert(type < counts.size());
 		counts[type]--;
 	}
 
@@ -62,20 +65,21 @@ struct Object : ObjectPool::PoolItem<&_object_pool> {
 	 * @param type ObjectType to query
 	 * @pre type < NUM_OBJECTS
 	 */
-	static inline uint16 GetTypeCount(ObjectType type)
+	static inline uint16_t GetTypeCount(ObjectType type)
 	{
 		dbg_assert(type < NUM_OBJECTS);
+		if (type >= counts.size()) return 0;
 		return counts[type];
 	}
 
 	/** Resets object counts. */
 	static inline void ResetTypeCounts()
 	{
-		memset(&counts, 0, sizeof(counts));
+		counts.clear();
 	}
 
 protected:
-	static uint16 counts[NUM_OBJECTS]; ///< Number of objects per type ingame
+	static std::vector<uint16_t> counts; ///< Number of objects per type ingame
 };
 
 /**

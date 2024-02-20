@@ -33,7 +33,7 @@ public:
 	size_t Next(IterType what) override;
 	size_t Prev(IterType what) override;
 
-	static StringIterator *Create();
+	static std::unique_ptr<StringIterator> Create();
 };
 
 /**
@@ -62,8 +62,9 @@ public:
 	 * @param c           The character to add.
 	 * @return The number of buffer spaces that were used.
 	 */
-	static size_t AppendToBuffer(CharType *buff, const CharType *buffer_last, WChar c)
+	static size_t AppendToBuffer(CharType *buff, const CharType *buffer_last, char32_t c)
 	{
+		assert(buff < buffer_last);
 		if (c >= 0x010000U) {
 			/* Character is encoded using surrogates in UTF-16. */
 			if (buff + 1 <= buffer_last) {
@@ -83,7 +84,8 @@ public:
 
 void MacOSResetScriptCache(FontSize size);
 void MacOSSetCurrentLocaleName(const char *iso_code);
-int MacOSStringCompare(const char *s1, const char *s2);
+int MacOSStringCompare(std::string_view s1, std::string_view s2);
+int MacOSStringContains(const std::string_view str, const std::string_view value, bool case_insensitive);
 
 void MacOSRegisterExternalFont(const char *file_path);
 

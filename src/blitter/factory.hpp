@@ -13,7 +13,6 @@
 #include "base.hpp"
 #include "../debug.h"
 #include "../string_func.h"
-#include "../core/string_compare_type.hpp"
 #include <map>
 
 
@@ -122,13 +121,12 @@ public:
 #else
 		const char *default_blitter = "8bpp-optimized";
 #endif
-		if (GetBlitters().size() == 0) return nullptr;
+		if (GetBlitters().empty()) return nullptr;
 		const char *bname = name.empty() ? default_blitter : name.c_str();
 
-		Blitters::iterator it = GetBlitters().begin();
-		for (; it != GetBlitters().end(); it++) {
-			BlitterFactory *b = (*it).second;
-			if (strcasecmp(bname, b->name.c_str()) == 0) {
+		for (auto &it : GetBlitters()) {
+			BlitterFactory *b = it.second;
+			if (StrEqualsIgnoreCase(bname, b->name)) {
 				return b->IsUsable() ? b : nullptr;
 			}
 		}
@@ -152,9 +150,8 @@ public:
 	static char *GetBlittersInfo(char *p, const char *last)
 	{
 		p += seprintf(p, last, "List of blitters:\n");
-		Blitters::iterator it = GetBlitters().begin();
-		for (; it != GetBlitters().end(); it++) {
-			BlitterFactory *b = (*it).second;
+		for (auto &it : GetBlitters()) {
+			BlitterFactory *b = it.second;
 			p += seprintf(p, last, "%18s: %s\n", b->name.c_str(), b->GetDescription().c_str());
 		}
 		p += seprintf(p, last, "\n");

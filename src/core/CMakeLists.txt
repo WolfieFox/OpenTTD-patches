@@ -3,7 +3,6 @@ add_files(
     alloc_func.hpp
     alloc_type.hpp
     backup_type.hpp
-    bitmath_func.cpp
     bitmath_func.hpp
     checksum_func.hpp
     container_func.hpp
@@ -12,6 +11,7 @@ add_files(
     endian_type.hpp
     enum_type.hpp
     hash_func.hpp
+    format.hpp
     geometry_func.cpp
     geometry_func.hpp
     geometry_type.hpp
@@ -21,18 +21,18 @@ add_files(
     mem_func.hpp
     multimap.hpp
     overflowsafe_type.hpp
+    pod_pool.hpp
     pool_func.cpp
     pool_func.hpp
     pool_type.hpp
     random_func.cpp
     random_func.hpp
+    ring_buffer.hpp
+    ring_buffer_queue.hpp
     serialisation.cpp
     serialisation.hpp
-    smallmap_type.hpp
-    smallmatrix_type.hpp
     smallstack_type.hpp
-    smallvec_type.hpp
-    string_compare_type.hpp
+    strong_typedef_type.hpp
     tinystring_type.hpp
     y_combinator.hpp
 )

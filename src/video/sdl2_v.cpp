@@ -10,7 +10,6 @@
 #include "../stdafx.h"
 #include "../openttd.h"
 #include "../gfx_func.h"
-#include "../rev.h"
 #include "../blitter/factory.hpp"
 #include "../thread.h"
 #include "../progress.h"
@@ -108,7 +107,7 @@ static DBusHandlerResult FcitxDBusMessageFilter(DBusConnection *connection, DBus
 
 	if (dbus_message_is_signal(message, "org.fcitx.Fcitx.InputContext", "UpdatePreedit")) {
 		const char *text = nullptr;
-		int32 cursor;
+		int32_t cursor;
 		if (!dbus_message_get_args(message, nullptr, DBUS_TYPE_STRING, &text, DBUS_TYPE_INT32, &cursor, DBUS_TYPE_INVALID)) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
 		if (text != nullptr && EditBoxInGlobalFocus()) {
@@ -137,7 +136,7 @@ static void FcitxInit()
 
 	int pid = getpid();
 	int id = -1;
-	uint32 enable, hk1sym, hk1state, hk2sym, hk2state;
+	uint32_t enable, hk1sym, hk1state, hk2sym, hk2state;
 	DBusMessage *msg = dbus_message_new_method_call(_fcitx_service_name, "/inputmethod", "org.fcitx.Fcitx.InputMethod", "CreateICv3");
 	if (!msg) return;
 	auto guard1 = scope_guard([&]() {
@@ -159,7 +158,7 @@ static void FcitxInit()
 	dbus_connection_add_filter(_fcitx_dbus_session_conn, &FcitxDBusMessageFilter, nullptr, nullptr);
 	dbus_connection_flush(_fcitx_dbus_session_conn);
 
-	uint32 caps = CAPACITY_PREEDIT;
+	uint32_t caps = CAPACITY_PREEDIT;
 	DBusMessage *msg2 = dbus_message_new_method_call(_fcitx_service_name, _fcitx_ic_name, "org.fcitx.Fcitx.InputContext", "SetCapacity");
 	if (!msg2) return;
 	auto guard3 = scope_guard([&]() {
@@ -175,12 +174,12 @@ static void FcitxInit()
 	_fcitx_mode = true;
 }
 
-static uint32 _fcitx_last_keycode = 0;
-static uint32 _fcitx_last_keysym = 0;
-static uint16 _last_sdl_key_mod;
+static uint32_t _fcitx_last_keycode = 0;
+static uint32_t _fcitx_last_keysym = 0;
+static uint16_t _last_sdl_key_mod;
 static bool FcitxProcessKey()
 {
-	uint32 fcitx_mods = 0;
+	uint32_t fcitx_mods = 0;
 	if (_last_sdl_key_mod & KMOD_SHIFT) fcitx_mods |= FcitxKeyState_Shift;
 	if (_last_sdl_key_mod & KMOD_CAPS)  fcitx_mods |= FcitxKeyState_CapsLock;
 	if (_last_sdl_key_mod & KMOD_CTRL)  fcitx_mods |= FcitxKeyState_Ctrl;
@@ -190,7 +189,7 @@ static bool FcitxProcessKey()
 	if (_last_sdl_key_mod & KMOD_RGUI)  fcitx_mods |= FcitxKeyState_Meta;
 
 	int type = FCITX_PRESS_KEY;
-	uint32 event_time = 0;
+	uint32_t event_time = 0;
 
 	DBusMessage *msg = dbus_message_new_method_call(_fcitx_service_name, _fcitx_ic_name, "org.fcitx.Fcitx.InputContext", "ProcessKeyEvent");
 	if (!msg) return false;
@@ -204,7 +203,7 @@ static bool FcitxProcessKey()
 	auto guard2 = scope_guard([&]() {
 		dbus_message_unref(reply);
 	});
-	uint32 handled = 0;
+	uint32_t handled = 0;
 	if (!dbus_message_get_args(reply, nullptr, DBUS_TYPE_INT32, &handled, DBUS_TYPE_INVALID)) return false;
 	return handled;
 }
@@ -275,13 +274,15 @@ static void FindResolutions()
 {
 	_resolutions.clear();
 
-	for (int i = 0; i < SDL_GetNumDisplayModes(0); i++) {
-		SDL_DisplayMode mode;
-		SDL_GetDisplayMode(0, i, &mode);
+	for (int display = 0; display < SDL_GetNumVideoDisplays(); display++) {
+		for (int i = 0; i < SDL_GetNumDisplayModes(display); i++) {
+			SDL_DisplayMode mode;
+			SDL_GetDisplayMode(display, i, &mode);
 
-		if (mode.w < 640 || mode.h < 480) continue;
-		if (std::find(_resolutions.begin(), _resolutions.end(), Dimension(mode.w, mode.h)) != _resolutions.end()) continue;
-		_resolutions.emplace_back(mode.w, mode.h);
+			if (mode.w < 640 || mode.h < 480) continue;
+			if (std::find(_resolutions.begin(), _resolutions.end(), Dimension(mode.w, mode.h)) != _resolutions.end()) continue;
+			_resolutions.emplace_back(mode.w, mode.h);
+		}
 	}
 
 	/* We have found no resolutions, show the default list */
@@ -367,10 +368,9 @@ bool VideoDriver_SDL_Base::CreateMainWindow(uint w, uint h, uint flags)
 		y = r.y + std::max(0, r.h - static_cast<int>(h)) / 4; // decent desktops have taskbars at the bottom
 	}
 
-	char caption[50];
-	seprintf(caption, lastof(caption), "OpenTTD %s", _openttd_revision);
+	std::string caption = VideoDriver::GetCaption();
 	this->sdl_window = SDL_CreateWindow(
-		caption,
+		caption.c_str(),
 		x, y,
 		w, h,
 		flags);
@@ -389,7 +389,7 @@ bool VideoDriver_SDL_Base::CreateMainWindow(uint w, uint h, uint flags)
 		SDL_Surface *icon = SDL_LoadBMP(icon_path.c_str());
 		if (icon != nullptr) {
 			/* Get the colourkey, which will be magenta */
-			uint32 rgbmap = SDL_MapRGB(icon->format, 255, 0, 255);
+			uint32_t rgbmap = SDL_MapRGB(icon->format, 255, 0, 255);
 
 			SDL_SetColorKey(icon, SDL_TRUE, rgbmap);
 			SDL_SetWindowIcon(this->sdl_window, icon);
@@ -436,7 +436,7 @@ static void SetTextInputRect()
 	winrect.x = win.x + caret.x;
 	winrect.y = win.y + caret.y;
 	winrect.w = 1;
-	winrect.h = FONT_HEIGHT_NORMAL;
+	winrect.h = GetCharacterHeight(FS_NORMAL);
 
 #if defined(WITH_FCITX)
 	if (_fcitx_mode) {
@@ -583,7 +583,7 @@ static const SDLVkMapping _vk_mapping[] = {
 	AS(SDLK_HASH,    WKC_HASH),
 };
 
-static uint ConvertSdlKeyIntoMy(SDL_Keysym *sym, WChar *character)
+static uint ConvertSdlKeyIntoMy(SDL_Keysym *sym, char32_t *character)
 {
 	const SDLVkMapping *map;
 	uint key = 0;
@@ -653,12 +653,25 @@ bool VideoDriver_SDL_Base::PollEvent()
 	if (!SDL_PollEvent(&ev)) return false;
 
 	switch (ev.type) {
-		case SDL_MOUSEMOTION:
-			if (_cursor.UpdateCursorPosition(ev.motion.x, ev.motion.y, true)) {
+		case SDL_MOUSEMOTION: {
+			int32_t x = ev.motion.x;
+			int32_t y = ev.motion.y;
+
+			if (_cursor.fix_at) {
+				/* Get all queued mouse events now in case we have to warp the cursor. In the
+				 * end, we only care about the current mouse position and not bygone events. */
+				while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION)) {
+					x = ev.motion.x;
+					y = ev.motion.y;
+				}
+			}
+
+			if (_cursor.UpdateCursorPosition(x, y)) {
 				SDL_WarpMouseInWindow(this->sdl_window, _cursor.pos.x, _cursor.pos.y);
 			}
 			HandleMouseEvents();
 			break;
+		}
 
 		case SDL_MOUSEWHEEL:
 			if (ev.wheel.y > 0) {
@@ -725,7 +738,7 @@ bool VideoDriver_SDL_Base::PollEvent()
 					(ev.key.keysym.sym == SDLK_RETURN || ev.key.keysym.sym == SDLK_f)) {
 				if (ev.key.repeat == 0) ToggleFullScreen(!_fullscreen);
 			} else {
-				WChar character;
+				char32_t character;
 
 				uint keycode = ConvertSdlKeyIntoMy(&ev.key.keysym, &character);
 				// Only handle non-text keys here. Text is handled in
@@ -757,7 +770,7 @@ bool VideoDriver_SDL_Base::PollEvent()
 			uint keycode = ConvertSdlKeycodeIntoMy(kc);
 
 			if (keycode == WKC_BACKQUOTE && FocusedWindowIsConsole()) {
-				WChar character;
+				char32_t character;
 				Utf8Decode(&character, ev.text.text);
 				HandleKeypress(keycode, character);
 			} else {
@@ -790,10 +803,8 @@ bool VideoDriver_SDL_Base::PollEvent()
 			} else if (ev.window.event == SDL_WINDOWEVENT_ENTER) {
 				// mouse entered the window, enable cursor
 				_cursor.in_window = true;
-#ifdef __EMSCRIPTEN__
 				/* Ensure pointer lock will not occur. */
 				SDL_SetRelativeMouseMode(SDL_FALSE);
-#endif
 			} else if (ev.window.event == SDL_WINDOWEVENT_LEAVE) {
 				// mouse left the window, undraw cursor
 				UndrawMouseCursor();
@@ -826,14 +837,6 @@ static const char *InitializeSDL()
 {
 #if defined(WITH_FCITX)
 	FcitxInit();
-#endif
-
-	/* Explicitly disable hardware acceleration. Enabling this causes
-	 * UpdateWindowSurface() to update the window's texture instead of
-	 * its surface. */
-	SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "0");
-#ifndef __EMSCRIPTEN__
-	SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "1");
 #endif
 
 	/* Check if the video-driver is already initialized. */
@@ -907,7 +910,7 @@ void VideoDriver_SDL_Base::Stop()
 
 void VideoDriver_SDL_Base::InputLoop()
 {
-	uint32 mod = SDL_GetModState();
+	uint32_t mod = SDL_GetModState();
 	const Uint8 *keys = SDL_GetKeyboardState(nullptr);
 
 	bool old_ctrl_pressed = _ctrl_pressed;
@@ -916,13 +919,9 @@ void VideoDriver_SDL_Base::InputLoop()
 	_ctrl_pressed  = !!(mod & KMOD_CTRL) != _invert_ctrl;
 	_shift_pressed = !!(mod & KMOD_SHIFT) != _invert_shift;
 
-#if defined(_DEBUG)
-	this->fast_forward_key_pressed = _shift_pressed;
-#else
 	/* Speedup when pressing tab, except when using ALT+TAB
 	 * to switch to another application. */
 	this->fast_forward_key_pressed = keys[SDL_SCANCODE_TAB] && (mod & KMOD_ALT) == 0;
-#endif /* defined(_DEBUG) */
 
 	/* Determine which directional keys are down. */
 	_dirkeys =
@@ -945,13 +944,19 @@ void VideoDriver_SDL_Base::LoopOnce()
 		 * normally done at the end of the main loop for non-Emscripten.
 		 * After that, Emscripten just halts, and the HTML shows a nice
 		 * "bye, see you next time" message. */
+		extern void PostMainLoop();
+		PostMainLoop();
+
 		emscripten_cancel_main_loop();
 		emscripten_exit_pointerlock();
 		/* In effect, the game ends here. As emscripten_set_main_loop() caused
 		 * the stack to be unwound, the code after MainLoop() in
 		 * openttd_main() is never executed. */
-		EM_ASM(if (window["openttd_syncfs"]) openttd_syncfs());
-		EM_ASM(if (window["openttd_exit"]) openttd_exit());
+		if (_game_mode == GM_BOOTSTRAP) {
+			EM_ASM(if (window["openttd_bootstrap_reload"]) openttd_bootstrap_reload());
+		} else {
+			EM_ASM(if (window["openttd_exit"]) openttd_exit());
+		}
 #endif
 		return;
 	}
@@ -988,15 +993,14 @@ bool VideoDriver_SDL_Base::ChangeResolution(int w, int h)
 
 bool VideoDriver_SDL_Base::ToggleFullscreen(bool fullscreen)
 {
-	int w, h;
-
 	/* Remember current window size */
-	if (fullscreen) {
-		SDL_GetWindowSize(this->sdl_window, &w, &h);
+	int w, h;
+	SDL_GetWindowSize(this->sdl_window, &w, &h);
 
+	if (fullscreen) {
 		/* Find fullscreen window size */
 		SDL_DisplayMode dm;
-		if (SDL_GetCurrentDisplayMode(0, &dm) < 0) {
+		if (SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(this->sdl_window), &dm) < 0) {
 			DEBUG(driver, 0, "SDL_GetCurrentDisplayMode() failed: %s", SDL_GetError());
 		} else {
 			SDL_SetWindowSize(this->sdl_window, dm.w, dm.h);

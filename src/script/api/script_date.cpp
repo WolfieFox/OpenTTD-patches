@@ -9,6 +9,7 @@
 
 #include "../../stdafx.h"
 #include "script_date.hpp"
+#include "script_timemode.hpp"
 #include "../../date_func.h"
 #include "../../settings_type.h"
 
@@ -25,51 +26,67 @@
 
 /* static */ ScriptDate::Date ScriptDate::GetCurrentDate()
 {
-	return (ScriptDate::Date)_date;
+	if (ScriptTimeMode::IsCalendarMode()) return (ScriptDate::Date)::CalTime::CurDate().base();
+
+	return (ScriptDate::Date)EconTime::CurDate().base();
 }
 
-/* static */ int32 ScriptDate::GetDayLengthFactor()
+/* static */ SQInteger ScriptDate::GetDayLengthFactor()
 {
-	return _settings_game.economy.day_length_factor;
+	return DayLengthFactor();
 }
 
-/* static */ int32 ScriptDate::GetYear(ScriptDate::Date date)
-{
-	if (date < 0) return DATE_INVALID;
-
-	::YearMonthDay ymd;
-	::ConvertDateToYMD(date, &ymd);
-	return ymd.year;
-}
-
-/* static */ int32 ScriptDate::GetMonth(ScriptDate::Date date)
+/* static */ SQInteger ScriptDate::GetYear(ScriptDate::Date date)
 {
 	if (date < 0) return DATE_INVALID;
 
-	::YearMonthDay ymd;
-	::ConvertDateToYMD(date, &ymd);
+	if (ScriptTimeMode::IsCalendarMode()) {
+		::CalTime::YearMonthDay ymd = ::CalTime::ConvertDateToYMD(date);
+		return ymd.year.base();
+	}
+
+	::EconTime::YearMonthDay ymd = ::EconTime::ConvertDateToYMD(date);
+	return ymd.year.base();
+}
+
+/* static */ SQInteger ScriptDate::GetMonth(ScriptDate::Date date)
+{
+	if (date < 0) return DATE_INVALID;
+
+	if (ScriptTimeMode::IsCalendarMode()) {
+		::CalTime::YearMonthDay ymd = ::CalTime::ConvertDateToYMD(date);
+		return ymd.month + 1;
+	}
+
+	::EconTime::YearMonthDay ymd = ::EconTime::ConvertDateToYMD(date);
 	return ymd.month + 1;
 }
 
-/* static */ int32 ScriptDate::GetDayOfMonth(ScriptDate::Date date)
+/* static */ SQInteger ScriptDate::GetDayOfMonth(ScriptDate::Date date)
 {
 	if (date < 0) return DATE_INVALID;
 
-	::YearMonthDay ymd;
-	::ConvertDateToYMD(date, &ymd);
+	if (ScriptTimeMode::IsCalendarMode()) {
+		::CalTime::YearMonthDay ymd = ::CalTime::ConvertDateToYMD(date);
+		return ymd.day;
+	}
+
+	::EconTime::YearMonthDay ymd = ::EconTime::ConvertDateToYMD(date);
 	return ymd.day;
 }
 
-/* static */ ScriptDate::Date ScriptDate::GetDate(int32 year, int32 month, int32 day_of_month)
+/* static */ ScriptDate::Date ScriptDate::GetDate(SQInteger year, SQInteger month, SQInteger day_of_month)
 {
 	if (month < 1 || month > 12) return DATE_INVALID;
 	if (day_of_month < 1 || day_of_month > 31) return DATE_INVALID;
-	if (year < 0 || year > MAX_YEAR) return DATE_INVALID;
+	if (year < 0 || year > CalTime::MAX_YEAR) return DATE_INVALID;
 
-	return (ScriptDate::Date)::ConvertYMDToDate(year, month - 1, day_of_month);
+	if (ScriptTimeMode::IsCalendarMode()) return (ScriptDate::Date)::CalTime::ConvertYMDToDate(year, month - 1, day_of_month).base();
+
+	return (ScriptDate::Date)::EconTime::ConvertYMDToDate(year, month - 1, day_of_month).base();
 }
 
-/* static */ int32 ScriptDate::GetSystemTime()
+/* static */ SQInteger ScriptDate::GetSystemTime()
 {
 	time_t t;
 	time(&t);
@@ -81,24 +98,24 @@
 	return _settings_game.game_time.time_in_minutes;
 }
 
-/* static */ int32 ScriptDate::GetTicksPerMinute()
+/* static */ SQInteger ScriptDate::GetTicksPerMinute()
 {
 	return _settings_game.game_time.ticks_per_minute;
 }
 
-/* static */ DateTicksScaled ScriptDate::GetCurrentScaledDateTicks()
+/* static */ SQInteger ScriptDate::GetCurrentScaledDateTicks()
 {
-	return _scaled_date_ticks;
+	return _state_ticks.base();
 }
 
-/* static */ int32 ScriptDate::GetHour(DateTicksScaled ticks)
+/* static */ SQInteger ScriptDate::GetHour(SQInteger ticks)
 {
-	Minutes minutes = (ticks / _settings_game.game_time.ticks_per_minute) + _settings_game.game_time.clock_offset;
-	return MINUTES_HOUR(minutes);
+	TickMinutes minutes = _settings_game.game_time.ToTickMinutes(StateTicks(ticks));
+	return minutes.ClockHour();
 }
 
-/* static */ int32 ScriptDate::GetMinute(DateTicksScaled ticks)
+/* static */ SQInteger ScriptDate::GetMinute(SQInteger ticks)
 {
-	Minutes minutes = (ticks / _settings_game.game_time.ticks_per_minute) + _settings_game.game_time.clock_offset;
-	return MINUTES_MINUTE(minutes);
+	TickMinutes minutes = _settings_game.game_time.ToTickMinutes(StateTicks(ticks));
+	return minutes.ClockMinute();
 }

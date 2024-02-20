@@ -21,26 +21,27 @@
 #include <sstream>
 
 #ifdef _MSC_VER
-#include <errno.h> // required by vsnprintf implementation for MSVC
+#	include <errno.h> // required by vsnprintf implementation for MSVC
+#	define strncasecmp strnicmp
 #endif
 
 #ifdef _WIN32
-#include "os/windows/win32.h"
+#	include "os/windows/win32.h"
 #endif
 
 #ifdef WITH_UNISCRIBE
-#include "os/windows/string_uniscribe.h"
+#	include "os/windows/string_uniscribe.h"
 #endif
 
 #ifdef WITH_ICU_I18N
-/* Required by strnatcmp. */
-#include <unicode/ustring.h>
-#include "language.h"
-#include "gfx_func.h"
+/* Required by StrNaturalCompare. */
+#	include <unicode/ustring.h>
+#	include "language.h"
+#	include "gfx_func.h"
 #endif /* WITH_ICU_I18N */
 
 #if defined(WITH_COCOA)
-#include "os/macosx/string_osx.h"
+#	include "os/macosx/string_osx.h"
 #endif
 
 /* The function vsnprintf is used internally to perform the required formatting
@@ -142,36 +143,26 @@ char *stredup(const char *s, const char *last)
 	return tmp;
 }
 
-char *str_vfmt(const char *str, va_list va)
-{
-	char buf[4096];
-
-	int len = vseprintf(buf, lastof(buf), str, va);
-	char *p = MallocT<char>(len + 1);
-	memcpy(p, buf, len + 1);
-	return p;
-}
-
-/**
- * Format, "printf", into a newly allocated string.
- * @param str The formatting string.
- * @return The formatted string. You must free this!
- */
-char *CDECL str_fmt(const char *str, ...)
-{
-	va_list va;
-	va_start(va, str);
-	char *output = str_vfmt(str, va);
-	va_end(va);
-	return output;
-}
-
 std::string stdstr_vfmt(const char *str, va_list va)
 {
-	char buf[4096];
+	std::string out;
 
-	int len = vseprintf(buf, lastof(buf), str, va);
-	return std::string(buf, len);
+	va_list va2;
+	va_copy(va2, va);
+
+	static constexpr int DEFAULT_BUFFER_SIZE = 1024;
+	char buf[DEFAULT_BUFFER_SIZE];
+
+	int len = vsnprintf(buf, DEFAULT_BUFFER_SIZE, str, va);
+	if (len >= DEFAULT_BUFFER_SIZE) {
+		/* buffer was too small */
+		out.resize(len);
+		vsnprintf(out.data(), len + 1, str, va2);
+	} else if (len > 0) {
+		out.assign(buf, len);
+	}
+	va_end(va2);
+	return out;
 }
 
 /**
@@ -201,7 +192,7 @@ const char *str_fix_scc_encoded(char *str, const char *last)
 		size_t len = Utf8EncodedCharLen(*str);
 		if ((len == 0 && str + 4 > last) || str + len > last) break;
 
-		WChar c;
+		char32_t c;
 		Utf8Decode(&c, str);
 		if (c == '\0') break;
 
@@ -214,15 +205,46 @@ const char *str_fix_scc_encoded(char *str, const char *last)
 	return str;
 }
 
+/**
+ * Format a byte array into a continuous hex string.
+ * @param data Array to format
+ * @return Converted string.
+ */
+std::string FormatArrayAsHex(std::span<const byte> data)
+{
+	std::string hex_output;
+	hex_output.resize(data.size() * 2);
 
+	char txt[3];
+	for (uint i = 0; i < data.size(); ++i) {
+		seprintf(txt, lastof(txt), "%02x", data[i]);
+		hex_output[i * 2] = txt[0];
+		hex_output[(i * 2) + 1] = txt[1];
+	}
+
+	return hex_output;
+}
+
+/**
+ * Copies the valid (UTF-8) characters from \c str up to \c last to the \c dst.
+ * Depending on the \c settings invalid characters can be replaced with a
+ * question mark, as well as determining what characters are deemed invalid.
+ *
+ * It is allowed for \c dst to be the same as \c src, in which case the string
+ * is make valid in place.
+ * @param dst The destination to write to.
+ * @param str The string to validate.
+ * @param last The last valid character of str.
+ * @param settings The settings for the string validation.
+ */
 template <class T>
-static void StrMakeValidInPlace(T &dst, const char *str, const char *last, StringValidationSettings settings)
+static void StrMakeValid(T &dst, const char *str, const char *last, StringValidationSettings settings)
 {
 	/* Assume the ABSOLUTE WORST to be in str as it comes from the outside. */
 
 	while (str <= last && *str != '\0') {
 		size_t len = Utf8EncodedCharLen(*str);
-		WChar c;
+		char32_t c;
 		/* If the first byte does not look like the first byte of an encoded
 		 * character, i.e. encoded length is 0, then this byte is definitely bad
 		 * and it should be skipped.
@@ -246,7 +268,7 @@ static void StrMakeValidInPlace(T &dst, const char *str, const char *last, Strin
 		 * would also reach the "last" byte of the string and a normal '\0'
 		 * termination will be placed after it.
 		 */
-		if (len == 0 || str + len > last || len != Utf8Decode(&c, str)) {
+		if (len == 0 || str + len > last + 1 || len != Utf8Decode(&c, str)) {
 			/* Maybe the next byte is still a valid character? */
 			str++;
 			continue;
@@ -261,16 +283,19 @@ static void StrMakeValidInPlace(T &dst, const char *str, const char *last, Strin
 			} while (--len != 0);
 		} else if ((settings & SVS_ALLOW_NEWLINE) != 0 && c == '\n') {
 			*dst++ = *str++;
-		} else if ((settings & SVS_ALLOW_SEPARATOR_CODE) != 0 && c == 0x1F) {
-			*dst++ = *str++;
 		} else {
 			if ((settings & SVS_ALLOW_NEWLINE) != 0 && c == '\r' && str[1] == '\n') {
 				str += len;
 				continue;
 			}
-			/* Replace the undesirable character with a question mark */
 			str += len;
-			if ((settings & SVS_REPLACE_WITH_QUESTION_MARK) != 0) *dst++ = '?';
+			if ((settings & SVS_REPLACE_TAB_CR_NL_WITH_SPACE) != 0 && (c == '\r' || c == '\n' || c == '\t')) {
+				/* Replace the tab, carriage return or newline with a space. */
+				*dst++ = ' ';
+			} else if ((settings & SVS_REPLACE_WITH_QUESTION_MARK) != 0) {
+				/* Replace the undesirable character with a question mark */
+				*dst++ = '?';
+			}
 		}
 	}
 
@@ -288,7 +313,7 @@ static void StrMakeValidInPlace(T &dst, const char *str, const char *last, Strin
 char *StrMakeValidInPlace(char *str, const char *last, StringValidationSettings settings)
 {
 	char *dst = str;
-	StrMakeValidInPlace(dst, str, last, settings);
+	StrMakeValid(dst, str, last, settings);
 	*dst = '\0';
 	return dst;
 }
@@ -307,19 +332,22 @@ void StrMakeValidInPlace(char *str, StringValidationSettings settings)
 }
 
 /**
- * Scans the string for invalid characters and replaces then with a
- * question mark '?' (if not ignored).
+ * Copies the valid (UTF-8) characters from \c str to the returned string.
+ * Depending on the \c settings invalid characters can be replaced with a
+ * question mark, as well as determining what characters are deemed invalid.
  * @param str The string to validate.
  * @param settings The settings for the string validation.
  */
-std::string StrMakeValid(const std::string &str, StringValidationSettings settings)
+std::string StrMakeValid(std::string_view str, StringValidationSettings settings)
 {
+	if (str.empty()) return {};
+
 	auto buf = str.data();
-	auto last = buf + str.size();
+	auto last = buf + str.size() - 1;
 
 	std::ostringstream dst;
 	std::ostreambuf_iterator<char> dst_iter(dst);
-	StrMakeValidInPlace(dst_iter, buf, last, settings);
+	StrMakeValid(dst_iter, buf, last, settings);
 
 	return dst.str();
 }
@@ -343,7 +371,7 @@ bool StrValid(const char *str, const char *last)
 		 * within the encoding of an UTF8 character. */
 		if (len == 0 || str + len > last) return false;
 
-		WChar c;
+		char32_t c;
 		len = Utf8Decode(&c, str);
 		if (!IsPrintable(c) || (c >= SCC_SPRITE_START && c <= SCC_SPRITE_END)) {
 			return false;
@@ -392,53 +420,100 @@ void StrTrimInPlace(std::string &str)
 	StrRightTrimInPlace(str);
 }
 
+const char *StrLastPathSegment(const char *path)
+{
+	const char *best = path;
+	for (; *path != '\0'; path++) {
+		if (*path == PATHSEPCHAR || *path == '/') {
+			if (*(path + 1) != '\0') best = path + 1;
+		}
+	}
+	return best;
+}
+
 /**
- * Check whether the given string starts with the given prefix.
+ * Check whether the given string starts with the given prefix, ignoring case.
  * @param str    The string to look at.
  * @param prefix The prefix to look for.
- * @return True iff the begin of the string is the same as the prefix.
+ * @return True iff the begin of the string is the same as the prefix, ignoring case.
  */
-bool StrStartsWith(const std::string_view str, const std::string_view prefix)
+bool StrStartsWithIgnoreCase(std::string_view str, const std::string_view prefix)
 {
-	size_t prefix_len = prefix.size();
-	if (str.size() < prefix_len) return false;
-	return str.compare(0, prefix_len, prefix, 0, prefix_len) == 0;
+	if (str.size() < prefix.size()) return false;
+	return StrEqualsIgnoreCase(str.substr(0, prefix.size()), prefix);
+}
+
+/** Case insensitive implementation of the standard character type traits. */
+struct CaseInsensitiveCharTraits : public std::char_traits<char> {
+	static bool eq(char c1, char c2) { return toupper(c1) == toupper(c2); }
+	static bool ne(char c1, char c2) { return toupper(c1) != toupper(c2); }
+	static bool lt(char c1, char c2) { return toupper(c1) <  toupper(c2); }
+
+	static int compare(const char *s1, const char *s2, size_t n)
+	{
+		while (n-- != 0) {
+			if (toupper(*s1) < toupper(*s2)) return -1;
+			if (toupper(*s1) > toupper(*s2)) return 1;
+			++s1; ++s2;
+		}
+		return 0;
+	}
+
+	static const char *find(const char *s, size_t n, char a)
+	{
+		for (; n > 0; --n, ++s) {
+			if (toupper(*s) == toupper(a)) return s;
+		}
+		return nullptr;
+	}
+};
+
+/** Case insensitive string view. */
+typedef std::basic_string_view<char, CaseInsensitiveCharTraits> CaseInsensitiveStringView;
+
+/**
+ * Check whether the given string ends with the given suffix, ignoring case.
+ * @param str    The string to look at.
+ * @param suffix The suffix to look for.
+ * @return True iff the end of the string is the same as the suffix, ignoring case.
+ */
+bool StrEndsWithIgnoreCase(std::string_view str, const std::string_view suffix)
+{
+	if (str.size() < suffix.size()) return false;
+	return StrEqualsIgnoreCase(str.substr(str.size() - suffix.size()), suffix);
 }
 
 /**
- * Check whether the given string ends with the given suffix.
- * @param str    The string to look at.
- * @param suffix The suffix to look for.
- * @return True iff the end of the string is the same as the suffix.
+ * Compares two string( view)s, while ignoring the case of the characters.
+ * @param str1 The first string.
+ * @param str2 The second string.
+ * @return Less than zero if str1 < str2, zero if str1 == str2, greater than
+ *         zero if str1 > str2. All ignoring the case of the characters.
  */
-bool StrEndsWith(const std::string_view str, const std::string_view suffix)
+int StrCompareIgnoreCase(const std::string_view str1, const std::string_view str2)
 {
-	size_t suffix_len = suffix.size();
-	if (str.size() < suffix_len) return false;
-	return str.compare(str.size() - suffix_len, suffix_len, suffix, 0, suffix_len) == 0;
+	CaseInsensitiveStringView ci_str1{ str1.data(), str1.size() };
+	CaseInsensitiveStringView ci_str2{ str2.data(), str2.size() };
+	return ci_str1.compare(ci_str2);
 }
 
-const char *StrConsumeToSeparator(std::string &result, const char *str)
+/**
+ * Compares two string( view)s for equality, while ignoring the case of the characters.
+ * @param str1 The first string.
+ * @param str2 The second string.
+ * @return True iff both strings are equal, barring the case of the characters.
+ */
+bool StrEqualsIgnoreCase(const std::string_view str1, const std::string_view str2)
 {
-	if (str == nullptr) {
-		result = "";
-		return nullptr;
-	}
-
-	const char *end = str;
-	while (*end != '\0' && *end != 0x1F) {
-		end++;
-	}
-	result.assign(str, end);
-	if (*end == 0x1F) return end + 1;
-	return nullptr;
+	if (str1.size() != str2.size()) return false;
+	return StrCompareIgnoreCase(str1, str2) == 0;
 }
 
 /** Scans the string for colour codes and strips them */
 void str_strip_colours(char *str)
 {
 	char *dst = str;
-	WChar c;
+	char32_t c;
 	size_t len;
 
 	for (len = Utf8Decode(&c, str); c != '\0'; len = Utf8Decode(&c, str)) {
@@ -457,12 +532,26 @@ void str_strip_colours(char *str)
 	*dst = '\0';
 }
 
+/** Advances the pointer over any colour codes at the start of the string */
+const char *strip_leading_colours(const char *str)
+{
+	char32_t c;
+
+	do {
+		size_t len = Utf8Decode(&c, str);
+		if (c < SCC_BLUE || c > SCC_BLACK) break;
+		str += len;
+	} while (c != '\0');
+
+	return str;
+}
+
 std::string str_strip_all_scc(const char *str)
 {
 	std::string out;
 	if (!str) return out;
 
-	WChar c;
+	char32_t c;
 	size_t len;
 
 	for (len = Utf8Decode(&c, str); c != '\0'; len = Utf8Decode(&c, str)) {
@@ -486,7 +575,7 @@ std::string str_strip_all_scc(const char *str)
  * @param replace The character to replace, may be 0 to not insert any character
  * @return The pointer to the terminating null-character in the string buffer
  */
-char *str_replace_wchar(char *str, const char *last, WChar find, WChar replace)
+char *str_replace_wchar(char *str, const char *last, char32_t find, char32_t replace)
 {
 	char *dst = str;
 
@@ -499,7 +588,7 @@ char *str_replace_wchar(char *str, const char *last, WChar find, WChar replace)
 		 * within the encoding of an UTF8 character. */
 		if ((len == 0 && str + 4 > last) || str + len > last) break;
 
-		WChar c;
+		char32_t c;
 		len = Utf8Decode(&c, str);
 		/* It's possible to encode the string termination character
 		 * into a multiple bytes. This prevents those termination
@@ -592,19 +681,21 @@ bool strtolower(std::string &str, std::string::size_type offs)
  * @param afilter the filter to use
  * @return true or false depending if the character is printable/valid or not
  */
-bool IsValidChar(WChar key, CharSetFilter afilter)
+bool IsValidChar(char32_t key, CharSetFilter afilter)
 {
 #if !defined(STRGEN) && !defined(SETTINGSGEN)
-	extern WChar GetDecimalSeparatorChar();
+	extern char32_t GetDecimalSeparatorChar();
 #endif
 	switch (afilter) {
 		case CS_ALPHANUMERAL:  return IsPrintable(key);
 		case CS_NUMERAL:       return (key >= '0' && key <= '9');
 		case CS_NUMERAL_SIGNED:  return (key >= '0' && key <= '9') || key == '-';
 #if !defined(STRGEN) && !defined(SETTINGSGEN)
-		case CS_NUMERAL_DECIMAL: return (key >= '0' && key <= '9') || key == '.' || key == '-' || key == GetDecimalSeparatorChar();
+		case CS_NUMERAL_DECIMAL: return (key >= '0' && key <= '9') || key == '.' || key == GetDecimalSeparatorChar();
+		case CS_NUMERAL_DECIMAL_SIGNED: return (key >= '0' && key <= '9') || key == '.' || key == '-' || key == GetDecimalSeparatorChar();
 #else
-		case CS_NUMERAL_DECIMAL: return (key >= '0' && key <= '9') || key == '.' || key == '-';
+		case CS_NUMERAL_DECIMAL: return (key >= '0' && key <= '9') || key == '.';
+		case CS_NUMERAL_DECIMAL_SIGNED: return (key >= '0' && key <= '9') || key == '.' || key == '-';
 #endif
 		case CS_NUMERAL_SPACE: return (key >= '0' && key <= '9') || key == ' ';
 		case CS_ALPHA:         return IsPrintable(key) && !(key >= '0' && key <= '9');
@@ -671,25 +762,6 @@ int CDECL seprintf(char *str, const char *last, const char *format, ...)
 }
 
 
-/**
- * Convert the md5sum to a hexadecimal string representation
- * @param buf buffer to put the md5sum into
- * @param last last character of buffer (usually lastof(buf))
- * @param md5sum the md5sum itself
- * @return a pointer to the next character after the md5sum
- */
-char *md5sumToString(char *buf, const char *last, const uint8 md5sum[16])
-{
-	char *p = buf;
-
-	for (uint i = 0; i < 16; i++) {
-		p += seprintf(p, last, "%02X", md5sum[i]);
-	}
-
-	return p;
-}
-
-
 /* UTF-8 handling routines */
 
 
@@ -699,7 +771,7 @@ char *md5sumToString(char *buf, const char *last, const uint8 md5sum[16])
  * @param s Character stream to retrieve character from.
  * @return Number of characters in the sequence.
  */
-size_t Utf8Decode(WChar *c, const char *s)
+size_t Utf8Decode(char32_t *c, const char *s)
 {
 	dbg_assert(c != nullptr);
 
@@ -727,7 +799,6 @@ size_t Utf8Decode(WChar *c, const char *s)
 		}
 	}
 
-	/* DEBUG(misc, 1, "[utf8] invalid UTF-8 sequence"); */
 	*c = '?';
 	return 1;
 }
@@ -741,7 +812,7 @@ size_t Utf8Decode(WChar *c, const char *s)
  * @return Number of characters in the encoded sequence.
  */
 template <class T>
-inline size_t Utf8Encode(T buf, WChar c)
+inline size_t Utf8Encode(T buf, char32_t c)
 {
 	if (c < 0x80) {
 		*buf = c;
@@ -763,19 +834,23 @@ inline size_t Utf8Encode(T buf, WChar c)
 		return 4;
 	}
 
-	/* DEBUG(misc, 1, "[utf8] can't UTF-8 encode value 0x%X", c); */
 	*buf = '?';
 	return 1;
 }
 
-size_t Utf8Encode(char *buf, WChar c)
+size_t Utf8Encode(char *buf, char32_t c)
 {
 	return Utf8Encode<char *>(buf, c);
 }
 
-size_t Utf8Encode(std::ostreambuf_iterator<char> &buf, WChar c)
+size_t Utf8Encode(std::ostreambuf_iterator<char> &buf, char32_t c)
 {
 	return Utf8Encode<std::ostreambuf_iterator<char> &>(buf, c);
+}
+
+size_t Utf8Encode(std::back_insert_iterator<std::string> &buf, char32_t c)
+{
+	return Utf8Encode<std::back_insert_iterator<std::string> &>(buf, c);
 }
 
 /**
@@ -829,9 +904,9 @@ char *strcasestr(const char *haystack, const char *needle)
  * @param str The string to skip the initial garbage of.
  * @return The string with the garbage skipped.
  */
-static const char *SkipGarbage(const char *str)
+static std::string_view SkipGarbage(std::string_view str)
 {
-	while (*str != '\0' && (*str < '0' || IsInsideMM(*str, ';', '@' + 1) || IsInsideMM(*str, '[', '`' + 1) || IsInsideMM(*str, '{', '~' + 1))) str++;
+	while (!str.empty() && (str[0] < '0' || IsInsideMM(str[0], ';', '@' + 1) || IsInsideMM(str[0], '[', '`' + 1) || IsInsideMM(str[0], '{', '~' + 1))) str.remove_prefix(1);
 	return str;
 }
 
@@ -874,7 +949,7 @@ static int _strnatcmpIntl(const char *s1, const char *s2) {
  * @param ignore_garbage_at_front Skip punctuation characters in the front
  * @return Less than zero if s1 < s2, zero if s1 == s2, greater than zero if s1 > s2.
  */
-int strnatcmp(const char *s1, const char *s2, bool ignore_garbage_at_front)
+int StrNaturalCompare(std::string_view s1, std::string_view s2, bool ignore_garbage_at_front)
 {
 	if (ignore_garbage_at_front) {
 		s1 = SkipGarbage(s1);
@@ -884,7 +959,7 @@ int strnatcmp(const char *s1, const char *s2, bool ignore_garbage_at_front)
 #ifdef WITH_ICU_I18N
 	if (_current_collator) {
 		UErrorCode status = U_ZERO_ERROR;
-		int result = _current_collator->compareUTF8(s1, s2, status);
+		int result = _current_collator->compareUTF8(icu::StringPiece(s1.data(), s1.size()), icu::StringPiece(s2.data(), s2.size()), status);
 		if (U_SUCCESS(status)) return result;
 	}
 #endif /* WITH_ICU_I18N */
@@ -900,14 +975,155 @@ int strnatcmp(const char *s1, const char *s2, bool ignore_garbage_at_front)
 #endif
 
 	/* Do a manual natural sort comparison if ICU is missing or if we cannot create a collator. */
-	return _strnatcmpIntl(s1, s2);
+	return _strnatcmpIntl(s1.data(), s2.data());
+}
+
+#ifdef WITH_ICU_I18N
+
+#include <unicode/stsearch.h>
+
+/**
+ * Search if a string is contained in another string using the current locale.
+ *
+ * @param str String to search in.
+ * @param value String to search for.
+ * @param case_insensitive Search case-insensitive.
+ * @return 1 if value was found, 0 if it was not found, or -1 if not supported by the OS.
+ */
+static int ICUStringContains(const std::string_view str, const std::string_view value, bool case_insensitive)
+{
+	if (_current_collator) {
+		std::unique_ptr<icu::RuleBasedCollator> coll(dynamic_cast<icu::RuleBasedCollator *>(_current_collator->clone()));
+		if (coll) {
+			UErrorCode status = U_ZERO_ERROR;
+			coll->setStrength(case_insensitive ? icu::Collator::SECONDARY : icu::Collator::TERTIARY);
+			coll->setAttribute(UCOL_NUMERIC_COLLATION, UCOL_OFF, status);
+
+			auto u_str = icu::UnicodeString::fromUTF8(icu::StringPiece(str.data(), str.size()));
+			auto u_value = icu::UnicodeString::fromUTF8(icu::StringPiece(value.data(), value.size()));
+			icu::StringSearch u_searcher(u_value, u_str, coll.get(), nullptr, status);
+			if (U_SUCCESS(status)) {
+				auto pos = u_searcher.first(status);
+				if (U_SUCCESS(status)) return pos != USEARCH_DONE ? 1 : 0;
+			}
+		}
+	}
+
+	return -1;
+}
+#endif /* WITH_ICU_I18N */
+
+/**
+ * Checks if a string is contained in another string with a locale-aware comparison that is case sensitive.
+ *
+ * @param str The string to search in.
+ * @param value The string to search for.
+ * @return True if a match was found.
+ */
+[[nodiscard]] bool StrNaturalContains(const std::string_view str, const std::string_view value)
+{
+#ifdef WITH_ICU_I18N
+	int res_u = ICUStringContains(str, value, false);
+	if (res_u >= 0) return res_u > 0;
+#endif /* WITH_ICU_I18N */
+
+#if defined(_WIN32) && !defined(STRGEN) && !defined(SETTINGSGEN)
+	int res = Win32StringContains(str, value, false);
+	if (res >= 0) return res > 0;
+#endif
+
+#if defined(WITH_COCOA) && !defined(STRGEN) && !defined(SETTINGSGEN)
+	int res = MacOSStringContains(str, value, false);
+	if (res >= 0) return res > 0;
+#endif
+
+	return str.find(value) != std::string_view::npos;
+}
+
+/**
+ * Checks if a string is contained in another string with a locale-aware comparison that is case insensitive.
+ *
+ * @param str The string to search in.
+ * @param value The string to search for.
+ * @return True if a match was found.
+ */
+[[nodiscard]] bool StrNaturalContainsIgnoreCase(const std::string_view str, const std::string_view value)
+{
+#ifdef WITH_ICU_I18N
+	int res_u = ICUStringContains(str, value, true);
+	if (res_u >= 0) return res_u > 0;
+#endif /* WITH_ICU_I18N */
+
+#if defined(_WIN32) && !defined(STRGEN) && !defined(SETTINGSGEN)
+	int res = Win32StringContains(str, value, true);
+	if (res >= 0) return res > 0;
+#endif
+
+#if defined(WITH_COCOA) && !defined(STRGEN) && !defined(SETTINGSGEN)
+	int res = MacOSStringContains(str, value, true);
+	if (res >= 0) return res > 0;
+#endif
+
+	CaseInsensitiveStringView ci_str{ str.data(), str.size() };
+	CaseInsensitiveStringView ci_value{ value.data(), value.size() };
+	return ci_str.find(ci_value) != CaseInsensitiveStringView::npos;
+}
+
+/**
+ * Convert a single hex-nibble to a byte.
+ *
+ * @param c The hex-nibble to convert.
+ * @return The byte the hex-nibble represents, or -1 if it is not a valid hex-nibble.
+ */
+static int ConvertHexNibbleToByte(char c)
+{
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'A' && c <= 'F') return c + 10 - 'A';
+	if (c >= 'a' && c <= 'f') return c + 10 - 'a';
+	return -1;
+}
+
+/**
+ * Convert a hex-string to a byte-array, while validating it was actually hex.
+ *
+ * @param hex The hex-string to convert.
+ * @param bytes The byte-array to write the result to.
+ *
+ * @note The length of the hex-string has to be exactly twice that of the length
+ * of the byte-array, otherwise conversion will fail.
+ *
+ * @return True iff the hex-string was valid and the conversion succeeded.
+ */
+bool ConvertHexToBytes(std::string_view hex, std::span<uint8_t> bytes)
+{
+	if (bytes.size() != hex.size() / 2) {
+		return false;
+	}
+
+	/* Hex-string lengths are always divisible by 2. */
+	if (hex.size() % 2 != 0) {
+		return false;
+	}
+
+	for (size_t i = 0; i < hex.size() / 2; i++) {
+		auto hi = ConvertHexNibbleToByte(hex[i * 2]);
+		auto lo = ConvertHexNibbleToByte(hex[i * 2 + 1]);
+
+		if (hi < 0 || lo < 0) {
+			return false;
+		}
+
+		bytes[i] = (hi << 4) | lo;
+	}
+
+	return true;
 }
 
 #ifdef WITH_UNISCRIBE
 
-/* static */ StringIterator *StringIterator::Create()
+/* static */ std::unique_ptr<StringIterator> StringIterator::Create()
 {
-	return new UniscribeStringIterator();
+	return std::make_unique<UniscribeStringIterator>();
 }
 
 #elif defined(WITH_ICU_I18N)
@@ -955,7 +1171,7 @@ public:
 		while (*s != '\0') {
 			size_t idx = s - string_base;
 
-			WChar c = Utf8Consume(&s);
+			char32_t c = Utf8Consume(&s);
 			if (c < 0x10000) {
 				this->utf16_str.push_back((UChar)c);
 			} else {
@@ -1010,7 +1226,7 @@ public:
 				 * break point, but we only want word starts. Move to the next location in
 				 * case the new position points to whitespace. */
 				while (pos != icu::BreakIterator::DONE &&
-						IsWhitespace(Utf16DecodeChar((const uint16 *)&this->utf16_str[pos]))) {
+						IsWhitespace(Utf16DecodeChar((const uint16_t *)&this->utf16_str[pos]))) {
 					int32_t new_pos = this->word_itr->next();
 					/* Don't set it to DONE if it was valid before. Otherwise we'll return END
 					 * even though the iterator wasn't at the end of the string before. */
@@ -1042,7 +1258,7 @@ public:
 				 * break point, but we only want word starts. Move to the previous location in
 				 * case the new position points to whitespace. */
 				while (pos != icu::BreakIterator::DONE &&
-						IsWhitespace(Utf16DecodeChar((const uint16 *)&this->utf16_str[pos]))) {
+						IsWhitespace(Utf16DecodeChar((const uint16_t *)&this->utf16_str[pos]))) {
 					int32_t new_pos = this->word_itr->previous();
 					/* Don't set it to DONE if it was valid before. Otherwise we'll return END
 					 * even though the iterator wasn't at the start of the string before. */
@@ -1061,9 +1277,9 @@ public:
 	}
 };
 
-/* static */ StringIterator *StringIterator::Create()
+/* static */ std::unique_ptr<StringIterator> StringIterator::Create()
 {
-	return new IcuStringIterator();
+	return std::make_unique<IcuStringIterator>();
 }
 
 #else
@@ -1080,14 +1296,14 @@ public:
 	{
 	}
 
-	virtual void SetString(const char *s)
+	void SetString(const char *s) override
 	{
 		this->string = s;
 		this->len = strlen(s);
 		this->cur_pos = 0;
 	}
 
-	virtual size_t SetCurPosition(size_t pos)
+	size_t SetCurPosition(size_t pos) override
 	{
 		dbg_assert(this->string != nullptr && pos <= this->len);
 		/* Sanitize in case we get a position inside an UTF-8 sequence. */
@@ -1095,7 +1311,7 @@ public:
 		return this->cur_pos = pos;
 	}
 
-	virtual size_t Next(IterType what)
+	size_t Next(IterType what) override
 	{
 		dbg_assert(this->string != nullptr);
 
@@ -1104,13 +1320,13 @@ public:
 
 		switch (what) {
 			case ITER_CHARACTER: {
-				WChar c;
+				char32_t c;
 				this->cur_pos += Utf8Decode(&c, this->string + this->cur_pos);
 				return this->cur_pos;
 			}
 
 			case ITER_WORD: {
-				WChar c;
+				char32_t c;
 				/* Consume current word. */
 				size_t offs = Utf8Decode(&c, this->string + this->cur_pos);
 				while (this->cur_pos < this->len && !IsWhitespace(c)) {
@@ -1133,7 +1349,7 @@ public:
 		return END;
 	}
 
-	virtual size_t Prev(IterType what)
+	size_t Prev(IterType what) override
 	{
 		dbg_assert(this->string != nullptr);
 
@@ -1146,7 +1362,7 @@ public:
 
 			case ITER_WORD: {
 				const char *s = this->string + this->cur_pos;
-				WChar c;
+				char32_t c;
 				/* Consume preceding whitespace. */
 				do {
 					s = Utf8PrevChar(s);
@@ -1172,17 +1388,17 @@ public:
 };
 
 #if defined(WITH_COCOA) && !defined(STRGEN) && !defined(SETTINGSGEN)
-/* static */ StringIterator *StringIterator::Create()
+/* static */ std::unique_ptr<StringIterator> StringIterator::Create()
 {
-	StringIterator *i = OSXStringIterator::Create();
+	std::unique_ptr<StringIterator> i = OSXStringIterator::Create();
 	if (i != nullptr) return i;
 
-	return new DefaultStringIterator();
+	return std::make_unique<DefaultStringIterator>();
 }
 #else
-/* static */ StringIterator *StringIterator::Create()
+/* static */ std::unique_ptr<StringIterator> StringIterator::Create()
 {
-	return new DefaultStringIterator();
+	return std::make_unique<DefaultStringIterator>();
 }
 #endif /* defined(WITH_COCOA) && !defined(STRGEN) && !defined(SETTINGSGEN) */
 

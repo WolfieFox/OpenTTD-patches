@@ -10,6 +10,15 @@
 #ifndef WINDOW_TYPE_H
 #define WINDOW_TYPE_H
 
+#include "core/strong_typedef_type.hpp"
+
+/**
+ * Widget ID.
+ * Even though the ID is signed, actual IDs must be non-negative.
+ * Negative IDs are used for special cases, like denoting 'no widget'.
+ */
+using WidgetID = int;
+
 /** %Window numbers. */
 enum WindowNumberEnum {
 	WN_GAME_OPTIONS_AI = 0,          ///< AI settings.
@@ -168,10 +177,10 @@ enum WindowClass {
 
 
 	/**
-	 * AI settings; %Window numbers:
-	 *   - 0 = #AISettingsWidgets
+	 * Script settings; %Window numbers:
+	 *   - 0 = #ScriptSettingsWidgets
 	 */
-	WC_AI_SETTINGS,
+	WC_SCRIPT_SETTINGS,
 
 	/**
 	 * NewGRF parameters; %Window numbers:
@@ -295,10 +304,10 @@ enum WindowClass {
 	WC_SIGN_LIST,
 
 	/**
-	 * AI list; %Window numbers:
-	 *   - 0 = #AIListWidgets
+	 * Scripts list; %Window numbers:
+	 *   - 0 = #ScriptListWidgets
 	 */
-	WC_AI_LIST,
+	WC_SCRIPT_LIST,
 
 	/**
 	 * Goals list; %Window numbers:
@@ -514,6 +523,12 @@ enum WindowClass {
 	WC_NETWORK_ASK_RELAY,
 
 	/**
+	 * Network ask survey window; %Window numbers:
+	 *  - 0 - #NetworkAskSurveyWidgets
+	 */
+	WC_NETWORK_ASK_SURVEY,
+
+	/**
 	 * Chatbox; %Window numbers:
 	 *   - #DestType = #NetWorkChatWidgets
 	 */
@@ -686,10 +701,10 @@ enum WindowClass {
 
 
 	/**
-	 * AI debug window; %Window numbers:
-	 *   - 0 = #AIDebugWidgets
+	 * Script debug window; %Window numbers:
+	 *   - Ascending value = #ScriptDebugWidgets
 	 */
-	WC_AI_DEBUG,
+	WC_SCRIPT_DEBUG,
 
 	/**
 	 * NewGRF inspect (debug); %Window numbers:
@@ -732,6 +747,12 @@ enum WindowClass {
 	 *   - 0 = #ScreenshotWidgets
 	 */
 	WC_SCREENSHOT,
+
+	/**
+	 * Help and manuals window; %Window numbers:
+	 *   - 0 = #HelpWindowWidgets
+	 */
+	WC_HELPWIN,
 
 	/**
 	 * Trace restrict programme window; %Window numbers:
@@ -781,6 +802,7 @@ enum WindowClass {
 	 */
 	WC_MODIFIER_KEY_TOGGLE,
 
+	WC_END,              ///< End sentinel.
 	WC_INVALID = 0xFFFF, ///< Invalid window.
 };
 
@@ -798,12 +820,14 @@ struct Window;
 struct WindowBase;
 
 /** Number to differentiate different windows of the same class */
-typedef int32 WindowNumber;
+typedef int32_t WindowNumber;
 
 /** State of handling an event. */
 enum EventState {
 	ES_HANDLED,     ///< The passed event is handled.
 	ES_NOT_HANDLED, ///< The passed event is not handled.
 };
+
+using WindowToken = StrongType::Typedef<uint64_t, struct WindowTokenTag, StrongType::Compare>;
 
 #endif /* WINDOW_TYPE_H */

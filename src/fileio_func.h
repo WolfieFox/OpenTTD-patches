@@ -18,14 +18,15 @@
 void FioFCloseFile(FILE *f);
 FILE *FioFOpenFile(const std::string &filename, const char *mode, Subdirectory subdir, size_t *filesize = nullptr, std::string *output_filename = nullptr);
 bool FioCheckFileExists(const std::string &filename, Subdirectory subdir);
-std::string FioFindFullPath(Subdirectory subdir, const char *filename);
+std::string FioFindFullPath(Subdirectory subdir, const std::string &filename);
 std::string FioGetDirectory(Searchpath sp, Subdirectory subdir);
 std::string FioFindDirectory(Subdirectory subdir);
 void FioCreateDirectory(const std::string &name);
+void FioRenameFile(const std::string &oldname, const std::string &newname);
 
 const char *FiosGetScreenshotDir();
 
-void SanitizeFilename(char *filename);
+void SanitizeFilename(std::string &filename);
 void AppendPathSeparator(std::string &buf);
 void DeterminePaths(const char *exe, bool only_local_path);
 std::unique_ptr<char[]> ReadFileToMem(const std::string &filename, size_t &lenp, size_t maxsize);
@@ -34,6 +35,7 @@ bool ExtractTar(const std::string &tar_filename, Subdirectory subdir);
 
 extern std::string _personal_dir; ///< custom directory for personal settings, saves, newgrf, etc.
 extern std::vector<Searchpath> _valid_searchpaths;
+extern std::vector<Searchpath> _valid_searchpaths_excluding_cwd;
 
 /** Helper for scanning for files with a given name */
 class FileScanner {
@@ -41,10 +43,10 @@ protected:
 	Subdirectory subdir; ///< The current sub directory we are searching through
 public:
 	/** Destruct the proper one... */
-	virtual ~FileScanner() {}
+	virtual ~FileScanner() = default;
 
 	uint Scan(const char *extension, Subdirectory sd, bool tars = true, bool recursive = true);
-	uint Scan(const char *extension, const char *directory, bool recursive = true);
+	uint Scan(const char *extension, const std::string &directory, bool recursive = true);
 
 	/**
 	 * Add a file with the given filename.
@@ -110,7 +112,7 @@ int closedir(DIR *d);
  * @param path string to open directory of
  * @return DIR pointer
  */
-static inline DIR *ttd_opendir(const char *path)
+inline DIR *ttd_opendir(const char *path)
 {
 	return opendir(OTTD2FS(path).c_str());
 }

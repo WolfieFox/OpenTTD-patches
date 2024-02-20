@@ -19,6 +19,7 @@
 #define NO_SHOBJIDL_SORTDIRECTION // Avoid multiple definition of SORT_ASCENDING
 #include <shlobj.h> /* SHGetFolderPath */
 #include <shellapi.h>
+#include <winnls.h>
 #include "win32.h"
 #include "../../fios.h"
 #include "../../core/alloc_func.hpp"
@@ -30,15 +31,16 @@
 #include <sys/stat.h>
 #include "../../language.h"
 #include "../../thread.h"
+#include "../../library_loader.h"
 #include <array>
 #include <map>
 #include <mutex>
-#if defined(__MINGW32__)
-#include "../../3rdparty/mingw-std-threads/mingw.mutex.h"
-#endif
-
 
 #include "../../safeguards.h"
+
+#if defined(__MINGW32__) && !defined(__MINGW64__) && !(_WIN32_IE >= 0x0500)
+#define SHGFP_TYPE_CURRENT 0
+#endif /* __MINGW32__ */
 
 static bool _has_console;
 static bool _cursor_disable = true;
@@ -56,37 +58,21 @@ bool MyShowCursor(bool show, bool toggle)
 	return !show;
 }
 
-/**
- * Helper function needed by dynamically loading libraries
- */
-bool LoadLibraryList(Function proc[], const char *dll)
-{
-	while (*dll != '\0') {
-		HMODULE lib;
-		lib = LoadLibrary(OTTD2FS(dll).c_str());
-
-		if (lib == nullptr) return false;
-		for (;;) {
-			Function p;
-
-			while (*dll++ != '\0') { /* Nothing */ }
-			if (*dll == '\0') break;
-			p = GetProcAddressT<Function>(lib, dll);
-			if (p == nullptr) return false;
-			*proc++ = p;
-		}
-		dll++;
-	}
-	return true;
-}
-
 void ShowOSErrorBox(const char *buf, bool system)
 {
 	MyShowCursor(true);
 	MessageBox(GetActiveWindow(), OTTD2FS(buf).c_str(), L"Error!", MB_ICONSTOP | MB_TASKMODAL);
 }
 
-void OSOpenBrowser(const char *url)
+[[noreturn]] void DoOSAbort()
+{
+	RaiseException(0xE1212012, 0, 0, nullptr);
+
+	/* This fallback should not be reached */
+	abort();
+}
+
+void OSOpenBrowser(const std::string &url)
 {
 	ShellExecute(GetActiveWindow(), L"open", OTTD2FS(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
@@ -218,8 +204,9 @@ void FiosGetDrives(FileList &file_list)
 		FiosItem *fios = &file_list.emplace_back();
 		fios->type = FIOS_TYPE_DRIVE;
 		fios->mtime = 0;
-		seprintf(fios->name, lastof(fios->name),  "%c:", s[0] & 0xFF);
-		strecpy(fios->title, fios->name, lastof(fios->title));
+		fios->name += (char)(s[0] & 0xFF);
+		fios->name += ':';
+		fios->title = fios->name;
 		while (*s++ != '\0') { /* Nothing */ }
 	}
 }
@@ -227,16 +214,16 @@ void FiosGetDrives(FileList &file_list)
 bool FiosIsValidFile(const char *path, const struct dirent *ent, struct stat *sb)
 {
 	/* hectonanoseconds between Windows and POSIX epoch */
-	static const int64 posix_epoch_hns = 0x019DB1DED53E8000LL;
+	static const int64_t posix_epoch_hns = 0x019DB1DED53E8000LL;
 	const WIN32_FIND_DATA *fd = &ent->dir->fd;
 
-	sb->st_size  = ((uint64) fd->nFileSizeHigh << 32) + fd->nFileSizeLow;
+	sb->st_size  = ((uint64_t) fd->nFileSizeHigh << 32) + fd->nFileSizeLow;
 	/* UTC FILETIME to seconds-since-1970 UTC
 	 * we just have to subtract POSIX epoch and scale down to units of seconds.
 	 * http://www.gamedev.net/community/forums/topic.asp?topic_id=294070&whichpage=1&#1860504
 	 * XXX - not entirely correct, since filetimes on FAT aren't UTC but local,
 	 * this won't entirely be correct, but we use the time only for comparison. */
-	sb->st_mtime = (time_t)((*(const uint64*)&fd->ftLastWriteTime - posix_epoch_hns) / 1E7);
+	sb->st_mtime = (time_t)((*(const uint64_t*)&fd->ftLastWriteTime - posix_epoch_hns) / 1E7);
 	sb->st_mode  = (fd->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)? S_IFDIR : S_IFREG;
 
 	return true;
@@ -247,47 +234,17 @@ bool FiosIsHiddenFile(const struct dirent *ent)
 	return (ent->dir->fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) != 0;
 }
 
-bool FiosGetDiskFreeSpace(const char *path, uint64 *tot)
+std::optional<uint64_t> FiosGetDiskFreeSpace(const std::string &path)
 {
 	UINT sem = SetErrorMode(SEM_FAILCRITICALERRORS);  // disable 'no-disk' message box
 
 	ULARGE_INTEGER bytes_free;
 	bool retval = GetDiskFreeSpaceEx(OTTD2FS(path).c_str(), &bytes_free, nullptr, nullptr);
-	if (retval && tot != nullptr) *tot = bytes_free.QuadPart;
 
 	SetErrorMode(sem); // reset previous setting
-	return retval;
-}
 
-static int ParseCommandLine(char *line, char **argv, int max_argc)
-{
-	int n = 0;
-
-	do {
-		/* skip whitespace */
-		while (*line == ' ' || *line == '\t') line++;
-
-		/* end? */
-		if (*line == '\0') break;
-
-		/* special handling when quoted */
-		if (*line == '"') {
-			argv[n++] = ++line;
-			while (*line != '"') {
-				if (*line == '\0') return n;
-				line++;
-			}
-		} else {
-			argv[n++] = line;
-			while (*line != ' ' && *line != '\t') {
-				if (*line == '\0') return n;
-				line++;
-			}
-		}
-		*line++ = '\0';
-	} while (n != max_argc);
-
-	return n;
+	if (retval) return bytes_free.QuadPart;
+	return std::nullopt;
 }
 
 void CreateConsole()
@@ -317,7 +274,7 @@ void CreateConsole()
 		_close(fd);
 		CloseHandle(hand);
 
-		ShowInfo("Unable to open an output handle to the console. Check known-bugs.txt for details.");
+		ShowInfoI("Unable to open an output handle to the console. Check known-bugs.txt for details.");
 		return;
 	}
 
@@ -347,7 +304,7 @@ void CreateConsole()
 static const char *_help_msg;
 
 /** Callback function to handle the window */
-static INT_PTR CALLBACK HelpDialogFunc(HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam)
+static INT_PTR CALLBACK HelpDialogFunc(HWND wnd, UINT msg, WPARAM wParam, LPARAM)
 {
 	switch (msg) {
 		case WM_INITDIALOG: {
@@ -382,7 +339,7 @@ static INT_PTR CALLBACK HelpDialogFunc(HWND wnd, UINT msg, WPARAM wParam, LPARAM
 	return FALSE;
 }
 
-void ShowInfo(const char *str)
+void ShowInfoI(const char *str)
 {
 	if (_has_console) {
 		fprintf(stderr, "%s\n", str);
@@ -406,48 +363,6 @@ void ShowInfo(const char *str)
 		}
 		MyShowCursor(old);
 	}
-}
-
-int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
-{
-	int argc;
-	char *argv[64]; // max 64 command line arguments
-
-	/* Set system timer resolution to 1ms. */
-	timeBeginPeriod(1);
-
-	PerThreadSetupInit();
-	CrashLog::InitialiseCrashLog();
-
-	/* Convert the command line to UTF-8. We need a dedicated buffer
-	 * for this because argv[] points into this buffer and this needs to
-	 * be available between subsequent calls to FS2OTTD(). */
-	char *cmdline = stredup(FS2OTTD(GetCommandLine()).c_str());
-
-	/* Set the console codepage to UTF-8. */
-	SetConsoleOutputCP(CP_UTF8);
-
-#if defined(_DEBUG)
-	CreateConsole();
-#endif
-
-	_set_error_mode(_OUT_TO_MSGBOX); // force assertion output to messagebox
-
-	/* setup random seed to something quite random */
-	SetRandomSeed(GetTickCount());
-
-	argc = ParseCommandLine(cmdline, argv, lengthof(argv));
-
-	/* Make sure our arguments contain only valid UTF-8 characters. */
-	for (int i = 0; i < argc; i++) StrMakeValidInPlace(argv[i]);
-
-	openttd_main(argc, argv);
-
-	/* Restore system timer resolution. */
-	timeEndPeriod(1);
-
-	free(cmdline);
-	return 0;
 }
 
 char *getcwd(char *buf, size_t size)
@@ -503,7 +418,7 @@ void DetermineBasePaths(const char *exe)
 	} else {
 		/* Use the folder of the config file as working directory. */
 		wchar_t config_dir[MAX_PATH];
-		wcsncpy(path, convert_to_fs(_config_file.c_str(), path, lengthof(path)), lengthof(path));
+		wcsncpy(path, convert_to_fs(_config_file, path, lengthof(path)), lengthof(path));
 		if (!GetFullPathName(path, lengthof(config_dir), config_dir, nullptr)) {
 			DEBUG(misc, 0, "GetFullPathName failed (%lu)\n", GetLastError());
 			_searchpaths[SP_WORKING_DIR].clear();
@@ -539,26 +454,19 @@ void DetermineBasePaths(const char *exe)
 }
 
 
-bool GetClipboardContents(char *buffer, const char *last)
+std::optional<std::string> GetClipboardContents()
 {
-	HGLOBAL cbuf;
-	const char *ptr;
+	if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) return std::nullopt;
 
-	if (IsClipboardFormatAvailable(CF_UNICODETEXT)) {
-		OpenClipboard(nullptr);
-		cbuf = GetClipboardData(CF_UNICODETEXT);
+	OpenClipboard(nullptr);
+	HGLOBAL cbuf = GetClipboardData(CF_UNICODETEXT);
 
-		ptr = (const char*)GlobalLock(cbuf);
-		int out_len = WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)ptr, -1, buffer, (last - buffer) + 1, nullptr, nullptr);
-		GlobalUnlock(cbuf);
-		CloseClipboard();
+	std::string result = FS2OTTD(static_cast<LPCWSTR>(GlobalLock(cbuf)));
+	GlobalUnlock(cbuf);
+	CloseClipboard();
 
-		if (out_len == 0) return false;
-	} else {
-		return false;
-	}
-
-	return true;
+	if (result.empty()) return std::nullopt;
+	return result;
 }
 
 
@@ -628,10 +536,10 @@ char *convert_from_fs(const wchar_t *name, char *utf8_buf, size_t buflen)
  * @param console_cp convert to the console encoding instead of the normal system encoding.
  * @return pointer to system_buf. If conversion fails the string is of zero-length
  */
-wchar_t *convert_to_fs(const char *name, wchar_t *system_buf, size_t buflen)
+wchar_t *convert_to_fs(const std::string_view name, wchar_t *system_buf, size_t buflen)
 {
-	int len = MultiByteToWideChar(CP_UTF8, 0, name, -1, system_buf, (int)buflen);
-	if (len == 0) system_buf[0] = '\0';
+	int len = MultiByteToWideChar(CP_UTF8, 0, name.data(), (int)name.size(), system_buf, (int)buflen);
+	system_buf[len] = '\0';
 
 	return system_buf;
 }
@@ -656,26 +564,24 @@ const char *GetCurrentLocale(const char *)
 
 static WCHAR _cur_iso_locale[16] = L"";
 
-void Win32SetCurrentLocaleName(const char *iso_code)
+void Win32SetCurrentLocaleName(std::string iso_code)
 {
 	/* Convert the iso code into the format that windows expects. */
-	char iso[16];
-	if (strcmp(iso_code, "zh_TW") == 0) {
-		strecpy(iso, "zh-Hant", lastof(iso));
-	} else if (strcmp(iso_code, "zh_CN") == 0) {
-		strecpy(iso, "zh-Hans", lastof(iso));
+	if (iso_code == "zh_TW") {
+		iso_code = "zh-Hant";
+	} else if (iso_code == "zh_CN") {
+		iso_code = "zh-Hans";
 	} else {
 		/* Windows expects a '-' between language and country code, but we use a '_'. */
-		strecpy(iso, iso_code, lastof(iso));
-		for (char *c = iso; *c != '\0'; c++) {
-			if (*c == '_') *c = '-';
+		for (char &c : iso_code) {
+			if (c == '_') c = '-';
 		}
 	}
 
-	MultiByteToWideChar(CP_UTF8, 0, iso, -1, _cur_iso_locale, lengthof(_cur_iso_locale));
+	MultiByteToWideChar(CP_UTF8, 0, iso_code.c_str(), -1, _cur_iso_locale, lengthof(_cur_iso_locale));
 }
 
-int OTTDStringCompare(const char *s1, const char *s2)
+int OTTDStringCompare(std::string_view s1, std::string_view s2)
 {
 	typedef int (WINAPI *PFNCOMPARESTRINGEX)(LPCWSTR, DWORD, LPCWCH, int, LPCWCH, int, LPVOID, LPVOID, LPARAM);
 	static PFNCOMPARESTRINGEX _CompareStringEx = nullptr;
@@ -689,23 +595,24 @@ int OTTDStringCompare(const char *s1, const char *s2)
 #endif
 
 	if (first_time) {
-		_CompareStringEx = GetProcAddressT<PFNCOMPARESTRINGEX>(GetModuleHandle(L"Kernel32"), "CompareStringEx");
+		static LibraryLoader _kernel32("Kernel32.dll");
+		_CompareStringEx = _kernel32.GetFunction("CompareStringEx");
 		first_time = false;
 	}
 
 	if (_CompareStringEx != nullptr) {
 		/* CompareStringEx takes UTF-16 strings, even in ANSI-builds. */
-		int len_s1 = MultiByteToWideChar(CP_UTF8, 0, s1, -1, nullptr, 0);
-		int len_s2 = MultiByteToWideChar(CP_UTF8, 0, s2, -1, nullptr, 0);
+		int len_s1 = MultiByteToWideChar(CP_UTF8, 0, s1.data(), (int)s1.size(), nullptr, 0);
+		int len_s2 = MultiByteToWideChar(CP_UTF8, 0, s2.data(), (int)s2.size(), nullptr, 0);
 
 		if (len_s1 != 0 && len_s2 != 0) {
 			LPWSTR str_s1 = AllocaM(WCHAR, len_s1);
 			LPWSTR str_s2 = AllocaM(WCHAR, len_s2);
 
-			MultiByteToWideChar(CP_UTF8, 0, s1, -1, str_s1, len_s1);
-			MultiByteToWideChar(CP_UTF8, 0, s2, -1, str_s2, len_s2);
+			len_s1 = MultiByteToWideChar(CP_UTF8, 0, s1.data(), (int)s1.size(), str_s1, len_s1);
+			len_s2 = MultiByteToWideChar(CP_UTF8, 0, s2.data(), (int)s2.size(), str_s2, len_s2);
 
-			int result = _CompareStringEx(_cur_iso_locale, LINGUISTIC_IGNORECASE | SORT_DIGITSASNUMBERS, str_s1, -1, str_s2, -1, nullptr, nullptr, 0);
+			int result = _CompareStringEx(_cur_iso_locale, LINGUISTIC_IGNORECASE | SORT_DIGITSASNUMBERS, str_s1, len_s1, str_s2, len_s2, nullptr, nullptr, 0);
 			if (result != 0) return result;
 		}
 	}
@@ -715,6 +622,44 @@ int OTTDStringCompare(const char *s1, const char *s2)
 	convert_to_fs(s2, s2_buf, lengthof(s2_buf));
 
 	return CompareString(MAKELCID(_current_language->winlangid, SORT_DEFAULT), NORM_IGNORECASE, s1_buf, -1, s2_buf, -1);
+}
+
+/**
+ * Search if a string is contained in another string using the current locale.
+ *
+ * @param str String to search in.
+ * @param value String to search for.
+ * @param case_insensitive Search case-insensitive.
+ * @return 1 if value was found, 0 if it was not found, or -1 if not supported by the OS.
+ */
+int Win32StringContains(const std::string_view str, const std::string_view value, bool case_insensitive)
+{
+	typedef int (WINAPI *PFNFINDNLSSTRINGEX)(LPCWSTR, DWORD, LPCWSTR, int, LPCWSTR, int, LPINT, LPNLSVERSIONINFO, LPVOID, LPARAM);
+	static PFNFINDNLSSTRINGEX _FindNLSStringEx = nullptr;
+	static bool first_time = true;
+
+	if (first_time) {
+		static LibraryLoader _kernel32("Kernel32.dll");
+		_FindNLSStringEx = _kernel32.GetFunction("FindNLSStringEx");
+		first_time = false;
+	}
+
+	if (_FindNLSStringEx != nullptr) {
+		int len_str = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0);
+		int len_value = MultiByteToWideChar(CP_UTF8, 0, value.data(), (int)value.size(), nullptr, 0);
+
+		if (len_str != 0 && len_value != 0) {
+			std::wstring str_str(len_str, L'\0'); // len includes terminating null
+			std::wstring str_value(len_value, L'\0');
+
+			MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), str_str.data(), len_str);
+			MultiByteToWideChar(CP_UTF8, 0, value.data(), (int)value.size(), str_value.data(), len_value);
+
+			return _FindNLSStringEx(_cur_iso_locale, FIND_FROMSTART | (case_insensitive ? LINGUISTIC_IGNORECASE : 0), str_str.data(), -1, str_value.data(), -1, nullptr, nullptr, nullptr, 0) >= 0 ? 1 : 0;
+		}
+	}
+
+	return -1; // Failure indication.
 }
 
 static DWORD main_thread_id;
@@ -742,7 +687,8 @@ void PerThreadSetup()
 
 void PerThreadSetupInit()
 {
-	LoadLibraryList((Function*)&_SetThreadStackGuarantee, "kernel32.dll\0SetThreadStackGuarantee\0\0");
+	static LibraryLoader _kernel32("Kernel32.dll");
+	_SetThreadStackGuarantee = _kernel32.GetFunction("SetThreadStackGuarantee");
 }
 
 bool IsMainThread()

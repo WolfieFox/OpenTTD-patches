@@ -11,7 +11,7 @@
 #define WIDGETS_COMPANY_WIDGET_H
 
 /** Widgets of the #CompanyWindow class. */
-enum CompanyWidgets {
+enum CompanyWidgets : WidgetID {
 	WID_C_CAPTION,                    ///< Caption of the window.
 
 	WID_C_FACE,                       ///< View of the face.
@@ -49,6 +49,9 @@ enum CompanyWidgets {
 	WID_C_SELECT_GIVE_MONEY,          ///< Selection widget for the give money button.
 	WID_C_GIVE_MONEY,                 ///< Button to give money.
 
+	WID_C_SELECT_HOSTILE_TAKEOVER,    ///< Selection widget for the hostile takeover button.
+	WID_C_HOSTILE_TAKEOVER,           ///< Button to hostile takeover another company.
+
 	WID_C_HAS_PASSWORD,               ///< Has company password lock.
 	WID_C_SELECT_MULTIPLAYER,         ///< Multiplayer selection panel.
 	WID_C_COMPANY_PASSWORD,           ///< Button to set company password.
@@ -56,7 +59,7 @@ enum CompanyWidgets {
 };
 
 /** Widgets of the #CompanyFinancesWindow class. */
-enum CompanyFinancesWidgets {
+enum CompanyFinancesWidgets : WidgetID {
 	WID_CF_CAPTION,        ///< Caption of the window.
 	WID_CF_TOGGLE_SIZE,    ///< Toggle windows size.
 	WID_CF_SEL_PANEL,      ///< Select panel or nothing.
@@ -80,7 +83,7 @@ enum CompanyFinancesWidgets {
 
 
 /** Widgets of the #SelectCompanyLiveryWindow class. */
-enum SelectCompanyLiveryWidgets {
+enum SelectCompanyLiveryWidgets : WidgetID {
 	WID_SCL_CAPTION,          ///< Caption of window.
 	WID_SCL_CLASS_GENERAL,    ///< Class general.
 	WID_SCL_CLASS_RAIL,       ///< Class rail.
@@ -104,7 +107,7 @@ enum SelectCompanyLiveryWidgets {
  * Do not change the order of the widgets from WID_SCMF_HAS_MOUSTACHE_EARRING to WID_SCMF_GLASSES_R,
  * this order is needed for the WE_CLICK event of DrawFaceStringLabel().
  */
-enum SelectCompanyManagerFaceWidgets {
+enum SelectCompanyManagerFaceWidgets : WidgetID {
 	WID_SCMF_CAPTION,                    ///< Caption of window.
 	WID_SCMF_TOGGLE_LARGE_SMALL,         ///< Toggle for large or small.
 	WID_SCMF_SELECT_FACE,                ///< Select face.
@@ -172,7 +175,7 @@ enum SelectCompanyManagerFaceWidgets {
 };
 
 /** Widgets of the #CompanyInfrastructureWindow class. */
-enum CompanyInfrastructureWidgets {
+enum CompanyInfrastructureWidgets : WidgetID {
 	WID_CI_CAPTION,       ///< Caption of window.
 	WID_CI_DESC,          ///< Description.
 	WID_CI_COUNT,         ///< Count.
@@ -180,7 +183,7 @@ enum CompanyInfrastructureWidgets {
 };
 
 /** Widgets of the #BuyCompanyWindow class. */
-enum BuyCompanyWidgets {
+enum BuyCompanyWidgets : WidgetID {
 	WID_BC_CAPTION,  ///< Caption of window.
 	WID_BC_FACE,     ///< Face button.
 	WID_BC_QUESTION, ///< Question text.

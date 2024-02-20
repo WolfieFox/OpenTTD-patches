@@ -10,13 +10,9 @@
 #ifndef WORKER_THREAD_H
 #define WORKER_THREAD_H
 
-#include <queue>
+#include "core/ring_buffer_queue.hpp"
 #include <mutex>
 #include <condition_variable>
-#if defined(__MINGW32__)
-#include "3rdparty/mingw-std-threads/mingw.mutex.h"
-#include "3rdparty/mingw-std-threads/mingw.condition_variable.h"
-#endif
 
 typedef void WorkerJobFunc(void *, void *, void *);
 
@@ -30,10 +26,11 @@ private:
 	};
 
 	uint workers = 0;
+	uint workers_waiting = 0;
 	bool exit = false;
 	std::mutex lock;
-	std::queue<WorkerJob> jobs;
-	std::condition_variable empty_cv;
+	ring_buffer_queue<WorkerJob> jobs;
+	std::condition_variable worker_wait_cv;
 	std::condition_variable done_cv;
 
 	static void Run(WorkerThreadPool *pool);

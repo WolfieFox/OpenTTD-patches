@@ -14,12 +14,13 @@
 #include "console_func.h"
 #include "spritecache.h"
 #include "walltime_func.h"
+#include "timer/timer.h"
+#include "timer/timer_game_tick.h"
 
 #include <chrono>
 
 
 std::vector<NewGRFProfiler> _newgrf_profilers;
-Date _newgrf_profile_end_date;
 
 
 /**
@@ -47,7 +48,7 @@ void NewGRFProfiler::BeginResolve(const ResolverObject &resolver)
 	using namespace std::chrono;
 	this->cur_call.root_sprite = resolver.root_spritegroup->nfo_line;
 	this->cur_call.subs = 0;
-	this->cur_call.time = (uint32)time_point_cast<microseconds>(high_resolution_clock::now()).time_since_epoch().count();
+	this->cur_call.time = (uint32_t)time_point_cast<microseconds>(high_resolution_clock::now()).time_since_epoch().count();
 	this->cur_call.tick = _tick_counter;
 	this->cur_call.cb = resolver.callback;
 	this->cur_call.feat = resolver.GetFeature();
@@ -60,7 +61,7 @@ void NewGRFProfiler::BeginResolve(const ResolverObject &resolver)
 void NewGRFProfiler::EndResolve(const SpriteGroup *result)
 {
 	using namespace std::chrono;
-	this->cur_call.time = (uint32)time_point_cast<microseconds>(high_resolution_clock::now()).time_since_epoch().count() - this->cur_call.time;
+	this->cur_call.time = (uint32_t)time_point_cast<microseconds>(high_resolution_clock::now()).time_since_epoch().count() - this->cur_call.time;
 
 	if (result == nullptr) {
 		this->cur_call.result = 0;
@@ -90,12 +91,14 @@ void NewGRFProfiler::Start()
 	this->start_tick = _tick_counter;
 }
 
-uint32 NewGRFProfiler::Finish()
+uint32_t NewGRFProfiler::Finish()
 {
 	if (!this->active) return 0;
 
 	if (this->calls.empty()) {
 		IConsolePrintF(CC_DEBUG, "Finished profile of NewGRF [%08X], no events collected, not writing a file", BSWAP32(this->grffile->grfid));
+
+		this->Abort();
 		return 0;
 	}
 
@@ -105,7 +108,7 @@ uint32 NewGRFProfiler::Finish()
 	FILE *f = FioFOpenFile(filename, "wt", Subdirectory::NO_DIRECTORY);
 	FileCloser fcloser(f);
 
-	uint32 total_microseconds = 0;
+	uint32_t total_microseconds = 0;
 
 	fputs("Tick,Sprite,Feature,Item,CallbackID,Microseconds,Depth,Result\n", f);
 	for (const Call &c : this->calls) {
@@ -114,7 +117,6 @@ uint32 NewGRFProfiler::Finish()
 	}
 
 	this->Abort();
-
 	return total_microseconds;
 }
 
@@ -139,10 +141,12 @@ std::string NewGRFProfiler::GetOutputFilename() const
 	return std::string(filepath);
 }
 
-uint32 NewGRFProfiler::FinishAll()
+/* static */ uint32_t NewGRFProfiler::FinishAll()
 {
-	uint64 max_ticks = 0;
-	uint32 total_microseconds = 0;
+	NewGRFProfiler::AbortTimer();
+
+	uint64_t max_ticks = 0;
+	uint32_t total_microseconds = 0;
 	for (NewGRFProfiler &pr : _newgrf_profilers) {
 		if (pr.active) {
 			total_microseconds += pr.Finish();
@@ -154,7 +158,29 @@ uint32 NewGRFProfiler::FinishAll()
 		IConsolePrintF(CC_DEBUG, "Total NewGRF callback processing: %u microseconds over " OTTD_PRINTF64U " ticks", total_microseconds, max_ticks);
 	}
 
-	_newgrf_profile_end_date = MAX_DAY;
-
 	return total_microseconds;
+}
+
+/**
+ * Check whether profiling is active and should be finished.
+ */
+static TimeoutTimer<TimerGameTick> _profiling_finish_timeout(0, []()
+{
+	NewGRFProfiler::FinishAll();
+});
+
+/**
+ * Start the timeout timer that will finish all profiling sessions.
+ */
+/* static */ void NewGRFProfiler::StartTimer(uint64_t ticks)
+{
+	_profiling_finish_timeout.Reset(ticks);
+}
+
+/**
+ * Abort the timeout timer, so the timer callback is never called.
+ */
+/* static */ void NewGRFProfiler::AbortTimer()
+{
+	_profiling_finish_timeout.Abort();
 }

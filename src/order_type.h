@@ -12,11 +12,11 @@
 
 #include "core/enum_type.hpp"
 
-typedef uint16 VehicleOrderID;  ///< The index of an order within its current vehicle (not pool related)
-typedef uint32 OrderID;
-typedef uint16 OrderListID;
-typedef uint16 DestinationID;
-typedef uint32 TimetableTicks;
+typedef uint16_t VehicleOrderID;  ///< The index of an order within its current vehicle (not pool related)
+typedef uint32_t OrderID;
+typedef uint16_t OrderListID;
+typedef uint16_t DestinationID;
+typedef uint32_t TimetableTicks;
 
 /** Invalid vehicle order index (sentinel) */
 static const VehicleOrderID INVALID_VEH_ORDER_ID = 0xFFFF;
@@ -32,6 +32,9 @@ static const OrderID INVALID_ORDER = 0xFFFFFF;
  */
 static const uint IMPLICIT_ORDER_ONLY_CAP = 32;
 
+/** Invalid scheduled dispatch offset from current schedule */
+static const int32_t INVALID_SCHEDULED_DISPATCH_OFFSET = INT32_MIN;
+
 /** Order types. It needs to be 8bits, because we save and load it as such */
 enum OrderType : byte {
 	OT_BEGIN         = 0,
@@ -46,10 +49,32 @@ enum OrderType : byte {
 	OT_IMPLICIT      = 8,
 	OT_WAITING       = 9,
 	OT_LOADING_ADVANCE = 10,
-	OT_RELEASE_SLOT  = 11,
+	OT_SLOT          = 11,
 	OT_COUNTER       = 12,
+	OT_LABEL         = 13,
 	OT_END
 };
+
+enum OrderSlotSubType : byte {
+	OSST_RELEASE               = 0,
+	OSST_TRY_ACQUIRE           = 1,
+};
+
+enum OrderLabelSubType : byte {
+	OLST_TEXT                  = 0,
+	OLST_DEPARTURES_VIA        = 1,
+	OLST_DEPARTURES_REMOVE_VIA = 2,
+};
+
+inline bool IsDestinationOrderLabelSubType(OrderLabelSubType subtype)
+{
+	return subtype == OLST_DEPARTURES_VIA || subtype == OLST_DEPARTURES_REMOVE_VIA;
+}
+
+inline bool IsDeparturesOrderLabelSubType(OrderLabelSubType subtype)
+{
+	return subtype == OLST_DEPARTURES_VIA || subtype == OLST_DEPARTURES_REMOVE_VIA;
+}
 
 /**
  * Flags related to the unloading order.
@@ -115,6 +140,7 @@ enum OrderDepotActionFlags {
 	ODATFB_HALT          = 1 << 0, ///< Service the vehicle and then halt it.
 	ODATFB_NEAREST_DEPOT = 1 << 1, ///< Send the vehicle to the nearest depot.
 	ODATFB_SELL          = 1 << 2, ///< Sell the vehicle on arrival at the depot.
+	ODATFB_UNBUNCH       = 1 << 3, ///< Service the vehicle and then unbunch it.
 };
 DECLARE_ENUM_AS_BIT_SET(OrderDepotActionFlags)
 
@@ -148,20 +174,25 @@ enum OrderConditionVariable {
 	OCV_UNCONDITIONALLY,    ///< Always skip
 	OCV_REMAINING_LIFETIME, ///< Skip based on the remaining lifetime
 	OCV_MAX_RELIABILITY,    ///< Skip based on the maximum reliability
-	OCV_CARGO_WAITING,      ///< Skip if specified cargo is waiting at next station
-	OCV_CARGO_ACCEPTANCE,   ///< Skip if specified cargo is accepted at next station
-	OCV_FREE_PLATFORMS,     ///< Skip based on free platforms at next station
+	OCV_CARGO_WAITING,      ///< Skip if specified cargo is waiting at station
+	OCV_CARGO_ACCEPTANCE,   ///< Skip if specified cargo is accepted at station
+	OCV_FREE_PLATFORMS,     ///< Skip based on free platforms at station
 	OCV_PERCENT,            ///< Skip xx percent of times
-	OCV_SLOT_OCCUPANCY,     ///< Test if vehicle slot is fully occupied
+	OCV_SLOT_OCCUPANCY,     ///< Test if vehicle slot is fully occupied, or empty
 	OCV_VEH_IN_SLOT,        ///< Test if vehicle is in slot
 	OCV_CARGO_LOAD_PERCENTAGE, ///< Skip based on the amount of load of a specific cargo
-	OCV_CARGO_WAITING_AMOUNT,  ///< Skip based on the amount of a specific cargo waiting at next station
+	OCV_CARGO_WAITING_AMOUNT,  ///< Skip based on the amount of a specific cargo waiting at station
 	OCV_COUNTER_VALUE,      ///< Skip based on counter value
 	OCV_TIME_DATE,          ///< Skip based on current time/date
 	OCV_TIMETABLE,          ///< Skip based on timetable state
 	OCV_DISPATCH_SLOT,      ///< Skip based on scheduled dispatch slot state
 	OCV_END
 };
+
+inline bool ConditionVariableHasStationID(OrderConditionVariable ocv)
+{
+	return ocv == OCV_CARGO_WAITING || ocv == OCV_CARGO_ACCEPTANCE || ocv == OCV_FREE_PLATFORMS || ocv == OCV_CARGO_WAITING_AMOUNT;
+}
 
 /**
  * Comparator for the skip reasoning.
@@ -193,6 +224,7 @@ enum ModifyOrderFlags {
 	MOF_COND_VALUE,      ///< The value to set the condition to.
 	MOF_COND_VALUE_2,    ///< The secondary value to set the condition to.
 	MOF_COND_VALUE_3,    ///< The tertiary value to set the condition to.
+	MOF_COND_STATION_ID, ///< The station ID to set the condition to.
 	MOF_COND_DESTINATION,///< Change the destination of a conditional order.
 	MOF_WAYPOINT_FLAGS,  ///< Change the waypoint flags
 	MOF_CARGO_TYPE_UNLOAD, ///< Passes an OrderUnloadType and a CargoID.
@@ -202,6 +234,9 @@ enum ModifyOrderFlags {
 	MOF_COUNTER_ID,      ///< Change the counter ID
 	MOF_COUNTER_OP,      ///< Change the counter operation
 	MOF_COUNTER_VALUE,   ///< Change the counter value
+	MOF_COLOUR,          ///< Change the colour value
+	MOF_LABEL_TEXT,      ///< Change the label text value
+	MOF_DEPARTURES_SUBTYPE, ///< Change the label departures subtype
 	MOF_END
 };
 template <> struct EnumPropsT<ModifyOrderFlags> : MakeEnumPropsT<ModifyOrderFlags, byte, MOF_NON_STOP, MOF_END, MOF_END, 8> {};
@@ -213,6 +248,7 @@ enum OrderDepotAction {
 	DA_ALWAYS_GO, ///< Always go to the depot
 	DA_SERVICE,   ///< Service only if needed
 	DA_STOP,      ///< Go to the depot and stop there
+	DA_UNBUNCH,   ///< Go to the depot and unbunch
 	DA_SELL,      ///< Go to the depot and sell vehicle
 	DA_END
 };
@@ -234,12 +270,24 @@ enum OrderTimetableConditionMode {
 	OTCM_END
 };
 
-enum OrderScheduledDispatchSlotConditionMode {
-	OSDSCM_NEXT_FIRST        = 0, ///< Test if next departure is first slot
-	OSDSCM_NEXT_LAST         = 1, ///< Test if next departure is last slot
-	OSDSCM_LAST_FIRST        = 2, ///< Test if last departure was first slot
-	OSDSCM_LAST_LAST         = 3, ///< Test if last departure was last slot
-	OSDSCM_END
+enum OrderDispatchConditionBits {
+	ODCB_LAST_DISPATCHED     = 1,
+	ODCB_MODE_START          = 8,
+	ODCB_MODE_COUNT          = 3,
+};
+
+enum OrderDispatchConditionModes : uint8_t {
+	ODCM_FIRST_LAST          = 0,
+	OCDM_TAG                 = 1,
+};
+
+enum OrderDispatchFirstLastConditionBits {
+	ODFLCB_LAST_SLOT         = 0,
+};
+
+enum OrderDispatchTagConditionBits {
+	ODFLCB_TAG_START         = 4,
+	ODFLCB_TAG_COUNT         = 2,
 };
 
 /**

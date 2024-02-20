@@ -28,7 +28,6 @@ void BaseConsist::CopyConsistPropertiesFrom(const BaseConsist *src)
 	this->current_order_time = src->current_order_time;
 	this->lateness_counter = src->lateness_counter;
 	this->timetable_start = src->timetable_start;
-	this->timetable_start_subticks = src->timetable_start_subticks;
 
 	this->service_interval = src->service_interval;
 
@@ -55,5 +54,10 @@ void BaseConsist::CopyConsistPropertiesFrom(const BaseConsist *src)
 		SetBit(this->vehicle_flags, VF_TIMETABLE_SEPARATION);
 	} else {
 		ClrBit(this->vehicle_flags, VF_TIMETABLE_SEPARATION);
+	}
+	if (HasBit(src->vehicle_flags, VF_SCHEDULED_DISPATCH)) {
+		SetBit(this->vehicle_flags, VF_SCHEDULED_DISPATCH);
+	} else {
+		ClrBit(this->vehicle_flags, VF_SCHEDULED_DISPATCH);
 	}
 }

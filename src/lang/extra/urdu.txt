@@ -1,0 +1,41 @@
+STR_UNIT_NAME_VELOCITY_IMPERIAL                                 :میل فی گھنٹھ
+STR_UNIT_NAME_VELOCITY_METRIC                                   :کلو میٹر فی گھنٹھ
+STR_UNIT_NAME_VELOCITY_SI                                       :میٹر فی سیکنڈ
+
+STR_BUTTON_RENAME                                               :{BLACK} تبادلھء نام
+
+STR_VEHICLE_TYPE_TRAINS                                         :ریل گاڑیاں
+STR_VEHICLE_TYPE_ROAD_VEHICLES                                  :سڑک کی گاڑیاں
+STR_VEHICLE_TYPE_SHIPS                                          :کشتیاں
+STR_VEHICLE_TYPE_AIRCRAFT                                       :ہوایی جہاز
+
+STR_CONFIG_SETTING_AUTOSAVE                                     :Autosave: {STRING}
+STR_CONFIG_SETTING_AUTOSAVE_HELPTEXT                            :گیم بچانے کا وقفا چنیں
+
+STR_CONFIG_SETTING_TIMETABLE_IN_TICKS                           :اوقات کا جدول دنوں کی بجائے ٹِکس میں دکھائیں: {STRING}
+
+STR_TRANSPARENT_LOADING_TOOLTIP                                 :{BLACK}لوڈ کرنے کے نشانوں کی شفافیت کی تدویم کریں۔ محدوظ کرنے کے لئے Ctrl+Click دبائیں
+
+# Tracerestrict GUI
+
+# Programmable Pre-Signals
+
+#House construction window (for SE only)
+
+#Town select window (for SE only)
+
+# Town tooltip
+
+# Cargo type orders Window
+
+# Plans window
+
+# Clear area query
+
+# Plan related errors
+
+# Scheduled Dispatch
+
+# Modifier key toggle window
+
+STR_CONFIG_SETTING_ALLOW_SHARES                                 :دوسری کمپنیوں کے حصص خریدنے کی اجازت: {STRING}

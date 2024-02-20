@@ -22,22 +22,23 @@
 #include "date_func.h"
 #include "departures_gui.h"
 #include "station_base.h"
+#include "waypoint_base.h"
 #include "vehicle_gui_base.h"
 #include "vehicle_base.h"
 #include "vehicle_gui.h"
 #include "order_base.h"
 #include "settings_type.h"
-#include "core/smallvec_type.hpp"
 #include "date_type.h"
 #include "company_type.h"
 #include "departures_func.h"
 #include "cargotype.h"
 #include "zoom_func.h"
+#include "core/backup_type.hpp"
 
 #include "table/sprites.h"
 #include "table/strings.h"
 
-static const NWidgetPart _nested_departures_list[] = {
+static constexpr NWidgetPart _nested_departures_list[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
 		NWidget(WWT_CAPTION, COLOUR_GREY, WID_DB_CAPTION), SetDataTip(STR_DEPARTURES_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
@@ -65,11 +66,11 @@ static const NWidgetPart _nested_departures_list[] = {
 	EndContainer(),
 };
 
-static WindowDesc _departures_desc(
-	WDP_AUTO, nullptr, 260, 246,
+static WindowDesc _departures_desc(__FILE__, __LINE__,
+	WDP_AUTO, "depatures", 260, 246,
 	WC_DEPARTURES_BOARD, WC_NONE,
 	0,
-	_nested_departures_list, lengthof(_nested_departures_list)
+	std::begin(_nested_departures_list), std::end(_nested_departures_list)
 );
 
 static uint cached_date_width = 0;         ///< The cached maximum width required to display a date.
@@ -94,7 +95,7 @@ protected:
 	bool departures_invalid;   ///< The departures and arrivals list are currently invalid.
 	bool vehicles_invalid;     ///< The vehicles list is currently invalid.
 	uint entry_height;         ///< The height of an entry in the departures list.
-	uint tick_count;           ///< The number of ticks that have elapsed since the window was created. Used for scrolling text.
+	uint64_t elapsed_ms;       ///< The number of milliseconds that have elapsed since the window was created. Used for scrolling text.
 	int calc_tick_countdown;   ///< The number of ticks to wait until recomputing the departure list. Signed in case it goes below zero.
 	bool show_types[4];        ///< The vehicle types to show in the departure list.
 	bool departure_types[3];   ///< The types of departure to show in the departure list.
@@ -102,6 +103,7 @@ protected:
 	bool show_pax;             ///< Show passenger vehicles
 	bool show_freight;         ///< Show freight vehicles
 	bool cargo_buttons_disabled;///< Show pax/freight buttons disabled
+	mutable bool scroll_refresh; ///< Whether the window should be refreshed when paused due to scrolling
 	uint min_width;            ///< The minimum width of this window.
 	Scrollbar *vscroll;
 	std::vector<const Vehicle *> vehicles; /// current set of vehicles
@@ -114,7 +116,7 @@ protected:
 	virtual void DrawDeparturesListItems(const Rect &r) const;
 	void DeleteDeparturesList(DepartureList* list);
 
-	void ToggleCargoFilter(int widget, bool &flag)
+	void ToggleCargoFilter(WidgetID widget, bool &flag)
 	{
 		flag = !flag;
 		this->SetWidgetLoweredState(widget, flag);
@@ -169,19 +171,23 @@ protected:
 							&& order->GetDestination() == this->station) {
 						this->vehicles.push_back(v);
 
-						if (v->name.empty() && !(v->group_id != DEFAULT_GROUP && _settings_client.gui.vehicle_names != 0)) {
-							if (v->unitnumber > unitnumber_max[v->type]) unitnumber_max[v->type] = v->unitnumber;
-						} else {
-							SetDParam(0, (uint64)(v->index));
-							int width = (GetStringBoundingBox(STR_DEPARTURES_VEH)).width + 4;
-							if (width > this->veh_width) this->veh_width = width;
+						if (_settings_client.gui.departure_show_vehicle) {
+							if (v->name.empty() && !(v->group_id != DEFAULT_GROUP && _settings_client.gui.vehicle_names != 0)) {
+								if (v->unitnumber > unitnumber_max[v->type]) unitnumber_max[v->type] = v->unitnumber;
+							} else {
+								SetDParam(0, v->index | (_settings_client.gui.departure_show_group ? VEHICLE_NAME_NO_GROUP : 0));
+								int width = (GetStringBoundingBox(STR_DEPARTURES_VEH)).width + 4;
+								if (width > this->veh_width) this->veh_width = width;
+							}
 						}
 
-						if (v->group_id != INVALID_GROUP && v->group_id != DEFAULT_GROUP) {
+						if (v->group_id != INVALID_GROUP && v->group_id != DEFAULT_GROUP && _settings_client.gui.departure_show_group) {
 							groups.insert(v->group_id);
 						}
 
-						SetBit(companies, v->owner);
+						if (_settings_client.gui.departure_show_company) {
+							SetBit(companies, v->owner);
+						}
 						break;
 					}
 				}
@@ -199,13 +205,13 @@ protected:
 					unitnumber_digits = 3;
 				}
 				SetDParamMaxDigits(0, unitnumber_digits);
-				int width = (GetStringBoundingBox(STR_SV_TRAIN_NAME + i)).width + 4;
+				int width = (GetStringBoundingBox(((_settings_client.gui.vehicle_names == 1) ? STR_SV_TRAIN_NAME : STR_TRADITIONAL_TRAIN_NAME) + i)).width + 4;
 				if (width > this->veh_width) this->veh_width = width;
 			}
 		}
 
 		for (GroupID gid : groups) {
-			SetDParam(0, (uint64)(gid | GROUP_NAME_HIERARCHY));
+			SetDParam(0, (uint64_t)(gid | GROUP_NAME_HIERARCHY));
 			int width = (GetStringBoundingBox(STR_DEPARTURES_GROUP)).width + 4;
 			if (width > this->group_width) this->group_width = width;
 		}
@@ -232,7 +238,7 @@ public:
 		arrivals(new DepartureList()),
 		departures_invalid(true),
 		vehicles_invalid(true),
-		tick_count(0),
+		elapsed_ms(0),
 		calc_tick_countdown(0),
 		min_width(400)
 	{
@@ -283,20 +289,20 @@ public:
 
 	virtual ~DeparturesWindow()
 	{
-		this->DeleteDeparturesList(departures);
+		this->DeleteDeparturesList(this->departures);
 		this->DeleteDeparturesList(this->arrivals);
 	}
 
 	void SetupValues()
 	{
-		this->entry_height = 1 + FONT_HEIGHT_NORMAL + 1 + (_settings_client.gui.departure_larger_font ? FONT_HEIGHT_NORMAL : FONT_HEIGHT_SMALL) + 1 + 1;
+		this->entry_height = 1 + GetCharacterHeight(FS_NORMAL) + 1 + (_settings_client.gui.departure_larger_font ? GetCharacterHeight(FS_NORMAL) : GetCharacterHeight(FS_SMALL)) + 1 + 1;
 
 		if (cached_veh_type_width == 0) {
 			cached_veh_type_width = GetStringBoundingBox(STR_DEPARTURES_TYPE_PLANE).width;
 		}
 	}
 
-	virtual void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	virtual void UpdateWidgetSize(WidgetID widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
 	{
 		switch (widget) {
 			case WID_DB_LIST:
@@ -307,7 +313,7 @@ public:
 		}
 	}
 
-	virtual void SetStringParameters(int widget) const override
+	virtual void SetStringParameters(WidgetID widget) const override
 	{
 		if (widget == WID_DB_CAPTION) {
 			const Station *st = Station::Get(this->station);
@@ -315,16 +321,15 @@ public:
 		}
 	}
 
-	virtual bool OnTooltip(Point pt, int widget, TooltipCloseCondition close_cond) override
+	virtual bool OnTooltip(Point pt, WidgetID widget, TooltipCloseCondition close_cond) override
 	{
 		switch (widget) {
 			case WID_DB_SHOW_TRAINS:
 			case WID_DB_SHOW_ROADVEHS:
 			case WID_DB_SHOW_SHIPS:
 			case WID_DB_SHOW_PLANES: {
-				uint64 params[1];
-				params[0] = STR_DEPARTURES_SHOW_TRAINS_TOOLTIP + (widget - WID_DB_SHOW_TRAINS);
-				GuiShowTooltips(this, STR_DEPARTURES_SHOW_TYPE_TOOLTIP_CTRL_SUFFIX, 1, params, close_cond);
+				SetDParam(0, STR_DEPARTURES_SHOW_TRAINS_TOOLTIP + (widget - WID_DB_SHOW_TRAINS));
+				GuiShowTooltips(this, STR_DEPARTURES_SHOW_TYPE_TOOLTIP_CTRL_SUFFIX, close_cond, 1);
 				return true;
 			}
 			default:
@@ -332,7 +337,7 @@ public:
 		}
 	}
 
-	virtual void OnClick(Point pt, int widget, int click_count) override
+	virtual void OnClick(Point pt, WidgetID widget, int click_count) override
 	{
 		switch (widget) {
 			case WID_DB_SHOW_TRAINS:   // Show trains to this station
@@ -396,7 +401,7 @@ public:
 				if (this->departures_invalid) return;
 
 				/* We need to find the departure corresponding to where the user clicked. */
-				uint32 id_v = (pt.y - this->GetWidget<NWidgetBase>(WID_DB_LIST)->pos_y) / this->entry_height;
+				uint32_t id_v = (pt.y - this->GetWidget<NWidgetBase>(WID_DB_LIST)->pos_y) / this->entry_height;
 
 				if (id_v >= this->vscroll->GetCapacity()) return; // click out of bounds
 
@@ -419,7 +424,7 @@ public:
 						d = (*(this->departures))[departure];
 						const Departure *a = (*(this->arrivals))[arrival];
 
-						if (a->scheduled_date < d->scheduled_date) {
+						if (a->scheduled_tick < d->scheduled_tick) {
 							d = a;
 							arrival++;
 						} else {
@@ -451,7 +456,6 @@ public:
 	virtual void OnGameTick() override
 	{
 		if (_pause_mode == PM_UNPAUSED) {
-			this->tick_count += 1;
 			this->calc_tick_countdown -= 1;
 		}
 
@@ -503,7 +507,7 @@ public:
 			this->ReInit();
 		}
 
-		uint new_height = 1 + FONT_HEIGHT_NORMAL + 1 + (_settings_client.gui.departure_larger_font ? FONT_HEIGHT_NORMAL : FONT_HEIGHT_SMALL) + 1 + 1;
+		uint new_height = 1 + GetCharacterHeight(FS_NORMAL) + 1 + (_settings_client.gui.departure_larger_font ? GetCharacterHeight(FS_NORMAL) : GetCharacterHeight(FS_SMALL)) + 1 + 1;
 
 		if (new_height != this->entry_height) {
 			this->entry_height = new_height;
@@ -514,8 +518,11 @@ public:
 
 	virtual void OnRealtimeTick(uint delta_ms) override
 	{
+		this->elapsed_ms += delta_ms;
 		if (_pause_mode != PM_UNPAUSED && this->calc_tick_countdown <= 0) {
 			this->OnGameTick();
+		} else if (this->scroll_refresh) {
+			this->SetWidgetDirty(WID_DB_LIST);
 		}
 	}
 
@@ -525,7 +532,7 @@ public:
 		this->DrawWidgets();
 	}
 
-	virtual void DrawWidget(const Rect &r, int widget) const override
+	virtual void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
 		switch (widget) {
 			case WID_DB_LIST:
@@ -536,6 +543,7 @@ public:
 
 	virtual void OnResize() override
 	{
+		this->elapsed_ms = 0;
 		this->vscroll->SetCapacityFromWidget(this, WID_DB_LIST);
 		this->GetWidget<NWidgetCore>(WID_DB_LIST)->widget_data = (this->vscroll->GetCapacity() << MAT_ROW_START) + (1 << MAT_COL_START);
 	}
@@ -605,6 +613,12 @@ void DeparturesWindow<Twaypoint>::RecomputeDateWidth()
 	}
 }
 
+static int PadWidth(int width)
+{
+	if (width > 0) width += WidgetDimensions::scaled.hsep_wide;
+	return width;
+}
+
 template<bool Twaypoint>
 uint DeparturesWindow<Twaypoint>::GetMinWidth() const
 {
@@ -617,11 +631,9 @@ uint DeparturesWindow<Twaypoint>::GetMinWidth() const
 	result += _settings_client.gui.departure_show_vehicle_type ? cached_veh_type_width : 0;
 
 	/* Status */
-	result += cached_status_width;
+	result += PadWidth(cached_status_width) + PadWidth(this->toc_width) + PadWidth(this->veh_width) + PadWidth(this->group_width);
 
-	result += this->toc_width + this->veh_width + this->group_width;
-
-	return result + 140;
+	return result + ScaleGUITrad(140);
 }
 
 /**
@@ -647,15 +659,17 @@ void DeparturesWindow<Twaypoint>::DeleteDeparturesList(DepartureList *list)
 template<bool Twaypoint>
 void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 {
-	int left = r.left + WidgetDimensions::scaled.matrix.left;
-	int right = r.right - WidgetDimensions::scaled.matrix.right;
+	this->scroll_refresh = false;
 
-	bool rtl = _current_text_dir == TD_RTL;
-	bool ltr = !rtl;
+	const int left = r.left + WidgetDimensions::scaled.matrix.left;
+	const int right = r.right - WidgetDimensions::scaled.matrix.right;
 
-	int text_offset = WidgetDimensions::scaled.framerect.right;
-	int text_left  = left  + (rtl ?           0 : text_offset);
-	int text_right = right - (rtl ? text_offset :           0);
+	const bool rtl = _current_text_dir == TD_RTL;
+	const bool ltr = !rtl;
+
+	const int text_offset = WidgetDimensions::scaled.framerect.right;
+	const int text_left  = left  + (rtl ?           0 : text_offset);
+	const int text_right = right - (rtl ? text_offset :           0);
 
 	int y = r.top + 1;
 	uint max_departures = std::min<uint>(this->vscroll->GetPosition() + this->vscroll->GetCapacity(), (uint)this->departures->size() + (uint)this->arrivals->size());
@@ -664,7 +678,7 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 		max_departures = _settings_client.gui.max_departures;
 	}
 
-	byte small_font_size = _settings_client.gui.departure_larger_font ? FONT_HEIGHT_NORMAL : FONT_HEIGHT_SMALL;
+	const int small_font_size = _settings_client.gui.departure_larger_font ? GetCharacterHeight(FS_NORMAL) : GetCharacterHeight(FS_SMALL);
 
 	/* Draw the black background. */
 	GfxFillRect(r.left + 1, r.top, r.right - 1, r.bottom, PC_BLACK);
@@ -713,8 +727,11 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 	/* Find the maximum width of the status field */
 	int status_width = cached_status_width;
 
+	const StringID size_prefix = _settings_client.gui.departure_larger_font ? STR_JUST_STRING2 : STR_DEPARTURES_TINY;
+
 	/* Find the width of the "Calling at:" field. */
-	int calling_at_width = (GetStringBoundingBox(_settings_client.gui.departure_larger_font ? STR_DEPARTURES_CALLING_AT_LARGE : STR_DEPARTURES_CALLING_AT)).width;
+	SetDParam(0, STR_DEPARTURES_CALLING_AT);
+	int calling_at_width = (GetStringBoundingBox(size_prefix)).width;
 
 	/* Find the maximum company name width. */
 	int toc_width = _settings_client.gui.departure_show_company ? this->toc_width : 0;
@@ -728,8 +745,8 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 	uint departure = 0;
 	uint arrival = 0;
 
-	DateTicksScaled now_date = _scaled_date_ticks;
-	DateTicksScaled max_date = now_date + (_settings_client.gui.max_departure_time * DAY_TICKS * _settings_game.economy.day_length_factor);
+	StateTicks now_date = _state_ticks;
+	StateTicks max_date = now_date + GetDeparturesMaxTicksAhead();
 
 	/* Draw each departure. */
 	for (uint i = 0; i < max_departures; ++i) {
@@ -743,7 +760,7 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 			d = (*(this->departures))[departure];
 			const Departure *a = (*(this->arrivals))[arrival];
 
-			if (a->scheduled_date < d->scheduled_date) {
+			if (a->scheduled_tick < d->scheduled_tick) {
 				d = a;
 				arrival++;
 			} else {
@@ -756,7 +773,7 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 		}
 
 		/* If for some reason the departure is too far in the future or is at a negative time, skip it. */
-		if (d->scheduled_date > max_date || d->scheduled_date < 0) {
+		if (d->scheduled_tick > max_date || d->scheduled_tick < 0) {
 			continue;
 		}
 
@@ -767,12 +784,11 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 		if (_settings_client.gui.departure_show_both) time_str = STR_DEPARTURES_TIME_BOTH;
 
 		/* Time */
-		SetDParam(0, d->scheduled_date);
-		SetDParam(1, d->scheduled_date - (d->scheduled_waiting_time > 0 ? d->scheduled_waiting_time : d->order->GetWaitTime()));
+		SetDParam(0, d->scheduled_tick);
+		SetDParam(1, d->scheduled_tick - (d->scheduled_waiting_time > 0 ? d->scheduled_waiting_time : d->order->GetWaitTime()));
 		ltr ? DrawString(              text_left, text_left + time_width, y + 1, time_str)
 			: DrawString(text_right - time_width,             text_right, y + 1, time_str);
 
-		/* Vehicle type icon, with thanks to sph */
 		if (_settings_client.gui.departure_show_vehicle_type) {
 			StringID type = STR_DEPARTURES_TYPE_TRAIN;
 			int offset = (_settings_client.gui.departure_show_vehicle_color ? 1 : 0);
@@ -796,12 +812,12 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 
 			type += offset;
 
-			DrawString(text_left + time_width + 3, text_left + time_width + type_width + 3, y, type);
+			const int icon_left = ltr ? text_left + time_width + ScaleGUITrad(3) : text_right - time_width - ScaleGUITrad(3) - type_width;
+			DrawString(icon_left, icon_left + type_width, y, type);
 		}
 
 		/* The icons to show with the destination and via stations. */
 		StringID icon = STR_DEPARTURES_STATION_NONE;
-		StringID icon_via = STR_DEPARTURES_STATION_NONE;
 
 		if (_settings_client.gui.departure_destination_type) {
 			Station *t = Station::Get(d->terminus.station);
@@ -820,66 +836,90 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 			}
 		}
 
-		if (_settings_client.gui.departure_destination_type && d->via != INVALID_STATION) {
-			Station *t = Station::Get(d->via);
-
-			if (t->facilities & FACIL_DOCK &&
-					t->facilities & FACIL_AIRPORT &&
-					d->vehicle->type != VEH_SHIP &&
-					d->vehicle->type != VEH_AIRCRAFT) {
-				icon_via = STR_DEPARTURES_STATION_PORTAIRPORT;
-			} else if (t->facilities & FACIL_DOCK &&
-					d->vehicle->type != VEH_SHIP) {
-				icon_via = STR_DEPARTURES_STATION_PORT;
-			} else if (t->facilities & FACIL_AIRPORT &&
-					d->vehicle->type != VEH_AIRCRAFT) {
-				icon_via = STR_DEPARTURES_STATION_AIRPORT;
-			}
+		StationID via = d->via;
+		StationID via2 = d->via2;
+		if (via == d->terminus.station || via == this->station) {
+			via = via2;
+			via2 = INVALID_STATION;
 		}
+		if (via2 == d->terminus.station || via2 == this->station) via2 = INVALID_STATION;
 
 		/* Destination */
-		if (d->via == INVALID_STATION) {
-			/* Only show the terminus. */
-			SetDParam(0, d->terminus.station);
-			SetDParam(1, icon);
-			ltr ? DrawString(              text_left + time_width + type_width + 6,   text_right - status_width - (toc_width + veh_width + group_width + 2) - 2, y + 1, STR_DEPARTURES_TERMINUS)
-				: DrawString(text_left + status_width + (toc_width + veh_width + group_width + 2) + 2,                 text_right - time_width - type_width - 6, y + 1, STR_DEPARTURES_TERMINUS);
-		} else {
-			/* Show the terminus and the via station. */
-			SetDParam(0, d->terminus.station);
-			SetDParam(1, icon);
-			SetDParam(2, d->via);
-			SetDParam(3, icon_via);
-			int text_width = (GetStringBoundingBox(STR_DEPARTURES_TERMINUS_VIA_STATION)).width;
+		{
+			const int dest_left = ltr ? text_left + time_width + type_width + ScaleGUITrad(6) : text_left + PadWidth(toc_width) + PadWidth(group_width) + PadWidth(veh_width) + PadWidth(status_width);
+			const int dest_right = ltr ? text_right - PadWidth(toc_width) - PadWidth(group_width) - PadWidth(veh_width) - PadWidth(status_width) : text_right - time_width - type_width - ScaleGUITrad(6);
 
-			if (text_width < text_right - status_width - (toc_width + veh_width + group_width + 2) - 2 - (text_left + time_width + type_width + 6)) {
-				/* They will both fit, so show them both. */
+			if (via == INVALID_STATION) {
+				/* Only show the terminus. */
 				SetDParam(0, d->terminus.station);
 				SetDParam(1, icon);
-				SetDParam(2, d->via);
-				SetDParam(3, icon_via);
-				ltr ? DrawString(              text_left + time_width + type_width + 6, text_right - status_width - (toc_width + veh_width + group_width + 2) - 2, y + 1, STR_DEPARTURES_TERMINUS_VIA_STATION)
-					: DrawString(text_left + status_width + (toc_width + veh_width + group_width + 2) + 2,               text_right - time_width - type_width - 6, y + 1, STR_DEPARTURES_TERMINUS_VIA_STATION);
+				DrawString(dest_left, dest_right, y + 1, STR_DEPARTURES_TERMINUS);
 			} else {
-				/* They won't both fit, so switch between showing the terminus and the via station approximately every 4 seconds. */
-				if (this->tick_count & (1 << 7)) {
-					SetDParam(0, d->via);
-					SetDParam(1, icon_via);
-					ltr ? DrawString(              text_left + time_width + type_width + 6, text_right - status_width - (toc_width + veh_width + group_width + 2) - 2, y + 1, STR_DEPARTURES_VIA)
-						: DrawString(text_left + status_width + (toc_width + veh_width + group_width + 2) + 2,               text_right - time_width - type_width - 6, y + 1, STR_DEPARTURES_VIA);
-				} else {
+				auto set_via_dparams = [&](uint offset) {
+					auto get_single_via_string = [&](uint temp_str, StationID id) {
+						StringID icon_via = STR_DEPARTURES_STATION_NONE;
+						if (_settings_client.gui.departure_destination_type && Station::IsValidID(id)) {
+							Station *st = Station::Get(id);
+
+							if (st->facilities & FACIL_DOCK &&
+									st->facilities & FACIL_AIRPORT &&
+									d->vehicle->type != VEH_SHIP &&
+									d->vehicle->type != VEH_AIRCRAFT) {
+								icon_via = STR_DEPARTURES_STATION_PORTAIRPORT;
+							} else if (st->facilities & FACIL_DOCK &&
+									d->vehicle->type != VEH_SHIP) {
+								icon_via = STR_DEPARTURES_STATION_PORT;
+							} else if (st->facilities & FACIL_AIRPORT &&
+									d->vehicle->type != VEH_AIRCRAFT) {
+								icon_via = STR_DEPARTURES_STATION_AIRPORT;
+							}
+						}
+
+						auto tmp_params = MakeParameters(Waypoint::IsValidID(id) ? STR_WAYPOINT_NAME : STR_STATION_NAME, id, icon_via);
+						_temp_special_strings[temp_str] = GetStringWithArgs(STR_DEPARTURES_VIA_DESCRIPTOR, tmp_params);
+					};
+					get_single_via_string(0, via);
+
+					if (via2 != INVALID_STATION) {
+						get_single_via_string(1, via2);
+
+						auto tmp_params = MakeParameters(SPECSTR_TEMP_START, SPECSTR_TEMP_START + 1);
+						_temp_special_strings[0] = GetStringWithArgs(STR_DEPARTURES_VIA_AND, tmp_params);
+					}
+
+					SetDParam(offset, SPECSTR_TEMP_START);
+				};
+				/* Show the terminus and the via station. */
+				SetDParam(0, d->terminus.station);
+				SetDParam(1, icon);
+				set_via_dparams(2);
+				int text_width = (GetStringBoundingBox(STR_DEPARTURES_TERMINUS_VIA_STATION)).width;
+
+				if (dest_left + text_width < dest_right) {
+					/* They will both fit, so show them both. */
 					SetDParam(0, d->terminus.station);
 					SetDParam(1, icon);
-					ltr ? DrawString(              text_left + time_width + type_width + 6, text_right - status_width - (toc_width + veh_width + group_width + 2) - 2, y + 1, STR_DEPARTURES_TERMINUS_VIA)
-						: DrawString(text_left + status_width + (toc_width + veh_width + group_width + 2) + 2,               text_right - time_width - type_width - 6, y + 1, STR_DEPARTURES_TERMINUS_VIA);
+					set_via_dparams(2);
+					DrawString(dest_left, dest_right, y + 1, STR_DEPARTURES_TERMINUS_VIA_STATION);
+				} else {
+					/* They won't both fit, so switch between showing the terminus and the via station approximately every 4 seconds. */
+					if ((this->elapsed_ms >> 12) & 1) {
+						set_via_dparams(0);
+						DrawString(dest_left, dest_right, y + 1, STR_DEPARTURES_VIA);
+					} else {
+						SetDParam(0, d->terminus.station);
+						SetDParam(1, icon);
+						DrawString(dest_left, dest_right, y + 1, STR_DEPARTURES_TERMINUS_VIA);
+					}
+					this->scroll_refresh = true;
 				}
 			}
 		}
 
 		/* Status */
 		{
-			int status_left = ltr ? text_right - status_width - 2 - (toc_width + veh_width + group_width + 2) : text_left + (toc_width + veh_width + group_width + 2) + 2;
-			int status_right = ltr ? text_right - (toc_width + veh_width + group_width + 2) + 2 : text_left + status_width + 2 + (toc_width + veh_width + group_width + 2);
+			const int status_left = ltr ? text_right - PadWidth(toc_width) - PadWidth(group_width) - PadWidth(veh_width) - status_width : text_left + PadWidth(toc_width) + PadWidth(group_width) + PadWidth(veh_width);
+			const int status_right = ltr ? text_right - PadWidth(toc_width) - PadWidth(group_width) - PadWidth(veh_width) : text_left + PadWidth(toc_width) + PadWidth(group_width) + PadWidth(veh_width) + status_width;
 
 			if (d->status == D_ARRIVED) {
 				/* The vehicle has arrived. */
@@ -888,17 +928,17 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 				/* The vehicle has been cancelled. */
 				DrawString(status_left, status_right, y + 1, STR_DEPARTURES_CANCELLED);
 			} else{
-				if (d->lateness <= DATE_UNIT_SIZE && d->scheduled_date > now_date) {
+				if (d->lateness <= TimetableDisplayUnitSize() && d->scheduled_tick > now_date) {
 					/* We have no evidence that the vehicle is late, so assume it is on time. */
 					DrawString(status_left, status_right, y + 1, STR_DEPARTURES_ON_TIME);
 				} else {
-					if ((d->scheduled_date + d->lateness) < now_date) {
+					if ((d->scheduled_tick + d->lateness) < now_date) {
 						/* The vehicle was expected to have arrived by now, even if we knew it was going to be late. */
 						/* We assume that the train stays at least a day at a station so it won't accidentally be marked as delayed for a fraction of a day. */
 						DrawString(status_left, status_right, y + 1, STR_DEPARTURES_DELAYED);
 					} else {
 						/* The vehicle is expected to be late and is not yet due to arrive. */
-						SetDParam(0, d->scheduled_date + d->lateness);
+						SetDParam(0, d->scheduled_tick + d->lateness);
 						DrawString(status_left, status_right, y + 1, STR_DEPARTURES_EXPECTED);
 					}
 				}
@@ -906,48 +946,53 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 		}
 
 		/* Vehicle name */
-
 		if (_settings_client.gui.departure_show_vehicle) {
-			SetDParam(0, (uint64)(d->vehicle->index));
-			ltr ? DrawString(text_right - (toc_width + veh_width + group_width + 2),              text_right - toc_width - group_width - 2, y + 1, STR_DEPARTURES_VEH)
-				: DrawString(               text_left + toc_width + group_width + 2, text_left + (toc_width + veh_width + group_width + 2), y + 1, STR_DEPARTURES_VEH);
+			const int veh_left = ltr ? text_right - PadWidth(toc_width) - PadWidth(group_width) - veh_width : text_left + PadWidth(toc_width) + PadWidth(group_width);
+			const int veh_right = ltr ? text_right - PadWidth(toc_width) - PadWidth(group_width) : text_left + PadWidth(toc_width) + PadWidth(group_width) + veh_width;
+
+			SetDParam(0, d->vehicle->index | (_settings_client.gui.departure_show_group ? VEHICLE_NAME_NO_GROUP : 0));
+			DrawString(veh_left, veh_right, y + 1, STR_DEPARTURES_VEH);
 		}
 
 		/* Group name */
-
 		if (_settings_client.gui.departure_show_group && d->vehicle->group_id != INVALID_GROUP && d->vehicle->group_id != DEFAULT_GROUP) {
-			SetDParam(0, (uint64)(d->vehicle->group_id | GROUP_NAME_HIERARCHY));
-			ltr ? DrawString(text_right - (toc_width + group_width + 2),              text_right - toc_width - 2, y + 1, STR_DEPARTURES_GROUP)
-				: DrawString(               text_left + toc_width + 2, text_left + (toc_width + group_width + 2), y + 1, STR_DEPARTURES_GROUP);
+			const int group_left = ltr ? text_right - PadWidth(toc_width) - group_width : text_left + PadWidth(toc_width);
+			const int group_right = ltr ? text_right - PadWidth(toc_width) : text_left + PadWidth(toc_width) + group_width;
+
+			SetDParam(0, (uint64_t)(d->vehicle->group_id | GROUP_NAME_HIERARCHY));
+			DrawString(group_left, group_right, y + 1, STR_DEPARTURES_GROUP);
 		}
 
 		/* Operating company */
 		if (_settings_client.gui.departure_show_company) {
-			SetDParam(0, (uint64)(d->vehicle->owner));
-			ltr ? DrawString(text_right - toc_width,            text_right, y + 1, STR_DEPARTURES_TOC, TC_FROMSTRING, SA_RIGHT)
-				: DrawString(             text_left, text_left + toc_width, y + 1, STR_DEPARTURES_TOC, TC_FROMSTRING, SA_LEFT);
+			const int toc_left = ltr ? text_right - toc_width : text_left;
+			const int toc_right = ltr ? text_right : text_left + toc_width;
+
+			SetDParam(0, (uint64_t)(d->vehicle->owner));
+			DrawString(toc_left, toc_right, y + 1, STR_DEPARTURES_TOC, TC_FROMSTRING, SA_RIGHT);
 		}
 
 		int bottom_y = y + this->entry_height - small_font_size - (_settings_client.gui.departure_larger_font ? 1 : 3);
 
 		/* Calling at */
-		ltr ? DrawString(                    text_left,  text_left + calling_at_width, bottom_y, _settings_client.gui.departure_larger_font ? STR_DEPARTURES_CALLING_AT_LARGE : STR_DEPARTURES_CALLING_AT)
-			: DrawString(text_right - calling_at_width,                    text_right, bottom_y, _settings_client.gui.departure_larger_font ? STR_DEPARTURES_CALLING_AT_LARGE : STR_DEPARTURES_CALLING_AT);
+		SetDParam(0, STR_DEPARTURES_CALLING_AT);
+		ltr ? DrawString(                    text_left,  text_left + calling_at_width, bottom_y, size_prefix)
+			: DrawString(text_right - calling_at_width,                    text_right, bottom_y, size_prefix);
 
 		/* List of stations */
 		/* RTL languages can be handled in the language file, e.g. by having the following: */
 		/* STR_DEPARTURES_CALLING_AT_STATION      :{STATION}, {RAW_STRING} */
 		/* STR_DEPARTURES_CALLING_AT_LAST_STATION :{STATION} & {RAW_STRING}*/
-		char buffer[512], scratch[512];
+		std::string buffer;
 
 		if (d->calling_at.size() != 0) {
-			SetDParam(0, (uint64)(d->calling_at[0]).station);
-			GetString(scratch, STR_DEPARTURES_CALLING_AT_FIRST_STATION, lastof(scratch));
+			SetDParam(0, (d->calling_at[0]).station);
+			std::string calling_at_buffer = GetString(STR_DEPARTURES_CALLING_AT_FIRST_STATION);
 
-			StationID continuesTo = INVALID_STATION;
+			StationID continues_to = INVALID_STATION;
 
 			if (d->calling_at[0].station == d->terminus.station && d->calling_at.size() > 1) {
-				continuesTo = d->calling_at[d->calling_at.size() - 1].station;
+				continues_to = d->calling_at[d->calling_at.size() - 1].station;
 			} else if (d->calling_at.size() > 1) {
 				/* There's more than one stop. */
 
@@ -956,35 +1001,28 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 				for (i = 1; i < d->calling_at.size() - 1; ++i) {
 					StationID s = d->calling_at[i].station;
 					if (s == d->terminus.station) {
-						continuesTo = d->calling_at[d->calling_at.size() - 1].station;
+						continues_to = d->calling_at[d->calling_at.size() - 1].station;
 						break;
 					}
-					SetDParam(0, (uint64)scratch);
-					SetDParam(1, (uint64)s);
-					GetString(buffer, STR_DEPARTURES_CALLING_AT_STATION, lastof(buffer));
-					strncpy(scratch, buffer, sizeof(scratch));
+					SetDParamStr(0, std::move(calling_at_buffer));
+					SetDParam(1, s);
+					calling_at_buffer = GetString(STR_DEPARTURES_CALLING_AT_STATION);
 				}
 
 				/* Finally, finish off with " and <station>". */
-				SetDParam(0, (uint64)scratch);
-				SetDParam(1, (uint64)d->calling_at[i].station);
-				GetString(buffer, STR_DEPARTURES_CALLING_AT_LAST_STATION, lastof(buffer));
-				strncpy(scratch, buffer, sizeof(scratch));
+				SetDParamStr(0, std::move(calling_at_buffer));
+				SetDParam(1, d->calling_at[i].station);
+				calling_at_buffer = GetString(STR_DEPARTURES_CALLING_AT_LAST_STATION);
 			}
 
-			SetDParam(0, (uint64)scratch);
-			StringID string;
-			if (continuesTo == INVALID_STATION) {
-				string = _settings_client.gui.departure_larger_font ? STR_DEPARTURES_CALLING_AT_LIST_LARGE : STR_DEPARTURES_CALLING_AT_LIST;
+			SetDParamStr(1, std::move(calling_at_buffer));
+			if (continues_to == INVALID_STATION) {
+				SetDParam(0, STR_DEPARTURES_CALLING_AT_LIST);
 			} else {
-				SetDParam(1, continuesTo);
-				string = _settings_client.gui.departure_larger_font ? STR_DEPARTURES_CALLING_AT_LIST_SMART_TERMINUS_LARGE : STR_DEPARTURES_CALLING_AT_LIST_SMART_TERMINUS;
+				SetDParam(0, STR_DEPARTURES_CALLING_AT_LIST_SMART_TERMINUS);
+				SetDParam(2, continues_to);
 			}
-			GetString(buffer, string, lastof(buffer));
-		} else {
-			buffer[0] = 0;
-			//SetDParam(0, d->terminus);
-			//GetString(scratch, STR_DEPARTURES_CALLING_AT_FIRST_STATION, lastof(scratch));
+			buffer = GetString(size_prefix);
 		}
 
 		int list_width = (GetStringBoundingBox(buffer, _settings_client.gui.departure_larger_font ? FS_NORMAL : FS_SMALL)).width;
@@ -994,6 +1032,8 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 			ltr ? DrawString(text_left + calling_at_width + 2,                        text_right, bottom_y, buffer)
 				: DrawString(                       text_left, text_right - calling_at_width - 2, bottom_y, buffer);
 		} else {
+			this->scroll_refresh = true;
+
 			DrawPixelInfo tmp_dpi;
 			if (ltr
 				? !FillDrawPixelInfo(&tmp_dpi, text_left + calling_at_width + 2, bottom_y, text_right - (text_left + calling_at_width + 2), small_font_size + 3)
@@ -1001,18 +1041,16 @@ void DeparturesWindow<Twaypoint>::DrawDeparturesListItems(const Rect &r) const
 				y += this->entry_height;
 				continue;
 			}
-			DrawPixelInfo *old_dpi = _cur_dpi;
-			_cur_dpi = &tmp_dpi;
+			AutoRestoreBackup dpi_backup(_cur_dpi, &tmp_dpi);
 
 			/* The scrolling text starts out of view at the right of the screen and finishes when it is out of view at the left of the screen. */
+			int64_t elapsed_scroll_px = this->elapsed_ms / 27;
 			int pos = ltr
-				? text_right - (this->tick_count % (list_width + text_right - text_left))
-				:  text_left + (this->tick_count % (list_width + text_right - text_left));
+				? text_right - (elapsed_scroll_px % (list_width + text_right - text_left))
+				:  text_left + (elapsed_scroll_px % (list_width + text_right - text_left));
 
 			ltr ? DrawString(       pos, INT16_MAX, 0, buffer, TC_FROMSTRING,  SA_LEFT | SA_FORCE)
 				: DrawString(-INT16_MAX,       pos, 0, buffer, TC_FROMSTRING, SA_RIGHT | SA_FORCE);
-
-			_cur_dpi = old_dpi;
 		}
 
 		y += this->entry_height;

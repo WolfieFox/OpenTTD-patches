@@ -17,7 +17,7 @@ if (EMSCRIPTEN)
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
-set(CMAKE_OSX_DEPLOYMENT_TARGET 10.9)
+set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
 
 # Use GNUInstallDirs to allow customisation
 # but set our own default data and bin dir
@@ -36,7 +36,7 @@ set_directory_options()
 include(Static)
 set_static_if_needed()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -125,6 +125,14 @@ else()
 endif()
 find_package(PNG)
 
+if(WIN32 OR EMSCRIPTEN)
+    # Windows uses WinHttp for HTTP requests.
+    # Emscripten uses Javascript for HTTP requests.
+else()
+    # All other targets use libcurl.
+    find_package(CURL)
+endif()
+
 if(NOT OPTION_DEDICATED)
     if(NOT WIN32)
         find_package(Allegro)
@@ -135,8 +143,11 @@ if(NOT OPTION_DEDICATED)
                 find_package(SDL)
             endif()
             find_package(Fluidsynth)
-            find_package(Fontconfig)
-            find_package(ICU OPTIONAL_COMPONENTS i18n lx)
+            if(Freetype_FOUND)
+                find_package(Fontconfig)
+            endif()
+            find_package(Harfbuzz)
+            find_package(ICU OPTIONAL_COMPONENTS i18n)
         endif()
     endif()
 endif()
@@ -204,6 +215,12 @@ if(UNIX AND NOT APPLE AND NOT OPTION_DEDICATED)
     if(NOT SDL_FOUND AND NOT SDL2_FOUND AND NOT ALLEGRO_FOUND)
         message(FATAL_ERROR "SDL, SDL2 or Allegro is required for this platform")
     endif()
+    if(HARFBUZZ_FOUND AND NOT ICU_i18n_FOUND)
+        message(WARNING "HarfBuzz depends on ICU i18n to function; HarfBuzz will be disabled")
+    endif()
+    if(NOT HARFBUZZ_FOUND)
+        message(WARNING "Without HarfBuzz and ICU i18n the game will not be able to render right-to-left languages correctly")
+    endif()
 endif()
 if(APPLE)
     if(NOT AUDIOTOOLBOX_LIBRARY)
@@ -241,6 +258,13 @@ if(OPTION_PACKAGE_DEPENDENCIES)
     set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
 endif()
 
+if(OPTION_NO_SPLIT_LIB)
+    set(OPENTTD_LIB openttd)
+else()
+    set(OPENTTD_LIB openttd_lib)
+endif()
+
+include(CTest)
 include(SourceList)
 
 # Needed by rev.cpp
@@ -250,9 +274,21 @@ include_directories(${CMAKE_SOURCE_DIR}/src/3rdparty/squirrel/include)
 
 include(MSVCFilters)
 
-add_executable(openttd WIN32 ${GENERATED_SOURCE_FILES})
+if(OPTION_NO_SPLIT_LIB)
+    add_executable(openttd WIN32 ${GENERATED_SOURCE_FILES})
+else()
+    add_library(openttd_lib OBJECT ${GENERATED_SOURCE_FILES})
+    add_executable(openttd WIN32)
+    add_executable(openttd_test)
+    set_target_properties(openttd_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endif()
+
 set_target_properties(openttd PROPERTIES OUTPUT_NAME "${BINARY_NAME}")
 # All other files are added via target_sources()
+
+if (MINGW AND OPTION_MINGW_STDTHREADS)
+    target_link_libraries(${OPENTTD_LIB} mingw_stdthreads)
+endif()
 
 set(host_tools_list strgen settingsgen)
 
@@ -289,6 +325,14 @@ endif()
 if(MSVC)
     # Add DPI manifest to project; other WIN32 targets get this via ottdres.rc
     target_sources(openttd PRIVATE "${CMAKE_SOURCE_DIR}/os/windows/openttd.manifest")
+
+    # If target -static is used, switch our project to static (/MT) too.
+    # If the target ends on -static-md, it will remain dynamic (/MD).
+    if(VCPKG_TARGET_TRIPLET MATCHES "-static" AND NOT VCPKG_TARGET_TRIPLET MATCHES "-md")
+        set_property(TARGET openttd_lib PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        set_property(TARGET openttd PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        set_property(TARGET openttd_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+     endif()
 endif()
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/bin)
@@ -306,21 +350,36 @@ endif()
 add_dependencies(openttd
     find_version)
 
-target_link_libraries(openttd
+if(NOT OPTION_NO_SPLIT_LIB)
+    target_link_libraries(openttd openttd_lib)
+
+    target_link_libraries(openttd_test PRIVATE openttd_lib)
+    if(ANDROID)
+        target_link_libraries(openttd_test PRIVATE log)
+    endif()
+
+    include(Catch)
+    catch_discover_tests(openttd_test)
+endif()
+
+target_link_libraries(${OPENTTD_LIB}
     openttd::languages
     openttd::settings
+    openttd::script_api
+    Threads::Threads
+)
+
+target_link_libraries(openttd
     openttd::media
     openttd::basesets
-    openttd::script_api
     openttd::binfiles
-    Threads::Threads
 )
 
 if(HAIKU)
     target_link_libraries(openttd "be" "network" "midi")
 endif()
 
-if(IPO_FOUND)
+if(IPO_FOUND AND NOT OPTION_NO_LTO)
     set_target_properties(openttd PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE True)
     set_target_properties(openttd PROPERTIES INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL True)
     set_target_properties(openttd PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO True)
@@ -340,6 +399,11 @@ else()
 	link_package(ZSTD TARGET ZSTD::ZSTD RECOMMENDED)
 endif()
 
+if(NOT WIN32 AND NOT EMSCRIPTEN)
+    link_package(CURL ENCOURAGED)
+    target_link_libraries(openttd_lib ${CMAKE_DL_LIBS})
+endif()
+
 if(NOT OPTION_DEDICATED)
     link_package(Fluidsynth)
     link_package(SDL)
@@ -347,7 +411,7 @@ if(NOT OPTION_DEDICATED)
     link_package(Allegro)
     link_package(FREETYPE TARGET Freetype::Freetype)
     link_package(Fontconfig TARGET Fontconfig::Fontconfig)
-    link_package(ICU_lx)
+    link_package(Harfbuzz TARGET harfbuzz::harfbuzz)
     link_package(ICU_i18n)
     link_package(Fcitx)
     link_package(DBus1)
@@ -364,10 +428,12 @@ if(NOT OPTION_DEDICATED)
     endif()
 endif()
 
+include(CheckAtomic)
+
 if(APPLE)
     link_package(Iconv TARGET Iconv::Iconv)
 
-    target_link_libraries(openttd
+    target_link_libraries(${OPENTTD_LIB}
         ${AUDIOTOOLBOX_LIBRARY}
         ${AUDIOUNIT_LIBRARY}
         ${COCOA_LIBRARY}
@@ -386,6 +452,7 @@ if(EMSCRIPTEN)
     target_link_libraries(WASM::WASM INTERFACE "-s ALLOW_MEMORY_GROWTH=1")
     target_link_libraries(WASM::WASM INTERFACE "-s INITIAL_MEMORY=33554432")
     target_link_libraries(WASM::WASM INTERFACE "-s DISABLE_EXCEPTION_CATCHING=0")
+    target_link_libraries(WASM::WASM INTERFACE "-s WASM_BIGINT")
     add_definitions(-s DISABLE_EXCEPTION_CATCHING=0)
 
     # Export functions to Javascript.
@@ -401,6 +468,23 @@ if(EMSCRIPTEN)
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_BINARY_DIR}/lang/english.lng@/lang/english.lng")
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/bin/ai@/ai")
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/bin/game@/game")
+    # Documentation files for the in-game text file viewer
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/README.md@/README.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/CREDITS.md@/CREDITS.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/CONTRIBUTING.md@/CONTRIBUTING.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/COPYING.md@/COPYING.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/known-bugs.txt@/known-bugs.txt")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/changelog.txt@/changelog.txt")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/admin_network.md@/docs/admin_network.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/debugging_desyncs.md@/docs/debugging_desyncs.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/desync.md@/docs/desync.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/directory_structure.md@/docs/directory_structure.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/eints.md@/docs/eints.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/linkgraph.md@/docs/linkgraph.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/logging_and_performance_metrics.md@/docs/logging_and_performance_metrics.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/multiplayer.md@/docs/multiplayer.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/savegame_format.md@/docs/savegame_format.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/symbol_server.md@/docs/symbol_server.md")
 
     # We use IDBFS for persistent storage.
     target_link_libraries(WASM::WASM INTERFACE "-lidbfs.js")
@@ -446,12 +530,14 @@ if(WIN32)
         -DPSAPI_VERSION=1
     )
 
-    target_link_libraries(openttd
+    target_link_libraries(${OPENTTD_LIB}
         ws2_32
         winmm
         imm32
         usp10
         psapi
+        winhttp
+        bcrypt
     )
 endif()
 
@@ -459,8 +545,9 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     add_definitions(-DPOINTER_IS_64BIT)
 endif()
 
-include(CreateRegression)
-create_regression()
+enable_testing()
+
+add_subdirectory(regression)
 
 if(APPLE OR WIN32)
     find_package(Pandoc)
@@ -478,6 +565,7 @@ string(REGEX REPLACE "(^|;)-D" "\\1" CFG_DEFS "${CFG_DEFS}")
 get_property(CFG_DEFS_2 DIRECTORY . PROPERTY COMPILE_DEFINITIONS)
 list(APPEND CFG_DEFS ${CFG_DEFS_2})
 list(FILTER CFG_DEFS EXCLUDE REGEX "_DIR=")
+list(FILTER CFG_DEFS EXCLUDE REGEX "SURVEY_KEY=")
 
 # Generate a target to determine version, which is execute every 'make' run
 add_custom_target(find_version

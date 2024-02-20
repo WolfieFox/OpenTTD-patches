@@ -26,6 +26,7 @@
 
 #include <stdarg.h>
 #include <iosfwd>
+#include <iterator>
 
 #include "core/bitmath_func.hpp"
 #include "string_type.h"
@@ -37,29 +38,55 @@ char *stredup(const char *src, const char *last = nullptr) NOACCESS(2);
 int CDECL seprintf(char *str, const char *last, const char *format, ...) WARN_FORMAT(3, 4) NOACCESS(2);
 int CDECL vseprintf(char *str, const char *last, const char *format, va_list ap) WARN_FORMAT(3, 0) NOACCESS(2);
 
-char *CDECL str_fmt(const char *str, ...) WARN_FORMAT(1, 2);
-char *str_vfmt(const char *str, va_list ap) WARN_FORMAT(1, 0);
 std::string CDECL stdstr_fmt(const char *str, ...) WARN_FORMAT(1, 2);
 std::string stdstr_vfmt(const char *str, va_list va) WARN_FORMAT(1, 0);
 
+std::string FormatArrayAsHex(std::span<const byte> data);
+
 char *StrMakeValidInPlace(char *str, const char *last, StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK) NOACCESS(2);
-[[nodiscard]] std::string StrMakeValid(const std::string &str, StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK);
+[[nodiscard]] std::string StrMakeValid(std::string_view str, StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK);
 void StrMakeValidInPlace(char *str, StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK);
 
 const char *str_fix_scc_encoded(char *str, const char *last) NOACCESS(2);
 void str_strip_colours(char *str);
+const char *strip_leading_colours(const char *str);
+
+inline const char *strip_leading_colours(const std::string &str)
+{
+	return strip_leading_colours(str.c_str());
+}
+
+
 std::string str_strip_all_scc(const char *str);
-char *str_replace_wchar(char *str, const char *last, WChar find, WChar replace);
+char *str_replace_wchar(char *str, const char *last, char32_t find, char32_t replace);
 bool strtolower(char *str);
 bool strtolower(std::string &str, std::string::size_type offs = 0);
 
-bool StrValid(const char *str, const char *last) NOACCESS(2);
+[[nodiscard]] bool StrValid(const char *str, const char *last) NOACCESS(2);
 void StrTrimInPlace(std::string &str);
 
-bool StrStartsWith(const std::string_view str, const std::string_view prefix);
-bool StrEndsWith(const std::string_view str, const std::string_view suffix);
+const char *StrLastPathSegment(const char *path);
 
-const char *StrConsumeToSeparator(std::string &result, const char *str);
+inline const char *StrLastPathSegment(const std::string &path)
+{
+	return StrLastPathSegment(path.c_str());
+}
+
+[[nodiscard]] bool StrStartsWithIgnoreCase(std::string_view str, const std::string_view prefix);
+[[nodiscard]] bool StrEndsWithIgnoreCase(std::string_view str, const std::string_view suffix);
+
+[[nodiscard]] int StrCompareIgnoreCase(const std::string_view str1, const std::string_view str2);
+[[nodiscard]] bool StrEqualsIgnoreCase(const std::string_view str1, const std::string_view str2);
+[[nodiscard]] int StrNaturalCompare(std::string_view s1, std::string_view s2, bool ignore_garbage_at_front = false);
+[[nodiscard]] bool StrNaturalContains(const std::string_view str, const std::string_view value);
+[[nodiscard]] bool StrNaturalContainsIgnoreCase(const std::string_view str, const std::string_view value);
+
+bool ConvertHexToBytes(std::string_view hex, std::span<uint8_t> bytes);
+
+/** Case insensitive comparator for strings, for example for use in std::map. */
+struct CaseInsensitiveComparator {
+	bool operator()(const std::string_view s1, const std::string_view s2) const { return StrCompareIgnoreCase(s1, s2) < 0; }
+};
 
 /**
  * Check if a string buffer is empty.
@@ -68,7 +95,7 @@ const char *StrConsumeToSeparator(std::string &result, const char *str);
  * @return true if the buffer starts with the terminating null-character or
  *         if the given pointer points to nullptr else return false
  */
-static inline bool StrEmpty(const char *s)
+inline bool StrEmpty(const char *s)
 {
 	return s == nullptr || s[0] == '\0';
 }
@@ -80,34 +107,33 @@ static inline bool StrEmpty(const char *s)
  * @param maxlen The maximum size of the buffer
  * @return The length of the string
  */
-static inline size_t ttd_strnlen(const char *str, size_t maxlen)
+inline size_t ttd_strnlen(const char *str, size_t maxlen)
 {
 	const char *t;
 	for (t = str; (size_t)(t - str) < maxlen && *t != '\0'; t++) {}
 	return t - str;
 }
 
-char *md5sumToString(char *buf, const char *last, const uint8 md5sum[16]);
+bool IsValidChar(char32_t key, CharSetFilter afilter);
 
-bool IsValidChar(WChar key, CharSetFilter afilter);
-
-size_t Utf8Decode(WChar *c, const char *s);
-size_t Utf8Encode(char *buf, WChar c);
-size_t Utf8Encode(std::ostreambuf_iterator<char> &buf, WChar c);
+size_t Utf8Decode(char32_t *c, const char *s);
+size_t Utf8Encode(char *buf, char32_t c);
+size_t Utf8Encode(std::ostreambuf_iterator<char> &buf, char32_t c);
+size_t Utf8Encode(std::back_insert_iterator<std::string> &buf, char32_t c);
 size_t Utf8TrimString(char *s, size_t maxlen);
 
 
-static inline WChar Utf8Consume(const char **s)
+inline char32_t Utf8Consume(const char **s)
 {
-	WChar c;
+	char32_t c;
 	*s += Utf8Decode(&c, *s);
 	return c;
 }
 
 template <class Titr>
-static inline WChar Utf8Consume(Titr &s)
+inline char32_t Utf8Consume(Titr &s)
 {
-	WChar c;
+	char32_t c;
 	s += Utf8Decode(&c, &*s);
 	return c;
 }
@@ -117,7 +143,7 @@ static inline WChar Utf8Consume(Titr &s)
  * @param c Unicode character.
  * @return Length of UTF-8 encoding for character.
  */
-static inline int8 Utf8CharLen(WChar c)
+inline int8_t Utf8CharLen(char32_t c)
 {
 	if (c < 0x80)       return 1;
 	if (c < 0x800)      return 2;
@@ -136,7 +162,7 @@ static inline int8 Utf8CharLen(WChar c)
  * @param c char to query length of
  * @return requested size
  */
-static inline int8 Utf8EncodedCharLen(char c)
+inline int8_t Utf8EncodedCharLen(char c)
 {
 	if (GB(c, 3, 5) == 0x1E) return 4;
 	if (GB(c, 4, 4) == 0x0E) return 3;
@@ -149,7 +175,7 @@ static inline int8 Utf8EncodedCharLen(char c)
 
 
 /* Check if the given character is part of a UTF8 sequence */
-static inline bool IsUtf8Part(char c)
+inline bool IsUtf8Part(char c)
 {
 	return GB(c, 6, 2) == 2;
 }
@@ -161,14 +187,14 @@ static inline bool IsUtf8Part(char c)
  * @note The function should not be used to determine the length of the previous
  * encoded char because it might be an invalid/corrupt start-sequence
  */
-static inline char *Utf8PrevChar(char *s)
+inline char *Utf8PrevChar(char *s)
 {
 	char *ret = s;
 	while (IsUtf8Part(*--ret)) {}
 	return ret;
 }
 
-static inline const char *Utf8PrevChar(const char *s)
+inline const char *Utf8PrevChar(const char *s)
 {
 	const char *ret = s;
 	while (IsUtf8Part(*--ret)) {}
@@ -183,7 +209,7 @@ size_t Utf8StringLength(const std::string &str);
  * @param c The character to test.
  * @return True if the character is a lead surrogate code point.
  */
-static inline bool Utf16IsLeadSurrogate(uint c)
+inline bool Utf16IsLeadSurrogate(uint c)
 {
 	return c >= 0xD800 && c <= 0xDBFF;
 }
@@ -193,7 +219,7 @@ static inline bool Utf16IsLeadSurrogate(uint c)
  * @param c The character to test.
  * @return True if the character is a lead surrogate code point.
  */
-static inline bool Utf16IsTrailSurrogate(uint c)
+inline bool Utf16IsTrailSurrogate(uint c)
 {
 	return c >= 0xDC00 && c <= 0xDFFF;
 }
@@ -204,7 +230,7 @@ static inline bool Utf16IsTrailSurrogate(uint c)
  * @param trail Trail surrogate code point.
  * @return Decoded Unicode character.
  */
-static inline WChar Utf16DecodeSurrogate(uint lead, uint trail)
+inline char32_t Utf16DecodeSurrogate(uint lead, uint trail)
 {
 	return 0x10000 + (((lead - 0xD800) << 10) | (trail - 0xDC00));
 }
@@ -214,7 +240,7 @@ static inline WChar Utf16DecodeSurrogate(uint lead, uint trail)
  * @param c Pointer to one or two UTF-16 code points.
  * @return Decoded Unicode character.
  */
-static inline WChar Utf16DecodeChar(const uint16 *c)
+inline char32_t Utf16DecodeChar(const uint16_t *c)
 {
 	if (Utf16IsLeadSurrogate(c[0])) {
 		return Utf16DecodeSurrogate(c[0], c[1]);
@@ -229,7 +255,7 @@ static inline WChar Utf16DecodeChar(const uint16 *c)
  * @return true iff the character is used to influence
  *         the text direction.
  */
-static inline bool IsTextDirectionChar(WChar c)
+inline bool IsTextDirectionChar(char32_t c)
 {
 	switch (c) {
 		case CHAR_TD_LRM:
@@ -246,7 +272,7 @@ static inline bool IsTextDirectionChar(WChar c)
 	}
 }
 
-static inline bool IsPrintable(WChar c)
+inline bool IsPrintable(char32_t c)
 {
 	if (c < 0x20)   return false;
 	if (c < 0xE000) return true;
@@ -261,7 +287,7 @@ static inline bool IsPrintable(WChar c)
  * @return a boolean value whether 'c' is a whitespace character or not
  * @see http://www.fileformat.info/info/unicode/category/Zs/list.htm
  */
-static inline bool IsWhitespace(WChar c)
+inline bool IsWhitespace(char32_t c)
 {
 	return c == 0x0020 /* SPACE */ || c == 0x3000; /* IDEOGRAPHIC SPACE */
 }
@@ -278,7 +304,5 @@ static inline bool IsWhitespace(WChar c)
 #	define DEFINE_STRCASESTR
 char *strcasestr(const char *haystack, const char *needle);
 #endif /* strcasestr is available */
-
-int strnatcmp(const char *s1, const char *s2, bool ignore_garbage_at_front = false);
 
 #endif /* STRING_FUNC_H */

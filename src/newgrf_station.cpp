@@ -23,25 +23,25 @@
 #include "tunnelbridge_map.h"
 #include "newgrf_animation_base.h"
 #include "newgrf_class_func.h"
+#include "newgrf_extension.h"
+#include "core/checksum_func.hpp"
 
 #include "safeguards.h"
 
+uint64_t _station_tile_cache_hash = 0;
 
 template <typename Tspec, typename Tid, Tid Tmax>
 /* static */ void NewGRFClass<Tspec, Tid, Tmax>::InsertDefaults()
 {
 	/* Set up initial data */
-	classes[0].global_id = 'DFLT';
-	classes[0].name = STR_STATION_CLASS_DFLT;
-	classes[0].Insert(nullptr);
-
-	classes[1].global_id = 'WAYP';
-	classes[1].name = STR_STATION_CLASS_WAYP;
-	classes[1].Insert(nullptr);
+	StationClass::Get(StationClass::Allocate('DFLT'))->name = STR_STATION_CLASS_DFLT;
+	StationClass::Get(StationClass::Allocate('DFLT'))->Insert(nullptr);
+	StationClass::Get(StationClass::Allocate('WAYP'))->name = STR_STATION_CLASS_WAYP;
+	StationClass::Get(StationClass::Allocate('WAYP'))->Insert(nullptr);
 }
 
 template <typename Tspec, typename Tid, Tid Tmax>
-bool NewGRFClass<Tspec, Tid, Tmax>::IsUIAvailable(uint index) const
+bool NewGRFClass<Tspec, Tid, Tmax>::IsUIAvailable(uint) const
 {
 	return true;
 }
@@ -102,9 +102,9 @@ struct ETileArea : TileArea {
  * if centered, C/P start from the centre and c/p are not available.
  * @return Platform information in bit-stuffed format.
  */
-uint32 GetPlatformInfo(Axis axis, byte tile, int platforms, int length, int x, int y, bool centred)
+uint32_t GetPlatformInfo(Axis axis, byte tile, int platforms, int length, int x, int y, bool centred)
 {
-	uint32 retval = 0;
+	uint32_t retval = 0;
 
 	if (axis == AXIS_X) {
 		Swap(platforms, length);
@@ -163,7 +163,7 @@ static TileIndex FindRailStationEnd(TileIndex tile, TileIndexDiff delta, bool ch
 }
 
 
-static uint32 GetPlatformInfoHelper(TileIndex tile, bool check_type, bool check_axis, bool centred)
+static uint32_t GetPlatformInfoHelper(TileIndex tile, bool check_type, bool check_axis, bool centred)
 {
 	int tx = TileX(tile);
 	int ty = TileY(tile);
@@ -179,7 +179,7 @@ static uint32 GetPlatformInfoHelper(TileIndex tile, bool check_type, bool check_
 }
 
 
-static uint32 GetRailContinuationInfo(TileIndex tile)
+static uint32_t GetRailContinuationInfo(TileIndex tile)
 {
 	/* Tile offsets and exit dirs for X axis */
 	static const Direction x_dir[8] = { DIR_SW, DIR_NE, DIR_SE, DIR_NW, DIR_S, DIR_E, DIR_W, DIR_N };
@@ -195,12 +195,12 @@ static uint32 GetRailContinuationInfo(TileIndex tile)
 	const Direction *dir = axis == AXIS_X ? x_dir : y_dir;
 	const DiagDirection *diagdir = axis == AXIS_X ? x_exits : y_exits;
 
-	uint32 res = 0;
+	uint32_t res = 0;
 	uint i;
 
 	for (i = 0; i < lengthof(x_dir); i++, dir++, diagdir++) {
 		TileIndex neighbour_tile = tile + TileOffsByDir(*dir);
-		TrackBits trackbits = TrackStatusToTrackBits(GetTileTrackStatus(neighbour_tile, TRANSPORT_RAIL, 0));
+		TrackBits trackbits = TrackdirBitsToTrackBits(GetTileTrackdirBits(neighbour_tile, TRANSPORT_RAIL, 0));
 		if (trackbits != TRACK_BIT_NONE) {
 			/* If there is any track on the tile, set the bit in the second byte */
 			SetBit(res, i + 8);
@@ -221,13 +221,13 @@ static uint32 GetRailContinuationInfo(TileIndex tile)
 
 
 /* Station Resolver Functions */
-/* virtual */ uint32 StationScopeResolver::GetRandomBits() const
+/* virtual */ uint32_t StationScopeResolver::GetRandomBits() const
 {
 	return (this->st == nullptr ? 0 : this->st->random_bits) | (this->tile == INVALID_TILE ? 0 : GetStationTileRandomBits(this->tile) << 16);
 }
 
 
-/* virtual */ uint32 StationScopeResolver::GetTriggers() const
+/* virtual */ uint32_t StationScopeResolver::GetTriggers() const
 {
 	return this->st == nullptr ? 0 : this->st->waiting_triggers;
 }
@@ -239,13 +239,13 @@ static uint32 GetRailContinuationInfo(TileIndex tile)
  * several tiles that may be called multiple times per Resolve().
  */
 static struct {
-	uint32 v40;
-	uint32 v41;
-	uint32 v45;
-	uint32 v46;
-	uint32 v47;
-	uint32 v49;
-	uint8 valid; ///< Bits indicating what variable is valid (for each bit, \c 0 is invalid, \c 1 is valid).
+	uint32_t v40;
+	uint32_t v41;
+	uint32_t v45;
+	uint32_t v46;
+	uint32_t v47;
+	uint32_t v49;
+	uint8_t valid; ///< Bits indicating what variable is valid (for each bit, \c 0 is invalid, \c 1 is valid).
 } _svc;
 
 /**
@@ -268,7 +268,35 @@ TownScopeResolver *StationResolverObject::GetTown()
 	return this->town_scope;
 }
 
-/* virtual */ uint32 StationScopeResolver::GetVariable(uint16 variable, uint32 parameter, GetVariableExtra *extra) const
+uint32_t StationScopeResolver::GetNearbyStationInfo(uint32_t parameter, StationScopeResolver::NearbyStationInfoMode mode) const
+{
+	TileIndex nearby_tile = GetNearbyTile(parameter, this->tile);
+
+	if (!HasStationTileRail(nearby_tile)) return 0xFFFFFFFF;
+
+	uint32_t grfid = this->st->speclist[GetCustomStationSpecIndex(this->tile)].grfid;
+	bool perpendicular = GetRailStationAxis(this->tile) != GetRailStationAxis(nearby_tile);
+	bool same_station = this->st->TileBelongsToRailStation(nearby_tile);
+	uint32_t res = GB(GetStationGfx(nearby_tile), 1, 2) << 12 | !!perpendicular << 11 | !!same_station << 10;
+
+	uint16_t localidx = 0;
+	if (IsCustomStationSpecIndex(nearby_tile)) {
+		const StationSpecList ssl = BaseStation::GetByTile(nearby_tile)->speclist[GetCustomStationSpecIndex(nearby_tile)];
+		localidx = ssl.localidx;
+		res |= 1 << (ssl.grfid != grfid ? 9 : 8);
+	}
+
+	switch (mode) {
+		case NearbyStationInfoMode::Standard:
+		default:
+			return res | ClampTo<uint8_t>(localidx);
+
+		case NearbyStationInfoMode::V2:
+			return (res << 8) | localidx;
+	}
+}
+
+/* virtual */ uint32_t StationScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const
 {
 	if (this->st == nullptr) {
 		/* Station does not exist, so we're in a purchase list or the land slope check callback. */
@@ -286,7 +314,7 @@ TownScopeResolver *StationResolverObject::GetTown()
 					TileIndex tile = this->tile;
 					if (parameter != 0) tile = GetNearbyTile(parameter, tile, true, this->axis); // only perform if it is required
 
-					uint32 result = GetNearbyTileInformation(tile, this->ro.grffile->grf_version >= 8, extra->mask);
+					uint32_t result = GetNearbyTileInformation(tile, this->ro.grffile->grf_version >= 8, extra->mask);
 					if (extra->mask & SLOPE_EW) {
 						Slope tileh = GetTileSlope(tile);
 						if (this->axis == AXIS_Y && HasBit(tileh, CORNER_W) != HasBit(tileh, CORNER_E)) result ^= SLOPE_EW;
@@ -295,7 +323,7 @@ TownScopeResolver *StationResolverObject::GetTown()
 				}
 				break;
 
-			case 0xFA: return Clamp(_date - DAYS_TILL_ORIGINAL_BASE_YEAR, 0, 65535); // Build date, clamped to a 16 bit value
+			case 0xFA: return ClampTo<uint16_t>(CalTime::CurDate() - CalTime::DAYS_TILL_ORIGINAL_BASE_YEAR); // Build date, clamped to a 16 bit value
 		}
 
 		extra->available = false;
@@ -347,7 +375,7 @@ TownScopeResolver *StationResolverObject::GetTown()
 			TileIndex tile = this->tile;
 			if (parameter != 0) tile = GetNearbyTile(parameter, tile); // only perform if it is required
 
-			uint32 result = GetNearbyTileInformation(tile, this->ro.grffile->grf_version >= 8, extra->mask);
+			uint32_t result = GetNearbyTileInformation(tile, this->ro.grffile->grf_version >= 8, extra->mask);
 			if (extra->mask & SLOPE_EW) {
 				Slope tileh = GetTileSlope(tile);
 				if (axis == AXIS_Y && HasBit(tileh, CORNER_W) != HasBit(tileh, CORNER_E)) result ^= SLOPE_EW;
@@ -355,21 +383,14 @@ TownScopeResolver *StationResolverObject::GetTown()
 			return result;
 		}
 
-		case 0x68: { // Station info of nearby tiles
-			TileIndex nearby_tile = GetNearbyTile(parameter, this->tile);
+		/* Station info of nearby tiles */
+		case 0x68: {
+			return this->GetNearbyStationInfo(parameter, NearbyStationInfoMode::Standard);
+		}
 
-			if (!HasStationTileRail(nearby_tile)) return 0xFFFFFFFF;
-
-			uint32 grfid = this->st->speclist[GetCustomStationSpecIndex(this->tile)].grfid;
-			bool perpendicular = GetRailStationAxis(this->tile) != GetRailStationAxis(nearby_tile);
-			bool same_station = this->st->TileBelongsToRailStation(nearby_tile);
-			uint32 res = GB(GetStationGfx(nearby_tile), 1, 2) << 12 | !!perpendicular << 11 | !!same_station << 10;
-
-			if (IsCustomStationSpecIndex(nearby_tile)) {
-				const StationSpecList ssl = BaseStation::GetByTile(nearby_tile)->speclist[GetCustomStationSpecIndex(nearby_tile)];
-				res |= 1 << (ssl.grfid != grfid ? 9 : 8) | ssl.localidx;
-			}
-			return res;
+		/* Station info of nearby tiles: v2 */
+		case A2VRI_STATION_INFO_NEARBY_TILES_V2: {
+			return this->GetNearbyStationInfo(parameter, NearbyStationInfoMode::V2);
 		}
 
 		case 0x6A: { // GRFID of nearby station tiles
@@ -382,27 +403,38 @@ TownScopeResolver *StationResolverObject::GetTown()
 			return ssl.grfid;
 		}
 
+		case 0x6B: { // 16 bit Station ID of nearby tiles
+			TileIndex nearby_tile = GetNearbyTile(parameter, this->tile);
+
+			if (!HasStationTileRail(nearby_tile)) return 0xFFFFFFFF;
+			if (!IsCustomStationSpecIndex(nearby_tile)) return 0xFFFE;
+
+			uint32_t grfid = this->st->speclist[GetCustomStationSpecIndex(this->tile)].grfid;
+
+			const StationSpecList ssl = BaseStation::GetByTile(nearby_tile)->speclist[GetCustomStationSpecIndex(nearby_tile)];
+			if (ssl.grfid == grfid) {
+				return ssl.localidx;
+			}
+
+			return 0xFFFE;
+		}
+
 		/* General station variables */
 		case 0x82: return 50;
 		case 0x84: return this->st->string_id;
 		case 0x86: return 0;
 		case 0xF0: return this->st->facilities;
-		case 0xFA: return Clamp(this->st->build_date - DAYS_TILL_ORIGINAL_BASE_YEAR, 0, 65535);
+		case 0xFA: return ClampTo<uint16_t>(this->st->build_date - CalTime::DAYS_TILL_ORIGINAL_BASE_YEAR);
 	}
 
 	return this->st->GetNewGRFVariable(this->ro, variable, parameter, &(extra->available));
 }
 
-uint32 Station::GetNewGRFVariable(const ResolverObject &object, uint16 variable, byte parameter, bool *available) const
+uint32_t Station::GetNewGRFVariable(const ResolverObject &object, uint16_t variable, byte parameter, bool *available) const
 {
 	switch (variable) {
 		case 0x48: { // Accepted cargo types
-			CargoID cargo_type;
-			uint32 value = 0;
-
-			for (cargo_type = 0; cargo_type < NUM_CARGO; cargo_type++) {
-				if (HasBit(this->goods[cargo_type].status, GoodsEntry::GES_ACCEPTANCE)) SetBit(value, cargo_type);
-			}
+			uint32_t value = GetAcceptanceMask(this);
 			return value;
 		}
 
@@ -418,7 +450,7 @@ uint32 Station::GetNewGRFVariable(const ResolverObject &object, uint16 variable,
 	if ((variable >= 0x60 && variable <= 0x65) || variable == 0x69) {
 		CargoID c = GetCargoTranslation(parameter, object.grffile);
 
-		if (c == CT_INVALID) {
+		if (c == INVALID_CARGO) {
 			switch (variable) {
 				case 0x62: return 0xFFFFFFFF;
 				case 0x64: return 0xFF00;
@@ -428,10 +460,10 @@ uint32 Station::GetNewGRFVariable(const ResolverObject &object, uint16 variable,
 		const GoodsEntry *ge = &this->goods[c];
 
 		switch (variable) {
-			case 0x60: return std::min<uint32>(ge->cargo.TotalCount(), 4095);
+			case 0x60: return std::min<uint32_t>(ge->CargoTotalCount(), 4095);
 			case 0x61: return ge->HasVehicleEverTriedLoading() && ge->IsSupplyAllowed() ? ge->time_since_pickup : 0;
 			case 0x62: return ge->HasRating() ? ge->rating : 0xFFFFFFFF;
-			case 0x63: return ge->cargo.DaysInTransit();
+			case 0x63: return ge->data != nullptr ? ge->data->cargo.PeriodsInTransit() : 0;
 			case 0x64: return ge->HasVehicleEverTriedLoading() && ge->IsSupplyAllowed() ? ge->last_speed | (ge->last_age << 8) : 0xFF00;
 			case 0x65: return GB(ge->status, GoodsEntry::GES_ACCEPTANCE, 1) << 3;
 			case 0x69: {
@@ -447,12 +479,12 @@ uint32 Station::GetNewGRFVariable(const ResolverObject &object, uint16 variable,
 	if (variable >= 0x8C && variable <= 0xEC) {
 		const GoodsEntry *g = &this->goods[GB(variable - 0x8C, 3, 4)];
 		switch (GB(variable - 0x8C, 0, 3)) {
-			case 0: return g->cargo.TotalCount();
-			case 1: return GB(std::min(g->cargo.TotalCount(), 4095u), 0, 4) | (GB(g->status, GoodsEntry::GES_ACCEPTANCE, 1) << 7);
+			case 0: return g->CargoTotalCount();
+			case 1: return GB(std::min(g->CargoTotalCount(), 4095u), 0, 4) | (GB(g->status, GoodsEntry::GES_ACCEPTANCE, 1) << 7);
 			case 2: return g->time_since_pickup;
 			case 3: return g->rating;
-			case 4: return g->cargo.Source();
-			case 5: return g->cargo.DaysInTransit();
+			case 4: return g->data != nullptr ? g->data->cargo.GetFirstStation() : INVALID_STATION;
+			case 5: return g->data != nullptr ? g->data->cargo.PeriodsInTransit() : 0;
 			case 6: return g->last_speed;
 			case 7: return g->last_age;
 		}
@@ -464,7 +496,7 @@ uint32 Station::GetNewGRFVariable(const ResolverObject &object, uint16 variable,
 	return UINT_MAX;
 }
 
-uint32 Waypoint::GetNewGRFVariable(const ResolverObject &object, uint16 variable, byte parameter, bool *available) const
+uint32_t Waypoint::GetNewGRFVariable(const ResolverObject &object, uint16_t variable, byte parameter, bool *available) const
 {
 	switch (variable) {
 		case 0x48: return 0; // Accepted cargo types
@@ -506,20 +538,20 @@ uint32 Waypoint::GetNewGRFVariable(const ResolverObject &object, uint16 variable
 	const Station *st = Station::From(this->station_scope.st);
 
 	switch (this->station_scope.cargo_type) {
-		case CT_INVALID:
-		case CT_DEFAULT_NA:
-		case CT_PURCHASE:
+		case INVALID_CARGO:
+		case SpriteGroupCargo::SG_DEFAULT_NA:
+		case SpriteGroupCargo::SG_PURCHASE:
 			cargo = 0;
 			break;
 
-		case CT_DEFAULT:
-			for (CargoID cargo_type = 0; cargo_type < NUM_CARGO; cargo_type++) {
-				cargo += st->goods[cargo_type].cargo.TotalCount();
+		case SpriteGroupCargo::SG_DEFAULT:
+			for (const GoodsEntry &ge : st->goods) {
+				cargo += ge.CargoTotalCount();
 			}
 			break;
 
 		default:
-			cargo = st->goods[this->station_scope.cargo_type].cargo.TotalCount();
+			cargo = st->goods[this->station_scope.cargo_type].CargoTotalCount();
 			break;
 	}
 
@@ -546,7 +578,7 @@ GrfSpecFeature StationResolverObject::GetFeature() const
 	return GSF_STATIONS;
 }
 
-uint32 StationResolverObject::GetDebugID() const
+uint32_t StationResolverObject::GetDebugID() const
 {
 	return this->station_scope.statspec->grf_prop.local_id;
 }
@@ -562,24 +594,24 @@ uint32 StationResolverObject::GetDebugID() const
  * @param callback_param2 Second parameter (var 18) of the callback.
  */
 StationResolverObject::StationResolverObject(const StationSpec *statspec, BaseStation *base_station, TileIndex tile, RailType rt,
-		CallbackID callback, uint32 callback_param1, uint32 callback_param2)
+		CallbackID callback, uint32_t callback_param1, uint32_t callback_param2)
 	: ResolverObject(statspec->grf_prop.grffile, callback, callback_param1, callback_param2),
 	station_scope(*this, statspec, base_station, tile, rt), town_scope(nullptr)
 {
 	/* Invalidate all cached vars */
 	_svc.valid = 0;
 
-	CargoID ctype = CT_DEFAULT_NA;
+	CargoID ctype = SpriteGroupCargo::SG_DEFAULT_NA;
 
 	if (this->station_scope.st == nullptr) {
 		/* No station, so we are in a purchase list */
-		ctype = CT_PURCHASE;
+		ctype = SpriteGroupCargo::SG_PURCHASE;
 	} else if (Station::IsExpected(this->station_scope.st)) {
 		const Station *st = Station::From(this->station_scope.st);
 		/* Pick the first cargo that we have waiting */
 		for (const CargoSpec *cs : CargoSpec::Iterate()) {
 			if (this->station_scope.statspec->grf_prop.spritegroup[cs->Index()] != nullptr &&
-					st->goods[cs->Index()].cargo.TotalCount() > 0) {
+					st->goods[cs->Index()].CargoTotalCount() > 0) {
 				ctype = cs->Index();
 				break;
 			}
@@ -587,7 +619,7 @@ StationResolverObject::StationResolverObject(const StationSpec *statspec, BaseSt
 	}
 
 	if (this->station_scope.statspec->grf_prop.spritegroup[ctype] == nullptr) {
-		ctype = CT_DEFAULT;
+		ctype = SpriteGroupCargo::SG_DEFAULT;
 	}
 
 	/* Remember the cargo type we've picked */
@@ -609,7 +641,7 @@ StationResolverObject::~StationResolverObject()
  * @param var10 Value to put in variable 10; normally 0; 1 when resolving the groundsprite and SSF_SEPARATE_GROUND is set.
  * @return First sprite of the Action 1 spriteset to use, minus an offset of 0x42D to accommodate for weird NewGRF specs.
  */
-SpriteID GetCustomStationRelocation(const StationSpec *statspec, BaseStation *st, TileIndex tile, RailType rt, uint32 var10)
+SpriteID GetCustomStationRelocation(const StationSpec *statspec, BaseStation *st, TileIndex tile, RailType rt, uint32_t var10)
 {
 	StationResolverObject object(statspec, st, tile, rt, CBID_NO_CALLBACK, var10);
 	const SpriteGroup *group = object.Resolve();
@@ -639,7 +671,7 @@ SpriteID GetCustomStationFoundationRelocation(const StationSpec *statspec, BaseS
 }
 
 
-uint16 GetStationCallback(CallbackID callback, uint32 param1, uint32 param2, const StationSpec *statspec, BaseStation *st, TileIndex tile, RailType rt)
+uint16_t GetStationCallback(CallbackID callback, uint32_t param1, uint32_t param2, const StationSpec *statspec, BaseStation *st, TileIndex tile, RailType rt)
 {
 	StationResolverObject object(statspec, st, tile, rt, callback, param1, param2);
 	return object.ResolveCallback();
@@ -665,7 +697,7 @@ CommandCost PerformStationTileSlopeCheck(TileIndex north_tile, TileIndex cur_til
 			(numtracks << 24) | (plat_len << 16) | (axis == AXIS_Y ? TileX(diff) << 8 | TileY(diff) : TileY(diff) << 8 | TileX(diff)));
 	object.station_scope.axis = axis;
 
-	uint16 cb_res = object.ResolveCallback();
+	uint16_t cb_res = object.ResolveCallback();
 
 	/* Failed callback means success. */
 	if (cb_res == CALLBACK_FAILED) return CommandCost();
@@ -776,7 +808,7 @@ void DeallocateSpecFromStation(BaseStation *st, byte specindex)
 bool DrawStationTile(int x, int y, RailType railtype, Axis axis, StationClassID sclass, uint station)
 {
 	const DrawTileSprites *sprites = nullptr;
-	const RailtypeInfo *rti = GetRailTypeInfo(railtype);
+	const RailTypeInfo *rti = GetRailTypeInfo(railtype);
 	PaletteID palette = COMPANY_SPRITE_COLOUR(_local_company);
 	uint tile = 2;
 
@@ -784,13 +816,13 @@ bool DrawStationTile(int x, int y, RailType railtype, Axis axis, StationClassID 
 	if (statspec == nullptr) return false;
 
 	if (HasBit(statspec->callback_mask, CBM_STATION_SPRITE_LAYOUT)) {
-		uint16 callback = GetStationCallback(CBID_STATION_SPRITE_LAYOUT, 0, 0, statspec, nullptr, INVALID_TILE, railtype);
+		uint16_t callback = GetStationCallback(CBID_STATION_SPRITE_LAYOUT, 0, 0, statspec, nullptr, INVALID_TILE, railtype);
 		if (callback != CALLBACK_FAILED) tile = callback & ~1;
 	}
 
-	uint32 total_offset = rti->GetRailtypeSpriteOffset();
-	uint32 relocation = 0;
-	uint32 ground_relocation = 0;
+	uint32_t total_offset = rti->GetRailtypeSpriteOffset();
+	uint32_t relocation = 0;
+	uint32_t ground_relocation = 0;
 	const NewGRFSpriteLayout *layout = nullptr;
 	DrawTileSprites tmp_rail_layout;
 
@@ -807,9 +839,9 @@ bool DrawStationTile(int x, int y, RailType railtype, Axis axis, StationClassID 
 	if (layout != nullptr) {
 		/* Sprite layout which needs preprocessing */
 		bool separate_ground = HasBit(statspec->flags, SSF_SEPARATE_GROUND);
-		uint32 var10_values = layout->PrepareLayout(total_offset, rti->fallback_railtype, 0, 0, separate_ground);
-		for (uint8 var10 : SetBitIterator(var10_values)) {
-			uint32 var10_relocation = GetCustomStationRelocation(statspec, nullptr, INVALID_TILE, railtype, var10);
+		uint32_t var10_values = layout->PrepareLayout(total_offset, rti->fallback_railtype, 0, 0, separate_ground);
+		for (uint8_t var10 : SetBitIterator(var10_values)) {
+			uint32_t var10_relocation = GetCustomStationRelocation(statspec, nullptr, INVALID_TILE, railtype, var10);
 			layout->ProcessRegisters(var10, var10_relocation, separate_ground);
 		}
 
@@ -853,48 +885,8 @@ const StationSpec *GetStationSpec(TileIndex t)
 	return specindex < st->speclist.size() ? st->speclist[specindex].spec : nullptr;
 }
 
-
-/**
- * Check whether a rail station tile is NOT traversable.
- * @param tile %Tile to test.
- * @return Station tile is blocked.
- * @note This could be cached (during build) in the map array to save on all the dereferencing.
- */
-bool IsStationTileBlocked(TileIndex tile)
-{
-	const StationSpec *statspec = GetStationSpec(tile);
-
-	return statspec != nullptr && HasBit(statspec->blocked, GetStationGfx(tile));
-}
-
-/**
- * Check if a rail station tile shall have pylons when electrified.
- * @param tile %Tile to test.
- * @return Tile shall have pylons.
- * @note This could be cached (during build) in the map array to save on all the dereferencing.
- */
-bool CanStationTileHavePylons(TileIndex tile)
-{
-	const StationSpec *statspec = GetStationSpec(tile);
-	uint gfx = GetStationGfx(tile);
-	/* Default stations do not draw pylons under roofs (gfx >= 4) */
-	return statspec != nullptr ? HasBit(statspec->pylons, gfx) : gfx < 4;
-}
-
-/**
- * Check if a rail station tile shall have wires when electrified.
- * @param tile %Tile to test.
- * @return Tile shall have wires.
- * @note This could be cached (during build) in the map array to save on all the dereferencing.
- */
-bool CanStationTileHaveWires(TileIndex tile)
-{
-	const StationSpec *statspec = GetStationSpec(tile);
-	return statspec == nullptr || !HasBit(statspec->wires, GetStationGfx(tile));
-}
-
 /** Wrapper for animation control, see GetStationCallback. */
-uint16 GetAnimStationCallback(CallbackID callback, uint32 param1, uint32 param2, const StationSpec *statspec, BaseStation *st, TileIndex tile, int extra_data)
+uint16_t GetAnimStationCallback(CallbackID callback, uint32_t param1, uint32_t param2, const StationSpec *statspec, BaseStation *st, TileIndex tile, int extra_data)
 {
 	return GetStationCallback(callback, param1, param2, statspec, st, tile, INVALID_RAILTYPE);
 }
@@ -916,7 +908,7 @@ void AnimateStationTile(TileIndex tile)
 	StationAnimationBase::AnimateTile(ss, BaseStation::GetByTile(tile), tile, HasBit(ss->flags, SSF_CB141_RANDOM_BITS));
 }
 
-uint8 GetStationTileAnimationSpeed(TileIndex tile)
+uint8_t GetStationTileAnimationSpeed(TileIndex tile)
 {
 	const StationSpec *ss = GetStationSpec(tile);
 	if (ss == nullptr) return 0;
@@ -938,7 +930,7 @@ void TriggerStationAnimation(BaseStation *st, TileIndex trigger_tile, StationAni
 	 * to bother with any further processing. */
 	if (!HasBit(st->cached_anim_triggers, trigger)) return;
 
-	uint16 random_bits = Random();
+	uint16_t random_bits = Random();
 	ETileArea area = ETileArea(st, trigger_tile, tas[trigger]);
 
 	/* Check all tiles over the station to check if the specindex is still in use */
@@ -947,12 +939,12 @@ void TriggerStationAnimation(BaseStation *st, TileIndex trigger_tile, StationAni
 			const StationSpec *ss = GetStationSpec(tile);
 			if (ss != nullptr && HasBit(ss->animation.triggers, trigger)) {
 				CargoID cargo;
-				if (cargo_type == CT_INVALID) {
-					cargo = CT_INVALID;
+				if (cargo_type == INVALID_CARGO) {
+					cargo = INVALID_CARGO;
 				} else {
 					cargo = ss->grf_prop.grffile->cargo_map[cargo_type];
 				}
-				StationAnimationBase::ChangeAnimationFrame(CBID_STATION_ANIM_START_STOP, ss, st, tile, (random_bits << 16) | GB(Random(), 0, 16), (uint8)trigger | (cargo << 8));
+				StationAnimationBase::ChangeAnimationFrame(CBID_STATION_ANIM_START_STOP, ss, st, tile, (random_bits << 16) | GB(Random(), 0, 16), (uint8_t)trigger | (cargo << 8));
 			}
 		}
 	}
@@ -978,24 +970,17 @@ void TriggerStationRandomisation(Station *st, TileIndex trigger_tile, StationRan
 	/* Check the cached cargo trigger bitmask to see if we need
 	 * to bother with any further processing. */
 	if (st->cached_cargo_triggers == 0) return;
-	if (cargo_type != CT_INVALID && !HasBit(st->cached_cargo_triggers, cargo_type)) return;
+	if (cargo_type != INVALID_CARGO && !HasBit(st->cached_cargo_triggers, cargo_type)) return;
 
-	uint32 whole_reseed = 0;
+	uint32_t whole_reseed = 0;
 	ETileArea area = ETileArea(st, trigger_tile, tas[trigger]);
 
-	CargoTypes empty_mask = 0;
-	if (trigger == SRT_CARGO_TAKEN) {
-		/* Create a bitmask of completely empty cargo types to be matched */
-		for (CargoID i = 0; i < NUM_CARGO; i++) {
-			if (st->goods[i].cargo.TotalCount() == 0) {
-				SetBit(empty_mask, i);
-			}
-		}
-	}
+	/* Bitmask of completely empty cargo types to be matched. */
+	CargoTypes empty_mask = (trigger == SRT_CARGO_TAKEN) ? GetEmptyMask(st) : 0;
 
 	/* Store triggers now for var 5F */
 	SetBit(st->waiting_triggers, trigger);
-	uint32 used_triggers = 0;
+	uint32_t used_triggers = 0;
 
 	/* Check all tiles over the station to check if the specindex is still in use */
 	for (TileIndex tile : area) {
@@ -1009,7 +994,7 @@ void TriggerStationRandomisation(Station *st, TileIndex trigger_tile, StationRan
 				if ((ss->cargo_triggers & ~empty_mask) != 0) continue;
 			}
 
-			if (cargo_type == CT_INVALID || HasBit(ss->cargo_triggers, cargo_type)) {
+			if (cargo_type == INVALID_CARGO || HasBit(ss->cargo_triggers, cargo_type)) {
 				StationResolverObject object(ss, st, tile, INVALID_RAILTYPE, CBID_RANDOM_TRIGGER, 0);
 				object.waiting_triggers = st->waiting_triggers;
 
@@ -1018,13 +1003,13 @@ void TriggerStationRandomisation(Station *st, TileIndex trigger_tile, StationRan
 
 				used_triggers |= object.used_triggers;
 
-				uint32 reseed = object.GetReseedSum();
+				uint32_t reseed = object.GetReseedSum();
 				if (reseed != 0) {
 					whole_reseed |= reseed;
 					reseed >>= 16;
 
 					/* Set individual tile random bits */
-					uint8 random_bits = GetStationTileRandomBits(tile);
+					uint8_t random_bits = GetStationTileRandomBits(tile);
 					random_bits &= ~reseed;
 					random_bits |= Random() & reseed;
 					SetStationTileRandomBits(tile, random_bits);
@@ -1063,3 +1048,88 @@ void StationUpdateCachedTriggers(BaseStation *st)
 	}
 }
 
+void DumpStationSpriteGroup(const StationSpec *statspec, BaseStation *st, SpriteGroupDumper &dumper)
+{
+	char buffer[512];
+
+	StationResolverObject ro(statspec, st, INVALID_TILE, INVALID_RAILTYPE);
+
+	switch (ro.station_scope.cargo_type) {
+		case SpriteGroupCargo::SG_DEFAULT:
+			seprintf(buffer, lastof(buffer), "SG_DEFAULT");
+			break;
+		case SpriteGroupCargo::SG_PURCHASE:
+			seprintf(buffer, lastof(buffer), "SG_PURCHASE");
+			break;
+		case SpriteGroupCargo::SG_DEFAULT_NA:
+			seprintf(buffer, lastof(buffer), "SG_DEFAULT_NA");
+			break;
+		default:
+			seprintf(buffer, lastof(buffer), "Cargo: %u", ro.station_scope.cargo_type);
+			break;
+	}
+	dumper.Print(buffer);
+
+	dumper.DumpSpriteGroup(ro.root_spritegroup, 0);
+
+	for (uint i = 0; i < NUM_CARGO + 3; i++) {
+		if (statspec->grf_prop.spritegroup[i] != ro.root_spritegroup && statspec->grf_prop.spritegroup[i] != nullptr) {
+			dumper.Print("");
+			switch (i) {
+				case SpriteGroupCargo::SG_DEFAULT:
+					seprintf(buffer, lastof(buffer), "OTHER SPRITE GROUP: SG_DEFAULT");
+					break;
+				case SpriteGroupCargo::SG_PURCHASE:
+					seprintf(buffer, lastof(buffer), "OTHER SPRITE GROUP: SG_PURCHASE");
+					break;
+				case SpriteGroupCargo::SG_DEFAULT_NA:
+					seprintf(buffer, lastof(buffer), "OTHER SPRITE GROUP: SG_DEFAULT_NA");
+					break;
+				default:
+					seprintf(buffer, lastof(buffer), "OTHER SPRITE GROUP: Cargo: %u", i);
+					break;
+			}
+			dumper.Print(buffer);
+			dumper.DumpSpriteGroup(statspec->grf_prop.spritegroup[i], 0);
+		}
+	}
+}
+
+void UpdateStationTileCacheFlags(bool force_update)
+{
+	SimpleChecksum64 checksum;
+	for (uint i = 0; StationClass::IsClassIDValid((StationClassID)i); i++) {
+		StationClass *stclass = StationClass::Get((StationClassID)i);
+
+		checksum.Update(stclass->GetSpecCount());
+		for (uint j = 0; j < stclass->GetSpecCount(); j++) {
+			const StationSpec *statspec = stclass->GetSpec(j);
+			if (statspec == nullptr) continue;
+
+			checksum.Update(j);
+			checksum.Update(statspec->blocked);
+			checksum.Update(statspec->pylons);
+			checksum.Update(statspec->wires);
+		}
+	}
+
+	if (checksum.state != _station_tile_cache_hash || force_update) {
+		_station_tile_cache_hash = checksum.state;
+
+		for (TileIndex t = 0; t < MapSize(); t++) {
+			if (HasStationTileRail(t)) {
+				StationGfx gfx = GetStationGfx(t);
+				const StationSpec *statspec = GetStationSpec(t);
+
+				bool blocked = statspec != nullptr && HasBit(statspec->blocked, gfx);
+				/* Default stations do not draw pylons under roofs (gfx >= 4) */
+				bool pylons = statspec != nullptr ? HasBit(statspec->pylons, gfx) : gfx < 4;
+				bool wires = statspec == nullptr || !HasBit(statspec->wires, gfx);
+
+				SetStationTileBlocked(t, blocked);
+				SetStationTileHavePylons(t, pylons);
+				SetStationTileHaveWires(t, wires);
+			}
+		}
+	}
+}

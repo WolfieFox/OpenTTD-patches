@@ -10,10 +10,12 @@
 #ifndef STRINGS_TYPE_H
 #define STRINGS_TYPE_H
 
+#include <optional>
+
 /**
  * Numeric value that represents a string, independent of the selected language.
  */
-typedef uint32 StringID;
+typedef uint32_t StringID;
 static const StringID INVALID_STRING_ID = 0xFFFF; ///< Constant representing an invalid string (16bit in case it is used in savegames)
 static const int MAX_CHAR_LENGTH        = 4;      ///< Max. length of UTF-8 encoded unicode character
 static const uint MAX_LANG              = 0x7F;   ///< Maximum number of languages supported by the game, and the NewGRF specs
@@ -90,6 +92,36 @@ enum SpecialStrings {
 	SPECSTR_PRESIDENT_NAME     = 0x70E7,
 
 	SPECSTR_TEMP_START         = 0x7000,
+};
+
+/** Data that is to be stored when backing up StringParameters. */
+struct StringParameterBackup {
+	uint64_t data; ///< The data field; valid *when* string has no value.
+	std::optional<std::string> string; ///< The string value.
+
+	/**
+	 * Assign the numeric data with the given value, while clearing the stored string.
+	 * @param data The new value of the data field.
+	 * @return This object.
+	 */
+	StringParameterBackup &operator=(uint64_t data)
+	{
+		this->string.reset();
+		this->data = data;
+		return *this;
+	}
+
+	/**
+	 * Assign a copy of the given string to the string field, while clearing the data field.
+	 * @param string The new value of the string.
+	 * @return This object.
+	 */
+	StringParameterBackup &operator=(const std::string_view string)
+	{
+		this->data = 0;
+		this->string.emplace(string);
+		return *this;
+	}
 };
 
 #endif /* STRINGS_TYPE_H */

@@ -16,8 +16,9 @@
 
 void UpdateCompanyHQ(TileIndex tile, uint score);
 
-void BuildObject(ObjectType type, TileIndex tile, CompanyID owner = OWNER_NONE, struct Town *town = nullptr, uint8 view = 0);
+void BuildObject(ObjectType type, TileIndex tile, CompanyID owner = OWNER_NONE, struct Town *town = nullptr, uint8_t view = 0);
 
 Window *ShowBuildObjectPicker();
+void ShowBuildObjectPickerAndSelect(const ObjectSpec *spec);
 
 #endif /* OBJECT_H */

@@ -2,13 +2,13 @@
 
 #include "../stdafx.h"
 #include "demands.h"
-#include <queue>
+#include "../core/ring_buffer_queue.hpp"
 #include <algorithm>
 #include <tuple>
 
 #include "../safeguards.h"
 
-typedef std::queue<NodeID> NodeList;
+typedef ring_buffer_queue<NodeID> NodeList;
 
 /**
  * Scale various things according to symmetric/asymmetric distribution.
@@ -244,7 +244,13 @@ void AsymmetricScalerEq::SetDemands(LinkGraphJob &job, NodeID from_id, NodeID to
  */
 inline void Scaler::SetDemands(LinkGraphJob &job, NodeID from_id, NodeID to_id, uint demand_forw)
 {
-	job[from_id].DeliverSupply(to_id, demand_forw);
+	if (demand_forw == 0) return;
+
+	job[from_id].DeliverSupply(demand_forw);
+
+	uint &demand = job.demand_matrix[(from_id * job.Size()) + to_id];
+	if (demand == 0) job.demand_matrix_count++;
+	demand += demand_forw;
 }
 
 /**
@@ -299,16 +305,16 @@ void DemandCalculator::CalcDemand(LinkGraphJob &job, const std::vector<bool> &re
 				continue;
 			}
 
-			int32 supply = scaler.EffectiveSupply(job[from_id], job[to_id]);
+			int32_t supply = scaler.EffectiveSupply(job[from_id], job[to_id]);
 			assert(supply > 0);
 
 			/* Scale the distance by mod_dist around max_distance */
-			int32 distance = this->max_distance - (this->max_distance -
-					(int32)DistanceMaxPlusManhattan(job[from_id].XY(), job[to_id].XY())) *
+			int32_t distance = this->max_distance - (this->max_distance -
+					(int32_t)DistanceMaxPlusManhattan(job[from_id].XY(), job[to_id].XY())) *
 					this->mod_dist / 100;
 
 			/* Scale the accuracy by distance around accuracy / 2 */
-			int32 divisor = this->accuracy * (this->mod_dist - 50) / 100 +
+			int32_t divisor = this->accuracy * (this->mod_dist - 50) / 100 +
 					this->accuracy * distance / this->max_distance + 1;
 
 			assert(divisor > 0);
@@ -417,6 +423,8 @@ DemandCalculator::DemandCalculator(LinkGraphJob &job) :
 		this->mod_dist = 100 + over100 * over100;
 	}
 
+	if (settings.GetDistributionType(cargo) == DT_MANUAL) return;
+
 	const uint size = job.Size();
 
 	/* Symmetric edge matrix
@@ -434,6 +442,8 @@ DemandCalculator::DemandCalculator(LinkGraphJob &job) :
 	}
 	uint first_unseen = 0;
 	std::vector<bool> reachable_nodes(size);
+	job.demand_matrix.reset(new uint[size * size]{});
+	job.demand_matrix_count = 0;
 	do {
 		reachable_nodes.assign(size, false);
 		std::vector<NodeID> queue;
@@ -476,4 +486,24 @@ DemandCalculator::DemandCalculator(LinkGraphJob &job) :
 			first_unseen++;
 		}
 	} while (first_unseen < size);
+
+	if (job.demand_matrix_count > 0) {
+		job.demand_annotation_store.resize(job.demand_matrix_count);
+		size_t idx = 0;
+		const uint *demand = job.demand_matrix.get();
+		for (NodeID from = 0; from != size; from++) {
+			const size_t start_idx = idx;
+			for (NodeID to = 0; to != size; to++) {
+				if (*demand != 0) {
+					job.demand_annotation_store[idx] = { to, *demand, *demand };
+					idx++;
+				}
+				demand++;
+			}
+			if (idx != start_idx) {
+				job[from].SetDemandAnnotations({ job.demand_annotation_store.data() + start_idx, idx - start_idx });
+			}
+		}
+	}
+	job.demand_matrix.reset();
 }

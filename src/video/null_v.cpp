@@ -10,7 +10,7 @@
 #include "../stdafx.h"
 #include "../gfx_func.h"
 #include "../blitter/factory.hpp"
-#include "../saveload/saveload.h"
+#include "../sl/saveload.h"
 #include "../window_func.h"
 #include "../thread.h"
 #include "null_v.h"
@@ -48,7 +48,7 @@ const char *VideoDriver_Null::Start(const StringList &parm)
 
 void VideoDriver_Null::Stop() { }
 
-void VideoDriver_Null::MakeDirty(int left, int top, int width, int height) {}
+void VideoDriver_Null::MakeDirty(int, int, int, int) {}
 
 void VideoDriver_Null::MainLoop()
 {
@@ -74,6 +74,6 @@ void VideoDriver_Null::MainLoop()
 	}
 }
 
-bool VideoDriver_Null::ChangeResolution(int w, int h) { return false; }
+bool VideoDriver_Null::ChangeResolution(int, int) { return false; }
 
-bool VideoDriver_Null::ToggleFullscreen(bool fs) { return false; }
+bool VideoDriver_Null::ToggleFullscreen(bool) { return false; }

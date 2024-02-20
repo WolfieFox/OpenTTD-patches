@@ -10,12 +10,14 @@
 #include "stdafx.h"
 #include "animated_tile.h"
 #include "core/alloc_func.hpp"
-#include "core/smallvec_type.hpp"
+#include "core/container_func.hpp"
 #include "tile_cmd.h"
 #include "viewport_func.h"
 #include "framerate_type.h"
 #include "date_func.h"
 #include "3rdparty/cpp-btree/btree_map.h"
+
+#include INCLUDE_FOR_PREFETCH_NTA
 
 #include "safeguards.h"
 
@@ -37,10 +39,10 @@ void DeleteAnimatedTile(TileIndex tile)
 
 static void UpdateAnimatedTileSpeed(TileIndex tile, AnimatedTileInfo &info)
 {
-	extern uint8 GetAnimatedTileSpeed_Town(TileIndex tile);
-	extern uint8 GetAnimatedTileSpeed_Station(TileIndex tile);
-	extern uint8 GetAnimatedTileSpeed_Industry(TileIndex tile);
-	extern uint8 GetNewObjectTileAnimationSpeed(TileIndex tile);
+	extern uint8_t GetAnimatedTileSpeed_Town(TileIndex tile);
+	extern uint8_t GetAnimatedTileSpeed_Station(TileIndex tile);
+	extern uint8_t GetAnimatedTileSpeed_Industry(TileIndex tile);
+	extern uint8_t GetNewObjectTileAnimationSpeed(TileIndex tile);
 
 	switch (GetTileType(tile)) {
 		case MP_HOUSE:
@@ -99,14 +101,20 @@ void AnimateAnimatedTiles()
 
 	PerformanceAccumulator framerate(PFE_GL_LANDSCAPE);
 
-	const uint32 ticks = (uint) _scaled_tick_counter;
-	const uint8 max_speed = (ticks == 0) ? 32 : FindFirstBit(ticks);
+	const uint32_t ticks = (uint) _scaled_tick_counter;
+	const uint8_t max_speed = (ticks == 0) ? 32 : FindFirstBit(ticks);
 
 	auto iter = _animated_tiles.begin();
 	while (iter != _animated_tiles.end()) {
 		if (iter->second.pending_deletion) {
 			iter = _animated_tiles.erase(iter);
 			continue;
+		}
+
+		auto next = iter;
+		++next;
+		if (next != _animated_tiles.end()) {
+			PREFETCH_NTA(&(next->second));
 		}
 
 		if (iter->second.speed <= max_speed) {
@@ -132,7 +140,7 @@ void AnimateAnimatedTiles()
 					NOT_REACHED();
 			}
 		}
-		++iter;
+		iter = next;
 	}
 }
 

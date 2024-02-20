@@ -12,10 +12,10 @@
 
 #include "stdafx.h"
 #include "window_gui.h"
-
 #include "tbtr_template_vehicle.h"
+#include "3rdparty/cpp-btree/btree_set.h"
 
-Train* VirtualTrainFromTemplateVehicle(const TemplateVehicle* tv, StringID &err, uint32 user);
+Train* VirtualTrainFromTemplateVehicle(const TemplateVehicle* tv, StringID &err, uint32_t user);
 
 void BuildTemplateGuiList(GUITemplateList*, Scrollbar*, Owner, RailType);
 
@@ -30,35 +30,42 @@ void SetupTemplateVehicleFromVirtual(TemplateVehicle *tmp, TemplateVehicle *prev
 
 CommandCost CmdTemplateReplaceVehicle(Train*, bool, DoCommandFlag);
 
-#ifdef _DEBUG
-// for testing
-void tbtr_debug_pat();
-void tbtr_debug_pav();
-void tbtr_debug_ptv(TemplateVehicle*);
-void tbtr_debug_pvt(const Train*);
-#endif
+TemplateVehicle *GetTemplateVehicleByGroupID(GroupID gid);
+TemplateVehicle *GetTemplateVehicleByGroupIDRecursive(GroupID gid);
+Train *ChainContainsEngine(EngineID eid, Train *chain);
 
-TemplateVehicle* GetTemplateVehicleByGroupID(GroupID);
-TemplateVehicle* GetTemplateVehicleByGroupIDRecursive(GroupID);
-bool ChainContainsVehicle(Train*, Train*);
-Train* ChainContainsEngine(EngineID, Train*);
-Train* DepotContainsEngine(TileIndex, EngineID, Train*);
+struct TemplateDepotVehicles {
+	btree::btree_set<VehicleID> vehicles;
 
-int NumTrainsNeedTemplateReplacement(GroupID, const TemplateVehicle*);
+	void Init(TileIndex tile);
+	void RemoveVehicle(VehicleID id);
+	Train* ContainsEngine(EngineID eid, Train *not_in);
+};
+
+uint CountsTrainsNeedingTemplateReplacement(GroupID g_id, const TemplateVehicle *tv);
 
 CommandCost TestBuyAllTemplateVehiclesInChain(TemplateVehicle *tv, TileIndex tile);
 
-CommandCost CmdRefitTrainFromTemplate(Train *t, TemplateVehicle *tv, DoCommandFlag);
+CommandCost CmdRefitTrainFromTemplate(Train *t, TemplateVehicle *tv, DoCommandFlag flags);
+CommandCost CmdSetTrainUnitDirectionFromTemplate(Train *t, TemplateVehicle *tv, DoCommandFlag flags);
 void BreakUpRemainders(Train *t);
 
-bool TemplateVehicleContainsEngineOfRailtype(const TemplateVehicle*, RailType);
+bool TemplateVehicleContainsEngineOfRailtype(const TemplateVehicle *tv, RailType type);
 
-void TransferCargoForTrain(Train*, Train*);
+void TransferCargoForTrain(Train *old_veh, Train *new_head);
 
 void NeutralizeStatus(Train *t);
 
-bool TrainMatchesTemplate(const Train *t, const TemplateVehicle *tv);
-bool TrainMatchesTemplateRefit(const Train *t, const TemplateVehicle *tv);
+enum TBTRDiffFlags {
+	TBTRDF_NONE    = 0,      ///< no difference between train and template
+	TBTRDF_CONSIST = 1 << 0, ///< consist (vehicle units) differs between train and template
+	TBTRDF_REFIT   = 1 << 1, ///< refit differs between train and template
+	TBTRDF_DIR     = 1 << 2, ///< unit direction differs between train and template
+	TBTRDF_ALL     = TBTRDF_CONSIST | TBTRDF_REFIT | TBTRDF_DIR,
+};
+DECLARE_ENUM_AS_BIT_SET(TBTRDiffFlags)
+
+TBTRDiffFlags TrainTemplateDifference(const Train *t, const TemplateVehicle *tv);
 
 void UpdateAllTemplateVehicleImages();
 

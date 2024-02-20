@@ -12,6 +12,11 @@
 
 #include "../driver.h"
 
+#include <memory>
+#include <mutex>
+
+extern std::mutex _music_driver_mutex;
+
 struct MusicSongInfo;
 
 /** Driver for all music playback. */
@@ -41,9 +46,26 @@ public:
 	virtual void SetVolume(byte vol) = 0;
 
 	/**
+	 * Is playback in a failed state?
+	 * @return True if playback is in a failed state.
+	 */
+	virtual bool IsInFailedState() { return false; }
+
+	static std::unique_ptr<MusicDriver> ExtractDriver()
+	{
+		Driver **dptr = DriverFactoryBase::GetActiveDriver(Driver::DT_MUSIC);
+		Driver *driver = *dptr;
+		*dptr = nullptr;
+		return std::unique_ptr<MusicDriver>(static_cast<MusicDriver*>(driver));
+	}
+
+	/**
 	 * Get the currently active instance of the music driver.
 	 */
-	static MusicDriver *GetInstance() {
+	static MusicDriver *GetInstance()
+	{
+		std::unique_lock<std::mutex> lock(_music_driver_mutex);
+
 		return static_cast<MusicDriver*>(*DriverFactoryBase::GetActiveDriver(Driver::DT_MUSIC));
 	}
 };

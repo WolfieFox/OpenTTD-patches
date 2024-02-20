@@ -34,8 +34,8 @@ struct TownScopeResolver : public ScopeResolver {
 	{
 	}
 
-	virtual uint32 GetVariable(uint16 variable, uint32 parameter, GetVariableExtra *extra) const;
-	virtual void StorePSA(uint reg, int32 value);
+	virtual uint32_t GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const override;
+	virtual void StorePSA(uint reg, int32_t value) override;
 };
 
 /**
@@ -53,7 +53,7 @@ struct FakeTownScopeResolver : public ScopeResolver {
 	FakeTownScopeResolver(ResolverObject &ro) : ScopeResolver(ro)
 	{ }
 
-	virtual uint32 GetVariable(uint16 variable, uint32 parameter, GetVariableExtra *extra) const;
+	virtual uint32_t GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const override;
 };
 
 /** Resolver of town properties. */
@@ -62,7 +62,7 @@ struct TownResolverObject : public ResolverObject {
 
 	TownResolverObject(const struct GRFFile *grffile, Town *t, bool readonly);
 
-	ScopeResolver *GetScope(VarSpriteGroupScope scope = VSG_SCOPE_SELF, byte relative = 0) override
+	ScopeResolver *GetScope(VarSpriteGroupScope scope = VSG_SCOPE_SELF, VarSpriteGroupScopeOffset relative = 0) override
 	{
 		switch (scope) {
 			case VSG_SCOPE_SELF: return &town_scope;

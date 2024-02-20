@@ -115,6 +115,8 @@ SQVM::SQVM(SQSharedState *ss)
 	_can_suspend = false;
 	_in_stackoverflow = false;
 	_ops_till_suspend = 0;
+	_ops_till_suspend_error_threshold = INT64_MIN;
+	_ops_till_suspend_error_label = nullptr;
 	_callsstack = nullptr;
 	_callsstacksize = 0;
 	_alloccallsstacksize = 0;
@@ -140,7 +142,6 @@ void SQVM::Finalize()
 SQVM::~SQVM()
 {
 	Finalize();
-	//sq_free(_callsstack,_alloccallsstacksize*sizeof(CallInfo));
 	REMOVE_FROM_CHAIN(&_ss(this)->_gc_chain,this);
 }
 
@@ -215,7 +216,7 @@ bool SQVM::ObjCmp(const SQObjectPtr &o1,const SQObjectPtr &o2,SQInteger &result)
 					_RET_SUCCEED(_integer(res))
 				}
 			}
-			FALLTHROUGH;
+			[[fallthrough]];
 		default:
 			_RET_SUCCEED( _userpointer(o1) < _userpointer(o2)?-1:1 );
 		}
@@ -287,7 +288,7 @@ void SQVM::ToString(const SQObjectPtr &o,SQObjectPtr &res)
 				//else keeps going to the default
 			}
 		}
-		FALLTHROUGH;
+		[[fallthrough]];
 	default:
 		seprintf(buf, lastof(buf),"(%s : 0x%p)",GetTypeName(o),(void*)_rawval(o));
 	}
@@ -539,7 +540,7 @@ bool SQVM::FOREACH_OP(SQObjectPtr &o1,SQObjectPtr &o2,SQObjectPtr
 			_generator(o1)->Resume(this, arg_2+1);
 			_FINISH(0);
 		}
-		FALLTHROUGH;
+		[[fallthrough]];
 	default:
 		Raise_Error("cannot iterate %s", GetTypeName(o1));
 	}
@@ -712,7 +713,6 @@ bool SQVM::Execute(SQObjectPtr &closure, SQInteger target, SQInteger nargs, SQIn
 				return false;
 			}
 			if (_funcproto(_closure(temp_reg)->_function)->_bgenerator) {
-				//SQFunctionProto *f = _funcproto(_closure(temp_reg)->_function);
 				SQGenerator *gen = SQGenerator::Create(_ss(this), _closure(temp_reg));
 				_GUARD(gen->Yield(this));
 				Return(1, ci->_target, temp_reg);
@@ -745,10 +745,16 @@ exception_restore:
 		{
 			DecreaseOps(1);
 			if (ShouldSuspend()) { _suspended = SQTrue; _suspended_traps = traps; return true; }
+			if (IsOpsTillSuspendError()) {
+				Raise_Error("excessive CPU usage in %s", _ops_till_suspend_error_label);
+				SQ_THROW();
+			}
 
 			const SQInstruction &_i_ = *ci->_ip++;
-			//dumpstack(_stackbase);
-			//printf("%s %d %d %d %d\n",g_InstrDesc[_i_.op].name,arg0,arg1,arg2,arg3);
+#ifdef _DEBUG_DUMP
+			dumpstack(_stackbase);
+			printf("%s %d %d %d %d\n",g_InstrDesc[_i_.op].name,arg0,arg1,arg2,arg3);
+#endif
 			switch(_i_.op)
 			{
 			case _OP_LINE:
@@ -769,7 +775,7 @@ exception_restore:
 					ct_stackbase = _stackbase;
 					goto common_call;
 				}
-				FALLTHROUGH;
+				[[fallthrough]];
 			case _OP_CALL: {
 					ct_tailcall = false;
 					ct_target = arg0;
@@ -1053,7 +1059,9 @@ common_call:
 exception_trap:
 	{
 		SQObjectPtr currerror = _lasterror;
-//		dumpstack(_stackbase);
+#ifdef _DEBUG_DUMP
+		dumpstack(_stackbase);
+#endif
 		SQInteger n = 0;
 		SQInteger last_top = _top;
 		if(ci) {
@@ -1062,11 +1070,11 @@ exception_trap:
 			if(traps) {
 				do {
 					if(ci->_etraps > 0) {
-						SQExceptionTrap &et = _etraps.top();
-						ci->_ip = et._ip;
-						_top = et._stacksize;
-						_stackbase = et._stackbase;
-						_stack._vals[_stackbase+et._extarget] = currerror;
+						SQExceptionTrap &trap = _etraps.top();
+						ci->_ip = trap._ip;
+						_top = trap._stacksize;
+						_stackbase = trap._stackbase;
+						_stack._vals[_stackbase+trap._extarget] = currerror;
 						_etraps.pop_back(); traps--; ci->_etraps--;
 						CLEARSTACK(last_top);
 						goto exception_restore;
@@ -1329,7 +1337,7 @@ bool SQVM::Set(const SQObjectPtr &self,const SQObjectPtr &key,const SQObjectPtr 
 				return true;
 			}
 		}
-		FALLTHROUGH;
+		[[fallthrough]];
 	case OT_USERDATA:
 		if(_delegable(self)->_delegate) {
 			SQObjectPtr t;

@@ -26,18 +26,15 @@ INSTANTIATE_POOL_METHODS(LinkGraphJob)
  */
 /* static */ Path *Path::invalid_path = new Path(INVALID_NODE, true);
 
-static DateTicks GetLinkGraphJobJoinDateTicks(uint duration_multiplier)
+static ScaledTickCounter GetLinkGraphJobJoinTick(uint duration_multiplier)
 {
-	DateTicks ticks = _settings_game.linkgraph.recalc_time * DAY_TICKS * duration_multiplier;
-	if (_settings_game.linkgraph.recalc_not_scaled_by_daylength) {
-		ticks /= _settings_game.economy.day_length_factor;
-	}
-	return ticks + (_date * DAY_TICKS) + _date_fract;
+	ScaledTickCounter ticks = (_settings_game.linkgraph.recalc_time * DAY_TICKS * duration_multiplier) / SECONDS_PER_DAY;
+	return ticks + _scaled_tick_counter;
 }
 
 /**
  * Create a link graph job from a link graph. The link graph will be copied so
- * that the calculations don't interfer with the normal operations on the
+ * that the calculations don't interfere with the normal operations on the
  * original. The job is immediately started.
  * @param orig Original LinkGraph to be copied.
  */
@@ -46,8 +43,8 @@ LinkGraphJob::LinkGraphJob(const LinkGraph &orig, uint duration_multiplier) :
 		 * This is on purpose. */
 		link_graph(orig),
 		settings(_settings_game.linkgraph),
-		join_date_ticks(GetLinkGraphJobJoinDateTicks(duration_multiplier)),
-		start_date_ticks((_date * DAY_TICKS) + _date_fract),
+		join_tick(GetLinkGraphJobJoinTick(duration_multiplier)),
+		start_tick(_scaled_tick_counter),
 		job_completed(false),
 		job_aborted(false)
 {
@@ -103,7 +100,7 @@ void LinkGraphJob::FinaliseJob()
 	/* Link graph has been merged into another one. */
 	if (!LinkGraph::IsValidID(this->link_graph.index)) return;
 
-	uint16 size = this->Size();
+	uint16_t size = this->Size();
 	for (NodeID node_id = 0; node_id < size; ++node_id) {
 		Node from = (*this)[node_id];
 
@@ -124,32 +121,33 @@ void LinkGraphJob::FinaliseJob()
 
 		LinkGraph *lg = LinkGraph::Get(ge.link_graph);
 		FlowStatMap &flows = from.Flows();
+		FlowStatMap &geflows = ge.CreateData().flows;
 
-		this->IterateEdgesFromNode(from, [&](NodeID from_id, NodeID to_id, Edge edge) {
-			if (edge.Flow() == 0) return;
-			StationID to = (*this)[to_id].Station();
+		for (Edge &edge : from.GetEdges()) {
+			if (edge.Flow() == 0) continue;
+			StationID to = (*this)[edge.To()].Station();
 			Station *st2 = Station::GetIfValid(to);
-			LinkGraph::ConstEdge lg_edge = lg->GetConstEdge(from_id, to_id);
+			LinkGraph::ConstEdge lg_edge = lg->GetConstEdge(edge.From(), edge.To());
 			if (st2 == nullptr || st2->goods[this->Cargo()].link_graph != this->link_graph.index ||
-					st2->goods[this->Cargo()].node != to_id ||
-					lg_edge.LastUpdate() == INVALID_DATE) {
+					st2->goods[this->Cargo()].node != edge.To() ||
+					lg_edge.LastUpdate() == EconTime::INVALID_DATE) {
 				/* Edge has been removed. Delete flows. */
 				StationIDStack erased = flows.DeleteFlows(to);
 				/* Delete old flows for source stations which have been deleted
 				 * from the new flows. This avoids flow cycles between old and
 				 * new flows. */
-				while (!erased.IsEmpty()) ge.flows.erase(erased.Pop());
-			} else if (lg_edge.LastUnrestrictedUpdate() == INVALID_DATE) {
+				while (!erased.IsEmpty()) geflows.erase(erased.Pop());
+			} else if (lg_edge.LastUnrestrictedUpdate() == EconTime::INVALID_DATE) {
 				/* Edge is fully restricted. */
 				flows.RestrictFlows(to);
 			}
-		});
+		}
 
 		/* Swap shares and invalidate ones that are completely deleted. Don't
 		 * really delete them as we could then end up with unroutable cargo
 		 * somewhere. Do delete them and also reroute relevant cargo if
 		 * automatic distribution has been turned off for that cargo. */
-		for (FlowStatMap::iterator it(ge.flows.begin()); it != ge.flows.end();) {
+		for (FlowStatMap::iterator it(geflows.begin()); it != geflows.end();) {
 			FlowStatMap::iterator new_it = flows.find(it->GetOrigin());
 			if (new_it == flows.end()) {
 				if (_settings_game.linkgraph.GetDistributionType(this->Cargo()) != DT_MANUAL) {
@@ -157,7 +155,7 @@ void LinkGraphJob::FinaliseJob()
 						NodeID origin = it->GetOrigin();
 						FlowStat shares(INVALID_STATION, INVALID_STATION, 1);
 						it->SwapShares(shares);
-						it = ge.flows.erase(it);
+						it = geflows.erase(it);
 						for (FlowStat::const_iterator shares_it(shares.begin());
 								shares_it != shares.end(); ++shares_it) {
 							RerouteCargoFromSource(st, this->Cargo(), origin, shares_it->second, st->index);
@@ -168,7 +166,7 @@ void LinkGraphJob::FinaliseJob()
 				} else {
 					FlowStat shares(INVALID_STATION, INVALID_STATION, 1);
 					it->SwapShares(shares);
-					it = ge.flows.erase(it);
+					it = geflows.erase(it);
 					for (FlowStat::const_iterator shares_it(shares.begin());
 							shares_it != shares.end(); ++shares_it) {
 						RerouteCargo(st, this->Cargo(), shares_it->second, st->index);
@@ -181,9 +179,9 @@ void LinkGraphJob::FinaliseJob()
 			}
 		}
 		for (FlowStatMap::iterator it(flows.begin()); it != flows.end(); ++it) {
-			ge.flows.insert(std::move(*it));
+			geflows.insert(std::move(*it));
 		}
-		ge.flows.SortStorage();
+		geflows.SortStorage();
 		InvalidateWindowData(WC_STATION_VIEW, st->index, this->Cargo());
 	}
 }
@@ -197,24 +195,62 @@ void LinkGraphJob::Init()
 {
 	uint size = this->Size();
 	this->nodes.resize(size);
-	this->edges.Resize(size, size);
 	for (uint i = 0; i < size; ++i) {
 		this->nodes[i].Init(this->link_graph[i].Supply());
-		EdgeAnnotation *node_edges = this->edges[i];
-		for (uint j = 0; j < size; ++j) {
-			node_edges[j].Init();
-		}
 	}
-}
 
-/**
- * Initialize a linkgraph job edge.
- */
-void LinkGraphJob::EdgeAnnotation::Init()
-{
-	this->demand = 0;
-	this->flow = 0;
-	this->unsatisfied_demand = 0;
+	/* Prioritize the fastest route for passengers, mail and express cargo,
+	 * and the shortest route for other classes of cargo.
+	 * In-between stops are punished with a 1 tile or 1 day penalty. */
+	const bool express = IsLinkGraphCargoExpress(this->Cargo());
+	const uint16_t aircraft_link_scale = this->Settings().aircraft_link_scale;
+
+	size_t edge_count = 0;
+	for (auto &it : this->link_graph.GetEdges()) {
+		if (it.first.first == it.first.second) continue;
+		edge_count++;
+	}
+
+	this->edges.resize(edge_count);
+	size_t start_idx = 0;
+	size_t idx = 0;
+	NodeID last_from = INVALID_NODE;
+	auto flush = [&]() {
+		if (last_from == INVALID_NODE) return;
+		this->nodes[last_from].edges = { this->edges.data() + start_idx, idx - start_idx };
+	};
+	for (auto &it : this->link_graph.GetEdges()) {
+		if (it.first.first == it.first.second) continue;
+
+		if (it.first.first != last_from) {
+			flush();
+			last_from = it.first.first;
+			start_idx = idx;
+		}
+
+		LinkGraph::ConstEdge edge(it.second);
+
+		auto calculate_distance = [&]() {
+			return DistanceMaxPlusManhattan((*this)[it.first.first].XY(), (*this)[it.first.second].XY()) + 1;
+		};
+
+		uint distance_anno;
+		if (express) {
+			/* Compute a default travel time from the distance and an average speed of 1 tile/day. */
+			distance_anno = (edge.TravelTime() != 0) ? edge.TravelTime() + DAY_TICKS : calculate_distance() * DAY_TICKS;
+		} else {
+			distance_anno = calculate_distance();
+		}
+
+		if (edge.LastAircraftUpdate() != EconTime::INVALID_DATE && aircraft_link_scale > 100) {
+			distance_anno *= aircraft_link_scale;
+			distance_anno /= 100;
+		}
+
+		this->edges[idx].InitEdge(it.first.first, it.first.second, edge.Capacity(), distance_anno);
+		idx++;
+	}
+	flush();
 }
 
 /**
@@ -261,7 +297,7 @@ void Path::Fork(Path *base, uint cap, int free_cap, uint dist)
 uint Path::AddFlow(uint new_flow, LinkGraphJob &job, uint max_saturation)
 {
 	if (this->GetParent() != nullptr) {
-		LinkGraphJob::Edge edge = job[this->GetParent()->node].MakeEdge(job, this->node);
+		LinkGraphJob::Edge &edge = job[this->GetParent()->node].GetEdgeTo(this->node);
 		if (max_saturation != UINT_MAX) {
 			uint usable_cap = edge.Capacity() * max_saturation / 100;
 			if (usable_cap > edge.Flow()) {

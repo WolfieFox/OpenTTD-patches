@@ -12,45 +12,57 @@
 
 #include "../language.h"
 
+#include <memory>
+#include <string>
+#include <vector>
+
+#include <unordered_map>
+#include <array>
+
 /** Container for the different cases of a string. */
 struct Case {
-	int caseidx;  ///< The index of the case.
-	char *string; ///< The translation of the case.
-	Case *next;   ///< The next, chained, case.
+	int caseidx;        ///< The index of the case.
+	std::string string; ///< The translation of the case.
 
-	Case(int caseidx, const char *string, Case *next);
-	~Case();
+	Case(int caseidx, std::string string);
 };
 
 /** Information about a single string. */
 struct LangString {
-	char *name;            ///< Name of the string.
-	char *english;         ///< English text.
-	char *translated;      ///< Translated text.
-	size_t hash_next;      ///< Next hash entry.
-	size_t index;          ///< The index in the language file.
-	int line;              ///< Line of string in source-file.
-	Case *translated_case; ///< Cases of the translation.
+	std::string name;       ///< Name of the string.
+	std::string english;    ///< English text.
+	std::string translated; ///< Translated text.
+	int index;              ///< The index in the language file.
+	int line;               ///< Line of string in source-file.
+	std::vector<Case> translated_cases; ///< Cases of the translation.
+	std::unique_ptr<LangString> chain_before;
+	std::unique_ptr<LangString> chain_after;
+	bool no_translate_mode = false;
+	LangString *default_translation = nullptr;
 
-	LangString(const char *name, const char *english, size_t index, int line);
-	~LangString();
+	LangString(std::string name, std::string english, int index, int line);
+	void ReplaceDefinition(std::string english, int line);
 	void FreeTranslation();
 };
 
 /** Information about the currently known strings. */
 struct StringData {
-	LangString **strings; ///< Array of all known strings.
-	size_t *hash_heads;   ///< Hash table for the strings.
+	std::vector<LangString *> strings; ///< List of all known strings.
+	std::unordered_map<std::string_view, LangString *> name_to_string; ///< Lookup table for the strings.
 	size_t tabs;          ///< The number of 'tabs' of strings.
 	size_t max_strings;   ///< The maximum number of strings.
-	size_t next_string_id;///< The next string ID to allocate.
+	int next_string_id;   ///< The next string ID to allocate.
+
+	std::vector<std::unique_ptr<LangString>> string_store;
+	LangString *insert_before = nullptr;
+	LangString *insert_after = nullptr;
+	bool override_mode = false;
+	bool no_translate_mode = false;
+	LangString *default_translation = nullptr;
 
 	StringData(size_t tabs);
-	~StringData();
 	void FreeTranslation();
-	uint HashStr(const char *s) const;
-	void Add(const char *s, LangString *ls);
-	LangString *Find(const char *s);
+	LangString *Find(const std::string_view s);
 	uint VersionHashStr(uint hash, const char *s) const;
 	uint Version() const;
 	uint CountInUse(uint tab) const;
@@ -59,12 +71,12 @@ struct StringData {
 /** Helper for reading strings. */
 struct StringReader {
 	StringData &data; ///< The data to fill during reading.
-	const char *file; ///< The file we are reading.
+	std::string file; ///< The file we are reading.
 	bool master;      ///< Are we reading the master file?
 	bool translation; ///< Are we reading a translation, implies !master. However, the base translation will have this false.
 
-	StringReader(StringData &data, const char *file, bool master, bool translation);
-	virtual ~StringReader();
+	StringReader(StringData &data, std::string file, bool master, bool translation);
+	virtual ~StringReader() {}
 	void HandleString(char *str);
 
 	/**
@@ -85,6 +97,8 @@ struct StringReader {
 	 * Start parsing the file.
 	 */
 	virtual void ParseFile();
+
+	void AssignIDs(size_t &next_id, LangString *ls);
 };
 
 /** Base class for writing the header, i.e. the STR_XXX to numeric value. */
@@ -103,7 +117,7 @@ struct HeaderWriter {
 	virtual void Finalise(const StringData &data) = 0;
 
 	/** Especially destroy the subclasses. */
-	virtual ~HeaderWriter() {};
+	virtual ~HeaderWriter() = default;
 
 	void WriteHeader(const StringData &data);
 };
@@ -130,15 +144,30 @@ struct LanguageWriter {
 	virtual void Finalise() = 0;
 
 	/** Especially destroy the subclasses. */
-	virtual ~LanguageWriter() {}
+	virtual ~LanguageWriter() = default;
 
 	virtual void WriteLength(uint length);
 	virtual void WriteLang(const StringData &data);
 };
 
+struct CmdStruct;
+
+struct CmdPair {
+	const CmdStruct *cmd;
+	std::string param;
+};
+
+struct ParsedCommandStruct {
+	std::vector<CmdPair> non_consuming_commands;
+	std::array<const CmdStruct*, 32> consuming_commands{ nullptr }; // ordered by param #
+};
+
+const CmdStruct *TranslateCmdForCompare(const CmdStruct *a);
+ParsedCommandStruct ExtractCommandString(const char *s, bool warnings);
+
 void CDECL strgen_warning(const char *s, ...) WARN_FORMAT(1, 2);
 void CDECL strgen_error(const char *s, ...) WARN_FORMAT(1, 2);
-void NORETURN CDECL strgen_fatal(const char *s, ...) WARN_FORMAT(1, 2);
+[[noreturn]] void CDECL strgen_fatal(const char *s, ...) WARN_FORMAT(1, 2);
 char *ParseWord(char **buf);
 
 extern const char *_file;

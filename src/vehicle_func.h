@@ -20,12 +20,13 @@
 #include "track_type.h"
 #include "livery.h"
 #include "cargo_type.h"
+#include <vector>
 
 #define is_custom_sprite(x) (x >= 0xFD)
 #define IS_CUSTOM_FIRSTHEAD_SPRITE(x) (x == 0xFD)
 #define IS_CUSTOM_SECONDHEAD_SPRITE(x) (x == 0xFE)
 
-static const int VEHICLE_PROFIT_MIN_AGE = DAYS_IN_YEAR * 2; ///< Only vehicles older than this have a meaningful profit.
+static constexpr DateDelta VEHICLE_PROFIT_MIN_AGE = DAYS_IN_YEAR * 2; ///< Only vehicles older than this have a meaningful profit.
 static const Money VEHICLE_PROFIT_THRESHOLD = 10000;        ///< Threshold for a vehicle to be considered making good profit.
 
 struct Viewport;
@@ -37,7 +38,7 @@ struct Viewport;
  * @return True iff the image index is valid.
  */
 template <VehicleType T>
-bool IsValidImageIndex(uint8 image_index);
+bool IsValidImageIndex(uint8_t image_index);
 
 typedef Vehicle *VehicleFromPosProc(Vehicle *v, void *data);
 
@@ -117,22 +118,27 @@ inline bool HasVehicleOnPosXY(int x, int y, VehicleType type, void *data, Vehicl
 }
 
 void CallVehicleTicks();
-uint8 CalcPercentVehicleFilled(const Vehicle *v, StringID *colour);
-uint8 CalcPercentVehicleFilledOfCargo(const Vehicle *v, CargoID cargo);
+uint8_t CalcPercentVehicleFilled(const Vehicle *v, StringID *colour);
+uint8_t CalcPercentVehicleFilledOfCargo(const Vehicle *v, CargoID cargo);
 
 void VehicleLengthChanged(const Vehicle *u);
 
-byte VehicleRandomBits();
 void ResetVehicleHash();
 void ResetVehicleColourMap();
 
-byte GetBestFittingSubType(Vehicle *v_from, Vehicle *v_for, CargoID dest_cargo_type);
+byte GetBestFittingSubType(const Vehicle *v_from, Vehicle *v_for, CargoID dest_cargo_type);
 
 void ViewportAddVehicles(DrawPixelInfo *dpi, bool update_vehicles);
 void ViewportMapDrawVehicles(DrawPixelInfo *dpi, Viewport *vp);
 
 void ShowNewGrfVehicleError(EngineID engine, StringID part1, StringID part2, GRFBugs bug_type, bool critical);
-CommandCost TunnelBridgeIsFree(TileIndex tile, TileIndex endtile, const Vehicle *ignore = nullptr, bool across_only = false);
+
+enum TunnelBridgeIsFreeMode {
+	TBIFM_ALL,
+	TBIFM_ACROSS_ONLY,
+	TBIFM_PRIMARY_ONLY,
+};
+CommandCost TunnelBridgeIsFree(TileIndex tile, TileIndex endtile, const Vehicle *ignore = nullptr, TunnelBridgeIsFreeMode mode = TBIFM_ALL);
 Train *GetTrainClosestToTunnelBridgeEnd(TileIndex tile, TileIndex other_tile);
 int GetAvailableFreeTilesInSignalledTunnelBridge(TileIndex entrance, TileIndex exit, TileIndex tile);
 int GetAvailableFreeTilesInSignalledTunnelBridgeWithStartOffset(TileIndex entrance, TileIndex exit, int offset);
@@ -163,7 +169,7 @@ Direction GetDirectionTowards(const Vehicle *v, int x, int y);
  * @param type Vehicle type being queried.
  * @return Vehicle type is buildable by a company.
  */
-static inline bool IsCompanyBuildableVehicleType(VehicleType type)
+inline bool IsCompanyBuildableVehicleType(VehicleType type)
 {
 	switch (type) {
 		case VEH_TRAIN:
@@ -181,7 +187,7 @@ static inline bool IsCompanyBuildableVehicleType(VehicleType type)
  * @param v Vehicle being queried.
  * @return Vehicle is buildable by a company.
  */
-static inline bool IsCompanyBuildableVehicleType(const BaseVehicle *v)
+inline bool IsCompanyBuildableVehicleType(const BaseVehicle *v)
 {
 	return IsCompanyBuildableVehicleType(v->type);
 }
@@ -193,73 +199,77 @@ SpriteID GetEnginePalette(EngineID engine_type, CompanyID company);
 SpriteID GetVehiclePalette(const Vehicle *v);
 SpriteID GetUncachedTrainPaletteIgnoringGroup(const Train *v);
 
-extern const uint32 _veh_build_proc_table[];
-extern const uint32 _veh_sell_proc_table[];
-extern const uint32 _veh_refit_proc_table[];
-extern const uint32 _send_to_depot_proc_table[];
+extern const uint32_t _veh_build_proc_table[];
+extern const uint32_t _veh_sell_proc_table[];
+extern const uint32_t _veh_refit_proc_table[];
+extern const uint32_t _send_to_depot_proc_table[];
 
 /* Functions to find the right command for certain vehicle type */
-static inline uint32 GetCmdBuildVeh(VehicleType type)
+inline uint32_t GetCmdBuildVeh(VehicleType type)
 {
 	return _veh_build_proc_table[type];
 }
 
-static inline uint32 GetCmdBuildVeh(const BaseVehicle *v)
+inline uint32_t GetCmdBuildVeh(const BaseVehicle *v)
 {
 	return GetCmdBuildVeh(v->type);
 }
 
-static inline uint32 GetCmdSellVeh(VehicleType type)
+inline uint32_t GetCmdSellVeh(VehicleType type)
 {
 	return _veh_sell_proc_table[type];
 }
 
-static inline uint32 GetCmdSellVeh(const BaseVehicle *v)
+inline uint32_t GetCmdSellVeh(const BaseVehicle *v)
 {
 	return GetCmdSellVeh(v->type);
 }
 
-static inline uint32 GetCmdRefitVeh(VehicleType type)
+inline uint32_t GetCmdRefitVeh(VehicleType type)
 {
 	return _veh_refit_proc_table[type];
 }
 
-static inline uint32 GetCmdRefitVeh(const BaseVehicle *v)
+inline uint32_t GetCmdRefitVeh(const BaseVehicle *v)
 {
 	return GetCmdRefitVeh(v->type);
 }
 
-static inline uint32 GetCmdSendToDepot(VehicleType type)
+inline uint32_t GetCmdSendToDepot(VehicleType type)
 {
 	return _send_to_depot_proc_table[type];
 }
 
-static inline uint32 GetCmdSendToDepot(const BaseVehicle *v)
+inline uint32_t GetCmdSendToDepot(const BaseVehicle *v)
 {
 	return GetCmdSendToDepot(v->type);
 }
 
 CommandCost EnsureNoVehicleOnGround(TileIndex tile);
-CommandCost EnsureNoRoadVehicleOnGround(TileIndex tile);
+bool IsTrainCollidableRoadVehicleOnGround(TileIndex tile);
 CommandCost EnsureNoTrainOnTrackBits(TileIndex tile, TrackBits track_bits);
 
 extern VehicleID _new_vehicle_id;
 extern uint _returned_refit_capacity;
-extern uint16 _returned_mail_refit_capacity;
+extern uint16_t _returned_mail_refit_capacity;
 extern CargoArray _returned_vehicle_capacities;
 
 bool CanVehicleUseStation(EngineID engine_type, const struct Station *st);
 bool CanVehicleUseStation(const Vehicle *v, const struct Station *st);
 StringID GetVehicleCannotUseStationReason(const Vehicle *v, const Station *st);
 
-void ReleaseDisastersTargetingVehicle(VehicleID vehicle);
+void ResetDisasterVehicleTargeting();
+void ReleaseDisasterVehicleTargetingVehicle(VehicleID vehicle);
+bool SetDisasterVehicleTargetingVehicle(VehicleID vehicle, VehicleID disaster_vehicle);
 
 typedef std::vector<VehicleID> VehicleSet;
-void GetVehicleSet(VehicleSet &set, Vehicle *v, uint8 num_vehicles);
+void GetVehicleSet(VehicleSet &set, Vehicle *v, uint8_t num_vehicles);
 
 void CheckCargoCapacity(Vehicle *v);
 
 bool VehiclesHaveSameEngineList(const Vehicle *v1, const Vehicle *v2);
 bool VehiclesHaveSameOrderList(const Vehicle *v1, const Vehicle *v2);
+
+bool IsUniqueVehicleName(const char *name);
 
 #endif /* VEHICLE_FUNC_H */

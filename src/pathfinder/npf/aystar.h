@@ -17,13 +17,15 @@
 #define AYSTAR_H
 
 #include "queue.h"
-#include <unordered_map>
 #include <memory>
 
 #include "../../tile_type.h"
 #include "../../track_type.h"
 
-//#define AYSTAR_DEBUG
+#include "../../core/pod_pool.hpp"
+#include "../../3rdparty/robin_hood/robin_hood.h"
+
+static const int AYSTAR_DEF_MAX_SEARCH_NODES = 10000; ///< Reference limit for #AyStar::max_search_nodes
 
 /** Return status of #AyStar methods. */
 enum AystarStatus {
@@ -87,7 +89,7 @@ struct AyStar;
  *  - #AYSTAR_FOUND_END_NODE : indicates this is the end tile
  *  - #AYSTAR_DONE : indicates this is not the end tile (or direction was wrong)
  */
-typedef int32 AyStar_EndNodeCheck(const AyStar *aystar, const OpenListNode *current);
+typedef int32_t AyStar_EndNodeCheck(const AyStar *aystar, const OpenListNode *current);
 
 /**
  * Calculate the G-value for the %AyStar algorithm.
@@ -95,14 +97,14 @@ typedef int32 AyStar_EndNodeCheck(const AyStar *aystar, const OpenListNode *curr
  *  - #AYSTAR_INVALID_NODE : indicates an item is not valid (e.g.: unwalkable)
  *  - Any value >= 0 : the g-value for this tile
  */
-typedef int32 AyStar_CalculateG(AyStar *aystar, AyStarNode *current, OpenListNode *parent);
+typedef int32_t AyStar_CalculateG(AyStar *aystar, AyStarNode *current, OpenListNode *parent);
 
 /**
  * Calculate the H-value for the %AyStar algorithm.
  * Mostly, this must return the distance (Manhattan way) between the current point and the end point.
  * @return The h-value for this tile (any value >= 0)
  */
-typedef int32 AyStar_CalculateH(AyStar *aystar, AyStarNode *current, OpenListNode *parent);
+typedef int32_t AyStar_CalculateH(AyStar *aystar, AyStarNode *current, OpenListNode *parent);
 
 /**
  * This function requests the tiles around the current tile and put them in #neighbours.
@@ -168,13 +170,20 @@ struct AyStar {
 	void CheckTile(AyStarNode *current, OpenListNode *parent);
 
 protected:
-	std::unordered_map<std::pair<TileIndex, Trackdir>, PathNode*, PairHash> closedlist_hash;
+
+	inline uint32_t HashKey(TileIndex tile, Trackdir td) const { return tile | (td << 28); }
+
+	PodPool<PathNode*, sizeof(PathNode), 8192> closedlist_nodes;
+	robin_hood::unordered_flat_map<uint32_t, uint32_t> closedlist_hash;
+
 	BinaryHeap openlist_queue;  ///< The open queue.
-	std::unordered_map<std::pair<TileIndex, Trackdir>, OpenListNode*, PairHash> openlist_hash;
+
+	PodPool<OpenListNode*, sizeof(OpenListNode), 8192> openlist_nodes;
+	robin_hood::unordered_flat_map<uint32_t, uint32_t> openlist_hash;
 
 	void OpenListAdd(PathNode *parent, const AyStarNode *node, int f, int g);
-	OpenListNode *OpenListIsInList(const AyStarNode *node);
-	OpenListNode *OpenListPop();
+	uint32_t OpenListIsInList(const AyStarNode *node);
+	std::pair<uint32_t, OpenListNode *> OpenListPop();
 
 	void ClosedListAdd(const PathNode *node);
 	PathNode *ClosedListIsInList(const AyStarNode *node);

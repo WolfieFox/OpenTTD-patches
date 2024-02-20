@@ -14,15 +14,16 @@
 #include "command_func.h"
 #include "string_type.h"
 #include "core/serialisation.hpp"
-#include "3rdparty/optional/ottd_optional.h"
+#include <optional>
+#include <vector>
 
 struct CommandDeserialisationBuffer : public BufferDeserialisationHelper<CommandDeserialisationBuffer> {
-	const uint8 *buffer;
+	const uint8_t *buffer;
 	size_t size;
 	size_t pos = 0;
 	bool error = false;
 
-	CommandDeserialisationBuffer(const uint8 *buffer, size_t size) : buffer(buffer), size(size) {}
+	CommandDeserialisationBuffer(const uint8_t *buffer, size_t size) : buffer(buffer), size(size) {}
 
 	const byte *GetDeserialisationBuffer() const { return this->buffer; }
 	size_t GetDeserialisationBufferSize() const { return this->size; }
@@ -60,14 +61,14 @@ struct CommandAuxiliarySerialised : public CommandAuxiliaryBase {
 		return new CommandAuxiliarySerialised(*this);
 	}
 
-	virtual opt::optional<span<const uint8>> GetDeserialisationSrc() const override { return span<const uint8>(this->serialised_data.data(), this->serialised_data.size()); }
+	virtual std::optional<std::span<const uint8_t>> GetDeserialisationSrc() const override { return std::span<const uint8_t>(this->serialised_data.data(), this->serialised_data.size()); }
 
-	virtual void Serialise(CommandSerialisationBuffer &buffer) const override { buffer.Send_binary((const char *)this->serialised_data.data(), this->serialised_data.size()); }
+	virtual void Serialise(CommandSerialisationBuffer &buffer) const override { buffer.Send_binary(this->serialised_data.data(), this->serialised_data.size()); }
 };
 
 template <typename T>
 struct CommandAuxiliarySerialisable : public CommandAuxiliaryBase {
-	virtual opt::optional<span<const uint8>> GetDeserialisationSrc() const override { return {}; }
+	virtual std::optional<std::span<const uint8_t>> GetDeserialisationSrc() const override { return {}; }
 
 	CommandAuxiliaryBase *Clone() const override
 	{
@@ -77,18 +78,18 @@ struct CommandAuxiliarySerialisable : public CommandAuxiliaryBase {
 
 template <typename T>
 struct CommandAuxData {
-	private:
-	opt::optional<T> store;
+private:
+	std::optional<T> store;
 	const T *data = nullptr;
 
-	public:
+public:
 	inline CommandCost Load(const CommandAuxiliaryBase *base)
 	{
 		if (base == nullptr) return CMD_ERROR;
-		opt::optional<span<const uint8>> deserialise_from = base->GetDeserialisationSrc();
+		std::optional<std::span<const uint8_t>> deserialise_from = base->GetDeserialisationSrc();
 		if (deserialise_from.has_value()) {
 			this->store = T();
-			CommandDeserialisationBuffer buffer(deserialise_from->begin(), deserialise_from->size());
+			CommandDeserialisationBuffer buffer(deserialise_from->data(), deserialise_from->size());
 			CommandCost res = this->store->Deserialise(buffer);
 			if (res.Failed()) return res;
 			if (buffer.error || buffer.pos != buffer.size) {

@@ -12,7 +12,6 @@
 #include "../stdafx.h"
 #include "../openttd.h"
 #include "../gfx_func.h"
-#include "../rev.h"
 #include "../blitter/factory.hpp"
 #include "../thread.h"
 #include "../progress.h"
@@ -231,7 +230,6 @@ static void GetAvailableVideoMode(uint *w, uint *h)
 bool VideoDriver_SDL::CreateMainSurface(uint w, uint h)
 {
 	SDL_Surface *newscreen, *icon;
-	char caption[50];
 	int bpp = BlitterFactory::GetCurrentBlitter()->GetScreenDepth();
 	bool want_hwpalette;
 
@@ -247,7 +245,7 @@ bool VideoDriver_SDL::CreateMainSurface(uint w, uint h)
 		icon = SDL_LoadBMP(icon_path.c_str());
 		if (icon != nullptr) {
 			/* Get the colourkey, which will be magenta */
-			uint32 rgbmap = SDL_MapRGB(icon->format, 255, 0, 255);
+			uint32_t rgbmap = SDL_MapRGB(icon->format, 255, 0, 255);
 
 			SDL_SetColorKey(icon, SDL_SRCCOLORKEY, rgbmap);
 			SDL_WM_SetIcon(icon, nullptr);
@@ -365,8 +363,8 @@ bool VideoDriver_SDL::CreateMainSurface(uint w, uint h)
 
 	InitPalette();
 
-	seprintf(caption, lastof(caption), "OpenTTD %s", _openttd_revision);
-	SDL_WM_SetCaption(caption, caption);
+	std::string caption = VideoDriver::GetCaption();
+	SDL_WM_SetCaption(caption.c_str(), caption.c_str());
 
 	GameSizeChanged();
 
@@ -380,7 +378,7 @@ bool VideoDriver_SDL::ClaimMousePointer()
 }
 
 struct SDLVkMapping {
-	uint16 vk_from;
+	uint16_t vk_from;
 	byte vk_count;
 	byte map_to;
 };
@@ -441,7 +439,7 @@ static const SDLVkMapping _vk_mapping[] = {
 	AS(SDLK_HASH,    WKC_HASH),
 };
 
-static uint ConvertSdlKeyIntoMy(SDL_keysym *sym, WChar *character)
+static uint ConvertSdlKeyIntoMy(SDL_keysym *sym, char32_t *character)
 {
 	const SDLVkMapping *map;
 	uint key = 0;
@@ -454,7 +452,7 @@ static uint ConvertSdlKeyIntoMy(SDL_keysym *sym, WChar *character)
 	}
 
 	/* check scancode for BACKQUOTE key, because we want the key left of "1", not anything else (on non-US keyboards) */
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32)
 	if (sym->scancode == 41) key = WKC_BACKQUOTE;
 #elif defined(__APPLE__)
 	if (sym->scancode == 10) key = WKC_BACKQUOTE;
@@ -484,12 +482,25 @@ bool VideoDriver_SDL::PollEvent()
 	if (!SDL_PollEvent(&ev)) return false;
 
 	switch (ev.type) {
-		case SDL_MOUSEMOTION:
-			if (_cursor.UpdateCursorPosition(ev.motion.x, ev.motion.y, true)) {
+		case SDL_MOUSEMOTION: {
+			int32_t x = ev.motion.x;
+			int32_t y = ev.motion.y;
+
+			if (_cursor.fix_at) {
+				/* Get all queued mouse events now in case we have to warp the cursor. In the
+				 * end, we only care about the current mouse position and not bygone events. */
+				while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION)) {
+					x = ev.motion.x;
+					y = ev.motion.y;
+				}
+			}
+
+			if (_cursor.UpdateCursorPosition(x, y)) {
 				SDL_WarpMouse(_cursor.pos.x, _cursor.pos.y);
 			}
 			HandleMouseEvents();
 			break;
+		}
 
 		case SDL_MOUSEBUTTONDOWN:
 			if (_rightclick_emulate && SDL_GetModState() & KMOD_CTRL) {
@@ -548,7 +559,7 @@ bool VideoDriver_SDL::PollEvent()
 					(ev.key.keysym.sym == SDLK_RETURN || ev.key.keysym.sym == SDLK_f)) {
 				ToggleFullScreen(!_fullscreen);
 			} else {
-				WChar character;
+				char32_t character;
 				uint keycode = ConvertSdlKeyIntoMy(&ev.key.keysym, &character);
 				HandleKeypress(keycode, character);
 			}
@@ -622,7 +633,7 @@ void VideoDriver_SDL::Stop()
 
 void VideoDriver_SDL::InputLoop()
 {
-	uint32 mod = SDL_GetModState();
+	uint32_t mod = SDL_GetModState();
 	int numkeys;
 	Uint8 *keys = SDL_GetKeyState(&numkeys);
 
@@ -632,13 +643,9 @@ void VideoDriver_SDL::InputLoop()
 	_ctrl_pressed  = !!(mod & KMOD_CTRL) != _invert_ctrl;
 	_shift_pressed = !!(mod & KMOD_SHIFT) != _invert_shift;
 
-#if defined(_DEBUG)
-	this->fast_forward_key_pressed = _shift_pressed;
-#else
 	/* Speedup when pressing tab, except when using ALT+TAB
 	 * to switch to another application. */
 	this->fast_forward_key_pressed = keys[SDLK_TAB] && (mod & KMOD_ALT) == 0;
-#endif /* defined(_DEBUG) */
 
 	/* Determine which directional keys are down. */
 	_dirkeys =

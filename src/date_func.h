@@ -12,75 +12,81 @@
 
 #include "date_type.h"
 #include "settings_type.h"
-#include <utility>
 
-extern YearMonthDay _cur_date_ymd;
-extern Date      _date;
-extern DateFract _date_fract;
-extern uint64    _tick_counter;
-extern uint8     _tick_skip_counter;
-extern uint64    _scaled_tick_counter;
-extern DateTicksScaled _scaled_date_ticks;
-extern DateTicksScaled _scaled_date_ticks_offset;
-extern uint32    _quit_after_days;
+extern uint64_t  _tick_counter;
+extern ScaledTickCounter _scaled_tick_counter;
+extern StateTicks _state_ticks;
+extern uint32_t  _quit_after_days;
 
-extern YearMonthDay _game_load_cur_date_ymd;
-extern DateFract _game_load_date_fract;
-extern uint8 _game_load_tick_skip_counter;
+namespace DateDetail {
+	extern StateTicksDelta _state_ticks_offset;
+	extern uint8_t _tick_skip_counter;
+	extern uint8_t _effective_day_length;
+};
 
-void SetDate(Date date, DateFract fract, bool preserve_scaled_ticks = true);
-void ConvertDateToYMD(Date date, YearMonthDay *ymd);
-Date ConvertYMDToDate(Year year, Month month, Day day);
-void SetScaledTickVariables();
+StateTicks GetStateTicksFromCurrentDateWithoutOffset();
+void RecalculateStateTicksOffset();
 
-inline Date ConvertYMDToDate(const YearMonthDay &ymd)
+inline uint8_t TickSkipCounter()
 {
-	return ConvertYMDToDate(ymd.year, ymd.month, ymd.day);
+	return DateDetail::_tick_skip_counter;
 }
 
-#define _cur_year (static_cast<Year>(_cur_date_ymd.year))
-
-/**
- * Checks whether the given year is a leap year or not.
- * @param yr The year to check.
- * @return True if \c yr is a leap year, otherwise false.
- */
-static inline bool IsLeapYear(Year yr)
+inline uint8_t DayLengthFactor()
 {
-	return yr % 4 == 0 && (yr % 100 != 0 || yr % 400 == 0);
+	return DateDetail::_effective_day_length;
 }
 
-static inline Date ScaledDateTicksToDate(DateTicksScaled ticks)
+void UpdateEffectiveDayLengthFactor();
+
+inline constexpr YearDelta DateDeltaToYearDelta(DateDelta date)
 {
-	return (ticks - _scaled_date_ticks_offset) / (DAY_TICKS * _settings_game.economy.day_length_factor);
+	return date.base() / DAYS_IN_LEAP_YEAR;
 }
 
-static inline DateTicksScaled DateToScaledDateTicks(Date date)
+inline constexpr DateTicksDelta DateDeltaToDateTicksDelta(DateDelta date, uint16_t fract = 0)
 {
-	return ((int64)date * DAY_TICKS * _settings_game.economy.day_length_factor) + _scaled_date_ticks_offset;
+	return ((int64_t)date.base() * DAY_TICKS) + fract;
 }
 
-static inline DateTicks ScaledDateTicksToDateTicks(DateTicksScaled ticks)
+inline EconTime::Date StateTicksToDate(StateTicks ticks)
 {
-	return (ticks - _scaled_date_ticks_offset) / _settings_game.economy.day_length_factor;
+	return (ticks.base() - DateDetail::_state_ticks_offset.base()) / (DAY_TICKS * DayLengthFactor());
 }
 
-static inline DateTicksScaled DateTicksToScaledDateTicks(DateTicks date_ticks)
+CalTime::Date StateTicksToCalendarDate(StateTicks ticks);
+
+inline StateTicks DateToStateTicks(EconTime::Date date)
 {
-	return ((int64)date_ticks * _settings_game.economy.day_length_factor) + _scaled_date_ticks_offset;
+	return ((int64_t)date.base() * DAY_TICKS * DayLengthFactor()) + DateDetail::_state_ticks_offset.base();
 }
 
-static inline std::pair<DateTicks, uint16> ScaledDateTicksToDateTicksAndSubTicks(DateTicksScaled ticks)
+inline EconTime::DateTicks StateTicksToDateTicks(StateTicks ticks)
 {
-	ticks -= _scaled_date_ticks_offset;
-	return std::make_pair<DateTicks, uint16>(ticks / _settings_game.economy.day_length_factor, ticks % _settings_game.economy.day_length_factor);
+	return (ticks.base() - DateDetail::_state_ticks_offset.base()) / DayLengthFactor();
 }
 
-static inline std::pair<Date, uint16> ScaledDateTicksToDateAndFullSubTicks(DateTicksScaled ticks)
+inline StateTicks DateTicksToStateTicks(EconTime::DateTicks date_ticks)
 {
-	ticks -= _scaled_date_ticks_offset;
-	const int full_date = _settings_game.economy.day_length_factor * DAY_TICKS;
-	return std::make_pair<Date, uint16>(ticks / full_date, ticks % full_date);
+	return ((int64_t)date_ticks.base() * DayLengthFactor()) + DateDetail::_state_ticks_offset.base();
 }
+
+inline Ticks TimetableDisplayUnitSize()
+{
+	if (_settings_time.time_in_minutes) {
+		return _settings_time.ticks_per_minute;
+	} else {
+		return DAY_TICKS * DayLengthFactor();
+	}
+}
+
+struct debug_date_dumper {
+	const char *HexDate(EconTime::Date date, EconTime::DateFract date_fract, uint8_t tick_skip_counter);
+
+	inline const char *HexDate() { return this->HexDate(EconTime::CurDate(), EconTime::CurDateFract(), TickSkipCounter()); }
+
+private:
+	char buffer[24];
+};
 
 #endif /* DATE_FUNC_H */

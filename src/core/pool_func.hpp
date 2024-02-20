@@ -35,9 +35,9 @@ DEFINE_POOL_METHOD(inline)::Pool(const char *name) :
 		first_free(0),
 		first_unused(0),
 		items(0),
-#ifdef WITH_FULL_dbg_assertS
+#ifdef WITH_FULL_ASSERTS
 		checked(0),
-#endif /* WITH_FULL_dbg_assertS */
+#endif /* WITH_FULL_ASSERTS */
 		cleaning(false),
 		data(nullptr),
 		free_bitmap(nullptr),
@@ -63,7 +63,7 @@ DEFINE_POOL_METHOD(inline void)::ResizeFor(size_t index)
 	this->free_bitmap = ReallocT(this->free_bitmap, CeilDivT<size_t>(new_size, 64));
 	MemSetT(this->free_bitmap + CeilDivT<size_t>(this->size, 64), 0, CeilDivT<size_t>(new_size, 64) - CeilDivT<size_t>(this->size, 64));
 	if (new_size % 64 != 0) {
-		this->free_bitmap[new_size / 64] |= (~((uint64) 0)) << (new_size % 64);
+		this->free_bitmap[new_size / 64] |= (~((uint64_t) 0)) << (new_size % 64);
 	}
 
 	this->size = new_size;
@@ -79,7 +79,7 @@ DEFINE_POOL_METHOD(inline size_t)::FindFirstFree()
 	size_t bitmap_end = CeilDivT<size_t>(this->first_unused, 64);
 
 	for (; bitmap_index < bitmap_end; bitmap_index++) {
-		uint64 available = ~this->free_bitmap[bitmap_index];
+		uint64_t available = ~this->free_bitmap[bitmap_index];
 		if (available == 0) continue;
 		return (bitmap_index * 64) + FindFirstBit(available);
 	}
@@ -145,10 +145,10 @@ DEFINE_POOL_METHOD(void *)::GetNew(size_t size)
 {
 	size_t index = this->FindFirstFree();
 
-#ifdef WITH_FULL_dbg_assertS
+#ifdef WITH_FULL_ASSERTS
 	dbg_assert(this->checked != 0);
 	this->checked--;
-#endif /* WITH_FULL_dbg_assertS */
+#endif /* WITH_FULL_ASSERTS */
 	if (index == NO_FREE_ITEM) {
 		error("%s: no more free items", this->name);
 	}
@@ -166,7 +166,7 @@ DEFINE_POOL_METHOD(void *)::GetNew(size_t size)
  */
 DEFINE_POOL_METHOD(void *)::GetNew(size_t size, size_t index)
 {
-	extern void NORETURN SlErrorCorruptFmt(const char *format, ...);
+	[[noreturn]] extern void SlErrorCorruptFmt(const char *format, ...);
 
 	if (index >= Tmax_size) {
 		SlErrorCorruptFmt("%s index " PRINTF_SIZE " out of range (" PRINTF_SIZE ")", this->name, index, Tmax_size);

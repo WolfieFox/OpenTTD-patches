@@ -21,7 +21,7 @@
 #include "water.h"
 #include "video/video_driver.hpp"
 #include "tilehighlight_func.h"
-#include "saveload/saveload.h"
+#include "sl/saveload.h"
 #include "void_map.h"
 #include "town.h"
 #include "newgrf.h"
@@ -36,6 +36,7 @@
 #include "tgp.h"
 #include "signal_func.h"
 #include "newgrf_industrytiles.h"
+#include "station_func.h"
 
 #include "safeguards.h"
 
@@ -63,6 +64,8 @@ GenWorldInfo _gw;
 /** Whether we are generating the map or not. */
 bool _generating_world;
 
+extern bool _town_noise_no_update;
+
 class AbortGenerateWorldSignal { };
 
 /**
@@ -71,15 +74,14 @@ class AbortGenerateWorldSignal { };
 static void CleanupGeneration()
 {
 	_generating_world = false;
+	_town_noise_no_update = false;
 
 	SetMouseCursorBusy(false);
-	/* Show all vital windows again, because we have hidden them */
-	if (_game_mode != GM_MENU) ShowVitalWindows();
 	SetModalProgress(false);
 	_gw.proc     = nullptr;
 	_gw.abortp   = nullptr;
 
-	DeleteWindowByClass(WC_MODAL_PROGRESS);
+	CloseWindowByClass(WC_MODAL_PROGRESS);
 	ShowFirstError();
 	MarkWholeScreenDirty();
 }
@@ -94,6 +96,7 @@ static void _GenerateWorld()
 
 	try {
 		_generating_world = true;
+		_town_noise_no_update = true;
 		if (_network_dedicated) DEBUG(net, 3, "Generating map, please wait...");
 		/* Set the Random() seed to generation_seed so we produce the same map with the same seed */
 		_random.SetSeed(_settings_game.game_creation.generation_seed);
@@ -104,6 +107,7 @@ static void _GenerateWorld()
 
 		SetGeneratingWorldProgress(GWP_MAP_INIT, 2);
 		SetObjectToPlace(SPR_CURSOR_ZZZ, PAL_NONE, HT_NONE, WC_MAIN_WINDOW, 0);
+		ScriptObject::InitializeRandomizers();
 
 		BasePersistentStorageArray::SwitchMode(PSM_ENTER_GAMELOOP);
 
@@ -111,8 +115,14 @@ static void _GenerateWorld()
 		/* Must start economy early because of the costs. */
 		StartupEconomy();
 
+		bool landscape_generated = false;
+
 		/* Don't generate landscape items when in the scenario editor. */
-		if (_gw.mode == GWM_EMPTY) {
+		if (_gw.mode != GWM_EMPTY) {
+			landscape_generated = GenerateLandscape(_gw.mode);
+		}
+
+		if (!landscape_generated) {
 			SetGeneratingWorldProgress(GWP_OBJECT, 1);
 
 			/* Make sure the tiles at the north border are void tiles if needed. */
@@ -131,7 +141,6 @@ static void _GenerateWorld()
 			UpdateCachedSnowLine();
 			UpdateCachedSnowLineBounds();
 		} else {
-			GenerateLandscape(_gw.mode);
 			GenerateClearTile();
 
 			/* Only generate towns, tree and industries in newgame mode. */
@@ -155,6 +164,8 @@ static void _GenerateWorld()
 		IncreaseGeneratingWorldProgress(GWP_GAME_INIT);
 		StartupDisasters();
 		_generating_world = false;
+		_town_noise_no_update = false;
+		UpdateAirportsNoise();
 
 		/* No need to run the tile loop in the scenario editor. */
 		if (_gw.mode != GWM_EMPTY) {
@@ -188,6 +199,8 @@ static void _GenerateWorld()
 		ResetObjectToPlace();
 		_cur_company.Trash();
 		_current_company = _local_company = _gw.lc;
+		/* Show all vital windows again, because we have hidden them. */
+		if (_game_mode != GM_MENU) ShowVitalWindows();
 
 		SetGeneratingWorldProgress(GWP_GAME_START, 1);
 		/* Call any callback */
@@ -203,7 +216,7 @@ static void _GenerateWorld()
 
 		if (_debug_desync_level > 0) {
 			char name[MAX_PATH];
-			seprintf(name, lastof(name), "dmp_cmds_%08x_%08x.sav", _settings_game.game_creation.generation_seed, _date);
+			seprintf(name, lastof(name), "dmp_cmds_%08x_%08x.sav", _settings_game.game_creation.generation_seed, EconTime::CurDate().base());
 			SaveOrLoad(name, SLO_SAVE, DFT_GAME_FILE, AUTOSAVE_DIR, false, SMF_ZSTD_OK);
 		}
 	} catch (AbortGenerateWorldSignal&) {
@@ -312,7 +325,7 @@ void GenerateWorld(GenWorldMode mode, uint size_x, uint size_y, bool reset_setti
 		_settings_game.construction.map_height_limit = std::max(MAP_HEIGHT_LIMIT_AUTO_MINIMUM, std::min(MAX_MAP_HEIGHT_LIMIT, estimated_height + MAP_HEIGHT_LIMIT_AUTO_CEILING_ROOM));
 	}
 
-	if (_settings_game.game_creation.generation_seed == GENERATE_NEW_SEED) _settings_game.game_creation.generation_seed = _settings_newgame.game_creation.generation_seed = InteractiveRandom();
+	if (_settings_game.game_creation.generation_seed == GENERATE_NEW_SEED) _settings_game.game_creation.generation_seed = InteractiveRandom();
 
 	/* Load the right landscape stuff, and the NewGRFs! */
 	GfxLoadSprites();
@@ -331,7 +344,7 @@ void GenerateWorld(GenWorldMode mode, uint size_x, uint size_y, bool reset_setti
 	SetObjectToPlace(SPR_CURSOR_ZZZ, PAL_NONE, HT_NONE, WC_MAIN_WINDOW, 0);
 
 	UnshowCriticalError();
-	DeleteAllNonVitalWindows();
+	CloseAllNonVitalWindows();
 	HideVitalWindows();
 
 	ShowGenerateWorldProgress();
@@ -342,4 +355,6 @@ void GenerateWorld(GenWorldMode mode, uint size_x, uint size_y, bool reset_setti
 	}
 
 	_GenerateWorld();
+
+	ReInitAllWindows(false);
 }

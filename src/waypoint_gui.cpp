@@ -22,13 +22,13 @@
 #include "waypoint_base.h"
 #include "departures_gui.h"
 #include "newgrf_debug.h"
+#include "zoom_func.h"
 
 #include "widgets/waypoint_widget.h"
 
 #include "table/strings.h"
 
 #include "safeguards.h"
-#include "zoom_func.h"
 
 /** GUI for accessing waypoints and buoys. */
 struct WaypointWindow : Window {
@@ -106,17 +106,28 @@ public:
 		this->OnInvalidateData(0);
 	}
 
-	~WaypointWindow()
+	void Close([[maybe_unused]] int data = 0) override
 	{
-		DeleteWindowById(GetWindowClassForVehicleType(this->vt), VehicleListIdentifier(VL_STATION_LIST, this->vt, this->owner, this->window_number).Pack(), false);
+		CloseWindowById(GetWindowClassForVehicleType(this->vt), VehicleListIdentifier(VL_STATION_LIST, this->vt, this->owner, this->window_number).Pack(), false);
+		SetViewportCatchmentWaypoint(Waypoint::Get(this->window_number), false);
+		this->Window::Close();
 	}
 
-	void SetStringParameters(int widget) const override
+	void SetStringParameters(WidgetID widget) const override
 	{
 		if (widget == WID_W_CAPTION) SetDParam(0, this->wp->index);
 	}
 
-	void OnClick(Point pt, int widget, int click_count) override
+	void OnPaint() override
+	{
+		extern const Waypoint *_viewport_highlight_waypoint;
+		this->SetWidgetDisabledState(WID_W_CATCHMENT, !this->wp->IsInUse());
+		this->SetWidgetLoweredState(WID_W_CATCHMENT, _viewport_highlight_waypoint == this->wp);
+
+		this->DrawWidgets();
+	}
+
+	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
 	{
 		switch (widget) {
 			case WID_W_CENTER_VIEW: // scroll to location
@@ -140,6 +151,10 @@ public:
 				ShowWaypointDepartures((StationID)this->wp->index);
 				break;
 
+			case WID_W_CATCHMENT:
+				SetViewportCatchmentWaypoint(Waypoint::Get(this->window_number), !this->IsWidgetLowered(WID_W_CATCHMENT));
+				break;
+
 			case WID_W_TOGGLE_HIDDEN:
 				DoCommandP(0, this->window_number, HasBit(this->wp->waypoint_flags, WPF_HIDE_LABEL) ? 0 : 1, CMD_SET_WAYPOINT_LABEL_HIDDEN | CMD_MSG(STR_ERROR_CAN_T_CHANGE_WAYPOINT_NAME));
 				break;
@@ -151,7 +166,7 @@ public:
 	 * @param data Information about the changed data.
 	 * @param gui_scope Whether the call is done from GUI scope. You may not do everything when not in GUI scope. See #InvalidateWindowData() for details.
 	 */
-	void OnInvalidateData(int data = 0, bool gui_scope = true) override
+	void OnInvalidateData([[maybe_unused]] int data = 0, [[maybe_unused]] bool gui_scope = true) override
 	{
 		if (!gui_scope) return;
 		/* You can only change your own waypoints */
@@ -202,7 +217,7 @@ public:
 };
 
 /** The widgets of the waypoint view. */
-static const NWidgetPart _nested_waypoint_view_widgets[] = {
+static constexpr NWidgetPart _nested_waypoint_view_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
 		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_W_RENAME), SetMinimalSize(12, 14), SetDataTip(SPR_RENAME, STR_BUOY_VIEW_CHANGE_BUOY_NAME),
@@ -219,7 +234,8 @@ static const NWidgetPart _nested_waypoint_view_widgets[] = {
 		EndContainer(),
 	EndContainer(),
 	NWidget(NWID_HORIZONTAL),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_W_DEPARTURES), SetMinimalSize(100, 12), SetResize(1, 0), SetFill(1, 0), SetDataTip(STR_STATION_VIEW_DEPARTURES_BUTTON, STR_STATION_VIEW_DEPARTURES_TOOLTIP),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_W_DEPARTURES), SetMinimalSize(50, 12), SetResize(1, 0), SetFill(1, 0), SetDataTip(STR_STATION_VIEW_DEPARTURES_BUTTON, STR_STATION_VIEW_DEPARTURES_TOOLTIP),
+		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_W_CATCHMENT), SetMinimalSize(50, 12), SetResize(1, 0), SetFill(1, 1), SetDataTip(STR_BUTTON_CATCHMENT, STR_TOOLTIP_CATCHMENT),
 		NWidget(NWID_SELECTION, INVALID_COLOUR, WID_W_TOGGLE_HIDDEN_SEL),
 			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_W_TOGGLE_HIDDEN), SetMinimalSize(15, 12), SetDataTip(SPR_MISC_GUI_BASE, STR_WAYPOINT_VIEW_HIDE_VIEWPORT_LABEL),
 		EndContainer(),
@@ -229,11 +245,11 @@ static const NWidgetPart _nested_waypoint_view_widgets[] = {
 };
 
 /** The description of the waypoint view. */
-static WindowDesc _waypoint_view_desc(
+static WindowDesc _waypoint_view_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_waypoint", 260, 118,
 	WC_WAYPOINT_VIEW, WC_NONE,
 	0,
-	_nested_waypoint_view_widgets, lengthof(_nested_waypoint_view_widgets)
+	std::begin(_nested_waypoint_view_widgets), std::end(_nested_waypoint_view_widgets)
 );
 
 /**

@@ -15,13 +15,11 @@
 #include "tcp.h"
 #include "../network_coordinator.h"
 #include "../network_internal.h"
-
-#include <deque>
+#include "../../core/ring_buffer.hpp"
 
 #include "../../safeguards.h"
 
-/** List of connections that are currently being created */
-static std::vector<TCPConnecter *> _tcp_connecters;
+/* static */ std::vector<std::shared_ptr<TCPConnecter>> TCPConnecter::connecters;
 
 /**
  * Create a new connecter for the given address.
@@ -29,13 +27,11 @@ static std::vector<TCPConnecter *> _tcp_connecters;
  * @param default_port If not indicated in connection_string, what port to use.
  * @param bind_address The local bind address to use. Defaults to letting the OS find one.
  */
-TCPConnecter::TCPConnecter(const std::string &connection_string, uint16 default_port, NetworkAddress bind_address, int family) :
+TCPConnecter::TCPConnecter(const std::string &connection_string, uint16_t default_port, const NetworkAddress &bind_address, int family) :
 	bind_address(bind_address),
 	family(family)
 {
 	this->connection_string = NormalizeConnectionString(connection_string, default_port);
-
-	_tcp_connecters.push_back(this);
 }
 
 /**
@@ -43,7 +39,7 @@ TCPConnecter::TCPConnecter(const std::string &connection_string, uint16 default_
  * @param connection_string The address to connect to.
  * @param default_port If not indicated in connection_string, what port to use.
  */
-TCPServerConnecter::TCPServerConnecter(const std::string &connection_string, uint16 default_port) :
+TCPServerConnecter::TCPServerConnecter(const std::string &connection_string, uint16_t default_port) :
 	server_address(ServerAddress::Parse(connection_string, default_port))
 {
 	switch (this->server_address.type) {
@@ -59,8 +55,6 @@ TCPServerConnecter::TCPServerConnecter(const std::string &connection_string, uin
 		default:
 			NOT_REACHED();
 	}
-
-	_tcp_connecters.push_back(this);
 }
 
 TCPConnecter::~TCPConnecter()
@@ -154,7 +148,7 @@ bool TCPConnecter::TryNextAddress()
  */
 void TCPConnecter::OnResolved(addrinfo *ai)
 {
-	std::deque<addrinfo *> addresses_ipv4, addresses_ipv6;
+	ring_buffer<addrinfo *> addresses_ipv4, addresses_ipv6;
 
 	/* Apply "Happy Eyeballs" if it is likely IPv6 is functional. */
 
@@ -205,7 +199,7 @@ void TCPConnecter::OnResolved(addrinfo *ai)
 	}
 
 	if (_debug_net_level >= 6) {
-		if (this->addresses.size() == 0) {
+		if (this->addresses.empty()) {
 			DEBUG(net, 6, "%s did not resolve", this->connection_string.c_str());
 		} else {
 			DEBUG(net, 6, "%s resolved in:", this->connection_string.c_str());
@@ -470,24 +464,14 @@ void TCPServerConnecter::SetFailure()
  */
 /* static */ void TCPConnecter::CheckCallbacks()
 {
-	for (auto iter = _tcp_connecters.begin(); iter < _tcp_connecters.end(); /* nothing */) {
-		TCPConnecter *cur = *iter;
-
-		if (cur->CheckActivity()) {
-			iter = _tcp_connecters.erase(iter);
-			delete cur;
-		} else {
-			iter++;
-		}
-	}
+	TCPConnecter::connecters.erase(
+		std::remove_if(TCPConnecter::connecters.begin(), TCPConnecter::connecters.end(),
+				   [](auto &connecter) { return connecter->CheckActivity(); }),
+		TCPConnecter::connecters.end());
 }
 
 /** Kill all connection attempts. */
 /* static */ void TCPConnecter::KillAll()
 {
-	for (auto iter = _tcp_connecters.begin(); iter < _tcp_connecters.end(); /* nothing */) {
-		TCPConnecter *cur = *iter;
-		iter = _tcp_connecters.erase(iter);
-		delete cur;
-	}
+	TCPConnecter::connecters.clear();
 }

@@ -20,9 +20,10 @@
 #include <string>
 #include <functional>
 #include <limits>
+#include <vector>
 
-typedef uint16 PacketSize; ///< Size of the whole packet.
-typedef uint8  PacketType; ///< Identifier for the packet
+typedef uint16_t PacketSize; ///< Size of the whole packet.
+typedef uint8_t  PacketType; ///< Identifier for the packet
 
 /**
  * Internal entity of a packet. As everything is sent as a packet,
@@ -74,7 +75,7 @@ public:
 
 	bool CanWriteToPacket(size_t bytes_to_write);
 
-	void WriteAtOffset_uint16(size_t offset, uint16);
+	void WriteAtOffset_uint16(size_t offset, uint16_t);
 
 	/* Reading/receiving of packets */
 	size_t ReadRawPacketSize() const;
@@ -187,6 +188,23 @@ public:
 		if (bytes > 0) this->pos += bytes;
 		return bytes;
 	}
+
+	NetworkSocketHandler *GetParentSocket() { return this->cs; }
+};
+
+struct SubPacketDeserialiser : public BufferDeserialisationHelper<SubPacketDeserialiser> {
+	NetworkSocketHandler *cs;
+	const byte *data;
+	size_t size;
+	PacketSize pos;
+
+	SubPacketDeserialiser(Packet &p, const byte *data, size_t size, PacketSize pos = 0) : cs(p.GetParentSocket()), data(data), size(size), pos(pos) {}
+	SubPacketDeserialiser(Packet &p, const std::vector<byte> &buffer, PacketSize pos = 0) : cs(p.GetParentSocket()), data(buffer.data()), size(buffer.size()), pos(pos) {}
+
+	const byte *GetDeserialisationBuffer() const { return this->data; }
+	size_t GetDeserialisationBufferSize() const { return this->size; }
+	PacketSize &GetDeserialisationPosition() { return this->pos; }
+	bool CanDeserialiseBytes(size_t bytes_to_read, bool raise_error);
 };
 
 #endif /* NETWORK_CORE_PACKET_H */

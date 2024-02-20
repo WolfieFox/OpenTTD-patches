@@ -97,39 +97,38 @@ STR_QUANTITY_N_A                                                :палӑ мар
 
 # Two letter abbreviation of cargo name
 STR_ABBREV_NOTHING                                              :
-STR_ABBREV_PASSENGERS                                           :{TINY_FONT}ПА
-STR_ABBREV_COAL                                                 :{TINY_FONT}КӐ
-STR_ABBREV_MAIL                                                 :{TINY_FONT}ПО
-STR_ABBREV_OIL                                                  :{TINY_FONT}НЕ
-STR_ABBREV_LIVESTOCK                                            :{TINY_FONT}ВЫ
-STR_ABBREV_GOODS                                                :{TINY_FONT}ТВ
-STR_ABBREV_GRAIN                                                :{TINY_FONT}ПР
-STR_ABBREV_WOOD                                                 :{TINY_FONT}ЙВ
-STR_ABBREV_IRON_ORE                                             :{TINY_FONT}ТМ
-STR_ABBREV_STEEL                                                :{TINY_FONT}ХР
-STR_ABBREV_VALUABLES                                            :{TINY_FONT}КП
-STR_ABBREV_COPPER_ORE                                           :{TINY_FONT}ПХ
-STR_ABBREV_MAIZE                                                :{TINY_FONT}КК
-STR_ABBREV_FRUIT                                                :{TINY_FONT}ҪМ
-STR_ABBREV_DIAMONDS                                             :{TINY_FONT}КА
-STR_ABBREV_FOOD                                                 :{TINY_FONT}АП
-STR_ABBREV_PAPER                                                :{TINY_FONT}ХТ
-STR_ABBREV_GOLD                                                 :{TINY_FONT}ЫЛ
-STR_ABBREV_WATER                                                :{TINY_FONT}ШВ
-STR_ABBREV_WHEAT                                                :{TINY_FONT}ТЛ
-STR_ABBREV_RUBBER                                               :{TINY_FONT}КЧ
-STR_ABBREV_SUGAR                                                :{TINY_FONT}СХ
-STR_ABBREV_TOYS                                                 :{TINY_FONT}ТТ
-STR_ABBREV_SWEETS                                               :{TINY_FONT}КН
-STR_ABBREV_COLA                                                 :{TINY_FONT}КЛ
-STR_ABBREV_CANDYFLOSS                                           :{TINY_FONT}СВ
-STR_ABBREV_BUBBLES                                              :{TINY_FONT}ХМ
-STR_ABBREV_TOFFEE                                               :{TINY_FONT}КР
-STR_ABBREV_BATTERIES                                            :{TINY_FONT}БТ
-STR_ABBREV_PLASTIC                                              :{TINY_FONT}ПЛ
-STR_ABBREV_FIZZY_DRINKS                                         :{TINY_FONT}ГШ
-STR_ABBREV_NONE                                                 :{TINY_FONT}ҪУК
-STR_ABBREV_ALL                                                  :{TINY_FONT}ПӖРМАЙ
+STR_ABBREV_PASSENGERS                                           :ПА
+STR_ABBREV_COAL                                                 :КӐ
+STR_ABBREV_MAIL                                                 :ПО
+STR_ABBREV_OIL                                                  :НЕ
+STR_ABBREV_LIVESTOCK                                            :ВЫ
+STR_ABBREV_GOODS                                                :ТВ
+STR_ABBREV_GRAIN                                                :ПР
+STR_ABBREV_WOOD                                                 :ЙВ
+STR_ABBREV_IRON_ORE                                             :ТМ
+STR_ABBREV_STEEL                                                :ХР
+STR_ABBREV_VALUABLES                                            :КП
+STR_ABBREV_COPPER_ORE                                           :ПХ
+STR_ABBREV_MAIZE                                                :КК
+STR_ABBREV_FRUIT                                                :ҪМ
+STR_ABBREV_DIAMONDS                                             :КА
+STR_ABBREV_FOOD                                                 :АП
+STR_ABBREV_PAPER                                                :ХТ
+STR_ABBREV_GOLD                                                 :ЫЛ
+STR_ABBREV_WATER                                                :ШВ
+STR_ABBREV_WHEAT                                                :ТЛ
+STR_ABBREV_RUBBER                                               :КЧ
+STR_ABBREV_SUGAR                                                :СХ
+STR_ABBREV_TOYS                                                 :ТТ
+STR_ABBREV_SWEETS                                               :КН
+STR_ABBREV_COLA                                                 :КЛ
+STR_ABBREV_CANDYFLOSS                                           :СВ
+STR_ABBREV_BUBBLES                                              :ХМ
+STR_ABBREV_TOFFEE                                               :КР
+STR_ABBREV_BATTERIES                                            :БТ
+STR_ABBREV_PLASTIC                                              :ПЛ
+STR_ABBREV_FIZZY_DRINKS                                         :ГШ
+STR_ABBREV_ALL                                                  :ПӖРМАЙ
 
 # 'Mode' of transport for cargoes
 STR_PASSENGERS                                                  :{COMMA} пассажир{P "" сем}
@@ -150,27 +149,29 @@ STR_COLOUR_BROWN                                                :Хӑмӑр
 STR_COLOUR_GREY                                                 :Сӑрӑ
 STR_COLOUR_WHITE                                                :Шурӑ
 
+###length 17
+
+
 # Units used in OpenTTD
-STR_UNITS_VELOCITY_IMPERIAL                                     :{COMMA} мил/с
-STR_UNITS_VELOCITY_METRIC                                       :{COMMA} км/с
-STR_UNITS_VELOCITY_SI                                           :{COMMA} м/ҫ
+STR_UNITS_VELOCITY_IMPERIAL                                     :{DECIMAL} мил/с
+STR_UNITS_VELOCITY_METRIC                                       :{DECIMAL} км/с
+STR_UNITS_VELOCITY_SI                                           :{DECIMAL} м/ҫ
 
-STR_UNIT_NAME_VELOCITY_IMPERIAL                                 :мил/с
-STR_UNIT_NAME_VELOCITY_METRIC                                   :км/с
-STR_UNIT_NAME_VELOCITY_SI                                       :м/ҫ
-
-STR_UNITS_POWER_SI                                              :{COMMA}кВт
+STR_UNITS_POWER_SI                                              :{DECIMAL}кВт
 
 
 
 
 
+
+
+
+# Time units used in string control characters
 
 
 
 # Common window strings
 
-STR_BUTTON_RENAME                                               :{BLACK}Ята улӑштар
 
 STR_TOOLTIP_CLOSE_WINDOW                                        :{BLACK}Чӳречене хуп
 
@@ -231,80 +232,45 @@ STR_SCENEDIT_FILE_MENU_SEPARATOR                                :
 STR_SCENEDIT_FILE_MENU_QUIT                                     :Вӗҫле
 
 # Settings menu
-###length 15
+###length 16
 STR_SETTINGS_MENU_GAME_OPTIONS                                  :Вӑййи майлаштару
 STR_SETTINGS_MENU_NEWGRF_SETTINGS                               :NewGRF майлаштару
 
 # File menu
-###length 5
-STR_FILE_MENU_SEPARATOR                                         :
 STR_FILE_MENU_EXIT                                              :Тух
 
 # Map menu
-###length 4
 
 # Town menu
-###length 2
 
 # Subsidies menu
-###length 1
 STR_SUBSIDIES_MENU_SUBSIDIES                                    :Грантсем
 
 # Graph menu
-###length 6
 
 # Company league menu
-###length 3
 
 # Industry menu
-###length 3
 
 # URailway construction menu
-###length 4
 
 # Road construction menu
-###length 2
 
 # Waterways construction menu
-###length 1
 
 # Aairport construction menu
-###length 1
 STR_AIRCRAFT_MENU_AIRPORT_CONSTRUCTION                          :Аэропорт ҫурт
 
 # Landscaping menu
-###length 3
 
 # Music menu
-###length 1
 STR_TOOLBAR_SOUND_MUSIC                                         :Сасӑ/Юрӑ-кӗвӗ
 
 # Message menu
-###length 3
 
 # About menu
-###length 10
-STR_ABOUT_MENU_SEPARATOR                                        :
 STR_ABOUT_MENU_SCREENSHOT                                       :Экран сӑнӗ
 STR_ABOUT_MENU_ABOUT_OPENTTD                                    :'OpenTTD' çинчен
-
-# Place in highscore window
-###length 15
-STR_ORDINAL_NUMBER_1ST                                          :1мӗш
-STR_ORDINAL_NUMBER_2ND                                          :2мӗш
-STR_ORDINAL_NUMBER_3RD                                          :3-мӗш
-STR_ORDINAL_NUMBER_4TH                                          :4-мӗш
-STR_ORDINAL_NUMBER_5TH                                          :5-мӗш
-STR_ORDINAL_NUMBER_6TH                                          :6-мӗш
-STR_ORDINAL_NUMBER_7TH                                          :7-мӗш
-STR_ORDINAL_NUMBER_8TH                                          :8-мӗш
-STR_ORDINAL_NUMBER_9TH                                          :9-мӗш
-STR_ORDINAL_NUMBER_10TH                                         :10-мӗш
-STR_ORDINAL_NUMBER_11TH                                         :11-мӗш
-STR_ORDINAL_NUMBER_12TH                                         :12-мӗш
-STR_ORDINAL_NUMBER_13TH                                         :13-мӗш
-STR_ORDINAL_NUMBER_14TH                                         :14-мӗш
-STR_ORDINAL_NUMBER_15TH                                         :15-мӗш
 
 ###length 31
 STR_DAY_NUMBER_1ST                                              :1мӗш
@@ -367,18 +333,13 @@ STR_MONTH_OCT                                                   :Юпа
 STR_MONTH_NOV                                                   :Чӳк
 STR_MONTH_DEC                                                   :Раштав
 
-###length VEHICLE_TYPES
-STR_VEHICLE_TYPE_TRAINS                                         :Пуйăссем
-STR_VEHICLE_TYPE_ROAD_VEHICLES                                  :Транспорт ҫул
-STR_VEHICLE_TYPE_SHIPS                                          :Карапсем
-STR_VEHICLE_TYPE_AIRCRAFT                                       :Сывлӑш ҫул-йӗрӗ
-
 # Graph window
 STR_GRAPH_KEY_BUTTON                                            :{BLACK}Уҫӑ
 STR_GRAPH_X_LABEL_MONTH                                         :{TINY_FONT}{STRING}
 STR_GRAPH_X_LABEL_MONTH_YEAR                                    :{TINY_FONT}{STRING}{}{NUM}
 STR_GRAPH_Y_LABEL                                               :{TINY_FONT}{STRING}
 STR_GRAPH_Y_LABEL_NUMBER                                        :{TINY_FONT}{COMMA}
+
 
 
 STR_GRAPH_CARGO_PAYMENT_CARGO                                   :{TINY_FONT}{BLACK}{STRING}
@@ -406,8 +367,8 @@ STR_PERFORMANCE_DETAIL_CARGO                                    :{BLACK}Тиев
 STR_PERFORMANCE_DETAIL_MONEY                                    :{BLACK}Укҫӑ:
 STR_PERFORMANCE_DETAIL_LOAN                                     :{BLACK}Кивҫен:
 STR_PERFORMANCE_DETAIL_TOTAL                                    :{BLACK}Пурӗ:
+###next-name-looks-similar
 
-###length 10
 
 # Music window
 STR_MUSIC_TRACK_NONE                                            :{TINY_FONT}{DKGREEN}--
@@ -493,8 +454,13 @@ STR_NEWS_MESSAGE_CAPTION                                        :{WHITE}Пӗлт
 
 # Game options window
 
-###length 42
-STR_GAME_OPTIONS_CURRENCY_RUR                                   :Вырӑсла тенкӗ (RUR)
+
+
+
+
+
+###length 43
+STR_GAME_OPTIONS_CURRENCY_RUR                                   :Вырӑсла тенкӗ
 
 STR_GAME_OPTIONS_AUTOSAVE_FRAME                                 :{BLACK}Хӑй управ
 
@@ -508,6 +474,12 @@ STR_GAME_OPTIONS_FULLSCREEN                                     :{BLACK}Тулл
 
 STR_GAME_OPTIONS_RESOLUTION                                     :{BLACK}Экрана сӑнарлама пултарни
 STR_GAME_OPTIONS_RESOLUTION_OTHER                               :расна
+
+
+
+
+
+
 
 
 
@@ -591,10 +563,14 @@ STR_CONFIG_SETTING_HORIZONTAL_POS_RIGHT                         :Сылтӑмр�
 
 
 
+###setting-zero-is-special
 
 
 
 
+
+
+###length 2
 
 ###setting-zero-is-special
 
@@ -628,13 +604,18 @@ STR_CONFIG_SETTING_RAW_INDUSTRY_CONSTRUCTION_METHOD_NONE        :ҫук
 
 ###length 3
 
+###length 2
+
+###length 2
 
 
 ###length 3
 
 ###length 4
 
+###length 2
 
+###length 2
 
 
 
@@ -647,11 +628,20 @@ STR_CONFIG_SETTING_PLANE_CRASHES_NONE                           :ҫук
 
 
 
+
+
 STR_CONFIG_SETTING_NEVER_EXPIRE_AIRPORTS                        :Аэропорт кивел мар: {STRING}
 
 
 ###length 3
 
+###length 2
+
+
+###length 2
+
+
+###setting-zero-is-special
 
 
 
@@ -717,7 +707,7 @@ STR_CONFIG_SETTING_SCROLLWHEEL_OFF                              :Сӳнтер
 ###length 3
 STR_CONFIG_SETTING_RIGHT_MOUSE_BTN_EMU_OFF                      :Сӳнтер
 
-
+###length 3
 
 ###length 3
 STR_CONFIG_SETTING_DATE_FORMAT_IN_SAVE_NAMES_LONG               :вӑрӑм (2008 раш 31меш)
@@ -729,6 +719,7 @@ STR_CONFIG_SETTING_DATE_FORMAT_IN_SAVE_NAMES_ISO                :ISO (2008-12-31
 
 
 
+###length 3
 
 
 
@@ -741,6 +732,9 @@ STR_CONFIG_SETTING_DATE_FORMAT_IN_SAVE_NAMES_ISO                :ISO (2008-12-31
 
 
 
+###length 2
+
+###length 2
 
 
 
@@ -754,13 +748,12 @@ STR_CONFIG_SETTING_DATE_FORMAT_IN_SAVE_NAMES_ISO                :ISO (2008-12-31
 
 
 
-
-###length 3
 
 
 
 
 ###setting-zero-is-special
+
 
 
 
@@ -790,8 +783,6 @@ STR_CONFIG_SETTING_NEWS_MESSAGES_FULL                           :Тулли
 ###setting-zero-is-special
 
 ###length 3
-
-
 
 
 
@@ -835,7 +826,6 @@ STR_CONFIG_SETTING_TOWN_GROWTH_VERY_FAST                        :Питӗ хӑв
 
 
 
-###length 4
 
 ###length 3
 
@@ -847,11 +837,11 @@ STR_CONFIG_SETTING_TOWN_GROWTH_VERY_FAST                        :Питӗ хӑв
 
 ###length 3
 
-STR_CONFIG_SETTING_INTERFACE                                    :{ORANGE}Интерфейс
-STR_CONFIG_SETTING_INTERFACE_CONSTRUCTION                       :{ORANGE}Лартӑм
-STR_CONFIG_SETTING_VEHICLES                                     :{ORANGE}Ҫул-йӗр:
-STR_CONFIG_SETTING_ENVIRONMENT_TOWNS                            :{ORANGE}Хуласем
-STR_CONFIG_SETTING_AI                                           :{ORANGE}Ӑмӑртуҫӑсем
+STR_CONFIG_SETTING_INTERFACE                                    :Интерфейс
+STR_CONFIG_SETTING_INTERFACE_CONSTRUCTION                       :Лартӑм
+STR_CONFIG_SETTING_VEHICLES                                     :Ҫул-йӗр:
+STR_CONFIG_SETTING_ENVIRONMENT_TOWNS                            :Хуласем
+STR_CONFIG_SETTING_AI                                           :Ӑмӑртуҫӑсем
 
 ###length 2
 STR_CONFIG_SETTING_PATHFINDER_NPF                               :NPF
@@ -881,6 +871,8 @@ STR_QUIT_NO                                                     :{BLACK}Ҫук
 
 # Abandon game
 STR_ABANDON_GAME_CAPTION                                        :{WHITE}Вӑййи ан килӗш
+
+# Help window
 
 # Cheat window
 STR_CHEAT_CHANGE_DATE                                           :{LTBLUE}Тӳрлет кун: {ORANGE}{DATE_SHORT}
@@ -956,7 +948,6 @@ STR_NETWORK_SERVER_LIST_MAP_SIZE_SHORT                          :{BLACK}{COMMA}x
 STR_NETWORK_SERVER_LIST_MAP_SIZE_CAPTION                        :{BLACK}Виҫе картти
 STR_NETWORK_SERVER_LIST_DATE_CAPTION                            :{BLACK}Кун
 STR_NETWORK_SERVER_LIST_DATE_CAPTION_TOOLTIP                    :{BLACK}Хальхи кун
-STR_NETWORK_SERVER_LIST_YEARS_CAPTION                           :{BLACK}Ҫул
 STR_NETWORK_SERVER_LIST_INFO_ICONS_TOOLTIP                      :{BLACK}Чӗлхе, сервер версиӗ, т. ыт. те.
 
 
@@ -1000,6 +991,7 @@ STR_NETWORK_START_SERVER_SET_PASSWORD                           :{BLACK}Вырн
 
 # Matches ConnectionType
 ###length 5
+
 
 
 
@@ -1293,8 +1285,8 @@ STR_TOWN_VIEW_TOWN_CAPTION                                      :{WHITE}{TOWN}
 STR_LOCAL_AUTHORITY_COMPANY_RATING                              :{YELLOW}{COMPANY} {COMPANY_NUM}: {ORANGE}{STRING}
 
 ###length 8
+###next-name-looks-similar
 
-###length 8
 
 # Goal window
 STR_GOALS_TEXT                                                  :{ORANGE}{STRING}
@@ -1347,7 +1339,6 @@ STR_FINANCES_POSITIVE_INCOME                                    :{BLACK}+{CURREN
 # Company view
 
 STR_COMPANY_VIEW_VEHICLES_NONE                                  :{WHITE}Ҫук
-
 
 
 
@@ -1528,7 +1519,6 @@ STR_VEHICLE_INFO_NO_CAPACITY                                    :{BLACK}Савӑ
 # Order view
 
 STR_ORDER_INDEX                                                 :{COMMA}:{NBSP}
-STR_ORDER_TEXT                                                  :{STRING} {STRING} {STRING}
 
 
 # Order bottom buttons
@@ -1536,6 +1526,10 @@ STR_ORDER_TEXT                                                  :{STRING} {STRIN
 
 
 
+
+# Depot action tooltips, one per vehicle type
+###length VEHICLE_TYPES
+###next-name-looks-similar
 
 
 # Conditional order variables, must follow order of OrderConditionVariable enum
@@ -1558,6 +1552,7 @@ STR_ORDER_GO_TO_NEAREST_DEPOT_FORMAT                            :{STRING} {STRIN
 STR_ORDER_GO_TO_DEPOT_FORMAT                                    :{STRING} {DEPOT}
 
 
+
 STR_ORDER_GO_TO_STATION                                         :{STRING} {STATION} {STRING}
 
 
@@ -1570,6 +1565,7 @@ STR_ORDER_GO_TO_STATION                                         :{STRING} {STATI
 
 
 # Time table window
+
 
 
 
@@ -1602,12 +1598,12 @@ STR_AI_LIST_VERSION                                             :{LTBLUE}Вер�
 
 
 
-# AI Parameters
+# Script Parameters
 STR_AI_SETTINGS_SETTING                                         :{STRING}: {ORANGE}{STRING}
 
 
 # Textfile window
-###length 3
+###length 5
 
 
 # Vehicle loading indicators
@@ -1664,6 +1660,8 @@ STR_ERROR_MESSAGE_CAPTION                                       :{YELLOW}Пӗл�
 
 
 
+# Depot unbunching related errors
+
 # Autoreplace related errors
 STR_ERROR_AUTOREPLACE_MONEY_LIMIT                               :(укҫа ҫитмест)
 
@@ -1718,6 +1716,8 @@ STR_ERROR_OBJECT_IN_THE_WAY                                     :{WHITE}Ҫул �
 # Order related errors
 
 
+# Extra messages which go on the third line of errors, explaining why orders failed
+
 # Timetable related errors
 
 # Sign related errors
@@ -1764,10 +1764,10 @@ STR_SV_STNAME_WAYPOINT                                          :{STRING}
 
 ##id 0x8800
 # Formatting of some strings
-STR_FORMAT_DATE_TINY                                            :{STRING}.{STRING}.{NUM}
+STR_FORMAT_DATE_TINY                                            :{ZEROFILL_NUM}.{ZEROFILL_NUM}.{NUM}
 STR_FORMAT_DATE_SHORT                                           :{STRING} {NUM}
 STR_FORMAT_DATE_LONG                                            :{STRING} {STRING} {NUM}
-STR_FORMAT_DATE_ISO                                             :{2:NUM}-{1:STRING}-{0:STRING}
+STR_FORMAT_DATE_ISO                                             :{2:NUM}-{1:ZEROFILL_NUM}-{0:ZEROFILL_NUM}
 
 
 ###length 2
@@ -1811,6 +1811,7 @@ STR_TOWN_NAME                                                   :{TOWN}
 STR_VEHICLE_NAME                                                :{VEHICLE}
 STR_WAYPOINT_NAME                                               :{WAYPOINT}
 
+
 STR_JUST_CARGO                                                  :{CARGO_LONG}
 STR_JUST_CHECKMARK                                              :{CHECKMARK}
 STR_JUST_COMMA                                                  :{COMMA}
@@ -1827,33 +1828,8 @@ STR_JUST_STRING_STRING                                          :{STRING}{STRING
 STR_JUST_RAW_STRING                                             :{STRING}
 
 # Slightly 'raw' stringcodes with colour or size
-STR_BLACK_COMMA                                                 :{BLACK}{COMMA}
-STR_TINY_BLACK_COMA                                             :{TINY_FONT}{BLACK}{COMMA}
-STR_TINY_COMMA                                                  :{TINY_FONT}{COMMA}
-STR_BLUE_COMMA                                                  :{BLUE}{COMMA}
-STR_RED_COMMA                                                   :{RED}{COMMA}
-STR_WHITE_COMMA                                                 :{WHITE}{COMMA}
-STR_TINY_BLACK_DECIMAL                                          :{TINY_FONT}{BLACK}{DECIMAL}
-STR_COMPANY_MONEY                                               :{WHITE}{CURRENCY_LONG}
-STR_BLACK_DATE_LONG                                             :{BLACK}{DATE_LONG}
-STR_WHITE_DATE_LONG                                             :{WHITE}{DATE_LONG}
-STR_SHORT_DATE                                                  :{WHITE}{DATE_TINY}
-STR_DATE_LONG_SMALL                                             :{TINY_FONT}{BLACK}{DATE_LONG}
-STR_TINY_GROUP                                                  :{TINY_FONT}{GROUP}
-STR_BLACK_INT                                                   :{BLACK}{NUM}
-STR_ORANGE_INT                                                  :{ORANGE}{NUM}
 STR_WHITE_SIGN                                                  :{WHITE}{SIGN}
-STR_TINY_BLACK_STATION                                          :{TINY_FONT}{BLACK}{STATION}
-STR_BLACK_STRING                                                :{BLACK}{STRING}
-STR_BLACK_RAW_STRING                                            :{BLACK}{STRING}
-STR_ORANGE_STRING                                               :{ORANGE}{STRING}
-STR_LTBLUE_STRING                                               :{LTBLUE}{STRING}
-STR_WHITE_STRING                                                :{WHITE}{STRING}
-STR_ORANGE_STRING1_WHITE                                        :{ORANGE}{STRING}{WHITE}
-STR_ORANGE_STRING1_LTBLUE                                       :{ORANGE}{STRING}{LTBLUE}
 STR_TINY_BLACK_HEIGHT                                           :{TINY_FONT}{BLACK}{HEIGHT}
-STR_TINY_BLACK_VEHICLE                                          :{TINY_FONT}{BLACK}{VEHICLE}
-STR_TINY_RIGHT_ARROW                                            :{TINY_FONT}{RIGHT_ARROW}
 
 STR_BLACK_1                                                     :{BLACK}1
 STR_BLACK_2                                                     :{BLACK}2

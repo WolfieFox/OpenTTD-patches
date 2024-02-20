@@ -25,30 +25,17 @@ const int BinaryHeap::BINARY_HEAP_BLOCKSIZE_MASK = BinaryHeap::BINARY_HEAP_BLOCK
 
 /**
  * Clears the queue, by removing all values from it. Its state is
- * effectively reset. If free_items is true, each of the items cleared
- * in this way are free()'d.
+ * effectively reset.
  */
-void BinaryHeap::Clear(bool free_values)
+void BinaryHeap::Clear()
 {
 	/* Free all items if needed and free all but the first blocks of memory */
 	uint i;
-	uint j;
 
 	for (i = 0; i < this->blocks; i++) {
 		if (this->elements[i] == nullptr) {
 			/* No more allocated blocks */
 			break;
-		}
-		/* For every allocated block */
-		if (free_values) {
-			for (j = 0; j < (1 << BINARY_HEAP_BLOCKSIZE_BITS); j++) {
-				/* For every element in the block */
-				if ((this->size >> BINARY_HEAP_BLOCKSIZE_BITS) == i &&
-						(this->size & BINARY_HEAP_BLOCKSIZE_MASK) == j) {
-					break; // We're past the last element
-				}
-				free(this->elements[i][j].item);
-			}
 		}
 		if (i != 0) {
 			/* Leave the first block of memory alone */
@@ -62,14 +49,13 @@ void BinaryHeap::Clear(bool free_values)
 
 /**
  * Frees the queue, by reclaiming all memory allocated by it. After
- * this it is no longer usable. If free_items is true, any remaining
- * items are free()'d too.
+ * this it is no longer usable.
  */
-void BinaryHeap::Free(bool free_values)
+void BinaryHeap::Free()
 {
 	uint i;
 
-	this->Clear(free_values);
+	this->Clear();
 	for (i = 0; i < this->blocks; i++) {
 		if (this->elements[i] == nullptr) break;
 		free(this->elements[i]);
@@ -81,39 +67,36 @@ void BinaryHeap::Free(bool free_values)
  * Pushes an element into the queue, at the appropriate place for the queue.
  * Requires the queue pointer to be of an appropriate type, of course.
  */
-bool BinaryHeap::Push(void *item, int priority)
+bool BinaryHeap::Push(uint32_t item, int priority)
 {
 	if (this->size == this->max_size) return false;
-	assert(this->size < this->max_size);
+	dbg_assert(this->size < this->max_size);
 
 	if (this->elements[this->size >> BINARY_HEAP_BLOCKSIZE_BITS] == nullptr) {
 		/* The currently allocated blocks are full, allocate a new one */
-		assert((this->size & BINARY_HEAP_BLOCKSIZE_MASK) == 0);
+		dbg_assert((this->size & BINARY_HEAP_BLOCKSIZE_MASK) == 0);
 		this->elements[this->size >> BINARY_HEAP_BLOCKSIZE_BITS] = MallocT<BinaryHeapNode>(BINARY_HEAP_BLOCKSIZE);
 		this->blocks++;
 	}
 
 	/* Add the item at the end of the array */
-	this->GetElement(this->size + 1).priority = priority;
-	this->GetElement(this->size + 1).item = item;
+	BinaryHeapNode &new_item = this->GetElement(this->size + 1);
+	new_item.priority = priority;
+	new_item.item = item;
 	this->size++;
 
 	/* Now we are going to check where it belongs. As long as the parent is
 	 * bigger, we switch with the parent */
 	{
-		BinaryHeapNode temp;
-		int i;
-		int j;
-
-		i = this->size;
+		int i = this->size;
 		while (i > 1) {
 			/* Get the parent of this object (divide by 2) */
-			j = i / 2;
+			int j = i / 2;
 			/* Is the parent bigger than the current, switch them */
-			if (this->GetElement(i).priority <= this->GetElement(j).priority) {
-				temp = this->GetElement(j);
-				this->GetElement(j) = this->GetElement(i);
-				this->GetElement(i) = temp;
+			BinaryHeapNode &elem_i = this->GetElement(i);
+			BinaryHeapNode &elem_j = this->GetElement(j);
+			if (elem_i.priority <= elem_j.priority) {
+				std::swap(elem_i, elem_j);
 				i = j;
 			} else {
 				/* It is not, we're done! */
@@ -130,7 +113,7 @@ bool BinaryHeap::Push(void *item, int priority)
  * known, which speeds up the deleting for some queue's. Should be -1
  * if not known.
  */
-bool BinaryHeap::Delete(void *item, int priority)
+bool BinaryHeap::Delete(uint32_t item, int priority)
 {
 	uint i = 0;
 
@@ -149,15 +132,13 @@ bool BinaryHeap::Delete(void *item, int priority)
 	/* Now the only thing we have to do, is resort it..
 	 * On place i there is the item to be sorted.. let's start there */
 	{
-		uint j;
-		BinaryHeapNode temp;
 		/* Because of the fact that Binary Heap uses array from 1 to n, we need to
 		 * increase i by 1
 		 */
 		i++;
 
 		for (;;) {
-			j = i;
+			uint j = i;
 			/* Check if we have 2 children */
 			if (2 * j + 1 <= this->size) {
 				/* Is this child smaller than the parent? */
@@ -172,9 +153,7 @@ bool BinaryHeap::Delete(void *item, int priority)
 
 			/* One of our children is smaller than we are, switch */
 			if (i != j) {
-				temp = this->GetElement(j);
-				this->GetElement(j) = this->GetElement(i);
-				this->GetElement(i) = temp;
+				std::swap(this->GetElement(i), this->GetElement(j));
 			} else {
 				/* None of our children is smaller, so we stay here.. stop :) */
 				break;
@@ -189,18 +168,16 @@ bool BinaryHeap::Delete(void *item, int priority)
  * Pops the first element from the queue. What exactly is the first element,
  * is defined by the exact type of queue.
  */
-void *BinaryHeap::Pop()
+uint32_t BinaryHeap::Pop()
 {
-	void *result;
-
-	if (this->size == 0) return nullptr;
+	if (this->size == 0) return UINT32_MAX;
 
 	/* The best item is always on top, so give that as result */
-	result = this->GetElement(1).item;
+	BinaryHeapNode result = this->GetElement(1);
 	/* And now we should get rid of this item... */
-	this->Delete(this->GetElement(1).item, this->GetElement(1).priority);
+	this->Delete(result.item, result.priority);
 
-	return result;
+	return result.item;
 }
 
 /**
@@ -369,9 +346,9 @@ void Hash::Clear(bool free_values)
  * bucket, or nullptr if it is empty. prev can also be nullptr, in which case it is
  * not used for output.
  */
-HashNode *Hash::FindNode(uint key1, uint key2, HashNode** prev_out) const
+HashNode *Hash::FindNode(TileIndex tile, Trackdir dir, HashNode** prev_out) const
 {
-	uint hash = this->hash(key1, key2);
+	uint hash = this->hash(tile, dir);
 	HashNode *result = nullptr;
 
 	/* Check if the bucket is empty */
@@ -379,7 +356,7 @@ HashNode *Hash::FindNode(uint key1, uint key2, HashNode** prev_out) const
 		if (prev_out != nullptr) *prev_out = nullptr;
 		result = nullptr;
 	/* Check the first node specially */
-	} else if (this->buckets[hash].key1 == key1 && this->buckets[hash].key2 == key2) {
+	} else if (this->buckets[hash].tile == tile && this->buckets[hash].dir == dir) {
 		/* Save the value */
 		result = this->buckets + hash;
 		if (prev_out != nullptr) *prev_out = nullptr;
@@ -389,7 +366,7 @@ HashNode *Hash::FindNode(uint key1, uint key2, HashNode** prev_out) const
 		HashNode *node;
 
 		for (node = prev->next; node != nullptr; node = node->next) {
-			if (node->key1 == key1 && node->key2 == key2) {
+			if (node->tile == tile && node->dir == dir) {
 				/* Found it */
 				result = node;
 				break;
@@ -406,11 +383,11 @@ HashNode *Hash::FindNode(uint key1, uint key2, HashNode** prev_out) const
  * that value. Returns nullptr when the value was not present. The value returned
  * is _not_ free()'d!
  */
-void *Hash::DeleteValue(uint key1, uint key2)
+void *Hash::DeleteValue(TileIndex tile, Trackdir dir)
 {
 	void *result;
 	HashNode *prev; // Used as output var for below function call
-	HashNode *node = this->FindNode(key1, key2, &prev);
+	HashNode *node = this->FindNode(tile, dir, &prev);
 
 	if (node == nullptr) {
 		/* not found */
@@ -429,7 +406,7 @@ void *Hash::DeleteValue(uint key1, uint key2)
 		} else {
 			/* This was the last in this bucket
 			 * Mark it as empty */
-			uint hash = this->hash(key1, key2);
+			uint hash = this->hash(tile, dir);
 			this->buckets_in_use[hash] = false;
 		}
 	} else {
@@ -449,10 +426,10 @@ void *Hash::DeleteValue(uint key1, uint key2)
  * Sets the value associated with the given key pair to the given value.
  * Returns the old value if the value was replaced, nullptr when it was not yet present.
  */
-void *Hash::Set(uint key1, uint key2, void *value)
+void *Hash::Set(TileIndex tile, Trackdir dir, void *value)
 {
 	HashNode *prev;
-	HashNode *node = this->FindNode(key1, key2, &prev);
+	HashNode *node = this->FindNode(tile, dir, &prev);
 
 	if (node != nullptr) {
 		/* Found it */
@@ -464,7 +441,7 @@ void *Hash::Set(uint key1, uint key2, void *value)
 	/* It is not yet present, let's add it */
 	if (prev == nullptr) {
 		/* The bucket is still empty */
-		uint hash = this->hash(key1, key2);
+		uint hash = this->hash(tile, dir);
 		this->buckets_in_use[hash] = true;
 		node = this->buckets + hash;
 	} else {
@@ -473,8 +450,8 @@ void *Hash::Set(uint key1, uint key2, void *value)
 		prev->next = node;
 	}
 	node->next = nullptr;
-	node->key1 = key1;
-	node->key2 = key2;
+	node->tile = tile;
+	node->dir = dir;
 	node->value = value;
 	this->size++;
 	return nullptr;
@@ -484,9 +461,9 @@ void *Hash::Set(uint key1, uint key2, void *value)
  * Gets the value associated with the given key pair, or nullptr when it is not
  * present.
  */
-void *Hash::Get(uint key1, uint key2) const
+void *Hash::Get(TileIndex tile, Trackdir dir) const
 {
-	HashNode *node = this->FindNode(key1, key2, nullptr);
+	HashNode *node = this->FindNode(tile, dir, nullptr);
 
 	return (node != nullptr) ? node->value : nullptr;
 }

@@ -20,8 +20,8 @@ class OrthogonalTileIterator;
 /** Represents the covered area of e.g. a rail station */
 struct OrthogonalTileArea {
 	TileIndex tile; ///< The base tile of the area
-	uint16 w;       ///< The width of the area
-	uint16 h;       ///< The height of the area
+	uint16_t w;     ///< The width of the area
+	uint16_t h;     ///< The height of the area
 
 	/**
 	 * Construct this tile area with some set values
@@ -29,7 +29,7 @@ struct OrthogonalTileArea {
 	 * @param w the width
 	 * @param h the height
 	 */
-	OrthogonalTileArea(TileIndex tile = INVALID_TILE, uint8 w = 0, uint8 h = 0) : tile(tile), w(w), h(h)
+	OrthogonalTileArea(TileIndex tile = INVALID_TILE, uint16_t w = 0, uint16_t h = 0) : tile(tile), w(w), h(h)
 	{
 	}
 
@@ -78,8 +78,8 @@ struct OrthogonalTileArea {
 struct DiagonalTileArea {
 
 	TileIndex tile; ///< Base tile of the area
-	int16 a;        ///< Extent in diagonal "x" direction (may be negative to signify the area stretches to the left)
-	int16 b;        ///< Extent in diagonal "y" direction (may be negative to signify the area stretches upwards)
+	int16_t a;        ///< Extent in diagonal "x" direction (may be negative to signify the area stretches to the left)
+	int16_t b;        ///< Extent in diagonal "y" direction (may be negative to signify the area stretches upwards)
 
 	/**
 	 * Construct this tile area with some set values.
@@ -87,7 +87,7 @@ struct DiagonalTileArea {
 	 * @param a The "x" extent.
 	 * @param b The "y" estent.
 	 */
-	DiagonalTileArea(TileIndex tile = INVALID_TILE, int8 a = 0, int8 b = 0) : tile(tile), a(a), b(b)
+	DiagonalTileArea(TileIndex tile = INVALID_TILE, int16_t a = 0, int16_t b = 0) : tile(tile), a(a), b(b)
 	{
 	}
 
@@ -154,7 +154,9 @@ public:
 	/**
 	 * Allocate a new iterator that is a copy of this one.
 	 */
-	virtual TileIterator *Clone() const = 0;
+	virtual std::unique_ptr<TileIterator> Clone() const = 0;
+
+	static std::unique_ptr<TileIterator> Create(TileIndex corner1, TileIndex corner2, bool diagonal);
 };
 
 /** Iterator to iterate over a tile area (rectangle) of the map. */
@@ -186,7 +188,7 @@ public:
 	/**
 	 * Move ourselves to the next tile in the rectangle on the map.
 	 */
-	inline TileIterator& operator ++()
+	inline TileIterator& operator ++() override
 	{
 		assert(this->tile != INVALID_TILE);
 
@@ -201,9 +203,9 @@ public:
 		return *this;
 	}
 
-	virtual TileIterator *Clone() const
+	std::unique_ptr<TileIterator> Clone() const override
 	{
-		return new OrthogonalTileIterator(*this);
+		return std::make_unique<OrthogonalTileIterator>(*this);
 	}
 };
 
@@ -225,11 +227,6 @@ public:
 	OrthogonalPrefetchTileIterator(const TileArea &ta) : tile(ta.w == 0 || ta.h == 0 ? INVALID_TILE : ta.tile), w(ta.w), x(ta.w), y(ta.h)
 	{
 		PREFETCH_NTA(&_m[ta.tile]);
-	}
-
-	/** Some compilers really like this. */
-	virtual ~OrthogonalPrefetchTileIterator()
-	{
 	}
 
 	/**
@@ -258,11 +255,6 @@ public:
 			this->tile = INVALID_TILE;
 		}
 		return *this;
-	}
-
-	virtual OrthogonalPrefetchTileIterator *Clone() const
-	{
-		return new OrthogonalPrefetchTileIterator(*this);
 	}
 };
 
@@ -297,11 +289,11 @@ public:
 		*this = DiagonalTileIterator(DiagonalTileArea(corner1, corner2));
 	}
 
-	TileIterator& operator ++();
+	TileIterator& operator ++() override;
 
-	virtual TileIterator *Clone() const
+	std::unique_ptr<TileIterator> Clone() const override
 	{
-		return new DiagonalTileIterator(*this);
+		return std::make_unique<DiagonalTileIterator>(*this);
 	}
 };
 

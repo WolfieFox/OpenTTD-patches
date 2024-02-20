@@ -85,7 +85,7 @@ bool Packet::CanWriteToPacket(size_t bytes_to_write)
 	return this->Size() + bytes_to_write <= this->limit;
 }
 
-void Packet::WriteAtOffset_uint16(size_t offset, uint16 data)
+void Packet::WriteAtOffset_uint16(size_t offset, uint16_t data)
 {
 	assert(offset + 1 < this->buffer.size());
 	this->buffer[offset]     = GB(data, 0, 8);
@@ -198,3 +198,12 @@ size_t Packet::RemainingBytesToTransfer() const
 	return this->Size() - this->pos;
 }
 
+bool SubPacketDeserialiser::CanDeserialiseBytes(size_t bytes_to_read, bool raise_error)
+{
+	if (this->pos + bytes_to_read > this->size) {
+		if (raise_error) this->cs->NetworkSocketHandler::MarkClosed();
+		return false;
+	}
+
+	return true;
+}

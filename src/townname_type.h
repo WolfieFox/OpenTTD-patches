@@ -16,10 +16,10 @@
 #include "newgrf_townname.h"
 #include "town_type.h"
 #include "string_type.h"
-#include <set>
+#include "3rdparty/cpp-btree/btree_set.h"
 #include <string>
 
-typedef std::set<std::string> TownNames;
+typedef btree::btree_set<std::string> TownNames;
 
 static constexpr uint BUILTIN_TOWNNAME_GENERATOR_COUNT = SPECSTR_TOWNNAME_LAST - SPECSTR_TOWNNAME_START + 1; ///< Number of built-in town name generators.
 
@@ -28,8 +28,8 @@ static constexpr uint BUILTIN_TOWNNAME_GENERATOR_COUNT = SPECSTR_TOWNNAME_LAST -
  * Speeds things up a bit because these values are computed only once per name generation.
  */
 struct TownNameParams {
-	uint32 grfid; ///< newgrf ID (0 if not used)
-	uint16 type;  ///< town name style
+	uint32_t grfid; ///< newgrf ID (0 if not used)
+	uint16_t type;  ///< town name style
 
 	/**
 	 * Initializes this struct from language ID

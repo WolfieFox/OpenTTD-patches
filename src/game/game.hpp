@@ -10,12 +10,7 @@
 #ifndef GAME_HPP
 #define GAME_HPP
 
-#include "../core/string_compare_type.hpp"
 #include "game_scanner.hpp"
-#include <map>
-
-/** A list that maps AI names to their AIInfo object. */
-typedef std::map<const char *, class ScriptInfo *, StringCompare> ScriptInfoList;
 
 #include "../script/api/script_event_types.hpp"
 
@@ -36,8 +31,9 @@ public:
 
 	/**
 	 * Start up a new GameScript.
+	 * @param deviate Whether to apply random deviation to the configured GameScript.
 	 */
-	static void StartNew();
+	static void StartNew(bool deviate = true);
 
 	/**
 	 * Uninitialize the Game system.
@@ -96,9 +92,9 @@ public:
 	/** Wrapper function for GameScanner::GetUniqueInfoList */
 	static const ScriptInfoList *GetUniqueInfoList();
 	/** Wrapper function for GameScannerInfo::FindInfo */
-	static class GameInfo *FindInfo(const char *name, int version, bool force_exact_match);
+	static class GameInfo *FindInfo(const std::string &name, int version, bool force_exact_match);
 	/** Wrapper function for GameScanner::FindLibrary */
-	static class GameLibrary *FindLibrary(const char *library, int version);
+	static class GameLibrary *FindLibrary(const std::string &library, int version);
 
 	/**
 	 * Get the current active instance.

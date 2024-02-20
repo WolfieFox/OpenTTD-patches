@@ -23,6 +23,8 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <signal.h>
+#include <pthread.h>
+#include <atomic>
 
 #ifdef WITH_SDL2
 #include <SDL.h>
@@ -50,16 +52,7 @@
 #include <sys/sysctl.h>
 #endif
 
-#ifndef NO_THREADS
-#include <pthread.h>
-#endif
-
 #if defined(__APPLE__)
-#	if defined(WITH_SDL)
-		/* the mac implementation needs this file included in the same file as main() */
-#		include <SDL.h>
-#	endif
-
 #	include "../macosx/macos.h"
 #endif
 
@@ -70,28 +63,23 @@ bool FiosIsRoot(const char *path)
 	return path[1] == '\0';
 }
 
-void FiosGetDrives(FileList &file_list)
+void FiosGetDrives(FileList &)
 {
 	return;
 }
 
-bool FiosGetDiskFreeSpace(const char *path, uint64 *tot)
+std::optional<uint64_t> FiosGetDiskFreeSpace(const std::string &path)
 {
-	uint64 free = 0;
-
 #ifdef __APPLE__
 	struct statfs s;
 
-	if (statfs(path, &s) != 0) return false;
-	free = (uint64)s.f_bsize * s.f_bavail;
+	if (statfs(path.c_str(), &s) == 0) return static_cast<uint64_t>(s.f_bsize) * s.f_bavail;
 #elif defined(HAS_STATVFS)
 	struct statvfs s;
 
-	if (statvfs(path, &s) != 0) return false;
-	free = (uint64)s.f_frsize * s.f_bavail;
+	if (statvfs(path.c_str(), &s) == 0) return static_cast<uint64_t>(s.f_frsize) * s.f_bavail;
 #endif
-	if (tot != nullptr) *tot = free;
-	return true;
+	return std::nullopt;
 }
 
 bool FiosIsValidFile(const char *path, const struct dirent *ent, struct stat *sb)
@@ -146,31 +134,34 @@ static const char *GetLocalCode()
  * Convert between locales, which from and which to is set in the calling
  * functions OTTD2FS() and FS2OTTD().
  */
-static const char *convert_tofrom_fs(iconv_t convd, const char *name, char *outbuf, size_t outlen)
+static std::string convert_tofrom_fs(iconv_t convd, const std::string &name)
 {
 	/* There are different implementations of iconv. The older ones,
 	 * e.g. SUSv2, pass a const pointer, whereas the newer ones, e.g.
 	 * IEEE 1003.1 (2004), pass a non-const pointer. */
 #ifdef HAVE_NON_CONST_ICONV
-	char *inbuf = const_cast<char*>(name);
+	char *inbuf = const_cast<char*>(name.data());
 #else
-	const char *inbuf = name;
+	const char *inbuf = name.data();
 #endif
 
-	size_t inlen  = strlen(name);
-	char *buf = outbuf;
+	/* If the output is UTF-32, then 1 ASCII character becomes 4 bytes. */
+	size_t inlen = name.size();
+	std::string buf(inlen * 4, '\0');
 
-	strecpy(outbuf, name, outbuf + outlen);
-
+	size_t outlen = buf.size();
+	char *outbuf = buf.data();
 	iconv(convd, nullptr, nullptr, nullptr, nullptr);
 	if (iconv(convd, &inbuf, &inlen, &outbuf, &outlen) == (size_t)(-1)) {
-		DEBUG(misc, 0, "[iconv] error converting '%s'. Errno %d", name, errno);
+		DEBUG(misc, 0, "[iconv] error converting '%s'. Errno %d", name.c_str(), errno);
+		return name;
 	}
 
-	*outbuf = '\0';
-	/* FIX: invalid characters will abort conversion, but they shouldn't occur? */
+	buf.resize(outbuf - buf.data());
 	return buf;
 }
+
+std::mutex _iconv_convd_mutex;
 
 /**
  * Convert from OpenTTD's encoding to that of the local environment
@@ -179,19 +170,25 @@ static const char *convert_tofrom_fs(iconv_t convd, const char *name, char *outb
  */
 std::string OTTD2FS(const std::string &name)
 {
-	static iconv_t convd = (iconv_t)(-1);
-	char buf[1024] = {};
-
-	if (convd == (iconv_t)(-1)) {
-		const char *env = GetLocalCode();
-		convd = iconv_open(env, INTERNALCODE);
-		if (convd == (iconv_t)(-1)) {
+	static std::atomic<iconv_t> convd{(iconv_t)(-1)};
+	iconv_t local_convd = convd.load(std::memory_order_relaxed);
+	if (local_convd == (iconv_t)(-1)) {
+		{
+			std::unique_lock<std::mutex> lock(_iconv_convd_mutex);
+			local_convd = convd.load(); // Load a second time now that the lock is acquired
+			if (local_convd == (iconv_t)(-1)) {
+				const char *env = GetLocalCode();
+				local_convd = iconv_open(env, INTERNALCODE);
+				if (local_convd != (iconv_t)(-1)) convd.store(local_convd);
+			}
+		}
+		if (local_convd == (iconv_t)(-1)) {
 			DEBUG(misc, 0, "[iconv] conversion from codeset '%s' to '%s' unsupported", INTERNALCODE, env);
 			return name;
 		}
 	}
 
-	return convert_tofrom_fs(convd, name.c_str(), buf, lengthof(buf));
+	return convert_tofrom_fs(local_convd, name);
 }
 
 /**
@@ -201,30 +198,36 @@ std::string OTTD2FS(const std::string &name)
  */
 std::string FS2OTTD(const std::string &name)
 {
-	static iconv_t convd = (iconv_t)(-1);
-	char buf[1024] = {};
-
-	if (convd == (iconv_t)(-1)) {
-		const char *env = GetLocalCode();
-		convd = iconv_open(INTERNALCODE, env);
-		if (convd == (iconv_t)(-1)) {
+	static std::atomic<iconv_t> convd{(iconv_t)(-1)};
+	iconv_t local_convd = convd.load(std::memory_order_relaxed);
+	if (local_convd == (iconv_t)(-1)) {
+		{
+			std::unique_lock<std::mutex> lock(_iconv_convd_mutex);
+			local_convd = convd.load(); // Load a second time now that the lock is acquired
+			if (local_convd == (iconv_t)(-1)) {
+				const char *env = GetLocalCode();
+				local_convd = iconv_open(INTERNALCODE, env);
+				if (local_convd != (iconv_t)(-1)) convd.store(local_convd);
+			}
+		}
+		if (local_convd == (iconv_t)(-1)) {
 			DEBUG(misc, 0, "[iconv] conversion from codeset '%s' to '%s' unsupported", env, INTERNALCODE);
 			return name;
 		}
 	}
 
-	return convert_tofrom_fs(convd, name.c_str(), buf, lengthof(buf));
+	return convert_tofrom_fs(local_convd, name);
 }
 
 #endif /* WITH_ICONV */
 
-void ShowInfo(const char *str)
+void ShowInfoI(const char *str)
 {
 	fprintf(stderr, "%s\n", str);
 }
 
 #if !defined(__APPLE__)
-void ShowOSErrorBox(const char *buf, bool system)
+void ShowOSErrorBox(const char *buf, bool)
 {
 	/* All unix systems, except OSX. Only use escape codes on a TTY. */
 	if (isatty(fileno(stderr))) {
@@ -233,91 +236,59 @@ void ShowOSErrorBox(const char *buf, bool system)
 		fprintf(stderr, "Error: %s\n", buf);
 	}
 }
-#endif
 
-#ifdef WITH_COCOA
-void CocoaSetupAutoreleasePool();
-void CocoaReleaseAutoreleasePool();
-#endif
-
-int CDECL main(int argc, char *argv[])
+[[noreturn]] void DoOSAbort()
 {
-	/* Make sure our arguments contain only valid UTF-8 characters. */
-	for (int i = 0; i < argc; i++) StrMakeValidInPlace(argv[i]);
-
-#ifdef WITH_COCOA
-	CocoaSetupAutoreleasePool();
-	/* This is passed if we are launched by double-clicking */
-	if (argc >= 2 && strncmp(argv[1], "-psn", 4) == 0) {
-		argv[1] = nullptr;
-		argc = 1;
-	}
-#endif
-	PerThreadSetupInit();
-	CrashLog::InitialiseCrashLog();
-
-	SetRandomSeed(time(nullptr));
-
-	signal(SIGPIPE, SIG_IGN);
-
-	int ret = openttd_main(argc, argv);
-
-#ifdef WITH_COCOA
-	CocoaReleaseAutoreleasePool();
-#endif
-
-	return ret;
+	abort();
 }
+#endif
 
 #ifndef WITH_COCOA
-bool GetClipboardContents(char *buffer, const char *last)
+std::optional<std::string> GetClipboardContents()
 {
 #ifdef WITH_SDL2
-	if (SDL_HasClipboardText() == SDL_FALSE) {
-		return false;
-	}
+	if (SDL_HasClipboardText() == SDL_FALSE) return std::nullopt;
 
 	char *clip = SDL_GetClipboardText();
 	if (clip != nullptr) {
-		strecpy(buffer, clip, last);
+		std::string result = clip;
 		SDL_free(clip);
-		return true;
+		return result;
 	}
 #endif
 
-	return false;
+	return std::nullopt;
 }
 #endif
 
 
 #if defined(__EMSCRIPTEN__)
-void OSOpenBrowser(const char *url)
+void OSOpenBrowser(const std::string &url)
 {
 	/* Implementation in pre.js */
-	EM_ASM({ if(window["openttd_open_url"]) window.openttd_open_url($0, $1) }, url, strlen(url));
+	EM_ASM({ if (window["openttd_open_url"]) window.openttd_open_url($0, $1) }, url.c_str(), url.size());
 }
 #elif !defined( __APPLE__)
-void OSOpenBrowser(const char *url)
+void OSOpenBrowser(const std::string &url)
 {
 	pid_t child_pid = fork();
 	if (child_pid != 0) return;
 
 	const char *args[3];
 	args[0] = "xdg-open";
-	args[1] = url;
+	args[1] = url.c_str();
 	args[2] = nullptr;
 	execvp(args[0], const_cast<char * const *>(args));
-	DEBUG(misc, 0, "Failed to open url: %s", url);
+	DEBUG(misc, 0, "Failed to open url: %s", url.c_str());
 	exit(0);
 }
 #endif /* __APPLE__ */
 
-void SetCurrentThreadName(const char *threadName) {
-#if !defined(NO_THREADS) && defined(__GLIBC__)
-#if __GLIBC_PREREQ(2, 12)
+void SetCurrentThreadName([[maybe_unused]] const char *threadName)
+{
+#if defined(__GLIBC__)
 	if (threadName) pthread_setname_np(pthread_self(), threadName);
-#endif /* __GLIBC_PREREQ(2, 12) */
-#endif /* !defined(NO_THREADS) && defined(__GLIBC__) */
+#endif /* defined(__GLIBC__) */
 #if defined(__APPLE__)
 	MacOSSetThreadName(threadName);
 #endif /* defined(__APPLE__) */

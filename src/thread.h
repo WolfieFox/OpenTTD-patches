@@ -15,10 +15,6 @@
 #include <system_error>
 #include <thread>
 #include <mutex>
-#if defined(__MINGW32__)
-#include "3rdparty/mingw-std-threads/mingw.thread.h"
-#include "3rdparty/mingw-std-threads/mingw.mutex.h"
-#endif
 
 /**
  * Sleep on the current thread for a defined time.
@@ -97,7 +93,6 @@ bool IsNonGameThread();
 template<class TFn, class... TArgs>
 inline bool StartNewThread(std::thread *thr, const char *name, TFn&& _Fx, TArgs&&... _Ax)
 {
-#ifndef NO_THREADS
 	try {
 		static std::mutex thread_startup_mutex;
 		std::lock_guard<std::mutex> lock(thread_startup_mutex);
@@ -128,11 +123,10 @@ inline bool StartNewThread(std::thread *thr, const char *name, TFn&& _Fx, TArgs&
 		}
 
 		return true;
-	} catch (const std::system_error& e) {
+	} catch (const std::system_error &e) {
 		/* Something went wrong, the system we are running on might not support threads. */
 		DEBUG(misc, 1, "Can't create thread '%s': %s", name, e.what());
 	}
-#endif
 
 	return false;
 }

@@ -4,25 +4,6 @@
 #
 macro(compile_flags)
     if(MSVC)
-        if(VCPKG_TARGET_TRIPLET MATCHES "-static" AND NOT VCPKG_TARGET_TRIPLET MATCHES "-md")
-            # Switch to MT (static) instead of MD (dynamic) binary
-
-            # For MSVC two generators are available
-            # - a command line generator (Ninja) using CMAKE_BUILD_TYPE to specify the
-            #   configuration of the build tree
-            # - an IDE generator (Visual Studio) using CMAKE_CONFIGURATION_TYPES to
-            #   specify all configurations that will be available in the generated solution
-            list(APPEND MSVC_CONFIGS "${CMAKE_BUILD_TYPE}" "${CMAKE_CONFIGURATION_TYPES}")
-
-            # Set usage of static runtime for all configurations
-            foreach(MSVC_CONFIG ${MSVC_CONFIGS})
-                string(TOUPPER "CMAKE_CXX_FLAGS_${MSVC_CONFIG}" MSVC_FLAGS)
-                string(REPLACE "/MD" "/MT" ${MSVC_FLAGS} "${${MSVC_FLAGS}}")
-                string(TOUPPER "CMAKE_C_FLAGS_${MSVC_CONFIG}" MSVC_FLAGS)
-                string(REPLACE "/MD" "/MT" ${MSVC_FLAGS} "${${MSVC_FLAGS}}")
-            endforeach()
-        endif()
-
         # "If /Zc:rvalueCast is specified, the compiler follows section 5.4 of the
         # C++11 standard". We need C++11 for the way we use threads.
         add_compile_options(/Zc:rvalueCast)
@@ -33,6 +14,13 @@ macro(compile_flags)
                 /FC # Display the full path of source code files passed to the compiler in diagnostics.
             )
         endif()
+    endif()
+
+    # Our strings are UTF-8.
+    if(MSVC)
+        add_compile_options(/utf-8)
+    else()
+        add_compile_options(-finput-charset=utf-8)
     endif()
 
     # Add some -D flags for Debug builds. We cannot use add_definitions(), because
@@ -60,9 +48,13 @@ macro(compile_flags)
     #set(IS_STABLE_RELEASE "$<AND:$<NOT:$<CONFIG:Debug>>,$<NOT:$<BOOL:${OPTION_USE_ASSERTS}>>>")
 
     if(MSVC)
-        add_compile_options(/W3)
-        if(MSVC_VERSION GREATER 1929 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-            # Starting with version 19.30, there is an optimisation bug, see #9966 for details
+        add_compile_options(
+            /W3
+            #/w34100 # 'identifier' : unreferenced formal parameter
+            /w34189 # 'identifier' : local variable is initialized but not referenced
+        )
+        if(MSVC_VERSION GREATER 1929 AND MSVC_VERSION LESS 1937 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+            # Starting with version 19.30 (fixed in version 19.37), there is an optimisation bug, see #9966 for details
             # This flag disables the broken optimisation to work around the bug
             add_compile_options(/d2ssa-rse-)
         endif()
@@ -81,6 +73,7 @@ macro(compile_flags)
             -Wformat=2
             -Winit-self
             "$<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>"
+            "$<$<COMPILE_LANGUAGE:CXX>:-Wsuggest-override>"
 
             # Often parameters are unused, which is fine.
             -Wno-unused-parameter
@@ -92,7 +85,13 @@ macro(compile_flags)
             #  break anything. So disable strict-aliasing to make the
             #  compiler all happy.
             -fno-strict-aliasing
+
+
         )
+
+        if(OPTION_TRIM_PATH_PREFIX)
+            add_compile_options("-ffile-prefix-map=${CMAKE_SOURCE_DIR}/=/")
+        endif(OPTION_TRIM_PATH_PREFIX)
 
         if(NOT CMAKE_BUILD_TYPE)
             # Sensible default if no build type specified
@@ -101,22 +100,6 @@ macro(compile_flags)
                 add_compile_options(-DNDEBUG)
             endif()
         endif(NOT CMAKE_BUILD_TYPE)
-
-        # When we are a stable release (Release build + USE_ASSERTS not set),
-        # assertations are off, which trigger a lot of warnings. We disable
-        # these warnings for these releases.
-        #if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        #    add_compile_options(
-        #        "$<${IS_STABLE_RELEASE}:-Wno-unused-variable>"
-        #        "$<${IS_STABLE_RELEASE}:-Wno-unused-but-set-parameter>"
-        #        "$<${IS_STABLE_RELEASE}:-Wno-unused-but-set-variable>"
-        #    )
-        #else (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        #    add_compile_options(
-        #        "$<${IS_STABLE_RELEASE}:-Wno-unused-variable>"
-        #        "$<${IS_STABLE_RELEASE}:-Wno-unused-parameter>"
-        #    )
-        #endif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 
         # Ninja processes the output so the output from the compiler
         # isn't directly to a terminal; hence, the default is
@@ -149,6 +132,10 @@ macro(compile_flags)
                 # -flifetime-dse=2 (default since GCC 6) doesn't play
                 # well with our custom pool item allocator
                 "$<$<BOOL:${LIFETIME_DSE_FOUND}>:-flifetime-dse=1>"
+
+                # We have a fight between clang wanting std::move() and gcc not wanting it
+                # and of course they both warn when the other compiler is happy
+                "$<$<COMPILE_LANGUAGE:CXX>:-Wno-redundant-move>"
             )
         endif()
 
@@ -170,9 +157,35 @@ macro(compile_flags)
             endif()
         endif()
 
+        if(OPTION_COMPRESS_DEBUG)
+            include(CheckCXXCompilerFlag)
+            check_cxx_compiler_flag("-gz" GZ_FOUND)
+
+            if(GZ_FOUND)
+                # Compress debug sections.
+                add_compile_options(-gz)
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -gz")
+            endif()
+        endif(OPTION_COMPRESS_DEBUG)
+
+        if(OPTION_LTO)
+            include(CheckCXXCompilerFlag)
+            check_cxx_compiler_flag("-flto" LTO_FOUND)
+
+            if(LTO_FOUND)
+                # Enable LTO.
+                add_compile_options(-flto)
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
+            endif()
+        endif(OPTION_LTO)
+
         if (OPTION_NO_WARN_UNINIT)
             add_compile_options(-Wno-maybe-uninitialized -Wno-uninitialized)
         endif (OPTION_NO_WARN_UNINIT)
+
+        if (EMSCRIPTEN)
+            add_compile_options(-Wno-deprecated-builtins)
+        endif()
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
         add_compile_options(
             -Wall

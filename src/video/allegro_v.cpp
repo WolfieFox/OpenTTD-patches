@@ -17,7 +17,6 @@
 #include "../stdafx.h"
 #include "../openttd.h"
 #include "../gfx_func.h"
-#include "../rev.h"
 #include "../blitter/factory.hpp"
 #include "../core/random_func.hpp"
 #include "../core/math_func.hpp"
@@ -215,9 +214,8 @@ static bool CreateMainSurface(uint w, uint h)
 
 	InitPalette();
 
-	char caption[32];
-	seprintf(caption, lastof(caption), "OpenTTD %s", _openttd_revision);
-	set_window_title(caption);
+	std::string caption = VideoDriver::GetCaption();
+	set_window_title(caption.c_str());
 
 	enable_hardware_cursor();
 	select_mouse_cursor(MOUSE_CURSOR_ARROW);
@@ -247,7 +245,7 @@ std::vector<int> VideoDriver_Allegro::GetListOfMonitorRefreshRates()
 }
 
 struct AllegroVkMapping {
-	uint16 vk_from;
+	uint16_t vk_from;
 	byte vk_count;
 	byte map_to;
 };
@@ -308,7 +306,7 @@ static const AllegroVkMapping _vk_mapping[] = {
 	AS(KEY_TILDE,   WKC_BACKQUOTE),
 };
 
-static uint32 ConvertAllegroKeyIntoMy(WChar *character)
+static uint32_t ConvertAllegroKeyIntoMy(char32_t *character)
 {
 	int scancode;
 	int unicode = ureadkey(&scancode);
@@ -390,7 +388,7 @@ bool VideoDriver_Allegro::PollEvent()
 	}
 
 	/* Mouse movement */
-	if (_cursor.UpdateCursorPosition(mouse_x, mouse_y, false)) {
+	if (_cursor.UpdateCursorPosition(mouse_x, mouse_y)) {
 		position_mouse(_cursor.pos.x, _cursor.pos.y);
 	}
 	if (_cursor.delta.x != 0 || _cursor.delta.y) mouse_action = true;
@@ -408,7 +406,7 @@ bool VideoDriver_Allegro::PollEvent()
 	if ((key_shifts & KB_ALT_FLAG) && (key[KEY_ENTER] || key[KEY_F])) {
 		ToggleFullScreen(!_fullscreen);
 	} else if (keypressed()) {
-		WChar character;
+		char32_t character;
 		uint keycode = ConvertAllegroKeyIntoMy(&character);
 		HandleKeypress(keycode, character);
 	}
@@ -468,13 +466,9 @@ void VideoDriver_Allegro::InputLoop()
 	_ctrl_pressed  = !!(key_shifts & KB_CTRL_FLAG) != _invert_ctrl;
 	_shift_pressed = !!(key_shifts & KB_SHIFT_FLAG) != _invert_shift;
 
-#if defined(_DEBUG)
-	this->fast_forward_key_pressed = _shift_pressed;
-#else
 	/* Speedup when pressing tab, except when using ALT+TAB
 	 * to switch to another application. */
 	this->fast_forward_key_pressed = key[KEY_TAB] && (key_shifts & KB_ALT_FLAG) == 0;
-#endif
 
 	/* Determine which directional keys are down. */
 	_dirkeys =

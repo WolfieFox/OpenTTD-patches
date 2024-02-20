@@ -41,24 +41,24 @@ protected:
 	CYapfCostRoadT() : m_max_cost(0) {};
 
 	/** to access inherited path finder */
-	Tpf& Yapf()
+	Tpf &Yapf()
 	{
 		/* use two lines to avoid false-positive Undefined Behavior Sanitizer warnings when alignof(Tpf) > alignof(*this) and *this does not meet alignof(Tpf) */
 		Tpf *p = static_cast<Tpf *>(this);
 		return *p;
 	}
 
-	int SlopeCost(TileIndex tile, TileIndex next_tile, Trackdir trackdir)
+	int SlopeCost(TileIndex tile, TileIndex next_tile, Trackdir)
 	{
 		/* height of the center of the current tile */
 		int x1 = TileX(tile) * TILE_SIZE;
 		int y1 = TileY(tile) * TILE_SIZE;
-		int z1 = GetSlopePixelZ(x1 + TILE_SIZE / 2, y1 + TILE_SIZE / 2);
+		int z1 = GetSlopePixelZ(x1 + TILE_SIZE / 2, y1 + TILE_SIZE / 2, true);
 
 		/* height of the center of the next tile */
 		int x2 = TileX(next_tile) * TILE_SIZE;
 		int y2 = TileY(next_tile) * TILE_SIZE;
-		int z2 = GetSlopePixelZ(x2 + TILE_SIZE / 2, y2 + TILE_SIZE / 2);
+		int z2 = GetSlopePixelZ(x2 + TILE_SIZE / 2, y2 + TILE_SIZE / 2, true);
 
 		if (z2 - z1 > 1) {
 			/* Slope up */
@@ -189,7 +189,7 @@ public:
 			/* if there are more trackdirs available & reachable, we are at the end of segment */
 			if (KillFirstBit(F.m_new_td_bits) != TRACKDIR_BIT_NONE) break;
 
-			Trackdir new_td = (Trackdir)FindFirstBit2x64(F.m_new_td_bits);
+			Trackdir new_td = (Trackdir)FindFirstBit(F.m_new_td_bits);
 
 			/* stop if RV is on simple loop with no junctions */
 			if (F.m_new_tile == n.m_key.m_tile && new_td == n.m_key.m_td) return false;
@@ -231,7 +231,7 @@ public:
 	typedef typename Node::Key Key;                      ///< key to hash tables
 
 	/** to access inherited path finder */
-	Tpf& Yapf()
+	Tpf &Yapf()
 	{
 		return *static_cast<Tpf *>(this);
 	}
@@ -242,7 +242,7 @@ public:
 		return IsRoadDepotTile(n.m_segment_last_tile);
 	}
 
-	inline bool PfDetectDestinationTile(TileIndex tile, Trackdir trackdir)
+	inline bool PfDetectDestinationTile(TileIndex tile, Trackdir)
 	{
 		return IsRoadDepotTile(tile);
 	}
@@ -297,7 +297,7 @@ public:
 		} else {
 			m_dest_station  = INVALID_STATION;
 			m_destTile      = v->dest_tile;
-			m_destTrackdirs = TrackStatusToTrackdirBits(GetTileTrackStatus(v->dest_tile, TRANSPORT_ROAD, GetRoadTramType(v->roadtype)));
+			m_destTrackdirs = GetTileTrackdirBits(v->dest_tile, TRANSPORT_ROAD, GetRoadTramType(v->roadtype));
 		}
 	}
 
@@ -308,7 +308,7 @@ public:
 
 protected:
 	/** to access inherited path finder */
-	Tpf& Yapf()
+	Tpf &Yapf()
 	{
 		return *static_cast<Tpf *>(this);
 	}
@@ -410,7 +410,7 @@ public:
 
 protected:
 	/** to access inherited path finder */
-	inline Tpf& Yapf()
+	inline Tpf &Yapf()
 	{
 		return *static_cast<Tpf *>(this);
 	}
@@ -495,16 +495,11 @@ public:
 		Trackdir next_trackdir = INVALID_TRACKDIR;
 		Node *pNode = Yapf().GetBestNode();
 		if (pNode != nullptr) {
-			uint steps = 0;
-			for (Node *n = pNode; n->m_parent != nullptr; n = n->m_parent) steps++;
-
 			/* path was found or at least suggested
 			 * walk through the path back to its origin */
 			while (pNode->m_parent != nullptr) {
-				steps--;
-				if (pNode->GetIsChoice() && steps < YAPF_ROADVEH_PATH_CACHE_SEGMENTS) {
-					path_cache.td.push_front(pNode->GetTrackdir());
-					path_cache.tile.push_front(pNode->GetTile());
+				if (pNode->GetIsChoice()) {
+					path_cache.push_front(pNode->GetTile(), pNode->GetTrackdir());
 				}
 				pNode = pNode->m_parent;
 			}
@@ -514,8 +509,7 @@ public:
 			next_trackdir = best_next_node.GetTrackdir();
 			/* remove last element for the special case when tile == dest_tile */
 			if (path_found && !path_cache.empty() && tile == v->dest_tile) {
-				path_cache.td.pop_back();
-				path_cache.tile.pop_back();
+				path_cache.pop_back();
 			}
 			path_cache.layout_ctr = _road_layout_change_counter;
 
@@ -523,19 +517,12 @@ public:
 			if (multiple_targets) {
 				/* Destination station has at least 2 usable road stops, or first is a drive-through stop,
 				 * trim end of path cache within a number of tiles of road stop tile area */
-				while (!path_cache.empty() && non_cached_area.Contains(path_cache.tile.back())) {
-					path_cache.td.pop_back();
-					path_cache.tile.pop_back();
+				while (!path_cache.empty() && non_cached_area.Contains(path_cache.back_tile())) {
+					path_cache.pop_back();
 				}
 			}
 		}
 		return next_trackdir;
-	}
-
-	static uint stDistanceToTile(const RoadVehicle *v, TileIndex tile)
-	{
-		Tpf pf;
-		return pf.DistanceToTile(v, tile);
 	}
 
 	inline uint DistanceToTile(const RoadVehicle *v, TileIndex dst_tile)
@@ -651,7 +638,7 @@ Trackdir YapfRoadVehicleChooseTrack(const RoadVehicle *v, TileIndex tile, DiagDi
 	}
 
 	Trackdir td_ret = pfnChooseRoadTrack(v, tile, enterdir, path_found, path_cache);
-	return (td_ret != INVALID_TRACKDIR) ? td_ret : (Trackdir)FindFirstBit2x64(trackdirs);
+	return (td_ret != INVALID_TRACKDIR) ? td_ret : (Trackdir)FindFirstBit(trackdirs);
 }
 
 FindDepotData YapfRoadVehicleFindNearestDepot(const RoadVehicle *v, int max_distance)

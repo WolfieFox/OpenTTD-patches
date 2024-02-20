@@ -12,11 +12,11 @@
 
 #include "../random_access_file_type.h"
 
-enum SpriteFileFlags : uint8 {
+enum SpriteFileFlags : uint8_t {
 	SFF_NONE                  = 0,
 	SFF_USERGRF               = 1 << 0,
-	SFF_OGFX                  = 1 << 1,
-	SFF_PROGSIG               = 1 << 2,
+	SFF_PROGSIG               = 1 << 1,
+	SFF_OPENTTDGRF            = 1 << 2,
 };
 DECLARE_ENUM_AS_BIT_SET(SpriteFileFlags)
 

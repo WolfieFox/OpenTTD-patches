@@ -14,8 +14,12 @@
 #include "company_type.h"
 #include "core/geometry_type.hpp"
 
+#include <bitset>
+
 Window *FindWindowById(WindowClass cls, WindowNumber number);
 Window *FindWindowByClass(WindowClass cls);
+Window *FindWindowByToken(WindowToken token);
+Window *GetMainWindow();
 void ChangeWindowOwner(Owner old_owner, Owner new_owner);
 
 void ResizeWindow(Window *w, int x, int y, bool clamp_to_screen = true);
@@ -36,11 +40,11 @@ void InputLoop();
 void InvalidateWindowData(WindowClass cls, WindowNumber number, int data = 0, bool gui_scope = false);
 void InvalidateWindowClassesData(WindowClass cls, int data = 0, bool gui_scope = false);
 
-void DeleteNonVitalWindows();
-void DeleteAllNonVitalWindows();
+void CloseNonVitalWindows();
+void CloseAllNonVitalWindows();
 void DeleteAllMessages();
-void DeleteConstructionWindows();
-void DeleteNetworkClientWindows();
+void CloseConstructionWindows();
+void CloseNetworkClientWindows();
 void HideVitalWindows();
 void ShowVitalWindows();
 
@@ -50,15 +54,21 @@ void ShowVitalWindows();
  */
 void ReInitAllWindows(bool zoom_changed);
 
-void SetWindowWidgetDirty(WindowClass cls, WindowNumber number, byte widget_index);
+void SetWindowWidgetDirty(WindowClass cls, WindowNumber number, WidgetID widget_index);
 void SetWindowDirty(WindowClass cls, WindowNumber number);
 void SetWindowClassesDirty(WindowClass cls);
 
-void DeleteWindowById(WindowClass cls, WindowNumber number, bool force = true);
-void DeleteAllWindowsById(WindowClass cls, WindowNumber number, bool force = true);
-void DeleteWindowByClass(WindowClass cls);
+void CloseWindowById(WindowClass cls, WindowNumber number, bool force = true, int data = 0);
+void CloseAllWindowsById(WindowClass cls, WindowNumber number, bool force = true, int data = 0);
+void CloseWindowByClass(WindowClass cls, int data = 0);
 
 bool FocusWindowById(WindowClass cls, WindowNumber number);
+
+inline bool HaveWindowByClass(WindowClass wc)
+{
+	extern std::bitset<WC_END> _present_window_types;
+	return wc < WC_END && _present_window_types[wc];
+}
 
 bool EditBoxInGlobalFocus();
 bool FocusedWindowIsConsole();

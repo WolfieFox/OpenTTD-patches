@@ -1,4 +1,4 @@
-## JGR's Patchpack version 0.50.1
+## JGR's Patchpack version 0.57.1
 
 This is a collection of patches applied to [OpenTTD](http://www.openttd.org/)
 
@@ -18,7 +18,7 @@ See [below](#openttd) for the original OpenTTD readme.
 
 The thread for this patchpack can be found [here](http://www.tt-forums.net/viewtopic.php?f=33&t=73469).
 
-See [jgrpp-changelog.md](jgrpp-changelog.md) for changelog.
+See [jgrpp-changelog.md](jgrpp-changelog.md) for the changelog.
 
 See the [wiki](https://github.com/JGRennison/OpenTTD-patches/wiki) for guides on how to use some of the included features.
 
@@ -57,6 +57,8 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Add client setting to show all signals using the default baseset sprites.
 * Remember the last-used signal type between games.
 * Add client setting to show the introduction year for train wagons.
+* Add setting for rail depot maximum speed.
+* Add setting to allow auto-fill signal dragging to skip over stations/waypoints.
 
 #### Roads and Road Vehicles
 
@@ -99,6 +101,7 @@ See [installation.md](/installation.md) for instructions on how to install.
 #### Ships
 
 * [Ship collision avoidance](http://www.tt-forums.net/viewtopic.php?f=33&t=74365).
+* Allow NewGRF ships to carry more than one cargo.
 
 #### Vehicles in General
 
@@ -157,6 +160,8 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Add features to duplicate an individual order and to change the jump target of conditional orders.
 * Add company setting for whether to advance the current order when cloning/copying/sharing (if current depot is in order list).
 * Add vehicle list menu item to mass cancel go to or service at depot orders.
+* Allow changing colour of orders in order list and timetable windows.
+* Add text label and departure board via order types.
 
 #### Stations
 
@@ -178,6 +183,8 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Add setting to allow hiding viewport labels of individual waypoints.
 * Increase the distance a station can be from the town centre and still be assigned have the same name as the town (no suffix/prefix), for large towns.
 * [Allow NewGRFs to supply additional station name strings](https://github.com/JGRennison/OpenTTD-patches/wiki/GRF-features#extra-station-names).
+* Allow generating new default name for station (ctrl-click default button in rename station query window).
+* Allow exchanging a station's name with another station in the same town.
 
 #### Towns
 
@@ -189,9 +196,12 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Add "indifferent" mode to the town council attitude to area restructuring setting.
 * Disallow converting town-owned roads to types with the no houses flag.
 * Add public roads (road network automatically built between towns) at map generation and in the scenario editor.
-* Add setting for if/when towns can build road tunnels.
+* Add settings for if/when towns can build road bridges and tunnels.
 * Add setting to limit length of continuous inclined roads built by towns.
-* Allow overriding town road construction settings on a per-town basis, add setting to enable this for multiplayer clients.
+* Add setting for whether to allow converting town road to non-house types.
+* Allow overriding town road construction settings and whether town growth is enabled on a per-town basis, add setting to enable this for multiplayer clients.
+* Allow NewGRFs to set town zone radii.
+* Show town count in town directory window.
 
 #### Industries
 
@@ -220,6 +230,7 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Add setting to disable object expiry after a given year.
 * Add setting to ignore object introduction dates.
 * Add setting for whether to confirm before demolishing industries and/or rail stations.
+* Add picker tool for objects, rail types, road types, rail stations/waypoint, road stops/waypoints and signals, to the main toolbar help menu.
 
 #### Scenario Editor
 
@@ -246,6 +257,10 @@ See [installation.md](/installation.md) for instructions on how to install.
 * Add display setting for income/cost text effects.
 * Make the company infrastructure window scrollable.
 * Add setting to disable water animation depending on zoom level.
+* Add zoom in support to the minimap window.
+* Add setting to increase the size of the main toolbar.
+* Add cargo filtering and a show by cargo mode to the company delivered cargo graph.
+* Add setting to display the area outside of the map as water.
 
 #### Limits
 
@@ -270,7 +285,7 @@ See [installation.md](/installation.md) for instructions on how to install.
 * [Give money to company, instead of player](https://www.tt-forums.net/viewtopic.php?f=33&t=63899), broadcast money transfer notifications to all players.
 * Add setting to enable non-admin multiplayer clients to rename towns.
 * Add a password mechanism to change network game settings from a network client.
-* Change network protocol to send server/join and rcon passwords in hashed form instead of in clear text.
+* Auto-kick clients after too many failed rcon/settings attempts.
 * Various changes to reduce the probability of desyncs and improve desync reporting/diagnostics.
 * Add support for zstd savegame compression for autosaves and network joins.
 * Increase the number of settings which can be changed in multiplayer.
@@ -327,12 +342,6 @@ See [installation.md](/installation.md) for instructions on how to install.
 * [NML specification additions](docs/newgrf-additions-nml.html) ([online copy](https://jgrennison.github.io/OpenTTD-patches/newgrf-additions-nml.html)).
 * [AI/GS script additions](docs/script-additions.html) ([online copy](https://jgrennison.github.io/OpenTTD-patches/script-additions.html)).
 * [Low-level code/performance changes](docs/jgrpp-low-level-changes.md).
-
-#### Translations
-
-* German (by Auge and Kruemelchen)  
-* Korean (by kiwitreekor and TELK)  
-* Japanese (by Qwerty Asd)
 
 #### Save/load and savegame format changes  
 * Various changes to improve handling of savegames which use features not in trunk.  
@@ -392,9 +401,10 @@ The *feature-sx* branches use the savegame framework in the *save_ext* branch.
     - 1.6) [OpenTTD directories](#16-openttd-directories)
     - 1.7) [Compiling OpenTTD](#17-compiling-openttd)
 - 2.0) [Contact and community](#20-contact-and-community)
-    - 2.1) [Contributing to OpenTTD](#21-contributing-to-openttd)
-    - 2.2) [Reporting bugs](#22-reporting-bugs)
-    - 2.3) [Translating](#23-translating)
+    - 2.1) [Multiplayer games](#21-multiplayer-games)
+    - 2.2) [Contributing to OpenTTD](#22-contributing-to-openttd)
+    - 2.3) [Reporting bugs](#23-reporting-bugs)
+    - 2.4) [Translating](#24-translating)
 - 3.0) [Licensing](#30-licensing)
 - 4.0) [Credits](#40-credits)
 
@@ -458,9 +468,9 @@ For some platforms, you will need to refer to [the installation guide](https://w
 The free data files, split into OpenGFX for graphics, OpenSFX for sounds and
 OpenMSX for music can be found at:
 
-- https://www.openttd.org/downloads/opengfx-releases/latest for OpenGFX
-- https://www.openttd.org/downloads/opensfx-releases/latest for OpenSFX
-- https://www.openttd.org/downloads/openmsx-releases/latest for OpenMSX
+- [OpenGFX](https://www.openttd.org/downloads/opengfx-releases/latest)
+- [OpenSFX](https://www.openttd.org/downloads/opensfx-releases/latest)
+- [OpenMSX](https://www.openttd.org/downloads/openmsx-releases/latest)
 
 Please follow the readme of these packages about the installation procedure.
 The Windows installer can optionally download and install these packages.
@@ -498,6 +508,15 @@ Most types of add-on content can be downloaded within OpenTTD via the 'Check Onl
 Add-on content can also be installed manually, but that's more complicated; the [OpenTTD wiki](https://wiki.openttd.org/) may offer help with that, or the [OpenTTD directory structure guide](./docs/directory_structure.md).
 
 
+### 1.5.1) Social Integration
+
+OpenTTD has the ability to load plugins to integrate with Social Platforms like Steam, Discord, etc.
+
+To enable such integration, the plugin for the specific platform has to be downloaded and stored in the `social_integration` folder.
+
+See [OpenTTD's website](https://www.openttd.org), under Downloads, for what plugins are available.
+
+
 ### 1.6) OpenTTD directories
 
 OpenTTD uses its own directory structure to store game data, add-on content etc.
@@ -525,12 +544,19 @@ If you want to compile OpenTTD from source, instructions can be found in [COMPIL
 - the OpenTTD wiki has a [page listing OpenTTD communities](https://wiki.openttd.org/en/Community/Community) including some in languages other than English
 
 
-### 2.1) Contributing to OpenTTD
+### 2.1) Multiplayer games
+
+You can play OpenTTD with others, either cooperatively or competitively.
+
+See the [multiplayer documentation](./docs/multiplayer.md) for more details.
+
+
+### 2.2) Contributing to OpenTTD
 
 We welcome contributors to OpenTTD.  More information for contributors can be found in [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 
-### 2.2) Reporting bugs
+### 2.3) Reporting bugs
 
 Good bug reports are very helpful.  We have a [guide to reporting bugs](./CONTRIBUTING.md#bug-reports) to help with this.
 
@@ -538,7 +564,7 @@ Desyncs in multiplayer are complex to debug and report (some software developmen
 Instructions can be found in [debugging and reporting desyncs](./docs/debugging_desyncs.md).
 
 
-### 2.3) Translating
+### 2.4) Translating
 
 OpenTTD is translated into many languages.  Translations are added and updated via the [online translation tool](https://translator.openttd.org).
 
@@ -555,12 +581,26 @@ See `src/3rdparty/squirrel/COPYRIGHT` for the complete license text.
 The md5 implementation in `src/3rdparty/md5` is licensed under the Zlib license.
 See the comments in the source files in `src/3rdparty/md5` for the complete license text.
 
-The implementations of Posix `getaddrinfo` and `getnameinfo` for OS/2 in `src/3rdparty/os2` are distributed partly under the GNU Lesser General Public License 2.1, and partly under the (3-clause) BSD license.
-The exact licensing terms can be found in `src/3rdparty/os2/getaddrinfo.c` resp. `src/3rdparty/os2/getnameinfo.c`.
+The fmt implementation in `src/3rdparty/fmt` is licensed under the MIT license.
+See `src/3rdparty/fmt/LICENSE.rst` for the complete license text.
 
-The implementation of C++17 `std::optional` in `src/3rdparty/optional` is licensed under the Boost Software License - Version 1.0.
-See `src/3rdparty/optional/LICENSE_1_0.txt` for the complete license text.
+The nlohmann json implementation in `src/3rdparty/nlohmann` is licensed under the MIT license.
+See `src/3rdparty/nlohmann/LICENSE.MIT` for the complete license text.
 
+The OpenGL API in `src/3rdparty/opengl` is licensed under the MIT license.
+See `src/3rdparty/opengl/khrplatform.h` for the complete license text.
+
+The catch2 implementation in `src/3rdparty/catch2` is licensed under the Boost Software License, Version 1.0.
+See `src/3rdparty/catch2/LICENSE.txt` for the complete license text.
+
+The icu scriptrun implementation in `src/3rdparty/icu` is licensed under the Unicode license.
+See `src/3rdparty/icu/LICENSE` for the complete license text.
+
+The monocypher implementation in `src/3rdparty/monocypher` is licensed under the 2-clause BSD and CC-0 license.
+See `src/3rdparty/monocypher/LICENSE.md` for the complete license text.
+
+The OpenTTD Social Integration API in `src/3rdparty/openttd_social_integration_api` is licensed under the MIT license.
+See `src/3rdparty/openttd_social_integration_api/LICENSE` for the complete license text.
 
 ## 4.0 Credits
 

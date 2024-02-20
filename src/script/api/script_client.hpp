@@ -14,6 +14,7 @@
 #include "script_date.hpp"
 #include "script_company.hpp"
 #include "../../network/network_type.h"
+#include <optional>
 
 /**
  * Class that handles all client related functions.
@@ -24,7 +25,7 @@ class ScriptClient : public ScriptObject {
 public:
 
 	/** Different constants related to ClientID. */
-	enum ClientID : uint32 {
+	enum ClientID : uint32_t {
 		CLIENT_INVALID = 0,  ///< Client is not part of anything
 		CLIENT_SERVER  = 1,  ///< Servers always have this ID
 		CLIENT_FIRST   = 2,  ///< The first client ID
@@ -45,7 +46,7 @@ public:
 	 * @pre ResolveClientID(client) != CLIENT_INVALID.
 	 * @return The name of the given client.
 	 */
-	static char *GetName(ClientID client);
+	static std::optional<std::string> GetName(ClientID client);
 
 	/**
 	 * Get the company in which the given client is playing.

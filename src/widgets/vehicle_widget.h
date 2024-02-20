@@ -11,7 +11,7 @@
 #define WIDGETS_VEHICLE_WIDGET_H
 
 /** Widgets of the #VehicleViewWindow class. */
-enum VehicleViewWidgets {
+enum VehicleViewWidgets : WidgetID {
 	WID_VV_CAPTION,            ///< Caption of window.
 	WID_VV_VIEWPORT,           ///< Viewport widget.
 	WID_VV_START_STOP,         ///< Start or stop this vehicle, and show information about the current state.
@@ -31,11 +31,12 @@ enum VehicleViewWidgets {
 };
 
 /** Widgets of the #RefitWindow class. */
-enum VehicleRefitWidgets {
+enum VehicleRefitWidgets : WidgetID {
 	WID_VR_CAPTION,               ///< Caption of window.
 	WID_VR_VEHICLE_PANEL_DISPLAY, ///< Display with a representation of the vehicle to refit.
 	WID_VR_SHOW_HSCROLLBAR,       ///< Selection widget for the horizontal scrollbar.
 	WID_VR_HSCROLLBAR,            ///< Horizontal scrollbar or the vehicle display.
+	WID_VR_VEHICLE_DROPDOWN,      ///< Dropdown for the vehicle display.
 	WID_VR_SELECT_HEADER,         ///< Header with question about the cargo to carry.
 	WID_VR_MATRIX,                ///< Options to refit to.
 	WID_VR_SCROLLBAR,             ///< Scrollbar for the refit options.
@@ -44,7 +45,7 @@ enum VehicleRefitWidgets {
 };
 
 /** Widgets of the #VehicleDetailsWindow class. */
-enum VehicleDetailsWidgets {
+enum VehicleDetailsWidgets : WidgetID {
 	WID_VD_CAPTION,                     ///< Caption of window.
 	WID_VD_TOP_DETAILS,                 ///< Panel with generic details.
 	WID_VD_INCREASE_SERVICING_INTERVAL, ///< Increase the servicing interval.
@@ -61,7 +62,7 @@ enum VehicleDetailsWidgets {
 };
 
 /** Widgets of the #VehicleListWindow class. */
-enum VehicleListWidgets {
+enum VehicleListWidgets : WidgetID {
 	WID_VL_LIST,                     ///< List of the vehicles, this must be first, see: DirtyVehicleListWindowForVehicle
 	WID_VL_CAPTION,                  ///< Caption of window (for non shared orders windows).
 	WID_VL_CAPTION_SHARED_ORDERS,    ///< Caption of window (for shared orders windows).

@@ -30,18 +30,21 @@
 #include "company_func.h"
 #include "tunnelbridge_map.h"
 #include "pathfinder/npf/aystar.h"
-#include "saveload/saveload.h"
+#include "sl/saveload.h"
 #include "framerate_type.h"
 #include "town.h"
 #include "3rdparty/cpp-btree/btree_set.h"
 #include "scope_info.h"
+#include "core/ring_buffer.hpp"
+#include "network/network_sync.h"
 #include <array>
 #include <list>
 #include <set>
-#include <deque>
 
 #include "table/strings.h"
 #include "table/sprites.h"
+
+#include INCLUDE_FOR_PREFETCH_NTA
 
 #include "safeguards.h"
 
@@ -224,146 +227,22 @@ uint ApplyFoundationToSlope(Foundation f, Slope *s)
 	return dz;
 }
 
-
 /**
- * Determines height at given coordinate of a slope
- * @param x x coordinate
- * @param y y coordinate
- * @param corners slope to examine
- * @return height of given point of given slope
+ * Return world \c Z coordinate of a given point of a tile. Normally this is the
+ * Z of the ground/foundation at the given location, but in some cases the
+ * ground/foundation can differ from the Z coordinate that the (ground) vehicle
+ * passing over it would take. For example when entering a tunnel or bridge.
+ *
+ * @param x World X coordinate in tile "units".
+ * @param y World Y coordinate in tile "units".
+ * @param ground_vehicle Whether to get the Z coordinate of the ground vehicle, or the ground.
+ * @return World Z coordinate at tile ground (vehicle) level, including slopes and foundations.
  */
-uint GetPartialPixelZ(int x, int y, Slope corners)
-{
-	if (IsHalftileSlope(corners)) {
-		switch (GetHalftileSlopeCorner(corners)) {
-			case CORNER_W:
-				if (x - y >= 0) return GetSlopeMaxPixelZ(corners);
-				break;
-
-			case CORNER_S:
-				if (x - (y ^ 0xF) >= 0) return GetSlopeMaxPixelZ(corners);
-				break;
-
-			case CORNER_E:
-				if (y - x >= 0) return GetSlopeMaxPixelZ(corners);
-				break;
-
-			case CORNER_N:
-				if ((y ^ 0xF) - x >= 0) return GetSlopeMaxPixelZ(corners);
-				break;
-
-			default: NOT_REACHED();
-		}
-	}
-
-	int z = 0;
-
-	switch (RemoveHalftileSlope(corners)) {
-		case SLOPE_W:
-			if (x - y >= 0) {
-				z = (x - y) >> 1;
-			}
-			break;
-
-		case SLOPE_S:
-			y ^= 0xF;
-			if ((x - y) >= 0) {
-				z = (x - y) >> 1;
-			}
-			break;
-
-		case SLOPE_SW:
-			z = (x >> 1) + 1;
-			break;
-
-		case SLOPE_E:
-			if (y - x >= 0) {
-				z = (y - x) >> 1;
-			}
-			break;
-
-		case SLOPE_EW:
-		case SLOPE_NS:
-		case SLOPE_ELEVATED:
-			z = 4;
-			break;
-
-		case SLOPE_SE:
-			z = (y >> 1) + 1;
-			break;
-
-		case SLOPE_WSE:
-			z = 8;
-			y ^= 0xF;
-			if (x - y < 0) {
-				z += (x - y) >> 1;
-			}
-			break;
-
-		case SLOPE_N:
-			y ^= 0xF;
-			if (y - x >= 0) {
-				z = (y - x) >> 1;
-			}
-			break;
-
-		case SLOPE_NW:
-			z = (y ^ 0xF) >> 1;
-			break;
-
-		case SLOPE_NWS:
-			z = 8;
-			if (x - y < 0) {
-				z += (x - y) >> 1;
-			}
-			break;
-
-		case SLOPE_NE:
-			z = (x ^ 0xF) >> 1;
-			break;
-
-		case SLOPE_ENW:
-			z = 8;
-			y ^= 0xF;
-			if (y - x < 0) {
-				z += (y - x) >> 1;
-			}
-			break;
-
-		case SLOPE_SEN:
-			z = 8;
-			if (y - x < 0) {
-				z += (y - x) >> 1;
-			}
-			break;
-
-		case SLOPE_STEEP_S:
-			z = 1 + ((x + y) >> 1);
-			break;
-
-		case SLOPE_STEEP_W:
-			z = 1 + ((x + (y ^ 0xF)) >> 1);
-			break;
-
-		case SLOPE_STEEP_N:
-			z = 1 + (((x ^ 0xF) + (y ^ 0xF)) >> 1);
-			break;
-
-		case SLOPE_STEEP_E:
-			z = 1 + (((x ^ 0xF) + y) >> 1);
-			break;
-
-		default: break;
-	}
-
-	return z;
-}
-
-int GetSlopePixelZ(int x, int y)
+int GetSlopePixelZ(int x, int y, bool ground_vehicle)
 {
 	TileIndex tile = TileVirtXY(x, y);
 
-	return _tile_type_procs[GetTileType(tile)]->get_slope_z_proc(tile, x, y);
+	return _tile_type_procs[GetTileType(tile)]->get_slope_z_proc(tile, x, y, ground_vehicle);
 }
 
 /**
@@ -377,9 +256,9 @@ int GetSlopePixelZ(int x, int y)
 int GetSlopePixelZOutsideMap(int x, int y)
 {
 	if (IsInsideBS(x, 0, MapSizeX() * TILE_SIZE) && IsInsideBS(y, 0, MapSizeY() * TILE_SIZE)) {
-		return GetSlopePixelZ(x, y);
+		return GetSlopePixelZ(x, y, false);
 	} else {
-		return _tile_type_procs[MP_VOID]->get_slope_z_proc(INVALID_TILE, x, y);
+		return _tile_type_procs[MP_VOID]->get_slope_z_proc(INVALID_TILE, x, y, false);
 	}
 }
 
@@ -431,6 +310,14 @@ void GetSlopePixelZOnEdge(Slope tileh, DiagDirection edge, int *z1, int *z2)
 	if (RemoveHalftileSlope(tileh) == corners[edge][3]) *z2 += TILE_HEIGHT; // z2 is highest corner of a steep slope
 }
 
+Slope GetFoundationSlopeFromTileSlope(TileIndex tile, Slope tileh, int *z)
+{
+	Foundation f = _tile_type_procs[GetTileType(tile)]->get_foundation_proc(tile, tileh);
+	uint z_inc = ApplyFoundationToSlope(f, &tileh);
+	if (z != nullptr) *z += z_inc;
+	return tileh;
+}
+
 /**
  * Get slope of a tile on top of a (possible) foundation
  * If a tile does not have a foundation, the function returns the same as GetTileSlope.
@@ -442,10 +329,7 @@ void GetSlopePixelZOnEdge(Slope tileh, DiagDirection edge, int *z1, int *z2)
 Slope GetFoundationSlope(TileIndex tile, int *z)
 {
 	Slope tileh = GetTileSlope(tile, z);
-	Foundation f = _tile_type_procs[GetTileType(tile)]->get_foundation_proc(tile, tileh);
-	uint z_inc = ApplyFoundationToSlope(f, &tileh);
-	if (z != nullptr) *z += z_inc;
-	return tileh;
+	return GetFoundationSlopeFromTileSlope(tile, tileh, z);
 }
 
 
@@ -678,7 +562,7 @@ byte GetSnowLineUncached()
 {
 	if (_snow_line == nullptr) return _settings_game.game_creation.snow_line_height;
 
-	return _snow_line->table[_cur_date_ymd.month][_cur_date_ymd.day];
+	return _snow_line->table[CalTime::CurMonth()][CalTime::CurDay()];
 }
 
 void UpdateCachedSnowLine()
@@ -720,7 +604,7 @@ void ClearSnowLine()
  * @param text unused
  * @return the cost of this operation or an error
  */
-CommandCost CmdLandscapeClear(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+CommandCost CmdLandscapeClear(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
 	CommandCost cost(EXPENSES_CONSTRUCTION);
 	bool do_clear = false;
@@ -774,7 +658,7 @@ CommandCost CmdLandscapeClear(TileIndex tile, DoCommandFlag flags, uint32 p1, ui
  * @param text unused
  * @return the cost of this operation or an error
  */
-CommandCost CmdClearArea(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 p2, const char *text)
+CommandCost CmdClearArea(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
 	if (p1 >= MapSize()) return CMD_ERROR;
 
@@ -785,6 +669,8 @@ CommandCost CmdClearArea(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 
 
 	const Company *c = (flags & (DC_AUTO | DC_BANKRUPT)) ? nullptr : Company::GetIfValid(_current_company);
 	int limit = (c == nullptr ? INT32_MAX : GB(c->clear_limit, 16, 16));
+
+	if (tile != p1) flags |= DC_FORCE_CLEAR_TILE;
 
 	OrthogonalOrDiagonalTileIterator iter(tile, p1, HasBit(p2, 0));
 	for (; *iter != INVALID_TILE; ++iter) {
@@ -827,29 +713,58 @@ CommandCost CmdClearArea(TileIndex tile, DoCommandFlag flags, uint32 p1, uint32 
 
 
 TileIndex _cur_tileloop_tile;
+TileIndex _aux_tileloop_tile;
 
-/**
- * Gradually iterate over all tiles on the map, calling their TileLoopProcs once every 256 ticks.
- */
-void RunTileLoop()
+static uint32_t GetTileLoopFeedback()
 {
-	PerformanceAccumulator framerate(PFE_GL_LANDSCAPE);
-
 	/* The pseudorandom sequence of tiles is generated using a Galois linear feedback
 	 * shift register (LFSR). This allows a deterministic pseudorandom ordering, but
 	 * still with minimal state and fast iteration. */
 
 	/* Maximal length LFSR feedback terms, from 12-bit (for 64x64 maps) to 28-bit (for 16kx16k maps).
 	 * Extracted from http://www.ece.cmu.edu/~koopman/lfsr/ */
-	static const uint32 feedbacks[] = {
+	static const uint32_t feedbacks[] = {
 		0xD8F, 0x1296, 0x2496, 0x4357, 0x8679, 0x1030E, 0x206CD, 0x403FE, 0x807B8, 0x1004B2, 0x2006A8,
 		0x4004B2, 0x800B87, 0x10004F3, 0x200072D, 0x40006AE, 0x80009E3,
 	};
 	static_assert(lengthof(feedbacks) == MAX_MAP_TILES_BITS - 2 * MIN_MAP_SIZE_BITS + 1);
-	const uint32 feedback = feedbacks[MapLogX() + MapLogY() - 2 * MIN_MAP_SIZE_BITS];
+	return feedbacks[MapLogX() + MapLogY() - 2 * MIN_MAP_SIZE_BITS];
+}
 
+static std::vector<uint> _tile_loop_counts;
+
+void SetupTileLoopCounts()
+{
+	_tile_loop_counts.resize(DayLengthFactor());
+	if (DayLengthFactor() == 0) return;
+
+	uint64_t count_per_tick_fp16 = (static_cast<uint64_t>(1) << (MapLogX() + MapLogY() + 8)) / DayLengthFactor();
+	uint64_t accumulator = 0;
+	for (uint &count : _tile_loop_counts) {
+		accumulator += count_per_tick_fp16;
+		count = static_cast<uint32_t>(accumulator >> 16);
+		accumulator &= 0xFFFF;
+	}
+	if (accumulator > 0) _tile_loop_counts[0]++;
+}
+
+/**
+ * Gradually iterate over all tiles on the map, calling their TileLoopProcs once every 256 ticks.
+ */
+void RunTileLoop(bool apply_day_length)
+{
 	/* We update every tile every 256 ticks, so divide the map size by 2^8 = 256 */
-	uint count = 1 << (MapLogX() + MapLogY() - 8);
+	uint count;
+	if (apply_day_length && DayLengthFactor() > 1) {
+		count = _tile_loop_counts[TickSkipCounter()];
+		if (count == 0) return;
+	} else {
+		count = 1 << (MapLogX() + MapLogY() - 8);
+	}
+
+	PerformanceAccumulator framerate(PFE_GL_LANDSCAPE);
+
+	const uint32_t feedback = GetTileLoopFeedback();
 
 	TileIndex tile = _cur_tileloop_tile;
 	/* The LFSR cannot have a zeroed state. */
@@ -864,13 +779,49 @@ void RunTileLoop()
 	}
 
 	while (count--) {
+		/* Get the next tile in sequence using a Galois LFSR. */
+		TileIndex next = (tile >> 1) ^ (-(int32_t)(tile & 1) & feedback);
+		if (count > 0) {
+			PREFETCH_NTA(&_m[next]);
+		}
+
 		_tile_type_procs[GetTileType(tile)]->tile_loop_proc(tile);
 
-		/* Get the next tile in sequence using a Galois LFSR. */
-		tile = (tile >> 1) ^ (-(int32)(tile & 1) & feedback);
+		tile = next;
 	}
 
 	_cur_tileloop_tile = tile;
+	RecordSyncEvent(NSRE_TILE);
+}
+
+void RunAuxiliaryTileLoop()
+{
+	/* At day lengths <= 4, flooding is handled by main tile loop */
+	if (DayLengthFactor() <= 4 || (_scaled_tick_counter % 4) != 0) return;
+
+	PerformanceAccumulator framerate(PFE_GL_LANDSCAPE);
+
+	const uint32_t feedback = GetTileLoopFeedback();
+	uint count = 1 << (MapLogX() + MapLogY() - 8);
+	TileIndex tile = _aux_tileloop_tile;
+
+	while (count--) {
+		/* Get the next tile in sequence using a Galois LFSR. */
+		TileIndex next = (tile >> 1) ^ (-(int32_t)(tile & 1) & feedback);
+		if (count > 0) {
+			PREFETCH_NTA(&_m[next]);
+		}
+
+		if (IsFloodingTypeTile(tile) && !IsNonFloodingWaterTile(tile)) {
+			FloodingBehaviour fb = GetFloodingBehaviour(tile);
+			if (fb != FLOOD_NONE) TileLoopWaterFlooding(fb, tile);
+		}
+
+		tile = next;
+	}
+
+	_aux_tileloop_tile = tile;
+	RecordSyncEvent(NSRE_AUX_TILE);
 }
 
 void InitializeLandscape()
@@ -893,14 +844,17 @@ static const byte _genterrain_tbl_2[5] = {  0,  0,  0,  0, 33 };
 
 static void GenerateTerrain(int type, uint flag)
 {
-	uint32 r = Random();
+	uint32_t r = Random();
 
-	const Sprite *templ = GetSprite((((r >> 24) * _genterrain_tbl_1[type]) >> 8) + _genterrain_tbl_2[type] + 4845, ST_MAPGEN);
+	/* Choose one of the templates from the graphics file. */
+	const Sprite *templ = GetSprite((((r >> 24) * _genterrain_tbl_1[type]) >> 8) + _genterrain_tbl_2[type] + SPR_MAPGEN_BEGIN, SpriteType::MapGen, 0);
 	if (templ == nullptr) usererror("Map generator sprites could not be loaded");
 
+	/* Chose a random location to apply the template to. */
 	uint x = r & MapMaxX();
 	uint y = (r >> MapLogX()) & MapMaxY();
 
+	/* Make sure the template is not too close to the upper edges; bottom edges are checked later. */
 	uint edge_distance = 1 + (_settings_game.construction.freeform_edges ? 1 : 0);
 	if (x <= edge_distance || y <= edge_distance) return;
 
@@ -913,6 +867,9 @@ static void GenerateTerrain(int type, uint flag)
 	const byte *p = templ->data;
 
 	if ((flag & 4) != 0) {
+		/* This is only executed in secondary/tertiary loops to generate the terrain for arctic and tropic.
+		 * It prevents the templates to be applied to certain parts of the map based on the flags, thus
+		 * creating regions with different elevations/topography. */
 		uint xw = x * MapSizeY();
 		uint yw = y * MapSizeX();
 		uint bias = (MapSizeX() + MapSizeY()) * 16;
@@ -937,11 +894,15 @@ static void GenerateTerrain(int type, uint flag)
 		}
 	}
 
+	/* Ensure the template does not overflow at the bottom edges of the map; upper edges were checked before. */
 	if (x + w >= MapMaxX()) return;
 	if (y + h >= MapMaxY()) return;
 
 	TileIndex tile = TileXY(x, y);
 
+	/* Get the template and overlay in a particular direction over the map's height from the given
+	 * origin point (tile), and update the map's height everywhere where the height from the template
+	 * is higher than the height of the map. In other words, this only raises the tile heights. */
 	switch (direction) {
 		default: NOT_REACHED();
 		case DIAGDIR_NE:
@@ -1024,8 +985,8 @@ void DesertOrRainforestProcessTiles(const std::pair<const Rect16 *, const Rect16
 {
 	for (data = desert_rainforest_data.first; data != desert_rainforest_data.second; ++data) {
 		const Rect16 r = *data;
-		for (int16 x = r.left; x <= r.right; x++) {
-			for (int16 y = r.top; y <= r.bottom; y++) {
+		for (int16_t x = r.left; x <= r.right; x++) {
+			for (int16_t y = r.top; y <= r.bottom; y++) {
 				TileIndex t = AddTileIndexDiffCWrap(tile, { x, y });
 				if (handle_tile(t)) return;
 			}
@@ -1076,10 +1037,9 @@ static void CreateDesertOrRainForest(uint desert_tropic_line)
 /**
  * Find the spring of a river.
  * @param tile The tile to consider for being the spring.
- * @param user_data Ignored data.
  * @return True iff it is suitable as a spring.
  */
-static bool FindSpring(TileIndex tile, void *user_data)
+static bool FindSpring(TileIndex tile, void *)
 {
 	int referenceHeight;
 	if (!IsTileFlat(tile, &referenceHeight) || IsWaterTile(tile)) return false;
@@ -1133,23 +1093,23 @@ static bool MakeLake(TileIndex tile, void *user_data)
 	if (_settings_game.game_creation.landscape == LT_TROPIC && GetTropicZone(tile) == TROPICZONE_DESERT && !_settings_game.game_creation.lakes_allowed_in_deserts) return false;
 
 	/* Offset from centre tile */
-	const int64 x_delta = (int)TileX(tile) - (int)TileX(data->centre);
-	const int64 y_delta = (int)TileY(tile) - (int)TileY(data->centre);
+	const int64_t x_delta = (int)TileX(tile) - (int)TileX(data->centre);
+	const int64_t y_delta = (int)TileY(tile) - (int)TileY(data->centre);
 
 	/* Rotate to new coordinate system */
-	const int64 a_delta = (x_delta * data->cos_fp + y_delta * data->sin_fp) >> 8;
-	const int64 b_delta = (-x_delta * data->sin_fp + y_delta * data->cos_fp) >> 8;
+	const int64_t a_delta = (x_delta * data->cos_fp + y_delta * data->sin_fp) >> 8;
+	const int64_t b_delta = (-x_delta * data->sin_fp + y_delta * data->cos_fp) >> 8;
 
 	int max_distance = data->max_distance;
 	if (max_distance >= 6) {
 		/* Vary radius a bit for larger lakes */
 		uint coord = (std::abs(x_delta) > std::abs(y_delta)) ? TileY(tile) : TileX(tile);
-		static const int8 offset_fuzz[4] = { 0, 1, 0, -1 };
+		static const int8_t offset_fuzz[4] = { 0, 1, 0, -1 };
 		max_distance += offset_fuzz[(coord / 3) & 3];
 	}
 
 	/* Check if inside ellipse */
-	if ((a_delta * a_delta) + ((data->secondary_axis_scale * b_delta * b_delta) >> 16) > ((int64)(max_distance * max_distance) << 16)) return false;
+	if ((a_delta * a_delta) + ((data->secondary_axis_scale * b_delta * b_delta) >> 16) > ((int64_t)(max_distance * max_distance) << 16)) return false;
 
 	for (DiagDirection d = DIAGDIR_BEGIN; d < DIAGDIR_END; d++) {
 		TileIndex t2 = tile + TileOffsByDiagDir(d);
@@ -1157,8 +1117,7 @@ static bool MakeLake(TileIndex tile, void *user_data)
 			MakeRiver(tile, Random());
 			MarkTileDirtyByTile(tile);
 			/* Remove desert directly around the river tile. */
-			TileIndex t = tile;
-			CircularTileSearch(&t, _settings_game.game_creation.lake_tropics_width, RiverModifyDesertZone, nullptr);
+			IterateCurvedCircularTileArea(tile, _settings_game.game_creation.lake_tropics_width, RiverModifyDesertZone, nullptr);
 			return false;
 		}
 	}
@@ -1189,19 +1148,19 @@ static bool FlowsDown(TileIndex begin, TileIndex end)
 }
 
 /* AyStar callback for checking whether we reached our destination. */
-static int32 River_EndNodeCheck(const AyStar *aystar, const OpenListNode *current)
+static int32_t River_EndNodeCheck(const AyStar *aystar, const OpenListNode *current)
 {
 	return current->path.node.tile == *(TileIndex*)aystar->user_target ? AYSTAR_FOUND_END_NODE : AYSTAR_DONE;
 }
 
 /* AyStar callback for getting the cost of the current node. */
-static int32 River_CalculateG(AyStar *aystar, AyStarNode *current, OpenListNode *parent)
+static int32_t River_CalculateG(AyStar *aystar, AyStarNode *current, OpenListNode *parent)
 {
 	return 1 + RandomRange(_settings_game.game_creation.river_route_random);
 }
 
 /* AyStar callback for getting the estimated cost to the destination. */
-static int32 River_CalculateH(AyStar *aystar, AyStarNode *current, OpenListNode *parent)
+static int32_t River_CalculateH(AyStar *aystar, AyStarNode *current, OpenListNode *parent)
 {
 	return DistanceManhattan(*(TileIndex*)aystar->user_target, current->tile);
 }
@@ -1228,10 +1187,9 @@ static bool RiverMakeWider(TileIndex tile, void *data)
 	if (IsValidTile(tile) && !IsWaterTile(tile) && GetTileSlope(tile) == GetTileSlope(*(TileIndex *)data)) {
 		MakeRiver(tile, Random());
 		/* Remove desert directly around the river tile. */
-		TileIndex cur_tile = tile;
 
-		MarkTileDirtyByTile(cur_tile);
-		CircularTileSearch(&cur_tile, _settings_game.game_creation.river_tropics_width, RiverModifyDesertZone, nullptr);
+		MarkTileDirtyByTile(tile);
+		IterateCurvedCircularTileArea(tile, _settings_game.game_creation.river_tropics_width, RiverModifyDesertZone, nullptr);
 	}
 	return false;
 }
@@ -1255,7 +1213,7 @@ static void River_FoundEndNode(AyStar *aystar, OpenListNode *current)
 				CircularTileSearch(&tile, radius + RandomRange(1), RiverMakeWider, (void *)&path->node.tile);
 			} else {
 				/* Remove desert directly around the river tile. */
-				CircularTileSearch(&tile, _settings_game.game_creation.river_tropics_width, RiverModifyDesertZone, nullptr);
+				IterateCurvedCircularTileArea(tile, _settings_game.game_creation.river_tropics_width, RiverModifyDesertZone, nullptr);
 			}
 		}
 	}
@@ -1277,6 +1235,7 @@ static void BuildRiver(TileIndex begin, TileIndex end)
 	finder.EndNodeCheck = River_EndNodeCheck;
 	finder.FoundEndNode = River_FoundEndNode;
 	finder.user_target = &end;
+	finder.max_search_nodes = 100 * AYSTAR_DEF_MAX_SEARCH_NODES;
 
 	finder.Init(1 << RIVER_HASH_SIZE);
 
@@ -1315,7 +1274,7 @@ static bool FlowRiver(TileIndex spring, TileIndex begin, uint min_river_length)
 	SET_MARK(begin);
 
 	/* Breadth first search for the closest tile we can flow down to. */
-	std::deque<TileIndex> queue;
+	ring_buffer<TileIndex> queue;
 	queue.push_back(begin);
 
 	bool found = false;
@@ -1367,8 +1326,7 @@ static bool FlowRiver(TileIndex spring, TileIndex begin, uint min_river_length)
 			MakeRiver(lakeCenter, Random());
 			MarkTileDirtyByTile(lakeCenter);
 			/* Remove desert directly around the river tile. */
-			CircularTileSearch(&lakeCenter, _settings_game.game_creation.river_tropics_width, RiverModifyDesertZone, nullptr);
-			lakeCenter = end;
+			IterateCurvedCircularTileArea(lakeCenter, _settings_game.game_creation.river_tropics_width, RiverModifyDesertZone, nullptr);
 
 			// Setting lake size +- 25%
 			const auto random_percentage = 75 + RandomRange(50);
@@ -1386,7 +1344,7 @@ static bool FlowRiver(TileIndex spring, TileIndex begin, uint min_river_length)
 			data.sin_fp = RandomRange(1 << 17) - (1 << 16);
 
 			/* sin^2 + cos^2 = 1 */
-			data.cos_fp = IntSqrt64(((int64)1 << 32) - ((int64)data.sin_fp * (int64)data.sin_fp));
+			data.cos_fp = IntSqrt64(((int64_t)1 << 32) - ((int64_t)data.sin_fp * (int64_t)data.sin_fp));
 
 			CircularTileSearch(&lakeCenter, range, MakeLake, &data);
 			/* Call the search a second time so artefacts from going circular in one direction get (mostly) hidden. */
@@ -1434,6 +1392,9 @@ static void CreateRivers()
 			if (FlowRiver(t, t, _settings_game.game_creation.min_river_length)) break;
 		}
 	}
+
+	/* Widening rivers may have left some tiles requiring to be watered. */
+	ConvertGroundTilesIntoWaterTiles();
 
 	/* Run tile loop to update the ground density. */
 	for (uint i = 0; i != 256; i++) {
@@ -1490,7 +1451,7 @@ static uint CalculateCoverageLine(uint coverage, uint edge_multiplier)
 	}
 
 	/* The amount of land we have is the map size minus the first (sea) layer. */
-	uint land_tiles = MapSizeX() * MapSizeY() - histogram[0];
+	uint land_tiles = MapSize() - histogram[0];
 	int best_score = land_tiles;
 
 	/* Our goal is the coverage amount of the land-mass. */
@@ -1549,7 +1510,7 @@ static void CalculateSnowLine()
  * Calculate the line (in height) between desert and tropic.
  * @return The height of the line between desert and tropic.
  */
-static uint8 CalculateDesertLine()
+static uint8_t CalculateDesertLine()
 {
 	if (_settings_game.game_creation.climate_threshold_mode != 0) return _settings_game.game_creation.rainforest_line_height;
 
@@ -1557,7 +1518,7 @@ static uint8 CalculateDesertLine()
 	return CalculateCoverageLine(100 - _settings_game.game_creation.desert_coverage, 4);
 }
 
-void GenerateLandscape(byte mode)
+bool GenerateLandscape(byte mode)
 {
 	/** Number of steps of landscape generation */
 	enum GenLandscapeSteps {
@@ -1571,7 +1532,9 @@ void GenerateLandscape(byte mode)
 
 	if (mode == GWM_HEIGHTMAP) {
 		SetGeneratingWorldProgress(GWP_LANDSCAPE, steps + GLS_HEIGHTMAP);
-		LoadHeightmap(_file_to_saveload.detail_ftype, _file_to_saveload.name.c_str());
+		if (!LoadHeightmap(_file_to_saveload.detail_ftype, _file_to_saveload.name.c_str())) {
+			return false;
+		}
 		IncreaseGeneratingWorldProgress(GWP_LANDSCAPE);
 	} else if (_settings_game.game_creation.land_generator == LG_TERRAGENESIS) {
 		SetGeneratingWorldProgress(GWP_LANDSCAPE, steps + GLS_TERRAGENESIS);
@@ -1584,7 +1547,7 @@ void GenerateLandscape(byte mode)
 		}
 		switch (_settings_game.game_creation.landscape) {
 			case LT_ARCTIC: {
-				uint32 r = Random();
+				uint32_t r = Random();
 
 				for (uint i = ScaleByMapSize(GB(r, 0, 7) + 950); i != 0; --i) {
 					GenerateTerrain(2, 0);
@@ -1598,7 +1561,7 @@ void GenerateLandscape(byte mode)
 			}
 
 			case LT_TROPIC: {
-				uint32 r = Random();
+				uint32_t r = Random();
 
 				for (uint i = ScaleByMapSize(GB(r, 0, 7) + 170); i != 0; --i) {
 					GenerateTerrain(0, 0);
@@ -1618,7 +1581,7 @@ void GenerateLandscape(byte mode)
 			}
 
 			default: {
-				uint32 r = Random();
+				uint32_t r = Random();
 
 				assert(_settings_game.difficulty.quantity_sea_lakes != CUSTOM_SEA_LEVEL_NUMBER_DIFFICULTY);
 				uint i = ScaleByMapSize(GB(r, 0, 7) + (3 - _settings_game.difficulty.quantity_sea_lakes) * 256 + 100);
@@ -1657,6 +1620,7 @@ void GenerateLandscape(byte mode)
 	}
 
 	CreateRivers();
+	return true;
 }
 
 void OnTick_Town();
@@ -1664,18 +1628,18 @@ void OnTick_Trees();
 void OnTick_Station();
 void OnTick_Industry();
 
-void OnTick_LinkGraph();
-
 void CallLandscapeTick()
 {
 	{
 		PerformanceAccumulator framerate(PFE_GL_LANDSCAPE);
 
 		OnTick_Town();
+		RecordSyncEvent(NSRE_TOWN);
 		OnTick_Trees();
+		RecordSyncEvent(NSRE_TREE);
 		OnTick_Station();
+		RecordSyncEvent(NSRE_STATION);
 		OnTick_Industry();
+		RecordSyncEvent(NSRE_INDUSTRY);
 	}
-
-	OnTick_LinkGraph();
 }
