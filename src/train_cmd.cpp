@@ -283,6 +283,8 @@ void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 		u->InvalidateNewGRFCache();
 	}
 
+	int TrainTotalPower = 0;
+
 	for (Train *u = this; u != nullptr; u = u->Next()) {
 		/* Update user defined data (must be done before other properties) */
 		u->tcache.user_def_data = GetVehicleProperty(u, PROP_TRAIN_USER_DATA, u->tcache.user_def_data);
@@ -292,8 +294,18 @@ void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 		if (!u->IsArticulatedPart()) {
 			if (u->IsEngine() || u->IsMultiheaded()) {
 				this->tcache.cached_num_engines++;
+
+				const RailVehicleInfo *rvi_u = RailVehInfo(u->engine_type);
+				TrainTotalPower += rvi_u->power;
 			}
 		}
+	}
+
+	int AverageLocomotivePower;
+	if (this->tcache.cached_num_engines) {
+		AverageLocomotivePower = TrainTotalPower / this->tcache.cached_num_engines;
+	} else {
+		AverageLocomotivePower = 0;
 	}
 
 	Vehicle *last_vis_effect = this;
@@ -325,9 +337,13 @@ void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 		}
 
 		if (!u->IsArticulatedPart()) {
+			bool bTooWeedyToExist =
+				(rvi_u->power < (AverageLocomotivePower / 2))
+				&& rvi_u->power < 150;
+
 			/* Do not count powered wagons for the compatible railtypes, as wagons always
 			   have railtype normal */
-			if (rvi_u->power > 0) {
+			if (rvi_u->power > 0 && !bTooWeedyToExist) {
 				this->compatible_railtypes |= GetRailTypeInfo(u->railtype)->powered_railtypes;
 			}
 
