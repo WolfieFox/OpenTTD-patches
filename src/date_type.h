@@ -26,6 +26,9 @@ static const int MONTHS_IN_YEAR    =  12; ///< months per year
 
 static const int SECONDS_PER_DAY   = 2;   ///< approximate seconds per day, not for precise calculations
 
+/** Estimation of how many ticks fit in a single second. */
+static const int TICKS_PER_SECOND = 1000 / 27 /*MILLISECONDS_PER_TICK*/;
+
 using Ticks = int32_t;                    ///< The type to store ticks in
 static constexpr Ticks INVALID_TICKS = -1; ///< Representation of an invalid number of ticks
 
@@ -237,9 +240,12 @@ struct EconTime : public DateDetail::BaseTime<struct EconTimeTag> {
 	/* Use a detail struct/namespace to more easily control writes */
 	struct Detail {
 		static State now;
+		static YearDelta years_elapsed;
+		static YearDelta period_display_offset;
 
 		static void SetDate(Date date, DateFract fract);
 		static State NewState(Year year);
+		static int32_t WallClockYearToDisplay(Year year);
 
 		/**
 		 * Calculate the date of the first day of a given year.
@@ -285,6 +291,12 @@ struct EconTime : public DateDetail::BaseTime<struct EconTimeTag> {
 	{
 		if (UsingWallclockUnits()) return Detail::DateAtStartOfWallclockModeYear(year);
 		return ParentBaseTime::Detail::DateAtStartOfCalendarYear(year);
+	}
+
+	static inline int32_t YearToDisplay(Year year)
+	{
+		if (UsingWallclockUnits()) return Detail::WallClockYearToDisplay(year);
+		return year.base();
 	}
 };
 

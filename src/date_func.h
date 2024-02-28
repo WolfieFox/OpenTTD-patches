@@ -22,6 +22,7 @@ namespace DateDetail {
 	extern StateTicksDelta _state_ticks_offset;
 	extern uint8_t _tick_skip_counter;
 	extern uint8_t _effective_day_length;
+	extern Ticks _ticks_per_calendar_day;
 };
 
 StateTicks GetStateTicksFromDateWithoutOffset(EconTime::Date date, EconTime::DateFract date_fract);
@@ -35,6 +36,11 @@ inline uint8_t TickSkipCounter()
 inline uint8_t DayLengthFactor()
 {
 	return DateDetail::_effective_day_length;
+}
+
+inline Ticks TicksPerCalendarDay()
+{
+	return DateDetail::_ticks_per_calendar_day;
 }
 
 void UpdateEffectiveDayLengthFactor();
@@ -75,8 +81,19 @@ inline Ticks TimetableDisplayUnitSize()
 {
 	if (_settings_time.time_in_minutes) {
 		return _settings_time.ticks_per_minute;
+	} else if (EconTime::UsingWallclockUnits()) {
+		return TICKS_PER_SECOND;
 	} else {
-		return DAY_TICKS * DayLengthFactor();
+		return TicksPerCalendarDay();
+	}
+}
+
+inline Ticks TimetableAbsoluteDisplayUnitSize()
+{
+	if (_settings_time.time_in_minutes) {
+		return _settings_time.ticks_per_minute;
+	} else {
+		return TicksPerCalendarDay();
 	}
 }
 

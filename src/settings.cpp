@@ -1024,7 +1024,7 @@ void IniSaveWindowSettings(IniFile &ini, const char *grpname, void *desc)
  */
 bool SettingDesc::IsEditable(bool do_command) const
 {
-	if (!do_command && !(this->flags & SF_NO_NETWORK_SYNC) && _networking && !(_network_server || _network_settings_access) && !(this->flags & SF_PER_COMPANY)) return false;
+	if (!do_command && !(this->flags & SF_NO_NETWORK_SYNC) && IsNonAdminNetworkClient() && !(this->flags & SF_PER_COMPANY)) return false;
 	if (do_command && (this->flags & SF_NO_NETWORK_SYNC)) return false;
 	if ((this->flags & SF_NETWORK_ONLY) && !_networking && _game_mode != GM_MENU) return false;
 	if ((this->flags & SF_NO_NETWORK) && _networking) return false;
@@ -1141,7 +1141,7 @@ static void StationSpreadChanged(int32_t new_value)
 
 static void UpdateConsists(int32_t new_value)
 {
-	for (Train *t : Train::Iterate()) {
+	for (Train *t : Train::IterateFrontOnly()) {
 		/* Update the consist of all trains so the maximum speed is set correctly. */
 		if (t->IsFrontEngine() || t->IsFreeWagon()) {
 			t->ConsistChanged(CCF_TRACK);
@@ -1196,7 +1196,7 @@ static void UpdateAllServiceInterval(int32_t new_value)
 
 	if (update_vehicles) {
 		const Company *c = Company::Get(_current_company);
-		for (Vehicle *v : Vehicle::Iterate()) {
+		for (Vehicle *v : Vehicle::IterateFrontOnly()) {
 			if (v->owner == _current_company && v->IsPrimaryVehicle() && !v->ServiceIntervalIsCustom()) {
 				v->SetServiceInterval(CompanyServiceInterval(c, v->type));
 				v->SetServiceIntervalIsPercent(new_value != 0);
@@ -1224,8 +1224,8 @@ static bool CanUpdateServiceInterval(VehicleType type, int32_t &new_value)
 static void UpdateServiceInterval(VehicleType type, int32_t new_value)
 {
 	if (_game_mode != GM_MENU && Company::IsValidID(_current_company)) {
-		for (Vehicle *v : Vehicle::Iterate()) {
-			if (v->owner == _current_company && v->type == type && v->IsPrimaryVehicle() && !v->ServiceIntervalIsCustom()) {
+		for (Vehicle *v : Vehicle::IterateTypeFrontOnly(type)) {
+			if (v->owner == _current_company && v->IsPrimaryVehicle() && !v->ServiceIntervalIsCustom()) {
 				v->SetServiceInterval(new_value);
 			}
 		}
@@ -1254,6 +1254,9 @@ static void ChangeTimekeepingUnits(int32_t)
 
 	/* It is possible to change these units in-game. We must set the economy date appropriately. */
 	if (_game_mode != GM_MENU) {
+		/* Update effective day length before setting dates, so that the state ticks offset is calculated correctly */
+		UpdateEffectiveDayLengthFactor();
+
 		EconTime::Date new_economy_date;
 		EconTime::DateFract new_economy_date_fract;
 
@@ -1265,20 +1268,28 @@ static void ChangeTimekeepingUnits(int32_t)
 			/* If the new mode is calendar units, sync the economy date with the calendar date. */
 			new_economy_date = CalTime::CurDate().base();
 			new_economy_date_fract = CalTime::CurDateFract();
+			EconTime::Detail::period_display_offset -= (CalTime::CurYear().base() - EconTime::CurYear().base());
 		}
 
-		/* If you open a savegame as a scenario, there may already be link graphs and/or vehicles. These use economy date. */
+		/* Update link graphs and vehicles, as these include stored economy dates. */
 		LinkGraphSchedule::instance.ShiftDates(new_economy_date - EconTime::CurDate());
 		ShiftVehicleDates(new_economy_date - EconTime::CurDate());
 
 		/* Only change the date after changing cached values above. */
 		EconTime::Detail::SetDate(new_economy_date, new_economy_date_fract);
+
 		UpdateOrderUIOnDateChange();
+		SetupTickRate();
 	}
 
-	UpdateEffectiveDayLengthFactor();
-	SetupTickRate();
 	UpdateTimeSettings(0);
+	CloseWindowByClass(WC_PAYMENT_RATES);
+	CloseWindowByClass(WC_COMPANY_VALUE);
+	CloseWindowByClass(WC_PERFORMANCE_HISTORY);
+	CloseWindowByClass(WC_DELIVERED_CARGO);
+	CloseWindowByClass(WC_OPERATING_PROFIT);
+	CloseWindowByClass(WC_INCOME_GRAPH);
+	CloseWindowByClass(WC_STATION_CARGO);
 }
 
 /**
@@ -1306,6 +1317,8 @@ static void ChangeMinutesPerYear(int32_t new_value)
 		}
 	}
 
+	UpdateEffectiveDayLengthFactor();
+
 	/* If the setting value is not the default, force the game to use wallclock timekeeping units.
 	 * This can only happen in the menu, since the pre_cb ensures this setting can only be changed there, or if we're already using wallclock units.
 	 */
@@ -1317,7 +1330,7 @@ static void ChangeMinutesPerYear(int32_t new_value)
 
 static void TrainAccelerationModelChanged(int32_t new_value)
 {
-	for (Train *t : Train::Iterate()) {
+	for (Train *t : Train::IterateFrontOnly()) {
 		if (t->IsFrontEngine()) {
 			t->tcache.cached_max_curve_speed = t->GetCurveSpeedLimit();
 			t->UpdateAcceleration();
@@ -1393,13 +1406,13 @@ static void TrainBrakingModelChanged(int32_t new_value)
 		SCOPE_INFO_FMT([&v_cur], "TrainBrakingModelChanged: %s", scope_dumper().VehicleInfo(v_cur));
 		extern bool _long_reserve_disabled;
 		_long_reserve_disabled = true;
-		for (Train *v : Train::Iterate()) {
+		for (Train *v : Train::IterateFrontOnly()) {
 			v_cur = v;
 			if (!v->IsPrimaryVehicle() || (v->vehstatus & VS_CRASHED) != 0 || HasBit(v->subtype, GVSF_VIRTUAL) || v->track == TRACK_BIT_DEPOT) continue;
 			TryPathReserve(v, true, HasStationTileRail(v->tile));
 		}
 		_long_reserve_disabled = false;
-		for (Train *v : Train::Iterate()) {
+		for (Train *v : Train::IterateFrontOnly()) {
 			v_cur = v;
 			if (!v->IsPrimaryVehicle() || (v->vehstatus & VS_CRASHED) != 0 || HasBit(v->subtype, GVSF_VIRTUAL) || v->track == TRACK_BIT_DEPOT) continue;
 			TryPathReserve(v, true, HasStationTileRail(v->tile));
@@ -1408,7 +1421,7 @@ static void TrainBrakingModelChanged(int32_t new_value)
 	} else if (new_value == TBM_ORIGINAL && (_game_mode == GM_NORMAL || _game_mode == GM_EDITOR)) {
 		Train *v_cur = nullptr;
 		SCOPE_INFO_FMT([&v_cur], "TrainBrakingModelChanged: %s", scope_dumper().VehicleInfo(v_cur));
-		for (Train *v : Train::Iterate()) {
+		for (Train *v : Train::IterateFrontOnly()) {
 			v_cur = v;
 			if (!v->IsPrimaryVehicle() || (v->vehstatus & VS_CRASHED) != 0 || HasBit(v->subtype, GVSF_VIRTUAL) || v->track == TRACK_BIT_DEPOT) {
 				v->lookahead.reset();
@@ -1438,7 +1451,7 @@ static void TrainBrakingModelChanged(int32_t new_value)
  */
 static void TrainSlopeSteepnessChanged(int32_t new_value)
 {
-	for (Train *t : Train::Iterate()) {
+	for (Train *t : Train::IterateFrontOnly()) {
 		if (t->IsFrontEngine()) {
 			t->CargoChanged();
 			if (t->lookahead != nullptr) SetBit(t->lookahead->flags, TRLF_APPLY_ADVISORY);
@@ -1453,17 +1466,13 @@ static void TrainSlopeSteepnessChanged(int32_t new_value)
 static void RoadVehAccelerationModelChanged(int32_t new_value)
 {
 	if (_settings_game.vehicle.roadveh_acceleration_model != AM_ORIGINAL) {
-		for (RoadVehicle *rv : RoadVehicle::Iterate()) {
-			if (rv->IsFrontEngine()) {
-				rv->CargoChanged();
-			}
+		for (RoadVehicle *rv : RoadVehicle::IterateFrontOnly()) {
+			rv->CargoChanged();
 		}
 	}
 	if (_settings_game.vehicle.roadveh_acceleration_model == AM_ORIGINAL || !_settings_game.vehicle.improved_breakdowns) {
-		for (RoadVehicle *rv : RoadVehicle::Iterate()) {
-			if (rv->IsFrontEngine()) {
-				rv->breakdown_chance_factor = 128;
-			}
+		for (RoadVehicle *rv : RoadVehicle::IterateFrontOnly()) {
+			rv->breakdown_chance_factor = 128;
 		}
 	}
 
@@ -1480,8 +1489,8 @@ static void RoadVehAccelerationModelChanged(int32_t new_value)
  */
 static void RoadVehSlopeSteepnessChanged(int32_t new_value)
 {
-	for (RoadVehicle *rv : RoadVehicle::Iterate()) {
-		if (rv->IsFrontEngine()) rv->CargoChanged();
+	for (RoadVehicle *rv : RoadVehicle::IterateFrontOnly()) {
+		rv->CargoChanged();
 	}
 }
 
@@ -1763,7 +1772,7 @@ static void MaxNoAIsChange(int32_t new_value)
 {
 	if (GetGameSettings().difficulty.max_no_competitors != 0 &&
 			AI::GetInfoList()->size() == 0 &&
-			(!_networking || (_network_server || _network_settings_access))) {
+			!IsNonAdminNetworkClient()) {
 		ShowErrorMessage(STR_WARNING_NO_SUITABLE_AI, INVALID_STRING_ID, WL_CRITICAL);
 	}
 
@@ -2009,8 +2018,8 @@ static void ImprovedBreakdownsSettingChanged(int32_t new_value)
 {
 	if (!_settings_game.vehicle.improved_breakdowns) return;
 
-	for (Vehicle *v : Vehicle::Iterate()) {
-		switch(v->type) {
+	for (Vehicle *v : Vehicle::IterateFrontOnly()) {
+		switch (v->type) {
 			case VEH_TRAIN:
 				if (v->IsFrontEngine()) {
 					v->breakdown_chance_factor = 128;
@@ -3287,7 +3296,7 @@ bool SetSettingValue(const IntSettingDesc *sd, int32_t value, bool force_newgame
 	}
 
 	/* send non-company-based settings over the network */
-	if (!_networking || (_networking && (_network_server || _network_settings_access))) {
+	if (!IsNonAdminNetworkClient()) {
 		return DoCommandP(0, 0, value, CMD_CHANGE_SETTING, nullptr, setting->name);
 	}
 	return false;
@@ -3402,7 +3411,7 @@ void IConsoleSetSetting(const char *name, const char *value, bool force_newgame)
 	}
 
 	if (!success) {
-		if ((_network_server || _network_settings_access)) {
+		if (IsNetworkSettingsAdmin()) {
 			IConsoleError("This command/variable is not available during network games.");
 		} else {
 			IConsoleError("This command/variable is only available to a network server.");

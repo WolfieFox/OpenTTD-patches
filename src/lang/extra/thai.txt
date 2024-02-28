@@ -31,6 +31,18 @@ STR_MAPGEN_SNOW_LINE_QUERY_CAPT                                 :{WHITE}ปร�
 
 STR_PURCHASE_INFO_DESIGNED                                      :{BLACK}สร้างครั้งแรก: {GOLD}{NUM}
 
+STR_VEHICLE_STATUS_TRAIN_STOPPING_VEL_END                       :{RED}กำหลังหยุด, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_STATION_VEL_END                  :{LTBLUE}มุ่งหน้าสู่ {STATION} ด้วยความเร็ว {VELOCITY}
+STR_VEHICLE_STATUS_NO_ORDERS_VEL_END                            :{LTBLUE}ไม่มีสถานที่ที่ต้องไป, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_WAYPOINT_VEL_END                 :{LTBLUE}มุ่งหน้าสู่ {WAYPOINT} ด้วยความเร็ว {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_VEL_END                    :{ORANGE}มุ่งหน้าสู่ {DEPOT} ด้วยความเร็ว {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_SERVICE_VEL_END            :{LTBLUE}ซ่อมบำรุงที่ {DEPOT}, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_STATION_VEL_END                 :{LTBLUE}ไม่สามารถวาง {STATION} ได้, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_WAYPOINT_VEL_END                :{LTBLUE}ไม่สามารถวาง {WAYPOINT}, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_SERVICE_VEL_END           :{LTBLUE}ไม่สามารถวาง {DEPOT}ได้ {VELOCITY}
+
+STR_ORDERS_GO_TO_TOOLTIP_EXTRA                                  :{BLACK}เพิ่มรายการที่ต้องทำก่อนหน้ารายการที่เลือก หรือเพิ่มในท้ายรายการที่มีอยู่แล้ว
+
 STR_TIMETABLE_ARRIVAL_ABBREVIATION                              :ถึง:
 STR_TIMETABLE_DEPARTURE_ABBREVIATION                            :ออก:
 

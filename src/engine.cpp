@@ -319,7 +319,9 @@ uint Engine::DetermineCapacity(const Vehicle *v, uint16_t *mail_capacity) const
  */
 Money Engine::GetDisplayRunningCost() const
 {
-	return this->GetRunningCost() * DayLengthFactor();
+	Money cost = this->GetRunningCost();
+	if (_settings_client.gui.show_running_costs_calendar_year) cost *= DayLengthFactor();
+	return cost;
 }
 
 /**
@@ -961,8 +963,8 @@ static CompanyID GetPreviewCompany(Engine *e)
 				c->old_economy[0].performance_history > best_hist) {
 
 			/* Check whether the company uses similar vehicles */
-			for (const Vehicle *v : Vehicle::Iterate()) {
-				if (v->owner != c->index || v->type != e->type || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
+			for (const Vehicle *v : Vehicle::IterateType(e->type)) {
+				if (v->owner != c->index || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
 				if (!v->GetEngine()->CanCarryCargo() || !HasBit(cargomask, v->cargo_type)) continue;
 
 				best_hist = c->old_economy[0].performance_history;

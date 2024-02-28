@@ -34,11 +34,14 @@ uint32_t _quit_after_days;                 ///< Quit after this many days of run
 
 CalTime::State CalTime::Detail::now;
 EconTime::State EconTime::Detail::now;
+YearDelta EconTime::Detail::years_elapsed;
+YearDelta EconTime::Detail::period_display_offset;
 
 namespace DateDetail {
 	StateTicksDelta _state_ticks_offset;   ///< Offset to add when calculating a StateTicks value from an economy date, date fract and tick skip counter
 	uint8_t _tick_skip_counter;            ///< Counter for ticks, when only vehicles are moving and nothing else happens
 	uint8_t _effective_day_length;         ///< Current effective day length
+	Ticks _ticks_per_calendar_day;         ///< Current ticks per calendar day
 };
 
 extern void ClearOutOfDateSignalSpeedRestrictions();
@@ -110,6 +113,11 @@ EconTime::State EconTime::Detail::NewState(EconTime::Year year)
 	return state;
 }
 
+int32_t EconTime::Detail::WallClockYearToDisplay(EconTime::Year year)
+{
+	return (year + EconTime::Detail::period_display_offset).base();
+}
+
 StateTicks GetStateTicksFromDateWithoutOffset(EconTime::Date date, EconTime::DateFract date_fract)
 {
 	return ((int64_t)(EconTime::DateToDateTicks(date, date_fract).base()) * DayLengthFactor()) + TickSkipCounter();
@@ -124,14 +132,31 @@ void UpdateEffectiveDayLengthFactor()
 {
 	DateDetail::_effective_day_length = _settings_game.EffectiveDayLengthFactor();
 
+	if (EconTime::UsingWallclockUnits()) {
+		if (CalTime::IsCalendarFrozen()) {
+			DateDetail::_ticks_per_calendar_day = INT32_MAX;
+		} else {
+			DateDetail::_ticks_per_calendar_day = (_settings_game.economy.minutes_per_calendar_year * DAY_TICKS) / CalTime::DEF_MINUTES_PER_YEAR;
+		}
+	} else {
+		DateDetail::_ticks_per_calendar_day = DAY_TICKS * DateDetail::_effective_day_length;
+	}
+
 	SetupTileLoopCounts();
 	UpdateCargoScalers();
 }
 
 CalTime::Date StateTicksToCalendarDate(StateTicks ticks)
 {
-	/* Process the same as calendar time (for now) */
-	return StateTicksToDate(ticks).base();
+	if (!EconTime::UsingWallclockUnits()) return StateTicksToDate(ticks).base();
+
+	if (CalTime::IsCalendarFrozen()) return CalTime::CurDate();
+
+	Ticks ticks_per_cal_day = TicksPerCalendarDay();
+	uint subticks_left_this_day = ((DAY_TICKS - CalTime::CurDateFract()) * ticks_per_cal_day) - CalTime::CurSubDateFract();
+	Ticks ticks_into_this_day = ticks_per_cal_day - CeilDiv(subticks_left_this_day, DAY_TICKS);
+
+	return CalTime::CurDate().base() + (int32_t)(((ticks - _state_ticks).base() + ticks_into_this_day) / ticks_per_cal_day);
 }
 
 #define M(a, b) ((a << 5) | b)
@@ -252,7 +277,7 @@ EconTime::YearMonthDay EconTime::ConvertDateToYMD(EconTime::Date date)
 	if (EconTime::UsingWallclockUnits()) {
 		/* If we're using wallclock units, economy months have 30 days and an economy year has 360 days. */
 		EconTime::YearMonthDay ymd;
-		ymd.year =date.base() / EconTime::DAYS_IN_ECONOMY_WALLCLOCK_YEAR;
+		ymd.year = date.base() / EconTime::DAYS_IN_ECONOMY_WALLCLOCK_YEAR;
 		ymd.month = (date.base() % EconTime::DAYS_IN_ECONOMY_WALLCLOCK_YEAR) / EconTime::DAYS_IN_ECONOMY_WALLCLOCK_MONTH;
 		ymd.day = (date.base() % EconTime::DAYS_IN_ECONOMY_WALLCLOCK_MONTH) + 1;
 		return ymd;
@@ -361,6 +386,7 @@ static void OnNewCalendarYear()
  */
 static void OnNewEconomyYear()
 {
+	EconTime::Detail::years_elapsed++;
 	CompaniesYearlyLoop();
 	VehiclesYearlyLoop();
 	TownsYearlyLoop();
@@ -368,6 +394,7 @@ static void OnNewEconomyYear()
 
 	/* check if we reached the maximum year, decrement dates by a year */
 	if (EconTime::CurYear() == EconTime::MAX_YEAR + 1) {
+		EconTime::Detail::period_display_offset++;
 		EconTime::Detail::now.econ_ymd.year--;
 		int days_this_year = EconTime::IsLeapYear(EconTime::Detail::now.econ_ymd.year) ? DAYS_IN_LEAP_YEAR : DAYS_IN_YEAR;
 		EconTime::Detail::now.econ_date -= days_this_year;
@@ -446,16 +473,19 @@ static void IncreaseCalendarDate()
 
 	/* If we are using a non-default calendar progression speed, we need to check the sub_date_fract before updating date_fract. */
 	if (_settings_game.economy.timekeeping_units == TKU_WALLCLOCK && _settings_game.economy.minutes_per_calendar_year != CalTime::DEF_MINUTES_PER_YEAR) {
-		CalTime::Detail::now.sub_date_fract++;
+		CalTime::Detail::now.sub_date_fract += DAY_TICKS;
 
 		/* Check if we are ready to increment date_fract */
-		if (CalTime::Detail::now.sub_date_fract < (DAY_TICKS * _settings_game.economy.minutes_per_calendar_year) / CalTime::DEF_MINUTES_PER_YEAR) return;
+		const uint16_t threshold = TicksPerCalendarDay();
+		if (CalTime::Detail::now.sub_date_fract < threshold) return;
+
+		CalTime::Detail::now.sub_date_fract = std::min<uint16_t>(CalTime::Detail::now.sub_date_fract - threshold, DAY_TICKS - 1);
 	}
-	CalTime::Detail::now.sub_date_fract = 0;
 
 	CalTime::Detail::now.cal_date_fract++;
 	if (CalTime::Detail::now.cal_date_fract < DAY_TICKS) return;
 	CalTime::Detail::now.cal_date_fract = 0;
+	CalTime::Detail::now.sub_date_fract = 0;
 
 	/* increase day counter */
 	CalTime::Detail::now.cal_date++;

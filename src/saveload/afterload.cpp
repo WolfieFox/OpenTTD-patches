@@ -279,6 +279,8 @@ static void InitializeWindowsAndCaches()
 		 * thus the MIN_YEAR (which is really nothing more than Zero, initialized value) test */
 		if (_file_to_saveload.abstract_ftype == FT_SCENARIO && c->inaugurated_year != CalTime::MIN_YEAR) {
 			c->inaugurated_year = CalTime::CurYear();
+			c->display_inaugurated_period = EconTime::Detail::WallClockYearToDisplay(EconTime::CurYear());
+			c->age_years = 0;
 		}
 	}
 
@@ -306,10 +308,8 @@ static void InitializeWindowsAndCaches()
 			it->tile = t->xy;
 		}
 	}
-	for (RoadVehicle *rv : RoadVehicle::Iterate()) {
-		if (rv->IsFrontEngine()) {
-			rv->CargoChanged();
-		}
+	for (RoadVehicle *rv : RoadVehicle::IterateFrontOnly()) {
+		rv->CargoChanged();
 	}
 
 	RecomputePrices();
@@ -1733,7 +1733,7 @@ bool AfterLoadGame()
 			}
 		}
 
-		for (Train *v : Train::Iterate()) {
+		for (Train *v : Train::IterateFrontOnly()) {
 			if (v->IsFrontEngine() || v->IsFreeWagon()) v->ConsistChanged(CCF_TRACK);
 		}
 
@@ -1830,11 +1830,27 @@ bool AfterLoadGame()
 		for (Waypoint *wp : Waypoint::Iterate()) wp->build_date      += CalTime::DAYS_TILL_ORIGINAL_BASE_YEAR.AsDelta();
 		for (Engine *e : Engine::Iterate())      e->intro_date       += CalTime::DAYS_TILL_ORIGINAL_BASE_YEAR.AsDelta();
 		for (Company *c : Company::Iterate())    c->inaugurated_year += CalTime::ORIGINAL_BASE_YEAR.AsDelta();
-		for (Industry *i : Industry::Iterate())  i->last_prod_year   += CalTime::ORIGINAL_BASE_YEAR.AsDelta();
+		for (Industry *i : Industry::Iterate())  i->last_prod_year   += EconTime::ORIGINAL_BASE_YEAR.AsDelta();
 
 		for (Vehicle *v : Vehicle::Iterate()) {
 			v->date_of_last_service += EconTime::DAYS_TILL_ORIGINAL_BASE_YEAR.AsDelta();
 			v->build_year += CalTime::ORIGINAL_BASE_YEAR.AsDelta();
+		}
+	}
+
+	if (SlXvIsFeatureMissing(XSLFI_VARIABLE_DAY_LENGTH, 6)) {
+		EconTime::Detail::years_elapsed = EconTime::CurYear().base() - 1;
+		EconTime::Detail::period_display_offset = 0;
+		for (Company *c : Company::Iterate()) {
+			if (SlXvIsFeaturePresent(XSLFI_VARIABLE_DAY_LENGTH, 5, 5)) {
+				/* inaugurated_year is calendar time in XSLFI_VARIABLE_DAY_LENGTH version 5 */
+				c->age_years = std::max<YearDelta>(0, CalTime::CurYear() - c->inaugurated_year);
+				c->display_inaugurated_period = EconTime::Detail::WallClockYearToDisplay(c->inaugurated_year.base() + EconTime::CurYear().base() - CalTime::CurYear().base());
+			} else {
+				c->age_years = std::max<YearDelta>(0, EconTime::CurYear().base() - c->inaugurated_year.base());
+				c->display_inaugurated_period = EconTime::Detail::WallClockYearToDisplay(c->inaugurated_year.base());
+				c->inaugurated_year += CalTime::CurYear().base() - EconTime::CurYear().base();
+			}
 		}
 	}
 
@@ -2352,8 +2368,8 @@ bool AfterLoadGame()
 		GroupStatistics::UpdateAfterLoad(); // Ensure statistics pool is initialised before trying to delete vehicles
 		/* Remove all trams from savegames without tram support.
 		 * There would be trams without tram track under causing crashes sooner or later. */
-		for (RoadVehicle *v : RoadVehicle::Iterate()) {
-			if (v->First() == v && HasBit(EngInfo(v->engine_type)->misc_flags, EF_ROAD_TRAM)) {
+		for (RoadVehicle *v : RoadVehicle::IterateFrontOnly()) {
+			if (HasBit(EngInfo(v->engine_type)->misc_flags, EF_ROAD_TRAM)) {
 				ShowErrorMessage(STR_WARNING_LOADGAME_REMOVED_TRAMS, INVALID_STRING_ID, WL_CRITICAL);
 				delete v;
 			}
@@ -2448,8 +2464,8 @@ bool AfterLoadGame()
 
 	/* Reserve all tracks trains are currently on. */
 	if (IsSavegameVersionBefore(SLV_101)) {
-		for (const Train *t : Train::Iterate()) {
-			if (t->First() == t) t->ReserveTrackUnderConsist();
+		for (const Train *t : Train::IterateFrontOnly()) {
+			t->ReserveTrackUnderConsist();
 		}
 	}
 
@@ -3178,7 +3194,7 @@ bool AfterLoadGame()
 		}
 
 		/* Fill Vehicle::cur_real_order_index */
-		for (Vehicle *v : Vehicle::Iterate()) {
+		for (Vehicle *v : Vehicle::IterateFrontOnly()) {
 			if (!v->IsPrimaryVehicle()) continue;
 
 			/* Older versions are less strict with indices being in range and fix them on the fly */
@@ -3483,7 +3499,7 @@ bool AfterLoadGame()
 		 * So, make articulated parts catch up. */
 		bool roadside = _settings_game.vehicle.road_side == 1;
 		std::vector<uint> skip_frames;
-		for (RoadVehicle *v : RoadVehicle::Iterate()) {
+		for (RoadVehicle *v : RoadVehicle::IterateFrontOnly()) {
 			if (!v->IsFrontEngine()) continue;
 			skip_frames.clear();
 			TileIndex prev_tile = v->tile;
@@ -3688,7 +3704,7 @@ bool AfterLoadGame()
 	}
 
 	if (!IsSavegameVersionBefore(SLV_DEPOT_UNBUNCHING)) {
-		for (Vehicle *v : Vehicle::Iterate()) {
+		for (Vehicle *v : Vehicle::IterateFrontOnly()) {
 			if (v->unbunch_state != nullptr) {
 				if (v->unbunch_state->depot_unbunching_last_departure > 0) {
 					v->unbunch_state->depot_unbunching_last_departure += _state_ticks.base() - _tick_counter;
@@ -4199,7 +4215,7 @@ bool AfterLoadGame()
 	}
 
 	if (!SlXvIsFeaturePresent(XSLFI_REALISTIC_TRAIN_BRAKING, 5) && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
-		for (Train *t : Train::Iterate()) {
+		for (Train *t : Train::IterateFrontOnly()) {
 			if (t->lookahead != nullptr) {
 				t->lookahead->SetNextExtendPosition();
 			}
@@ -4207,7 +4223,7 @@ bool AfterLoadGame()
 	}
 
 	if (!SlXvIsFeaturePresent(XSLFI_REALISTIC_TRAIN_BRAKING, 6) && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
-		for (Train *t : Train::Iterate()) {
+		for (Train *t : Train::IterateFrontOnly()) {
 			if (t->lookahead != nullptr) {
 				t->lookahead->cached_zpos = t->CalculateOverallZPos();
 				t->lookahead->zpos_refresh_remaining = t->GetZPosCacheUpdateInterval();
@@ -4348,7 +4364,7 @@ bool AfterLoadGame()
 	}
 
 	if (!SlXvIsFeaturePresent(XSLFI_REALISTIC_TRAIN_BRAKING, 9) && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
-		for (Train *t : Train::Iterate()) {
+		for (Train *t : Train::IterateFrontOnly()) {
 			if (t->lookahead != nullptr) {
 				t->lookahead->lookahead_end_position = t->lookahead->reservation_end_position + 1;
 			}

@@ -34,6 +34,16 @@ STR_MAPGEN_SNOW_LINE_QUERY_CAPT                                 :{WHITE}غير �
 
 STR_PURCHASE_INFO_DESIGNED                                      :{BLACK}تصميم: {GOLD}{NUM}
 
+STR_VEHICLE_STATUS_TRAIN_STOPPING_VEL_END                       :{RED}يتوقف , {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_STATION_VEL_END                  :{LTBLUE}تتوجة الى {STATION}, {VELOCITY}
+STR_VEHICLE_STATUS_NO_ORDERS_VEL_END                            :{LTBLUE}لا يوجد اوامر وجهات , {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_WAYPOINT_VEL_END                 :{LTBLUE}متوجه ل {WAYPOINT}, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_VEL_END                    :{ORANGE}يتوجة الى {DEPOT} , {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_SERVICE_VEL_END            :{LTBLUE}الصيانة في {DEPOT} , {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_VEL_END                   :{ORANGE}لا يمكن الوصول إلى {DEPOT}, {VELOCITY}
+
+STR_ORDERS_GO_TO_TOOLTIP_EXTRA                                  :{BLACK}اضافة امر قبل الامر المختار, او لاخر الاوامر
+
 STR_TIMETABLE_ARRIVAL_ABBREVIATION                              :و:
 STR_TIMETABLE_DEPARTURE_ABBREVIATION                            :م:
 

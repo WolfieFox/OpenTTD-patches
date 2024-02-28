@@ -1120,7 +1120,7 @@ STR_CURRENCY_INCREASE_EXCHANGE_RATE_TOOLTIP                     :{BLACK}Palielin
 STR_CURRENCY_SET_EXCHANGE_RATE_TOOLTIP                          :{BLACK}Uzstādīt savas valūtas maiņas kursu pret vienu mārciņu (£)
 
 STR_CURRENCY_SEPARATOR                                          :{LTBLUE}Atdalītājs: {ORANGE}{STRING}
-STR_CURRENCY_SET_CUSTOM_CURRENCY_SEPARATOR_TOOLTIP              :{BLACK}Uzstādīt savas valūtas atdalītājsimbolu
+STR_CURRENCY_SET_CUSTOM_CURRENCY_SEPARATOR_TOOLTIP              :{BLACK}Iestatiet savas valūtas atdalītāju
 
 STR_CURRENCY_PREFIX                                             :{LTBLUE}Priedēklis: {ORANGE}{STRING}
 STR_CURRENCY_SET_CUSTOM_CURRENCY_PREFIX_TOOLTIP                 :{BLACK}Uzstādīt priedēkli savai valūtai
@@ -1276,10 +1276,10 @@ STR_CONFIG_SETTING_INFINITE_MONEY                               :Bezgalīga naud
 STR_CONFIG_SETTING_INFINITE_MONEY_HELPTEXT                      :Atļaut neierobežotus tēriņus un izslēgt uzņēmumu bankrotu
 
 STR_CONFIG_SETTING_MAXIMUM_INITIAL_LOAN                         :Maksimālais sākotnējais aizdevums: {STRING}
-STR_CONFIG_SETTING_MAXIMUM_INITIAL_LOAN_HELPTEXT                :Maksimālais aizdevuma daudzums, ko uzņēmums var izsniegt (neskaitot inflāciju)
+STR_CONFIG_SETTING_MAXIMUM_INITIAL_LOAN_HELPTEXT                :Maksimālais aizdevuma daudzums, ko uzņēmumam var izsniegt (neskaitot inflāciju). Ja iestatīts uz “Nav aizdevuma”, nauda nebūs pieejama, ja vien to nenodrošina spēles skripts vai iestatījums “Bezgalīga nauda”.
 STR_CONFIG_SETTING_MAXIMUM_INITIAL_LOAN_VALUE                   :{CURRENCY_LONG}
 ###setting-zero-is-special
-STR_CONFIG_SETTING_MAXIMUM_INITIAL_LOAN_DISABLED                :Nav aizdevuma {RED}Lai nodrošinātu sākotnējos līdzekļus, ir nepieciešams spēles skripts
+STR_CONFIG_SETTING_MAXIMUM_INITIAL_LOAN_DISABLED                :Nav aizdevuma
 
 STR_CONFIG_SETTING_INTEREST_RATE                                :Procentu likme: {STRING}
 STR_CONFIG_SETTING_INTEREST_RATE_HELPTEXT                       :Aizdevumu procentu likme; ja ieslēgts, ietekmē arī inflāciju
@@ -2190,7 +2190,7 @@ STR_INTRO_HELP                                                  :{BLACK}Palīdz�
 STR_INTRO_CONFIG_SETTINGS_TREE                                  :{BLACK}Iestatījumi
 STR_INTRO_NEWGRF_SETTINGS                                       :{BLACK}NewGRF iestatījumi
 STR_INTRO_ONLINE_CONTENT                                        :{BLACK}Pārbaudīt tiešsaistes saturu
-STR_INTRO_AI_SETTINGS                                           :{BLACK}AI Iestatījumi
+STR_INTRO_AI_SETTINGS                                           :{BLACK}MI Iestatījumi
 STR_INTRO_GAMESCRIPT_SETTINGS                                   :{BLACK}Spēles Skripta Iestatījumi
 STR_INTRO_QUIT                                                  :{BLACK}Iziet
 
@@ -2212,7 +2212,7 @@ STR_INTRO_TOOLTIP_HELP                                          :{BLACK}Piekļū
 STR_INTRO_TOOLTIP_CONFIG_SETTINGS_TREE                          :{BLACK}Atvērt iestatījumus
 STR_INTRO_TOOLTIP_NEWGRF_SETTINGS                               :{BLACK}Atvērt NewGRF iestatījumus
 STR_INTRO_TOOLTIP_ONLINE_CONTENT                                :{BLACK}Pārbaudīt vai lejupielādei nav pieejams jauns un atjaunināts saturs
-STR_INTRO_TOOLTIP_AI_SETTINGS                                   :{BLACK}Atvērt AI iestatījumus
+STR_INTRO_TOOLTIP_AI_SETTINGS                                   :{BLACK}Atvērt MI iestatījumus
 STR_INTRO_TOOLTIP_GAMESCRIPT_SETTINGS                           :{BLACK}Atvērt spēles skripta iestatījumi
 STR_INTRO_TOOLTIP_QUIT                                          :{BLACK}Iziet no 'OpenTTD'
 
@@ -3320,8 +3320,8 @@ STR_MAPGEN_GENERATE                                             :{WHITE}Radīt
 STR_MAPGEN_GENERATE_TOOLTIP                                     :{BLACK}Izveidojiet pasauli un spēlējiet OpenTTD!
 STR_MAPGEN_NEWGRF_SETTINGS                                      :{BLACK}NewGRF Iestatījumi
 STR_MAPGEN_NEWGRF_SETTINGS_TOOLTIP                              :{BLACK}Atvērt NewGRF iestatījumus
-STR_MAPGEN_AI_SETTINGS                                          :{BLACK}AI iestatījumi
-STR_MAPGEN_AI_SETTINGS_TOOLTIP                                  :{BLACK}Atvērt AI iestatījumus
+STR_MAPGEN_AI_SETTINGS                                          :{BLACK}MI iestatījumi
+STR_MAPGEN_AI_SETTINGS_TOOLTIP                                  :{BLACK}Atvērt MI iestatījumus
 STR_MAPGEN_GS_SETTINGS                                          :{BLACK}Spēles skripta iestatījumi
 STR_MAPGEN_GS_SETTINGS_TOOLTIP                                  :{BLACK}Atvērt spēles skripta iestatījumus
 
@@ -4395,22 +4395,22 @@ STR_VEHICLE_STATUS_WAITING_UNBUNCHING                           :{LTBLUE}Gaida a
 STR_VEHICLE_STATUS_CRASHED                                      :{RED}Cietis avārijā!
 STR_VEHICLE_STATUS_BROKEN_DOWN                                  :{RED}Salūzis
 STR_VEHICLE_STATUS_STOPPED                                      :{RED}Apstādināts
-STR_VEHICLE_STATUS_TRAIN_STOPPING_VEL                           :{RED}Apstājas, {VELOCITY}
+STR_VEHICLE_STATUS_TRAIN_STOPPING_VEL                           :{RED}{VELOCITY} - Apstājas
 STR_VEHICLE_STATUS_TRAIN_NO_POWER                               :{RED} Nav jaudas
 STR_VEHICLE_STATUS_TRAIN_STUCK                                  :{ORANGE}Gaida brīvu ceļu
 STR_VEHICLE_STATUS_AIRCRAFT_TOO_FAR                             :{ORANGE}Pārāk tālu līdz nākamajam galamērķim
 
-STR_VEHICLE_STATUS_HEADING_FOR_STATION_VEL                      :{LTBLUE}Dodas uz {STATION}, {VELOCITY}
-STR_VEHICLE_STATUS_NO_ORDERS_VEL                                :{LTBLUE}Nav rīkojumu, {VELOCITY}
-STR_VEHICLE_STATUS_HEADING_FOR_WAYPOINT_VEL                     :{LTBLUE}Dodas uz {WAYPOINT}, {VELOCITY}
-STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_VEL                        :{ORANGE}Dodas uz {DEPOT}, {VELOCITY}
-STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_SERVICE_VEL                :{LTBLUE}Veikt apkopi {DEPOT}, {VELOCITY}
-STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_UNBUNCH_VEL                :{LTBLUE}Atvienot un apkalpot {DEPOT}, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_STATION_VEL                      :{LTBLUE}{1:VELOCITY} - Dodas uz {0:STATION}
+STR_VEHICLE_STATUS_NO_ORDERS_VEL                                :{LTBLUE}{VELOCITY} - Nav rīkojumu
+STR_VEHICLE_STATUS_HEADING_FOR_WAYPOINT_VEL                     :{LTBLUE}{1:VELOCITY} - Dodas uz {0:WAYPOINT}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_VEL                        :{ORANGE}{1:VELOCITY} - Dodas uz {0:DEPOT}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_SERVICE_VEL                :{LTBLUE}{1:VELOCITY} - Veikt apkopi {0:DEPOT}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_UNBUNCH_VEL                :{LTBLUE}{1:VELOCITY} - Atvienot un apkalpot {0:DEPOT}
 
-STR_VEHICLE_STATUS_CANNOT_REACH_STATION_VEL                     :{LTBLUE}Nevar sasniegt {STATION}, {VELOCITY}
-STR_VEHICLE_STATUS_CANNOT_REACH_WAYPOINT_VEL                    :{LTBLUE}Nevar sasniegt {WAYPOINT}, {VELOCITY}
-STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_VEL                       :{ORANGE}Nevar sasniegt {DEPOT}, {VELOCITY}
-STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_SERVICE_VEL               :{LTBLUE}Nevar sasniegt {DEPOT}, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_STATION_VEL                     :{LTBLUE}{1:VELOCITY} - Nevar sasniegt {0:STATION}
+STR_VEHICLE_STATUS_CANNOT_REACH_WAYPOINT_VEL                    :{LTBLUE}{1:VELOCITY} - Nevar sasniegt {0:WAYPOINT}
+STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_VEL                       :{ORANGE}{1:VELOCITY} - Nevar sasniegt {0:DEPOT}
+STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_SERVICE_VEL               :{LTBLUE}{1:VELOCITY} - Nevar sasniegt {0:DEPOT}
 
 # Vehicle stopped/started animations
 ###length 2
@@ -4624,7 +4624,7 @@ STR_ORDER_GO_TO_NEAREST_DEPOT                                   :Doties uz tuvā
 STR_ORDER_GO_TO_NEAREST_HANGAR                                  :Doties uz tuvāko angāru
 STR_ORDER_CONDITIONAL                                           :Nosacītais rīkojuma lēciens
 STR_ORDER_SHARE                                                 :Koplietot rīkojumus
-STR_ORDERS_GO_TO_TOOLTIP                                        :{BLACK}Ievietojiet jaunu pasūtījumu pirms iezīmētā pasūtījuma vai pievienojiet saraksta beigām. Ctrl+klikšķis uz stacijas lai 'piekraut pilnu', uz pieturas punkta, lai atcelu iestatījumu "bez pieturas pēc noklusējuma", vai uz noliktavas, lai veiktu apkopi. Noklikšķiniet uz cita transportlīdzekļa, lai kopētu tā pasūtījumus, vai Ctrl+klikšķis, lai kopīgotu pasūtījumus. Depo pasūtījums atspējo transportlīdzekļa automātisko apkalpošanu
+STR_ORDERS_GO_TO_TOOLTIP                                        :{BLACK}Ievietojiet jaunu pasūtījumu pirms iezīmētā pasūtījuma vai pievienojiet saraksta beigām. Ctrl+klikšķis uz stacijas izveidos 'piekraut pilnu ar jebkuru kravu', uz pieturas punkta, atspējos iestatījumu "bez apstāšanās pēc noklusējuma", vai uz noliktavas, lai "atdalītu". Noklikšķiniet uz cita transportlīdzekļa, lai kopētu tā pasūtījumus, vai Ctrl+klikšķis, lai kopīgotu pasūtījumus. Iebraukšana Depo atspējo transportlīdzekļa automātisko apkalpošanu
 
 STR_ORDERS_VEH_WITH_SHARED_ORDERS_LIST_TOOLTIP                  :{BLACK}Rādīt visus ar šo plānu saistītos transportlīdzekļus
 
@@ -4789,7 +4789,7 @@ STR_AI_DEBUG_MATCH_CASE                                         :{BLACK}Ievērot
 STR_AI_DEBUG_MATCH_CASE_TOOLTIP                                 :{BLACK}Pārslēgt lielo/mazo burtu ievērošanu, kad salīdzināt MI ziņojumus ar slēgšanas tekstu
 STR_AI_DEBUG_CONTINUE                                           :{BLACK}Turpināt
 STR_AI_DEBUG_CONTINUE_TOOLTIP                                   :{BLACK}Atsākt un turpināt šo MI
-STR_AI_DEBUG_SELECT_AI_TOOLTIP                                  :{BLACK}Skatīt šī AI atkļūdošanas izeju. Ctrl-klikšķis, lai atvērtu jaunā logā
+STR_AI_DEBUG_SELECT_AI_TOOLTIP                                  :{BLACK}Skatīt šī MI (mākslīgā intelekta) atkļūdošanas izvadi. Ctrl+klikšķis, lai atvērtu jaunā logā
 STR_AI_GAME_SCRIPT                                              :{BLACK}Spēles skripts
 STR_AI_GAME_SCRIPT_TOOLTIP                                      :{BLACK}Pārbaudiet spēles skripta žurnālu. Ctrl-klikšķis, lai atvērtu jaunā logā
 
@@ -4798,7 +4798,7 @@ STR_ERROR_AI_PLEASE_REPORT_CRASH                                :{WHITE}Viens no
 STR_ERROR_AI_DEBUG_SERVER_ONLY                                  :{YELLOW}MI/spēles skriptu atkļūdošanas logs ir pieejams tikai serverim
 
 # AI configuration window
-STR_AI_CONFIG_CAPTION_AI                                        :{WHITE}AI iestatījumi
+STR_AI_CONFIG_CAPTION_AI                                        :{WHITE}MI iestatījumi
 STR_AI_CONFIG_CAPTION_GAMESCRIPT                                :{WHITE}Spēles Skripta Iestatījumi
 STR_AI_CONFIG_GAMELIST_TOOLTIP                                  :{BLACK}Spēles skripts, kas tiks ielādēts nākamajā spēlē
 STR_AI_CONFIG_AILIST_TOOLTIP                                    :{BLACK}MI, kas tiks ielādēts nākamajā spēlē
@@ -4849,7 +4849,7 @@ STR_SCREENSHOT_MINIMAP_SCREENSHOT                               :{BLACK}Minikart
 
 # Script Parameters
 STR_AI_SETTINGS_CAPTION                                         :{WHITE}{STRING} Iestatījumi
-STR_AI_SETTINGS_CAPTION_AI                                      :AI
+STR_AI_SETTINGS_CAPTION_AI                                      :MI (mākslīgais intelekts)
 STR_AI_SETTINGS_CAPTION_GAMESCRIPT                              :Spēles skripts
 STR_AI_SETTINGS_CLOSE                                           :{BLACK}Aizvērt
 STR_AI_SETTINGS_RESET                                           :{BLACK}Atiestatīt
@@ -5821,10 +5821,10 @@ STR_TOWN_NAME                                                   :{TOWN}
 STR_VEHICLE_NAME                                                :{VEHICLE}
 STR_WAYPOINT_NAME                                               :{WAYPOINT}
 
-STR_CURRENCY_SHORT_KILO                                         :{NBSP}tk.
-STR_CURRENCY_SHORT_MEGA                                         :{NBSP}m
+STR_CURRENCY_SHORT_KILO                                         :{NBSP}tūkst.
+STR_CURRENCY_SHORT_MEGA                                         :{NBSP}milj.
 STR_CURRENCY_SHORT_GIGA                                         :{NBSP}mljrd.
-STR_CURRENCY_SHORT_TERA                                         :{NBSP}tonna
+STR_CURRENCY_SHORT_TERA                                         :{NBSP}trlj.
 
 STR_JUST_CARGO                                                  :{CARGO_LONG}
 STR_JUST_RIGHT_ARROW                                            :{RIGHT_ARROW}
