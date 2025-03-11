@@ -14,7 +14,7 @@
 
 static const uint32_t GOAL_QUESTION_BUTTON_COUNT = 18; ///< Amount of buttons available.
 
-enum GoalQuestionType : byte {
+enum GoalQuestionType : uint8_t {
 	GQT_QUESTION = 0,
 	GQT_INFORMATION = 1,
 	GQT_WARNING = 2,
@@ -23,7 +23,7 @@ enum GoalQuestionType : byte {
 };
 
 /** Types of goal destinations */
-enum GoalType : byte {
+enum GoalType : uint8_t {
 	GT_NONE,         ///< Destination is not linked
 	GT_TILE,         ///< Destination is a tile
 	GT_INDUSTRY,     ///< Destination is an industry
@@ -37,7 +37,5 @@ typedef uint32_t GoalTypeID; ///< Contains either tile, industry ID, town ID, co
 typedef uint16_t GoalID; ///< ID of a goal
 struct Goal;
 static const GoalID INVALID_GOAL = 0xFFFF; ///< Constant representing a non-existing goal.
-
-extern GoalID _new_goal_id;
 
 #endif /* GOAL_TYPE_H */

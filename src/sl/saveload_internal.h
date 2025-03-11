@@ -23,22 +23,21 @@ void ResetOldNames();
 void ResetOldWaypoints();
 void MoveBuoysToWaypoints();
 void MoveWaypointsToBaseStations();
-SaveLoadTable GetBaseStationDescription();
 
-void AfterLoadVehicles(bool part_of_load);
+void AfterLoadVehiclesPhase1(bool part_of_load);
+void AfterLoadVehiclesPhase2(bool part_of_load);
 void AfterLoadVehiclesRemoveAnyFoundInvalid();
 void AfterLoadEngines();
 void FixupTrainLengths();
 void AfterLoadTemplateVehicles();
 void AfterLoadStations();
 void AfterLoadRoadStops();
-void ResetLabelMaps();
 void AfterLoadLabelMaps();
 void AfterLoadStoryBook();
 void AfterLoadLinkGraphs();
 void AfterLoadCompanyStats();
 void AfterLoadTraceRestrict();
-void UpdateHousesAndTowns(bool cargo_update_required, bool old_map_position);
+void UpdateHousesAndTowns(bool cargo_update_required);
 
 void UpdateOldAircraft();
 
@@ -66,5 +65,7 @@ extern uint32_t _ttdp_version;
 CompanyManagerFace ConvertFromOldCompanyManagerFace(uint32_t face);
 
 Order UnpackOldOrder(uint16_t packed);
+
+void ResetSettingsToDefaultForLoad();
 
 #endif /* SL_SAVELOAD_INTERNAL_H */

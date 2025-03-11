@@ -46,12 +46,12 @@ static CommandCost ClearTile_Clear(TileIndex tile, DoCommandFlag flags)
 	return price;
 }
 
-SpriteID GetSpriteIDForClearLand(const Slope slope, byte set)
+SpriteID GetSpriteIDForClearLand(const Slope slope, uint8_t set)
 {
 	return SPR_FLAT_BARE_LAND + SlopeToSpriteOffset(slope) + set * 19;
 }
 
-void DrawClearLandTile(const TileInfo *ti, byte set)
+void DrawClearLandTile(const TileInfo *ti, uint8_t set)
 {
 	DrawGroundSprite(GetSpriteIDForClearLand(ti->tileh, set), PAL_NONE);
 }
@@ -173,7 +173,7 @@ static void DrawTile_Clear(TileInfo *ti, DrawTileProcParams params)
 			break;
 
 		case CLEAR_FIELDS:
-			if (params.min_visible_height <= 4 * ZOOM_LVL_BASE) {
+			if (params.min_visible_height <= (4 * ZOOM_BASE)) {
 				DrawGroundSprite(GetSpriteIDForFields(ti->tileh, GetFieldType(ti->tile)), PAL_NONE);
 				DrawClearLandFence(ti);
 			}
@@ -199,8 +199,7 @@ static void DrawTile_Clear(TileInfo *ti, DrawTileProcParams params)
 
 static int GetSlopePixelZ_Clear(TileIndex tile, uint x, uint y, bool)
 {
-	int z;
-	Slope tileh = GetTilePixelSlope(tile, &z);
+	auto [tileh, z] = GetTilePixelSlope(tile);
 
 	return z + GetPartialPixelZ(x & 0xF, y & 0xF, tileh);
 }
@@ -215,27 +214,11 @@ static void UpdateFences(TileIndex tile)
 	assert_tile(IsTileType(tile, MP_CLEAR) && IsClearGround(tile, CLEAR_FIELDS), tile);
 	bool dirty = false;
 
-	bool neighbour = (IsTileType(TILE_ADDXY(tile, 1, 0), MP_CLEAR) && IsClearGround(TILE_ADDXY(tile, 1, 0), CLEAR_FIELDS));
-	if (!neighbour && GetFence(tile, DIAGDIR_SW) == 0) {
-		SetFence(tile, DIAGDIR_SW, 3);
-		dirty = true;
-	}
-
-	neighbour = (IsTileType(TILE_ADDXY(tile, 0, 1), MP_CLEAR) && IsClearGround(TILE_ADDXY(tile, 0, 1), CLEAR_FIELDS));
-	if (!neighbour && GetFence(tile, DIAGDIR_SE) == 0) {
-		SetFence(tile, DIAGDIR_SE, 3);
-		dirty = true;
-	}
-
-	neighbour = (IsTileType(TILE_ADDXY(tile, -1, 0), MP_CLEAR) && IsClearGround(TILE_ADDXY(tile, -1, 0), CLEAR_FIELDS));
-	if (!neighbour && GetFence(tile, DIAGDIR_NE) == 0) {
-		SetFence(tile, DIAGDIR_NE, 3);
-		dirty = true;
-	}
-
-	neighbour = (IsTileType(TILE_ADDXY(tile, 0, -1), MP_CLEAR) && IsClearGround(TILE_ADDXY(tile, 0, -1), CLEAR_FIELDS));
-	if (!neighbour && GetFence(tile, DIAGDIR_NW) == 0) {
-		SetFence(tile, DIAGDIR_NW, 3);
+	for (DiagDirection dir = DIAGDIR_BEGIN; dir < DIAGDIR_END; dir++) {
+		if (GetFence(tile, dir) != 0) continue;
+		TileIndex neighbour = tile + TileOffsByDiagDir(dir);
+		if (IsTileType(neighbour, MP_CLEAR) && IsClearGround(neighbour, CLEAR_FIELDS)) continue;
+		SetFence(tile, dir, 3);
 		dirty = true;
 	}
 
@@ -258,30 +241,28 @@ static void TileLoopClearAlps(TileIndex tile)
 		k = GetTileZ(tile) - GetSnowLine() + 1;
 	}
 
-	if (k < 0) {
+	if (!IsSnowTile(tile)) {
 		/* Below the snow line, do nothing if no snow. */
-		if (!IsSnowTile(tile)) return;
-	} else {
 		/* At or above the snow line, make snow tile if needed. */
-		if (!IsSnowTile(tile)) {
+		if (k >= 0) {
 			MakeSnow(tile);
 			MarkTileDirtyByTile(tile);
-			return;
 		}
+		return;
 	}
+
 	/* Update snow density. */
 	uint current_density = GetClearDensity(tile);
 	uint req_density = (k < 0) ? 0u : std::min<uint>(k, 3u);
 
-	if (current_density < req_density) {
-		AddClearDensity(tile, 1);
-	} else if (current_density > req_density) {
-		AddClearDensity(tile, -1);
-	} else {
+	if (current_density == req_density) {
 		/* Density at the required level. */
 		if (k >= 0) return;
 		ClearSnow(tile);
+	} else {
+		AddClearDensity(tile, current_density < req_density ? 1 : -1);
 	}
+
 	MarkTileDirtyByTile(tile);
 }
 
@@ -457,7 +438,7 @@ static void ChangeTileOwner_Clear(TileIndex, Owner, Owner)
 
 static CommandCost TerraformTile_Clear(TileIndex tile, DoCommandFlag flags, int, Slope)
 {
-	return DoCommand(tile, 0, 0, flags, CMD_LANDSCAPE_CLEAR);
+	return DoCommandOld(tile, 0, 0, flags, CMD_LANDSCAPE_CLEAR);
 }
 
 extern const TileTypeProcs _tile_type_clear_procs = {

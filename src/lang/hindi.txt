@@ -66,7 +66,21 @@ STR_COLOUR_PINK                                                 :गुलाब
 STR_COLOUR_RED                                                  :लाल
 
 ###length 17
+STR_COLOUR_SECONDARY_DARK_BLUE                                  :गहरा नीला
+STR_COLOUR_SECONDARY_PALE_GREEN                                 :हल्का हरा
 STR_COLOUR_SECONDARY_YELLOW                                     :पीला
+STR_COLOUR_SECONDARY_RED                                        :लाल
+STR_COLOUR_SECONDARY_LIGHT_BLUE                                 :हल्का नीला
+STR_COLOUR_SECONDARY_GREEN                                      :हरा
+STR_COLOUR_SECONDARY_DARK_GREEN                                 :गहरा हरा
+STR_COLOUR_SECONDARY_BLUE                                       :नीला
+STR_COLOUR_SECONDARY_CREAM                                      :मलाई
+STR_COLOUR_SECONDARY_MAUVE                                      :कासनी रंग
+STR_COLOUR_SECONDARY_PURPLE                                     :जामुनी
+STR_COLOUR_SECONDARY_ORANGE                                     :नारंगी
+STR_COLOUR_SECONDARY_BROWN                                      :भूरा
+STR_COLOUR_SECONDARY_GREY                                       :स्‍लेटी रंग
+STR_COLOUR_SECONDARY_SAME_AS_PRIMARY                            :प्राथमिक के समान
 
 
 # Units used in OpenTTD
@@ -81,6 +95,7 @@ STR_UNITS_POWER_METRIC                                          :{DECIMAL}{NBSP}
 
 
 # Time units used in string control characters
+
 
 
 
@@ -123,15 +138,25 @@ STR_SORT_BY_AVERAGE_PROFIT_LAST_YEAR                            :पिछले
 STR_TOOLBAR_TOOLTIP_SHOW_SOUND_MUSIC_WINDOW                     :{BLACK}ध्वनि/संगीत विकल्प
 
 # Extra tooltips for the scenario editor toolbar
-STR_SCENEDIT_TOOLBAR_TOOLTIP_DISPLAY_MAP_TOWN_DIRECTORY         :{BLACK}मानचित्र, नगर निर्देशिका दिखायें
+STR_SCENEDIT_TOOLBAR_OPENTTD                                    :{YELLOW}OpenTTD
+STR_SCENEDIT_TOOLBAR_SCENARIO_EDITOR                            :{YELLOW}परिदृश्य संपादक
+STR_SCENEDIT_TOOLBAR_MOVE_THE_STARTING_DATE_BACKWARD_TOOLTIP    :{BLACK}प्रारंभ दिनांक को 1 वर्ष पीछे ले जाएँ
+STR_SCENEDIT_TOOLBAR_MOVE_THE_STARTING_DATE_FORWARD_TOOLTIP     :{BLACK}शुरुआती तारीख को 1 साल आगे ले जाएं
+STR_SCENEDIT_TOOLBAR_DISPLAY_MAP_TOWN_DIRECTORY_TOOLTIP         :{BLACK}मानचित्र, नगर निर्देशिका दिखायें
+STR_SCENEDIT_TOOLBAR_LANDSCAPE_GENERATION_TOOLTIP               :{BLACK}भूनिर्माण मेनू खोलें या एक नई दुनिया उत्पन्न करें
+STR_SCENEDIT_TOOLBAR_INDUSTRY_GENERATION_TOOLTIP                :{BLACK}उद्योगों का निर्माण या सृजन
+STR_SCENEDIT_TOOLBAR_ROAD_CONSTRUCTION_TOOLTIP                  :{BLACK}सड़क के बुनियादी ढांचे का निर्माण
+STR_SCENEDIT_TOOLBAR_PLANT_TREES_TOOLTIP                        :{BLACK}पेड़ लगाओ। क्षेत्र को तिरछे चुनने के लिए Ctrl+क्लिक करें+खींचें. केवल लागत अनुमान दिखाने के लिए Shift दबाएं
+STR_SCENEDIT_TOOLBAR_PLACE_SIGN_TOOLTIP                         :{BLACK} स्थान चिन्ह
+STR_SCENEDIT_TOOLBAR_PLACE_OBJECT_TOOLTIP                       :{BLACK}वस्तु रखें। क्षेत्र को तिरछे चुनने के लिए Ctrl+क्लिक करें+खींचें. केवल लागत अनुमान दिखाने के लिए Shift दबाएं
 
 # Scenario editor file menu
 ###length 7
 STR_SCENEDIT_FILE_MENU_SEPARATOR                                :
 STR_SCENEDIT_FILE_MENU_QUIT                                     :निकास
 
+
 # Settings menu
-###length 16
 STR_SETTINGS_MENU_CONFIG_SETTINGS_TREE                          :समायोजन
 STR_SETTINGS_MENU_WAYPOINTS_DISPLAYED                           :पथ-संकेतों के नाम दिखायें
 STR_SETTINGS_MENU_TRANSPARENT_SIGNS                             :पारदर्शी संकेत
@@ -167,6 +192,12 @@ STR_RAIL_MENU_ELRAIL_CONSTRUCTION                               :विद्य
 # Message menu
 
 # About menu
+STR_ABOUT_MENU_LAND_BLOCK_INFO                                  :भूमि क्षेत्र की जानकारी
+STR_ABOUT_MENU_HELP                                             :सहायता और नियमावली
+STR_ABOUT_MENU_AI_DEBUG                                         :एआई/गेम स्क्रिप्ट डिबग
+STR_ABOUT_MENU_SCREENSHOT                                       :स्क्रीनशॉट
+STR_ABOUT_MENU_SHOW_FRAMERATE                                   :फ्रेमदर दिखाएं
+STR_ABOUT_MENU_ABOUT_OPENTTD                                    :'OpenTTD' के बारे में
 
 ###length 31
 STR_DAY_NUMBER_14TH                                             :१४
@@ -175,10 +206,31 @@ STR_DAY_NUMBER_23RD                                             :२३
 
 ###length 12
 STR_MONTH_ABBREV_JAN                                            :जन
+STR_MONTH_ABBREV_FEB                                            :फ़रवरी
+STR_MONTH_ABBREV_MAR                                            :मार्च
+STR_MONTH_ABBREV_APR                                            :अप्रैल
+STR_MONTH_ABBREV_MAY                                            :मई
+STR_MONTH_ABBREV_JUN                                            :जून
+STR_MONTH_ABBREV_JUL                                            :जुलाई
+STR_MONTH_ABBREV_AUG                                            :अगस्‍त
+STR_MONTH_ABBREV_SEP                                            :सितम्बर
+STR_MONTH_ABBREV_OCT                                            :अक्‍तूबर
 STR_MONTH_ABBREV_NOV                                            :नव
+STR_MONTH_ABBREV_DEC                                            :दिसंबर
 
 ###length 12
+STR_MONTH_JAN                                                   :जनवरी
+STR_MONTH_FEB                                                   :फ़रवरी
+STR_MONTH_MAR                                                   :मार्च
+STR_MONTH_APR                                                   :अप्रैल
+STR_MONTH_MAY                                                   :मई
+STR_MONTH_JUN                                                   :जून
+STR_MONTH_JUL                                                   :जुलाई
 STR_MONTH_AUG                                                   :अगस्त
+STR_MONTH_SEP                                                   :सितंबर
+STR_MONTH_OCT                                                   :अक्टूबर
+STR_MONTH_NOV                                                   :नवंबर
+STR_MONTH_DEC                                                   :दिसंबर
 
 # Graph window
 STR_GRAPH_X_LABEL_MONTH                                         :{TINY_FONT}{STRING}
@@ -188,6 +240,7 @@ STR_GRAPH_Y_LABEL_NUMBER                                        :{TINY_FONT}{COM
 
 
 STR_GRAPH_CARGO_PAYMENT_CARGO                                   :{TINY_FONT}{BLACK}{STRING}
+
 
 
 # Graph key window
@@ -267,7 +320,7 @@ STR_NEWS_NEW_VEHICLE_TYPE                                       :{BIG_FONT}{BLAC
 
 
 # Extra view window
-STR_EXTRA_VIEW_MOVE_MAIN_TO_VIEW_TT                             :{BLACK}इस व्यूपोर्ट के स्थान को मुख्य दृश्य में कॉपी करें
+STR_EXTRA_VIEW_MOVE_MAIN_TO_VIEW_TOOLTIP                        :{BLACK}इस व्यूपोर्ट के स्थान को मुख्य दृश्य में कॉपी करें
 
 # Game options window
 
@@ -276,7 +329,7 @@ STR_EXTRA_VIEW_MOVE_MAIN_TO_VIEW_TT                             :{BLACK}इस �
 
 
 
-###length 43
+###length 44
 STR_GAME_OPTIONS_CURRENCY_FIM                                   :फिनलैंड मार्का
 STR_GAME_OPTIONS_CURRENCY_ISK                                   :आइसलैंडिक क्रोना
 STR_GAME_OPTIONS_CURRENCY_HKD                                   :हाँग काँग डॉलर
@@ -295,6 +348,7 @@ STR_GAME_OPTIONS_VIDEO_ACCELERATION                             :{BLACK}हा�
 
 
 STR_GAME_OPTIONS_GUI_SCALE_FRAME                                :{BLACK}इंटरफ़ेस का आकार
+
 
 
 
@@ -447,6 +501,7 @@ STR_CONFIG_SETTING_ORDER_REVIEW_OFF                             :नहीं
 ###length 2
 
 
+
 ###length 2
 
 
@@ -519,7 +574,13 @@ STR_CONFIG_SETTING_OSK_ACTIVATION_DISABLED                      :अक्षम
 ###length 3
 
 
+STR_CONFIG_SETTING_COMMAND_PAUSE_LEVEL                          :जब रोका गया हो, तो अनुमति दें: {STRING}
+STR_CONFIG_SETTING_COMMAND_PAUSE_LEVEL_HELPTEXT                 :चयन करें कि गेम रोके जाने के दौरान कौन सी क्रियाएँ की जा सकती हैं
 ###length 4
+STR_CONFIG_SETTING_COMMAND_PAUSE_LEVEL_NO_ACTIONS               :कोई कार्रवाई नहीं
+STR_CONFIG_SETTING_COMMAND_PAUSE_LEVEL_ALL_NON_CONSTRUCTION     :सभी गैर-निर्माण कार्य
+STR_CONFIG_SETTING_COMMAND_PAUSE_LEVEL_ALL_NON_LANDSCAPING      :सभी लेकिन परिदृश्य संशोधित क्रियाएं
+STR_CONFIG_SETTING_COMMAND_PAUSE_LEVEL_ALL_ACTIONS              :सभी क्रियाएं
 
 
 
@@ -562,6 +623,8 @@ STR_CONFIG_SETTING_AI_BUILDS_AIRCRAFT                           :कंप्य
 
 
 
+###length 3
+
 ###setting-zero-is-special
 
 
@@ -590,6 +653,8 @@ STR_CONFIG_SETTING_COLOURED_NEWS_YEAR                           :रंगीन
 
 STR_CONFIG_SETTING_ENDING_YEAR_VALUE                            :{NUM}
 ###setting-zero-is-special
+
+###length 2
 
 ###length 3
 
@@ -652,9 +717,7 @@ STR_CONFIG_SETTING_INTERFACE_GENERAL                            :सामान
 STR_CONFIG_SETTING_COMPANY                                      :कंपनी
 STR_CONFIG_SETTING_VEHICLES_ROUTING                             :मार्ग
 
-STR_CONFIG_SETTING_PATHFINDER_FOR_SHIPS_HELPTEXT                :नौकाओं द्वारा उपयोग किया जाने वाला पथान्वेषी
 STR_CONFIG_SETTING_REVERSE_AT_SIGNALS_HELPTEXT                  :यदि ट्रेनें लंबे समय तक वहां प्रतीक्षा करती हैं तो उन्हें सिग्नल पर रिवर्स करने की अनुमति दें
-###length 2
 
 
 # Config errors
@@ -740,10 +803,7 @@ STR_NETWORK_CLIENT_LIST_SERVER_NAME_QUERY_CAPTION               :सर्वर
 
 
 
-# Network set password
-
 # Network company info join/password
-STR_COMPANY_VIEW_PASSWORD                                       :{BLACK}पासवर्ड
 
 # Network chat
 
@@ -754,7 +814,7 @@ STR_NETWORK_ERROR_WRONG_PASSWORD                                :गलत प�
 
 STR_NETWORK_ERROR_CLIENT_GUI_LOST_CONNECTION_CAPTION            :{WHITE}संपर्क विच्छेद संभावित
 
-###length 21
+###length 23
 STR_NETWORK_ERROR_CLIENT_GENERAL                                :सामान्य त्रुटि
 STR_NETWORK_ERROR_CLIENT_SAVEGAME                               :मानचित्र लोड नहीं हो सका
 
@@ -811,6 +871,9 @@ STR_TOOLBAR_DISABLED_NO_VEHICLE_AVAILABLE                       :{BLACK}अक�
 # Rail waypoint construction window
 
 # Rail station construction window
+
+
+
 
 
 STR_STATION_CLASS_DFLT                                          :मानक स्टेशन
@@ -939,6 +1002,8 @@ STR_MAPGEN_BORDER_RANDOM                                        :{BLACK}या�
 # Map generation progress
 STR_GENERATION_PROGRESS_NUM                                     :{BLACK}{NUM} / {NUM}
 
+
+
 # NewGRF settings
 STR_NEWGRF_FILTER_TITLE                                         :{ORANGE}फ़िल्टर:
 STR_NEWGRF_SETTINGS_PRESET_LIST_TOOLTIP                         :{BLACK}चुने गये पूर्वनिश्चित समायोजन को खोलें
@@ -951,6 +1016,14 @@ STR_NEWGRF_SETTINGS_PALETTE_DEFAULT                             :मूल (D)
 STR_NEWGRF_SETTINGS_NO_INFO                                     :{BLACK}सूचना उपलब्ध नहीं
 
 # NewGRF save preset window
+STR_SAVE_PRESET_CAPTION                                         :{WHITE}प्रीसेट सहेजें
+STR_SAVE_PRESET_LIST_TOOLTIP                                    :{BLACK}उपलब्ध प्रीसेट की सूची, इसे नीचे सेव नाम पर कॉपी करने के लिए एक का चयन करें
+STR_SAVE_PRESET_TITLE                                           :{BLACK}प्रीसेट के लिए एक नाम दर्ज करें
+STR_SAVE_PRESET_EDITBOX_TOOLTIP                                 :{BLACK}सहेजने के लिए प्रीसेट के लिए वर्तमान में चयनित नाम
+STR_SAVE_PRESET_CANCEL                                          :{BLACK}रद्द
+STR_SAVE_PRESET_CANCEL_TOOLTIP                                  :{BLACK}प्रीसेट न बदलें
+STR_SAVE_PRESET_SAVE                                            :{BLACK}सेव
+STR_SAVE_PRESET_SAVE_TOOLTIP                                    :{BLACK}प्रीसेट को वर्तमान चयनित नाम पर सहेजें
 
 # NewGRF parameters window
 
@@ -1040,6 +1113,8 @@ STR_STATION_VIEW_RESERVED                                       :{YELLOW}({CARGO
 
 
 
+STR_STATION_VIEW_SUPPLY_RATINGS_TITLE_MONTH                     :{BLACK}प्रति माह आपूर्ति और स्थानीय रेटिंग:
+STR_STATION_VIEW_SUPPLY_RATINGS_TITLE_MINUTE                    :{BLACK}प्रति मिनट आपूर्ति और स्थानीय रेटिंग:
 
 STR_STATION_VIEW_VIA                                            :{YELLOW}{CARGO_SHORT} {STATION} द्वारा
 
@@ -1081,7 +1156,6 @@ STR_COMPANY_VIEW_COMPANY_NAME_BUTTON                            :{BLACK}कं�
 # Company infrastructure window
 
 # Industry directory
-STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}उद्योग
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING}
@@ -1236,9 +1310,6 @@ STR_VEHICLE_VIEW_TRAIN_STATUS_START_STOP_TOOLTIP                :{BLACK}वर�
 
 
 # Vehicle stopped/started animations
-###length 2
-
-###length 2
 
 # Vehicle details
 
@@ -1422,6 +1493,7 @@ STR_ERROR_FOREST_CAN_ONLY_BE_PLANTED                            :{WHITE}... व�
 # Station construction related errors
 
 STR_ERROR_TOO_MANY_STATIONS_LOADING                             :{WHITE}अत्यधिक स्टेशन/लादन क्षेत्र
+STR_ERROR_CAN_T_RENAME_STATION                                  :{WHITE}स्टेशन का नाम नहीं बदल सकते...
 
 # Station destruction related errors
 STR_ERROR_CAN_T_REMOVE_PASSENGER_TRAM_STATION                   :{WHITE}यात्री ट्राम स्टेशन नहीं हटा सकते...
@@ -1435,6 +1507,7 @@ STR_ERROR_CAN_T_REMOVE_PASSENGER_TRAM_STATION                   :{WHITE}या�
 STR_ERROR_CAN_T_BUILD_ROAD_DEPOT                                :{WHITE}यहां सड़क वाहन डिपो नहीं बना सकते...
 STR_ERROR_CAN_T_BUILD_TRAM_DEPOT                                :{WHITE}यहां ट्राम वाहन डिपो नहीं बना सकते...
 
+STR_ERROR_CAN_T_RENAME_DEPOT                                    :{WHITE}डिपो का नाम नहीं बदल सकते...
 
 
 
@@ -1481,7 +1554,10 @@ STR_ERROR_AIRCRAFT_NOT_AVAILABLE                                :{WHITE}वि�
 STR_ERROR_CAN_T_REFIT_ROAD_VEHICLE                              :{WHITE}सड़क वाहन को फिर से फिट नहीं किया जा सकता...
 
 ###length VEHICLE_TYPES
+STR_ERROR_CAN_T_RENAME_TRAIN                                    :{WHITE}ट्रेन का नाम नहीं बता सकते...
+STR_ERROR_CAN_T_RENAME_ROAD_VEHICLE                             :{WHITE}सड़क वाहन का नाम नहीं दे सकते...
 STR_ERROR_CAN_T_RENAME_SHIP                                     :{WHITE}जहाज का नामकरण नहीं कर सकते...
+STR_ERROR_CAN_T_RENAME_AIRCRAFT                                 :{WHITE}विमान का नाम नहीं दे सकते...
 
 ###length VEHICLE_TYPES
 
@@ -1490,9 +1566,14 @@ STR_ERROR_CAN_T_RENAME_SHIP                                     :{WHITE}जह�
 ###length VEHICLE_TYPES
 
 ###length VEHICLE_TYPES
+STR_ERROR_CAN_T_RENAME_TRAIN_TYPE                               :{WHITE}ट्रेन वाहन के प्रकार का नाम नहीं बदल सकते...
+STR_ERROR_CAN_T_RENAME_ROAD_VEHICLE_TYPE                        :{WHITE}सड़क वाहन प्रकार का नाम नहीं बदल सकते...
+STR_ERROR_CAN_T_RENAME_SHIP_TYPE                                :{WHITE}जहाज के प्रकार का नाम नहीं बदल सकते...
+STR_ERROR_CAN_T_RENAME_AIRCRAFT_TYPE                            :{WHITE}विमान के प्रकार का नाम नहीं बदल सकते...
 
 ###length VEHICLE_TYPES
 STR_ERROR_CAN_T_SELL_TRAIN                                      :{WHITE}रेल वाहन नहीं बेच सकते...
+
 
 
 
@@ -1506,6 +1587,8 @@ STR_ERROR_CAN_T_REVERSE_DIRECTION_TRAIN                         :{WHITE}ट्�
 # Order related errors
 STR_ERROR_CAN_T_INSERT_NEW_ORDER                                :{WHITE}नया ऑर्डर सम्मिलित नहीं किया जा सकता...
 STR_ERROR_CAN_T_COPY_SHARE_ORDER                                :{WHITE}... वाहन सभी स्टेशनों तक नहीं जा सकता
+STR_ERROR_CAN_T_ADD_ORDER                                       :{WHITE}... वाहन उस स्टेशन पर नहीं जा सकता
+STR_ERROR_CAN_T_ADD_ORDER_SHARED                                :{WHITE}... इस आदेश को साझा करने वाला वाहन उस स्टेशन पर नहीं जा सकता है
 
 
 # Extra messages which go on the third line of errors, explaining why orders failed
@@ -1528,9 +1611,17 @@ STR_TOWN_BUILDING_NAME_THEATER_1                                :थिएटर
 
 ##id 0x4800
 # industry names
+STR_INDUSTRY_NAME_COAL_MINE                                     :कोयले की खान
 STR_INDUSTRY_NAME_POWER_STATION                                 :बिजलीघर
+STR_INDUSTRY_NAME_FACTORY                                       :कारखाना
 STR_INDUSTRY_NAME_STEEL_MILL                                    :इस्पात चक्की
+STR_INDUSTRY_NAME_COPPER_ORE_MINE                               :कॉपर अयस्क माइन
+STR_INDUSTRY_NAME_BANK                                          :खाता होना
 STR_INDUSTRY_NAME_BANK_TROPIC_ARCTIC                            :बैंक
+STR_INDUSTRY_NAME_CANDY_FACTORY                                 :मिठाई का कारखाना
+STR_INDUSTRY_NAME_BATTERY_FARM                                  :बैटरी फार्म
+STR_INDUSTRY_NAME_COLA_WELLS                                    :कोला वेल्स
+STR_INDUSTRY_NAME_BUBBLE_GENERATOR                              :बुलबुला जनरेटर
 
 ############ WARNING, using range 0x6000 for strings that are stored in the savegame
 ############ These strings may never get a new id, or savegames will break!
@@ -1552,6 +1643,7 @@ STR_SV_STNAME_WAYPOINT                                          :{STRING}
 ##id 0x8000
 ###length 116
 # Vehicle names
+STR_VEHICLE_NAME_TRAIN_ENGINE_RAIL_GINZU_A4_STEAM               :Ginzu 'A4' (भाप)
 STR_VEHICLE_NAME_TRAIN_WAGON_RAIL_PASSENGER_CAR                 :यात्री गाड़ी
 STR_VEHICLE_NAME_TRAIN_WAGON_RAIL_COAL_CAR                      :कोयला वाहन
 STR_VEHICLE_NAME_TRAIN_WAGON_RAIL_FRUIT_TRUCK                   :फल वाहन
@@ -1600,18 +1692,7 @@ STR_UNKNOWN_STATION                                             :अज्ञा
 
 # Viewport strings
 STR_VIEWPORT_TOWN_POP                                           :{WHITE}{TOWN} ({COMMA})
-STR_VIEWPORT_TOWN                                               :{WHITE}{TOWN}
-STR_VIEWPORT_TOWN_TINY_BLACK                                    :{TINY_FONT}{BLACK}{TOWN}
-STR_VIEWPORT_TOWN_TINY_WHITE                                    :{TINY_FONT}{WHITE}{TOWN}
-
-STR_VIEWPORT_SIGN_SMALL_BLACK                                   :{TINY_FONT}{BLACK}{SIGN}
-STR_VIEWPORT_SIGN_SMALL_WHITE                                   :{TINY_FONT}{WHITE}{SIGN}
-
 STR_VIEWPORT_STATION                                            :{STATION} {STATION_FEATURES}
-STR_VIEWPORT_STATION_TINY                                       :{TINY_FONT}{STATION}
-
-STR_VIEWPORT_WAYPOINT                                           :{WAYPOINT}
-STR_VIEWPORT_WAYPOINT_TINY                                      :{TINY_FONT}{WAYPOINT}
 
 # Simple strings to get specific types of data
 STR_COMPANY_NAME                                                :{COMPANY}

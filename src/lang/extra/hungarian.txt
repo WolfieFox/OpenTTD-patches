@@ -2,6 +2,7 @@ STR_UNIT_NAME_VELOCITY_IMPERIAL                                 :mi/h
 STR_UNIT_NAME_VELOCITY_METRIC                                   :km/h
 STR_UNIT_NAME_VELOCITY_SI                                       :m/s
 STR_UNIT_NAME_VELOCITY_GAMEUNITS                                :mező/nap
+STR_UNIT_NAME_VELOCITY_GAMEUNITS_WALLCLOCK                      :mező/mp
 
 STR_BUTTON_RENAME                                               :{BLACK}Átnevez
 
@@ -25,8 +26,6 @@ STR_LINKGRAPH_STATS_TOOLTIP_CAPACITY                            :{}Kapacitás: {
 
 # Programmable Pre-Signals
 
-#House construction window (for SE only)
-
 #Town select window (for SE only)
 
 STR_MAPGEN_SNOW_LINE_HEIGHT                                     :{BLACK}Hóhatár:
@@ -38,8 +37,22 @@ STR_MAPGEN_SNOW_LINE_QUERY_CAPT                                 :{WHITE}Hóhatá
 
 STR_PURCHASE_INFO_DESIGNED                                      :{BLACK}Kifejlesztve: {GOLD}{NUM}
 
-STR_TIMETABLE_ARRIVAL_ABBREVIATION                              :É:
-STR_TIMETABLE_DEPARTURE_ABBREVIATION                            :I:
+STR_VEHICLE_STATUS_TRAIN_STOPPING_VEL_END                       :{RED}Lassít, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_STATION_VEL_END                  :{LTBLUE}{STATION} állomás felé, {VELOCITY}
+STR_VEHICLE_STATUS_NO_ORDERS_VEL_END                            :{LTBLUE}Nincs utasítás, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_WAYPOINT_VEL_END                 :{LTBLUE}Útban {WAYPOINT} felé, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_VEL_END                    :{ORANGE}Útban {DEPOT} felé, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_SERVICE_VEL_END            :{LTBLUE}Javítás {DEPOT}ban, {VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_UNBUNCH_VEL_END            :{LTBLUE}Csoport bontás és szervizelés itt: {DEPOT}, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_STATION_VEL_END                 :{LTBLUE}{STATION} nem elérhető, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_WAYPOINT_VEL_END                :{LTBLUE}{WAYPOINT} nem elérhető, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_VEL_END                   :{ORANGE}{DEPOT} nem elérhető, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_SERVICE_VEL_END           :{LTBLUE}{DEPOT} nem elérhető, {VELOCITY}
+
+STR_ORDERS_GO_TO_TOOLTIP_EXTRA                                  :{BLACK}Új utasítás beillesztése a kijelölt utasítás elé vagy a lista végére. Ctrl+kattintás állomásoknál 'bármiből teljes rakományra vár'-t, ellenőrző pontoknál 'Non-stop'-ot, járműtelepeknél 'Javításra menj' parancsot ad a célponthoz. 'Menetrend megosztása' esetén a jármű megosztja az utasításait a kiválasztott járművel. Ha járműtelep szerepel a menetrendben, kikapcsolja az automatikus javításokat
+
+STR_TIMETABLE_ARRIVAL_ABBREVIATION                              :É:{SPACE}{SPACE}
+STR_TIMETABLE_DEPARTURE_ABBREVIATION                            :I:{SPACE}{SPACE}
 
 # Cargo type orders Window
 
@@ -74,3 +87,21 @@ STR_COMPANY_VIEW_SELL_SHARE_TOOLTIP                             :{BLACK}25%-nyi 
 STR_ERROR_CAN_T_BUY_25_SHARE_IN_THIS                            :{WHITE}Nem vehetsz 25%-nyi részvényt ebből a vállalatból...
 STR_ERROR_CAN_T_SELL_25_SHARE_IN                                :{WHITE}Nem adhatsz el 25%-nyi részvényt ebből a vállalatból...
 STR_ERROR_PROTECTED                                             :{WHITE}Ez a vállalat egyelőre még nem rendelkezik részvényekkel...
+
+STR_CONFIG_SETTING_CYCLE_SIGNAL_PBS                             :Csak irányjelzők
+
+STR_WARNING_PASSWORD_SECURITY                                   :{YELLOW}Figyelem: A szerver adminjai láthatják az itt beírt szöveget.
+STR_NETWORK_NEED_COMPANY_PASSWORD_CAPTION                       :{WHITE}A vállalat jelszóval van védve. Írd be
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_UNLOCK                    :Jelszó feloldása
+STR_NETWORK_CLIENT_LIST_ASK_COMPANY_UNLOCK                      :{YELLOW}Biztos vissza akarod állítani a '{COMPANY}' vállalat jelszavát?
+
+# Network set password
+STR_COMPANY_PASSWORD_CANCEL                                     :{BLACK}Ne mentsd el a megadott jelszót
+STR_COMPANY_PASSWORD_OK                                         :{BLACK}Add meg az új vállalati jelszót
+STR_COMPANY_PASSWORD_CAPTION                                    :{WHITE}Vállalati jelszó
+STR_COMPANY_PASSWORD_MAKE_DEFAULT                               :{BLACK}Alapértelmezett vállalati jelszó
+STR_COMPANY_PASSWORD_MAKE_DEFAULT_TOOLTIP                       :{BLACK}Ez a jelszó legyen az alapértelmezett jelszó az új vállalatoknál
+
+STR_COMPANY_VIEW_PASSWORD                                       :{BLACK}Jelszó
+STR_COMPANY_VIEW_PASSWORD_TOOLTIP                               :{BLACK}Védd le a vállalatodat jelszóval ha nem akarod hogy mások csatlakozzanak hozzá
+STR_COMPANY_VIEW_SET_PASSWORD                                   :{BLACK}Vállalati jelszó beállítása

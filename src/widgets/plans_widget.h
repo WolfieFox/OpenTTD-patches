@@ -13,6 +13,10 @@
 /** Widgets of the #PlansWindow class. */
 enum PlansWidgets : WidgetID {
 	WID_PLN_CAPTION,        ///< Caption of the window.
+	WID_PLN_SORT_ORDER,     ///< Direction of sort dropdown.
+	WID_PLN_SORT_CRITERIA,  ///< Criteria of sort dropdown.
+	WID_PLN_OWN_ONLY,       ///< Only show own plans.
+	WID_PLN_FILTER,         ///< Filter of name.
 	WID_PLN_LIST,
 	WID_PLN_SCROLLBAR,
 	WID_PLN_NEW,
@@ -24,6 +28,8 @@ enum PlansWidgets : WidgetID {
 	WID_PLN_DELETE,
 	WID_PLN_HIDE_ALL_SEL,
 	WID_PLN_RENAME,
+	WID_PLN_RENAME_SEL,
+	WID_PLN_TAKE_OWNERSHIP,
 };
 
 #endif /* WIDGETS_PLANS_WIDGET_H */

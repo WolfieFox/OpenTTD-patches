@@ -23,7 +23,7 @@
 #include "company_base.h"
 #include "string_func.h"
 #include "scope_info.h"
-#include "order_cmd.h"
+#include "order_dest_func.h"
 #include "strings_func.h"
 #include "scope.h"
 
@@ -60,21 +60,6 @@ void PayStationSharingFee(Vehicle *v, const Station *st)
 	PaySharingFee(v, st->owner, (cost << 8) / DAY_TICKS);
 }
 
-uint16_t is2_GetWeight(Train *v)
-{
-	uint16_t weight = (CargoSpec::Get(v->cargo_type)->weight * v->cargo.StoredCount() * FreightWagonMult(v->cargo_type)) / 16;
-		/* Vehicle weight is not added for articulated parts. */
-	if (!v->IsArticulatedPart()) {
-		weight += GetVehicleProperty(v, PROP_TRAIN_WEIGHT, RailVehInfo(v->engine_type)->weight);
-	}
-		/* Powered wagons have extra weight added. */
-	if (HasBit(v->flags, VRF_POWEREDWAGON)) {
-		weight += RailVehInfo(v->gcache.first_engine)->pow_wag_weight;
-	}
-		return weight;
-}
-
-
 /**
  * Pay the daily fee for trains on foreign tracks.
  * @param v The vehicle to pay the fee for.
@@ -85,9 +70,9 @@ void PayDailyTrackSharingFee(Train *v)
 	if (owner == v->owner) return;
 	Money cost = _settings_game.economy.sharing_fee[VEH_TRAIN] << 8;
 	/* Cost is calculated per 1000 tonnes */
-	cost = cost * is2_GetWeight(v) / 1000;
+	cost = (cost * v->gcache.cached_weight) / 1000;
 	/* Only pay the required fraction */
-	cost = cost * v->running_ticks / DAY_TICKS;
+	cost = (cost * v->running_ticks) / DAY_TICKS;
 	if (cost != 0) PaySharingFee(v, owner, cost);
 }
 
@@ -206,7 +191,7 @@ static void FixAllReservations()
 {
 	/* if this function is called, we can safely assume that sharing of rails is being switched off */
 	assert(!_settings_game.economy.infrastructure_sharing[VEH_TRAIN]);
-	for (Train *v : Train::Iterate()) {
+	for (Train *v : Train::IterateFrontOnly()) {
 		if (!v->IsPrimaryVehicle() || (v->vehstatus & VS_CRASHED) != 0 || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
 		/* It might happen that the train reserved additional tracks,
 		 * but FollowTrainReservation can't detect those because they are no longer reachable.
@@ -254,9 +239,8 @@ bool CheckSharingChangePossible(VehicleType type, bool new_value)
 	});
 
 	StringID error_message = STR_NULL;
-	for (Vehicle *v : Vehicle::Iterate()) {
-		if (type != v->type || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
-		if (v->Previous() != nullptr) continue;
+	for (Vehicle *v : Vehicle::IterateTypeFrontOnly(type)) {
+		if (HasBit(v->subtype, GVSF_VIRTUAL)) continue;
 
 		/* Check vehicle positiion */
 		if (!VehiclePositionIsAllowed(v)) {
@@ -280,7 +264,7 @@ bool CheckSharingChangePossible(VehicleType type, bool new_value)
 	}
 
 	if (type == VEH_TRAIN && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
-		for (Train *v : Train::Iterate()) {
+		for (Train *v : Train::IterateFrontOnly()) {
 			if (!v->IsPrimaryVehicle() || (v->vehstatus & VS_CRASHED) != 0 || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
 			/* It might happen that the train reserved additional tracks,
 			 * but FollowTrainReservation can't detect those because they are no longer reachable.
@@ -328,10 +312,10 @@ void HandleSharingCompanyDeletion(Owner owner)
 	YapfNotifyTrackLayoutChange(INVALID_TILE, INVALID_TRACK);
 
 	Vehicle *si_v = nullptr;
-	SCOPE_INFO_FMT([&si_v], "HandleSharingCompanyDeletion: veh: %s", scope_dumper().VehicleInfo(si_v));
-	for (Vehicle *v : Vehicle::Iterate()) {
+	SCOPE_INFO_FMT([&si_v], "HandleSharingCompanyDeletion: veh: {}", VehicleInfoDumper(si_v));
+	for (Vehicle *v : Vehicle::IterateFrontOnly()) {
 		si_v = v;
-		if (!IsCompanyBuildableVehicleType(v) || v->Previous() != nullptr) continue;
+		if (!IsCompanyBuildableVehicleType(v)) continue;
 		/* vehicle position */
 		if (v->owner == owner || !VehiclePositionIsAllowed(v, owner)) {
 			RemoveAndSellVehicle(v, v->owner != owner);
@@ -357,7 +341,7 @@ void HandleSharingCompanyDeletion(Owner owner)
 	}
 
 	if (_settings_game.vehicle.train_braking_model == TBM_REALISTIC && _settings_game.economy.infrastructure_sharing[VEH_TRAIN]) {
-		for (TileIndex t = 0; t < MapSize(); t++) {
+		for (TileIndex t(0); t < MapSize(); t++) {
 			switch (GetTileType(t)) {
 				case MP_RAILWAY:
 				case MP_ROAD:
@@ -404,7 +388,7 @@ void UpdateAllBlockSignals(Owner owner)
 		}
 		return false;
 	};
-	TileIndex tile = 0;
+	TileIndex tile(0);
 	do {
 		if (IsTileType(tile, MP_RAILWAY) && HasSignals(tile)) {
 			Owner track_owner = GetTileOwner(tile);

@@ -16,18 +16,20 @@
 #include "date_func.h"
 #include "depot_base.h"
 #include "town.h"
+#include "tunnelbridge_map.h"
 #include "signal_func.h"
 #include "road.h"
+#include "newgrf_dump.h"
 
 #include "safeguards.h"
 
 /* virtual */ uint32_t RailTypeScopeResolver::GetRandomBits() const
 {
-	uint tmp = CountBits(this->tile + (TileX(this->tile) + TileY(this->tile)) * TILE_SIZE);
+	uint tmp = CountBits(this->tile.base() + (TileX(this->tile) + TileY(this->tile)) * TILE_SIZE);
 	return GB(tmp, 0, 2);
 }
 
-/* virtual */ uint32_t RailTypeScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const
+/* virtual */ uint32_t RailTypeScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra &extra) const
 {
 	if (this->tile == INVALID_TILE) {
 		switch (variable) {
@@ -37,7 +39,7 @@
 			case 0x43: return CalTime::CurDate().base();
 			case 0x44: return HZB_TOWN_EDGE;
 			case A2VRI_RAILTYPE_SIGNAL_RESTRICTION_INFO: return 0;
-			case A2VRI_RAILTYPE_SIGNAL_CONTEXT: return this->signal_context;
+			case A2VRI_RAILTYPE_SIGNAL_CONTEXT: return GetNewSignalsSignalContext(this->signal_context);
 			case A2VRI_RAILTYPE_SIGNAL_SIDE: return GetNewSignalsSideVariable();
 			case A2VRI_RAILTYPE_SIGNAL_VERTICAL_CLEARANCE: return 0xFF;
 			case A2VRI_RAILTYPE_ADJACENT_CROSSING: return 0;
@@ -63,7 +65,7 @@
 		case A2VRI_RAILTYPE_SIGNAL_RESTRICTION_INFO:
 			return GetNewSignalsRestrictedSignalsInfo(this->prog, this->tile, 0);
 		case A2VRI_RAILTYPE_SIGNAL_CONTEXT:
-			return GetNewSignalsSignalContext(this->signal_context, this->tile);
+			return GetNewSignalsSignalContext(this->signal_context);
 		case A2VRI_RAILTYPE_SIGNAL_SIDE:
 			return GetNewSignalsSideVariable();
 		case A2VRI_RAILTYPE_SIGNAL_VERTICAL_CLEARANCE:
@@ -95,9 +97,9 @@
 		}
 	}
 
-	DEBUG(grf, 1, "Unhandled rail type tile variable 0x%X", variable);
+	Debug(grf, 1, "Unhandled rail type tile variable 0x{:X}", variable);
 
-	extra->available = false;
+	extra.available = false;
 	return UINT_MAX;
 }
 
@@ -175,7 +177,7 @@ static PalSpriteID GetRailTypeCustomSignalSprite(const RailTypeInfo *rti, TileIn
 	if (type == SIGTYPE_PROG && !HasBit(rti->ctrl_flags, RTCF_PROGSIG)) return { 0, PAL_NONE };
 	if (type == SIGTYPE_NO_ENTRY && !HasBit(rti->ctrl_flags, RTCF_NOENTRYSIG)) return { 0, PAL_NONE };
 
-	uint32_t param1 = (context == CSSC_GUI) ? 0x10 : 0x00;
+	uint32_t param1 = (context.ctx_mode == CSSC_GUI) ? 0x10 : 0x00;
 	uint32_t param2 = (type << 16) | (var << 8) | RemapAspect(aspect, rti->signal_extra_aspects, 0);
 	if ((prog != nullptr) && HasBit(rti->ctrl_flags, RTCF_RESTRICTEDSIG)) SetBit(param2, 24);
 	RailTypeResolverObject object(rti, tile, TCX_NORMAL, RTSG_SIGNALS, param1, param2, context, prog, z);
@@ -214,7 +216,7 @@ CustomSignalSpriteResult GetCustomSignalSprite(const RailTypeInfo *rti, TileInde
 		}
 		if (!HasBit(grf->new_signal_style_mask, style)) continue;
 
-		uint32_t param1 = (context == CSSC_GUI) ? 0x10 : 0x00;
+		uint32_t param1 = (context.ctx_mode == CSSC_GUI) ? 0x10 : 0x00;
 		uint32_t param2 = (type << 16) | (var << 8) | RemapAspect(aspect, grf->new_signal_extra_aspects, style);
 		if ((prog != nullptr) && HasBit(grf->new_signal_ctrl_flags, NSCF_RESTRICTEDSIG)) SetBit(param2, 24);
 		NewSignalsResolverObject object(grf, tile, TCX_NORMAL, param1, param2, context, style, prog, z);
@@ -272,9 +274,85 @@ uint8_t GetReverseRailTypeTranslation(RailType railtype, const GRFFile *grffile)
 	return 0xFF;
 }
 
+std::vector<LabelObject<RailTypeLabel>> _railtype_list;
+
+/**
+ * Test if any saved rail type labels are different to the currently loaded
+ * rail types. Rail types stored in the map will be converted if necessary.
+ */
+void ConvertRailTypes()
+{
+	std::vector<RailType> railtype_conversion_map;
+	bool needs_conversion = false;
+
+	for (auto it = std::begin(_railtype_list); it != std::end(_railtype_list); ++it) {
+		RailType rt = GetRailTypeByLabel(it->label);
+		if (rt == INVALID_RAILTYPE) {
+			rt = RAILTYPE_RAIL;
+		}
+
+		railtype_conversion_map.push_back(rt);
+
+		/* Conversion is needed if the rail type is in a different position than the list. */
+		if (it->label != 0 && rt != std::distance(std::begin(_railtype_list), it)) needs_conversion = true;
+	}
+
+	if (!needs_conversion) return;
+
+	auto convert = [&](TileIndex t) {
+		SetRailType(t, railtype_conversion_map[GetRailType(t)]);
+		RailType secondary = GetTileSecondaryRailTypeIfValid(t);
+		if (secondary != INVALID_RAILTYPE) SetSecondaryRailType(t, railtype_conversion_map[secondary]);
+	};
+
+	for (TileIndex t(0); t < MapSize(); t++) {
+		switch (GetTileType(t)) {
+			case MP_RAILWAY:
+				convert(t);
+				break;
+
+			case MP_ROAD:
+				if (IsLevelCrossing(t)) {
+					convert(t);
+				}
+				break;
+
+			case MP_STATION:
+				if (HasStationRail(t)) {
+					convert(t);
+				}
+				break;
+
+			case MP_TUNNELBRIDGE:
+				if (GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL) {
+					convert(t);
+				}
+				break;
+
+			default:
+				break;
+		}
+	}
+}
+
+/** Populate railtype label list with current values. */
+void SetCurrentRailTypeLabelList()
+{
+	_railtype_list.clear();
+
+	for (RailType rt = RAILTYPE_BEGIN; rt != RAILTYPE_END; rt++) {
+		_railtype_list.push_back({GetRailTypeInfo(rt)->label, 0});
+	}
+}
+
+void ClearRailTypeLabelList()
+{
+	_railtype_list.clear();
+}
+
 void DumpRailTypeSpriteGroup(RailType rt, SpriteGroupDumper &dumper)
 {
-	char buffer[64];
+	format_buffer buffer;
 	const RailTypeInfo *rti = GetRailTypeInfo(rt);
 
 	static const char *sprite_group_names[] =  {
@@ -302,10 +380,10 @@ void DumpRailTypeSpriteGroup(RailType rt, SpriteGroupDumper &dumper)
 			} else {
 				non_first_group = true;
 			}
-			char *b = buffer;
-			b = strecpy(b, sprite_group_names[rtsg], lastof(buffer));
+			buffer.clear();
+			buffer.append(sprite_group_names[rtsg]);
 			if (rti->grffile[rtsg] != nullptr) {
-				b += seprintf(b, lastof(buffer), ", GRF: %08X", BSWAP32(rti->grffile[rtsg]->grfid));
+				buffer.format(", GRF: {:08X}", BSWAP32(rti->grffile[rtsg]->grfid));
 			}
 			dumper.Print(buffer);
 			dumper.DumpSpriteGroup(rti->group[rtsg], 0);

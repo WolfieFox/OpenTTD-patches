@@ -7,8 +7,10 @@
 
 /** @file tbtr_template_vehicle.h Template-based train replacement: template vehicle header. */
 
-#ifndef TEMPLATE_VEH_H
-#define TEMPLATE_VEH_H
+#ifndef TBTR_TEMPLATE_VEHICLE_H
+#define TBTR_TEMPLATE_VEHICLE_H
+
+#include "tbtr_template_vehicle_type.h"
 
 #include "company_func.h"
 
@@ -30,15 +32,6 @@
 #include "sl/saveload_common.h"
 
 #include "zoom_func.h"
-
-struct TemplateVehicle;
-struct TemplateReplacement;
-
-typedef uint16_t TemplateID;
-static const TemplateID INVALID_TEMPLATE = 0xFFFF;
-
-static const uint16_t CONSIST_HEAD = 0x0;
-static const uint16_t CONSIST_TAIL = 0xffff;
 
 /** A pool allowing to store up to ~64k templates */
 typedef Pool<TemplateVehicle, TemplateID, 512, 64000> TemplatePool;
@@ -88,7 +81,7 @@ private:
 	TemplateVehicle *first;                     ///< NOSAVE: pointer to the first vehicle in the chain
 
 public:
-	friend const SaveLoadTable GTD();
+	friend NamedSaveLoadTable GetTemplateVehicleDesc();
 	friend void AfterLoadTemplateVehicles();
 
 	// Template usage configuration
@@ -103,9 +96,9 @@ public:
 	EngineID engine_type;               ///< The type of engine used for this vehicle.
 	CargoID cargo_type;                 ///< type of cargo this vehicle is carrying
 	uint16_t cargo_cap;                 ///< total capacity
-	byte cargo_subtype;
+	uint8_t cargo_subtype;
 
-	byte subtype;
+	uint8_t subtype;
 	RailType railtype;
 
 	VehicleID index;
@@ -158,10 +151,10 @@ public:
 	bool IsSetKeepRemainingVehicles() const { return this->keep_remaining_vehicles; }
 	bool IsSetRefitAsTemplate() const { return this->refit_as_template; }
 	bool IsReplaceOldOnly() const { return this->replace_old_only; }
-	void ToggleReuseDepotVehicles() { this->reuse_depot_vehicles = !this->reuse_depot_vehicles; }
-	void ToggleKeepRemainingVehicles() { this->keep_remaining_vehicles = !this->keep_remaining_vehicles; }
+	void SetReuseDepotVehicles(bool reuse) { this->reuse_depot_vehicles = reuse; }
+	void SetKeepRemainingVehicles(bool keep) { this->keep_remaining_vehicles = keep; }
 	void SetRefitAsTemplate(bool as_template) { this->refit_as_template = as_template; }
-	void ToggleReplaceOldOnly() { this->replace_old_only = !this->replace_old_only; }
+	void SetReplaceOldOnly(bool old_only) { this->replace_old_only = old_only; }
 
 	bool IsPrimaryVehicle() const { return this->IsFrontEngine(); }
 	inline bool IsFrontEngine() const { return HasBit(this->subtype, GVSF_FRONT); }
@@ -186,8 +179,6 @@ public:
 
 	inline uint16_t GetRealLength() const { return this->real_consist_length; }
 	inline void SetRealLength(uint16_t len) { this->real_consist_length = len; }
-
-	int Length() const;
 
 	SpriteID GetImage(Direction) const;
 	SpriteID GetSpriteID() const;
@@ -249,4 +240,4 @@ struct ReindexTemplateReplacementsRecursiveGuard {
 
 int GetTemplateVehicleEstimatedMaxAchievableSpeed(const TemplateVehicle *tv, int mass, const int speed_cap);
 
-#endif /* TEMPLATE_VEH_H */
+#endif /* TBTR_TEMPLATE_VEHICLE_H */

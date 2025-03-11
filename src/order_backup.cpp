@@ -13,6 +13,7 @@
 #include "network/network.h"
 #include "network/network_func.h"
 #include "order_backup.h"
+#include "order_cmd.h"
 #include "vehicle_base.h"
 #include "window_func.h"
 #include "station_map.h"
@@ -29,13 +30,6 @@ uint OrderBackup::update_counter;
 OrderBackup::~OrderBackup()
 {
 	if (CleaningPool()) return;
-
-	Order *o = this->orders;
-	while (o != nullptr) {
-		Order *next = o->next;
-		delete o;
-		o = next;
-	}
 
 	OrderBackup::update_counter++;
 }
@@ -58,14 +52,8 @@ OrderBackup::OrderBackup(const Vehicle *v, uint32_t user)
 		this->clone = (v->FirstShared() == v) ? v->NextShared() : v->FirstShared();
 	} else {
 		/* Else copy the orders */
-		Order **tail = &this->orders;
-
-		/* Count the number of orders */
 		for (const Order *order : v->Orders()) {
-			Order *copy = new Order();
-			copy->AssignOrder(*order);
-			*tail = copy;
-			tail = &copy->next;
+			this->orders.emplace_back(*order);
 		}
 
 		if (v->orders != nullptr) {
@@ -84,10 +72,10 @@ void OrderBackup::DoRestore(Vehicle *v)
 {
 	/* If we had shared orders, recover that */
 	if (this->clone != nullptr) {
-		DoCommand(0, v->index | CO_SHARE << 30, this->clone->index, DC_EXEC, CMD_CLONE_ORDER);
-	} else if (this->orders != nullptr && OrderList::CanAllocateItem()) {
-		v->orders = new OrderList(this->orders, v);
-		this->orders = nullptr;
+		Command<CMD_CLONE_ORDER>::Do(DC_EXEC, CO_SHARE, v->index, this->clone->index);
+	} else if (!this->orders.empty() && OrderList::CanAllocateItem()) {
+		v->orders = new OrderList(std::move(this->orders), v);
+		this->orders.clear();
 
 		v->orders->GetScheduledDispatchScheduleSet() = std::move(this->dispatch_schedules);
 
@@ -96,7 +84,7 @@ void OrderBackup::DoRestore(Vehicle *v)
 	}
 
 	/* Remove backed up name if it's no longer unique. */
-	if (!this->name.empty() && !IsUniqueVehicleName(this->name.c_str())) this->name.clear();
+	if (!this->name.empty() && !IsUniqueVehicleName(this->name)) this->name.clear();
 
 	v->CopyConsistPropertiesFrom(this);
 
@@ -106,7 +94,7 @@ void OrderBackup::DoRestore(Vehicle *v)
 	if (v->cur_timetable_order_index >= v->GetNumOrders()) v->cur_timetable_order_index = INVALID_VEH_ORDER_ID;
 
 	/* Restore vehicle group */
-	DoCommand(0, this->group, v->index, DC_EXEC, CMD_ADD_VEHICLE_GROUP);
+	DoCommandOld(0, this->group, v->index, DC_EXEC, CMD_ADD_VEHICLE_GROUP);
 }
 
 /**
@@ -160,15 +148,13 @@ void OrderBackup::DoRestore(Vehicle *v)
  * Clear an OrderBackup
  * @param tile  Tile related to the to-be-cleared OrderBackup.
  * @param flags For command.
- * @param p1    Unused.
- * @param p2    User that had the OrderBackup.
- * @param text  Unused.
+ * @param user_id User that had the OrderBackup.
  * @return The cost of this operation or an error.
  */
-CommandCost CmdClearOrderBackup(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
+CommandCost CmdClearOrderBackup(DoCommandFlag flags, TileIndex tile, ClientID user_id)
 {
 	/* No need to check anything. If the tile or user don't exist we just ignore it. */
-	if (flags & DC_EXEC) OrderBackup::ResetOfUser(tile == 0 ? INVALID_TILE : tile, p2);
+	if (flags & DC_EXEC) OrderBackup::ResetOfUser(tile == 0 ? INVALID_TILE : tile, user_id);
 
 	return CommandCost();
 }
@@ -187,7 +173,7 @@ CommandCost CmdClearOrderBackup(TileIndex tile, DoCommandFlag flags, uint32_t p1
 		/* If it's not a backup of us, ignore it. */
 		if (ob->user != user) continue;
 
-		DoCommandP(0, 0, user, CMD_CLEAR_ORDER_BACKUP);
+		Command<CMD_CLEAR_ORDER_BACKUP>::Post({}, static_cast<ClientID>(user));
 		return;
 	}
 }
@@ -216,7 +202,7 @@ CommandCost CmdClearOrderBackup(TileIndex tile, DoCommandFlag flags, uint32_t p1
 			/* We need to circumvent the "prevention" from this command being executed
 			 * while the game is paused, so use the internal method. Nor do we want
 			 * this command to get its cost estimated when shift is pressed. */
-			DoCommandPInternal(ob->tile, 0, user, 0, CMD_CLEAR_ORDER_BACKUP, nullptr, nullptr, true, false, 0);
+			DoCommandPInternal(CMD_CLEAR_ORDER_BACKUP, ob->tile, CmdPayload<CMD_CLEAR_ORDER_BACKUP>::Make(static_cast<ClientID>(user)), (StringID)0, CommandCallback::None, 0, DCIF_NONE, false);
 		} else {
 			/* The command came from the game logic, i.e. the clearing of a tile.
 			 * In that case we have no need to actually sync this, just do it. */
@@ -267,7 +253,7 @@ CommandCost CmdClearOrderBackup(TileIndex tile, DoCommandFlag flags, uint32_t p1
 /* static */ void OrderBackup::RemoveOrder(OrderType type, DestinationID destination, bool hangar)
 {
 	for (OrderBackup *ob : OrderBackup::Iterate()) {
-		for (Order *order = ob->orders; order != nullptr; order = order->next) {
+		for (const Order *order : ob->Orders()) {
 			OrderType ot = order->GetType();
 			if (ot == OT_GOTO_DEPOT && (order->GetDepotActionType() & ODATFB_NEAREST_DEPOT) != 0) continue;
 			if (ot == OT_GOTO_DEPOT && hangar && !IsHangarTile(ob->tile)) continue; // Not an aircraft? Can't have a hangar order.

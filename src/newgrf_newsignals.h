@@ -35,6 +35,7 @@ enum NewSignalStyleFlags {
 	NSSF_LOOKAHEAD_SINGLE_SIGNAL        = 4,
 	NSSF_COMBINED_NORMAL_SHUNT          = 5,
 	NSSF_REALISTIC_BRAKING_ONLY         = 6,
+	NSSF_BOTH_SIDES                     = 7,
 };
 
 struct NewSignalStyle {
@@ -49,6 +50,8 @@ struct NewSignalStyle {
 	PalSpriteID signals[SIGTYPE_END][2][2];
 };
 extern std::array<NewSignalStyle, MAX_NEW_SIGNAL_STYLES> _new_signal_styles;
+extern uint8_t _default_signal_style_lookahead_extra_aspects;
+
 struct NewSignalStyleMapping {
 	uint32_t grfid = 0;
 	uint8_t grf_local_id = 0;
@@ -81,7 +84,7 @@ struct NewSignalsScopeResolver : public ScopeResolver {
 	}
 
 	uint32_t GetRandomBits() const override;
-	uint32_t GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const override;
+	uint32_t GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra &extra) const override;
 };
 
 /** Resolver object for rail types. */
@@ -107,11 +110,9 @@ struct NewSignalsResolverObject : public ResolverObject {
 uint GetNewSignalsRestrictedSignalsInfo(const TraceRestrictProgram *prog, TileIndex tile, uint8_t signal_style);
 uint GetNewSignalsVerticalClearanceInfo(TileIndex tile, uint z);
 
-inline uint GetNewSignalsSignalContext(CustomSignalSpriteContext signal_context, TileIndex tile)
+inline uint GetNewSignalsSignalContext(CustomSignalSpriteContext signal_context)
 {
-	uint result = signal_context;
-	if ((signal_context == CSSC_TUNNEL_BRIDGE_ENTRANCE || signal_context == CSSC_TUNNEL_BRIDGE_EXIT) && IsTunnel(tile)) result |= 0x100;
-	return result;
+	return (uint)signal_context.ctx_mode | (((uint)signal_context.ctx_flags) << 8);
 }
 
 uint32_t GetNewSignalsSideVariable();

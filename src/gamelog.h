@@ -35,12 +35,7 @@ void GamelogStopAnyAction();
 void GamelogFree(std::vector<LoggedAction> &gamelog_actions);
 void GamelogReset();
 
-/**
- * Callback for printing text.
- * @param s The string to print.
- */
-typedef void GamelogPrintProc(const char *s);
-void GamelogPrint(GamelogPrintProc *proc); // needed for WIN32 crash.log
+void GamelogPrint(struct format_target &buffer);
 
 void GamelogPrintDebug(int level);
 void GamelogPrintConsole();
@@ -53,18 +48,18 @@ void GamelogMode();
 void GamelogOldver();
 void GamelogSetting(const char *name, int32_t oldval, int32_t newval);
 
-void GamelogGRFUpdate(const GRFConfig *oldg, const GRFConfig *newg);
-void GamelogGRFAddList(const GRFConfig *newg);
+void GamelogGRFUpdate(const GRFConfigList oldg, const GRFConfigList newg);
+void GamelogGRFAddList(const GRFConfigList newg);
 void GamelogGRFRemove(uint32_t grfid);
-void GamelogGRFAdd(const GRFConfig *newg);
-void GamelogGRFCompatible(const GRFIdentifier *newg);
+void GamelogGRFAdd(const GRFConfig &newg);
+void GamelogGRFCompatible(const GRFIdentifier &newg);
 
 void GamelogTestRevision();
 void GamelogTestMode();
 
 bool GamelogGRFBugReverse(uint32_t grfid, uint16_t internal_id);
 
-void GamelogInfo(const std::vector<LoggedAction> &gamelog_actions, uint32_t *last_ottd_rev, byte *ever_modified, bool *removed_newgrfs);
+void GamelogInfo(const std::vector<LoggedAction> &gamelog_actions, uint32_t *last_ottd_rev, uint8_t *ever_modified, bool *removed_newgrfs);
 const char *GamelogGetLastRevision(const std::vector<LoggedAction> &gamelog_actions);
 
 #endif /* GAMELOG_H */

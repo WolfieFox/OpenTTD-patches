@@ -12,6 +12,7 @@
 #include "cheat_type.h"
 #include "company_base.h"
 #include "company_func.h"
+#include "currency.h"
 #include "date_func.h"
 #include "sl/saveload.h"
 #include "textbuf_gui.h"
@@ -20,6 +21,7 @@
 #include "strings_func.h"
 #include "window_func.h"
 #include "rail_gui.h"
+#include "settings_cmd.h"
 #include "settings_gui.h"
 #include "company_gui.h"
 #include "linkgraph/linkgraphschedule.h"
@@ -28,10 +30,14 @@
 #include "newgrf.h"
 #include "error.h"
 #include "network/network.h"
+#include "order_backup.h"
 #include "order_base.h"
 #include "vehicle_base.h"
 #include "currency.h"
 #include "core/geometry_func.hpp"
+#include "settings_type.h"
+#include "settings_internal.h"
+#include "misc_cmd.h"
 
 #include "widgets/cheat_widget.h"
 
@@ -56,9 +62,13 @@ static int32_t _money_cheat_amount = 10000000;
  * @param p2 is -1 or +1 (down/up)
  * @return Amount of money cheat.
  */
-static int32_t ClickMoneyCheat(int32_t p1, int32_t p2)
+static int32_t ClickMoneyCheat(int32_t, int32_t change_direction)
 {
-	DoCommandPEx(0, 0, 0, (uint64_t)(p2 * _money_cheat_amount), _network_server || _network_settings_access ? CMD_MONEY_CHEAT_ADMIN : CMD_MONEY_CHEAT);
+	if (IsNetworkSettingsAdmin()) {
+		Command<CMD_MONEY_CHEAT_ADMIN>::Post(Money(_money_cheat_amount) * change_direction);
+	} else {
+		Command<CMD_MONEY_CHEAT>::Post(Money(_money_cheat_amount) * change_direction);
+	}
 	return _money_cheat_amount;
 }
 
@@ -72,6 +82,7 @@ static int32_t ClickChangeCompanyCheat(int32_t p1, int32_t p2)
 {
 	while ((uint)p1 < Company::GetPoolSize()) {
 		if (Company::IsValidID((CompanyID)p1)) {
+			OrderBackup::Reset();
 			SetLocalCompany((CompanyID)p1);
 			return _local_company;
 		}
@@ -105,21 +116,22 @@ extern void EnginesMonthlyLoop();
 static int32_t ClickChangeDateCheat(int32_t p1, int32_t p2)
 {
 	/* Don't allow changing to an invalid year, or the current year. */
-	p1 = Clamp(p1, CalTime::MIN_YEAR.base(), CalTime::MAX_YEAR.base());
-	if (p1 == CalTime::CurYear()) return CalTime::CurYear().base();
+	const CalTime::Year year = CalTime::DeserialiseYearClamped(p1);
+	if (year == CalTime::CurYear()) return year.base();
 
-	CalTime::Date new_date = CalTime::ConvertYMDToDate(p1, CalTime::CurMonth(), CalTime::CurDay());
+	CalTime::Date new_date = CalTime::ConvertYMDToDate(year, CalTime::CurMonth(), CalTime::CurDay());
 
 	/* Change the date. */
 	CalTime::Detail::SetDate(new_date, CalTime::CurDateFract());
 
 	if (!EconTime::UsingWallclockUnits()) {
-		EconTime::Date new_econ_date = new_date.base();
+		EconTime::Date new_econ_date{new_date.base()};
 		EconTime::DateFract new_econ_date_fract = CalTime::CurDateFract();
 
 		/* Shift cached dates. */
 		LinkGraphSchedule::instance.ShiftDates(new_econ_date - EconTime::CurDate());
 		ShiftVehicleDates(new_econ_date - EconTime::CurDate());
+		EconTime::Detail::period_display_offset -= EconTime::YearDelta{year.base() - EconTime::CurYear().base()};
 
 		EconTime::Detail::SetDate(new_econ_date, new_econ_date_fract);
 		UpdateOrderUIOnDateChange();
@@ -129,6 +141,7 @@ static int32_t ClickChangeDateCheat(int32_t p1, int32_t p2)
 	InvalidateWindowClassesData(WC_BUILD_STATION, 0);
 	InvalidateWindowClassesData(WC_BUS_STATION, 0);
 	InvalidateWindowClassesData(WC_BUILD_OBJECT, 0);
+	InvalidateWindowClassesData(WC_FINANCES, 0);
 	ResetSignalVariant();
 	MarkWholeScreenDirty();
 	return CalTime::CurYear().base();
@@ -147,7 +160,7 @@ static int32_t ClickChangeMaxHlCheat(int32_t p1, int32_t p2)
 
 	/* Check if at least one mountain on the map is higher than the new value.
 	 * If yes, disallow the change. */
-	for (TileIndex t = 0; t < MapSize(); t++) {
+	for (TileIndex t(0); t < MapSize(); t++) {
 		if ((int32_t)TileHeight(t) > p1) {
 			ShowErrorMessage(STR_CONFIG_SETTING_TOO_HIGH_MOUNTAIN, INVALID_STRING_ID, WL_ERROR);
 			/* Return old, unchanged value */
@@ -211,13 +224,13 @@ static bool IsCheatAllowed(CheatNetworkMode mode)
 {
 	switch (mode) {
 		case CNM_ALL:
-			return !_networking || _network_server || _network_settings_access;
+			return !IsNonAdminNetworkClient();
 
 		case CNM_LOCAL_ONLY:
 			return !_networking;
 
 		case CNM_MONEY:
-			return !_networking || _network_server || _network_settings_access || _settings_game.difficulty.money_cheat_in_multiplayer;
+			return !IsNonAdminNetworkClient() || _settings_game.difficulty.money_cheat_in_multiplayer;
 	}
 	return false;
 }
@@ -228,23 +241,34 @@ static_assert(CHT_NUM_CHEATS == lengthof(_cheats_ui));
 static constexpr NWidgetPart _nested_cheat_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(WWT_CAPTION, COLOUR_GREY), SetDataTip(STR_CHEATS, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_CAPTION, COLOUR_GREY), SetStringTip(STR_CHEATS, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
 		NWidget(WWT_SHADEBOX, COLOUR_GREY),
 		NWidget(WWT_STICKYBOX, COLOUR_GREY),
 	EndContainer(),
-	NWidget(WWT_PANEL, COLOUR_GREY, WID_C_PANEL), EndContainer(),
+	NWidget(WWT_PANEL, COLOUR_GREY),
+		NWidget(NWID_VERTICAL), SetPadding(WidgetDimensions::unscaled.framerect),
+			NWidget(WWT_EMPTY, INVALID_COLOUR, WID_C_PANEL),
+			NWidget(WWT_EMPTY, INVALID_COLOUR, WID_C_SETTINGS),
+		EndContainer(),
+	EndContainer(),
 };
 
 /** GUI for the cheats. */
 struct CheatWindow : Window {
 	int clicked;
-	int clicked_widget;
+	CheatNumbers clicked_cheat;
 	uint line_height;
 	Dimension box;      ///< Dimension of box sprite
 	Dimension icon;     ///< Dimension of company icon sprite
 
-	CheatWindow(WindowDesc *desc) : Window(desc)
+	std::vector<const SettingDesc *> sandbox_settings;
+	const SettingDesc *clicked_setting;
+	const SettingDesc *last_clicked_setting;
+	const SettingDesc *valuewindow_entry;
+
+	CheatWindow(WindowDesc &desc) : Window(desc)
 	{
+		this->sandbox_settings = GetFilteredSettingCollection([](const SettingDesc &sd) { return HasFlag(sd.flags, SF_SANDBOX); });
 		this->InitNested();
 	}
 
@@ -256,16 +280,22 @@ struct CheatWindow : Window {
 
 	void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
-		if (widget != WID_C_PANEL) return;
+		switch (widget) {
+			case WID_C_PANEL: DrawCheatWidget(r); break;
+			case WID_C_SETTINGS: DrawSettingsWidget(r); break;
+		}
+	}
 
-		const Rect ir = r.Shrink(WidgetDimensions::scaled.framerect);
+	void DrawCheatWidget(const Rect &r) const
+	{
+		const Rect ir = r;
 		int y = ir.top;
 
 		bool rtl = _current_text_dir == TD_RTL;
 		uint box_left    = rtl ? ir.right - this->box.width - WidgetDimensions::scaled.hsep_wide : ir.left + WidgetDimensions::scaled.hsep_wide;
 		uint button_left = rtl ? ir.right - this->box.width - WidgetDimensions::scaled.hsep_wide * 2 - SETTING_BUTTON_WIDTH : ir.left + this->box.width + WidgetDimensions::scaled.hsep_wide * 2;
-		uint text_left   = ir.left + (rtl ? 0 : WidgetDimensions::scaled.hsep_wide * 4 + this->box.width + SETTING_BUTTON_WIDTH);
-		uint text_right  = ir.right - (rtl ? WidgetDimensions::scaled.hsep_wide * 4 + this->box.width + SETTING_BUTTON_WIDTH : 0);
+		uint text_left   = ir.left + (rtl ? 0 : WidgetDimensions::scaled.hsep_wide * 3 + this->box.width + SETTING_BUTTON_WIDTH);
+		uint text_right  = ir.right - (rtl ? WidgetDimensions::scaled.hsep_wide * 3 + this->box.width + SETTING_BUTTON_WIDTH : 0);
 
 		int text_y_offset = (this->line_height - GetCharacterHeight(FS_NORMAL)) / 2;
 		int box_y_offset = (this->line_height - this->box.height) / 2;
@@ -300,7 +330,7 @@ struct CheatWindow : Window {
 				}
 
 				default: {
-					int32_t val = (int32_t)ReadValue(ce->variable, ce->type);
+					int32_t val = static_cast<int32_t>(ReadValue(ce->variable, ce->type));
 
 					/* Draw [<][>] boxes for settings of an integer-type */
 					DrawArrowButtons(button_left, y + button_y_offset, COLOUR_YELLOW, clicked - (i * 2), true, true);
@@ -329,45 +359,93 @@ struct CheatWindow : Window {
 		}
 	}
 
-	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
+	void DrawSettingsWidget(const Rect &r) const
 	{
-		if (widget != WID_C_PANEL) return;
+		Rect ir = r.WithHeight(this->line_height);
 
+		for (const auto &desc : this->sandbox_settings) {
+			DrawSetting(ir, desc);
+			ir = ir.Translate(0, this->line_height);
+		}
+	}
+
+	void DrawSetting(const Rect outer_rect, const SettingDesc *desc) const
+	{
+		const IntSettingDesc *sd = desc->AsIntSetting();
+		int state = this->clicked_setting == sd ? this->clicked : 0;
+
+		bool rtl = _current_text_dir == TD_RTL;
+
+		const Rect r = outer_rect.Indent(this->box.width + WidgetDimensions::scaled.hsep_wide * 2, rtl);
+		Rect buttons = r.WithWidth(SETTING_BUTTON_WIDTH, rtl);
+		Rect text = r.Indent(SETTING_BUTTON_WIDTH + WidgetDimensions::scaled.hsep_wide, rtl);
+		buttons.top += (r.Height() - SETTING_BUTTON_HEIGHT) / 2;
+		text.top += (r.Height() - GetCharacterHeight(FS_NORMAL)) / 2;
+
+		/* We do not allow changes of some items when we are a client in a network game */
+		bool editable = sd->IsEditable();
+
+		SetDParam(0, STR_CONFIG_SETTING_VALUE);
+		int32_t value = sd->Read(&GetGameSettings());
+		if (sd->IsBoolSetting()) {
+			/* Draw checkbox for boolean-value either on/off */
+			DrawBoolButton(buttons.left, buttons.top, value != 0, editable);
+		} else if (HasFlag(sd->flags, SF_GUI_DROPDOWN)) {
+			/* Draw [v] button for settings of an enum-type */
+			DrawDropDownButton(buttons.left, buttons.top, COLOUR_YELLOW, state != 0, editable);
+		} else {
+			/* Draw [<][>] boxes for settings of an integer-type */
+			DrawArrowButtons(buttons.left, buttons.top, COLOUR_YELLOW, state,
+					editable && value != (HasFlag(sd->flags, SF_GUI_0_IS_SPECIAL) ? 0 : sd->min), editable && static_cast<uint32_t>(value) != sd->max);
+		}
+		sd->SetValueDParams(1, value);
+		DrawString(text.left, text.right, text.top, sd->GetTitle(), TC_LIGHT_BLUE);
+	}
+
+	void UpdateWidgetSize(WidgetID widget, Dimension &size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
+	{
+		switch (widget) {
+			case WID_C_PANEL: UpdateCheatPanelSize(size); break;
+			case WID_C_SETTINGS: UpdateSettingsPanelSize(size); break;
+		}
+	}
+
+	void UpdateCheatPanelSize(Dimension &size)
+	{
 		uint width = 0;
 		uint lines = 0;
-		for (int i = 0; i != lengthof(_cheats_ui); i++) {
-			const CheatEntry *ce = &_cheats_ui[i];
-			if (!IsCheatAllowed(ce->mode)) continue;
+		for (const CheatEntry &ce : _cheats_ui) {
+			if (!IsCheatAllowed(ce.mode)) continue;
 			lines++;
-			switch (ce->type) {
+			switch (ce.type) {
 				case SLF_ALLOW_CONTROL:
 					/* Change inflation factors */
 					break;
 
 				case SLE_BOOL:
 					SetDParam(0, STR_CONFIG_SETTING_ON);
-					width = std::max(width, GetStringBoundingBox(ce->str).width);
+					width = std::max(width, GetStringBoundingBox(ce.str).width);
 					SetDParam(0, STR_CONFIG_SETTING_OFF);
-					width = std::max(width, GetStringBoundingBox(ce->str).width);
+					width = std::max(width, GetStringBoundingBox(ce.str).width);
 					break;
 
 				default:
-					switch (ce->str) {
+					switch (ce.str) {
 						/* Display date for change date cheat */
 						case STR_CHEAT_CHANGE_DATE:
 							SetDParam(0, CalTime::ConvertYMDToDate(CalTime::MAX_YEAR, 11, 31));
-							width = std::max(width, GetStringBoundingBox(ce->str).width);
+							width = std::max(width, GetStringBoundingBox(ce.str).width);
 							break;
 
 						/* Draw coloured flag for change company cheat */
 						case STR_CHEAT_CHANGE_COMPANY:
 							SetDParamMaxValue(0, MAX_COMPANIES);
-							width = std::max(width, GetStringBoundingBox(ce->str).width + WidgetDimensions::scaled.hsep_wide * 4);
+							width = std::max(width, GetStringBoundingBox(ce.str).width + WidgetDimensions::scaled.hsep_wide * 4);
 							break;
 
 						default:
 							SetDParam(0, INT64_MAX);
-							width = std::max(width, GetStringBoundingBox(ce->str).width);
+							width = std::max(width, GetStringBoundingBox(ce.str).width);
 							break;
 					}
 					break;
@@ -378,14 +456,35 @@ struct CheatWindow : Window {
 		this->line_height = std::max<uint>(this->line_height, SETTING_BUTTON_HEIGHT);
 		this->line_height = std::max<uint>(this->line_height, GetCharacterHeight(FS_NORMAL)) + WidgetDimensions::scaled.framerect.Vertical();
 
-		size->width = width + WidgetDimensions::scaled.hsep_wide * 4 + this->box.width + SETTING_BUTTON_WIDTH /* stuff on the left */ + WidgetDimensions::scaled.hsep_wide * 2 /* extra spacing on right */;
-		size->height = WidgetDimensions::scaled.framerect.Vertical() + this->line_height * lines;
+		size.width = width + WidgetDimensions::scaled.hsep_wide * 4 + this->box.width + SETTING_BUTTON_WIDTH /* stuff on the left */ + WidgetDimensions::scaled.hsep_wide * 2 /* extra spacing on right */;
+		size.height = this->line_height * lines;
+	}
+
+	void UpdateSettingsPanelSize(Dimension &size)
+	{
+		uint width = 0;
+		for (const auto &desc : this->sandbox_settings) {
+			const IntSettingDesc *sd = desc->AsIntSetting();
+
+			SetDParam(0, STR_CONFIG_SETTING_VALUE);
+			sd->SetValueDParams(1, sd->max);
+			width = std::max(width, GetStringBoundingBox(sd->GetTitle()).width);
+		}
+
+		size.width = width + WidgetDimensions::scaled.hsep_wide * 2 + SETTING_BUTTON_WIDTH;
+		size.height = this->line_height * static_cast<uint>(std::size(this->sandbox_settings));
 	}
 
 	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
 	{
-		if (widget != WID_C_PANEL) return;
+		switch (widget) {
+			case WID_C_PANEL: CheatPanelClick(pt); break;
+			case WID_C_SETTINGS: SettingsPanelClick(pt); break;
+		}
+	}
 
+	void CheatPanelClick(Point pt)
+	{
 		Rect r = this->GetWidget<NWidgetBase>(WID_C_PANEL)->GetCurrentRect().Shrink(WidgetDimensions::scaled.framerect);
 		uint btn = (pt.y - r.top) / this->line_height;
 		uint x = pt.x - r.left;
@@ -399,32 +498,33 @@ struct CheatWindow : Window {
 
 		if (btn >= lengthof(_cheats_ui)) return;
 
-		const CheatEntry *ce = &_cheats_ui[btn];
-		int value = (int32_t)ReadValue(ce->variable, ce->type);
+		CheatNumbers cheat = static_cast<CheatNumbers>(btn);
+		const CheatEntry *ce = &_cheats_ui[cheat];
+		int value = static_cast<int32_t>(ReadValue(ce->variable, ce->type));
 		int oldvalue = value;
 
-		if (btn == CHT_CHANGE_DATE && x >= WidgetDimensions::scaled.hsep_wide * 2 + this->box.width + SETTING_BUTTON_WIDTH) {
+		if (cheat == CHT_CHANGE_DATE && x >= WidgetDimensions::scaled.hsep_wide * 2 + this->box.width + SETTING_BUTTON_WIDTH) {
 			/* Click at the date text directly. */
-			clicked_widget = CHT_CHANGE_DATE;
+			clicked_cheat = CHT_CHANGE_DATE;
 			SetDParam(0, value);
 			ShowQueryString(STR_JUST_INT, STR_CHEAT_CHANGE_DATE_QUERY_CAPT, 8, this, CS_NUMERAL, QSF_ACCEPT_UNCHANGED);
 			return;
-		} else if (btn == CHT_EDIT_MAX_HL && x >= WidgetDimensions::scaled.hsep_wide * 2 + this->box.width + SETTING_BUTTON_WIDTH) {
-			clicked_widget = CHT_EDIT_MAX_HL;
+		} else if (cheat == CHT_EDIT_MAX_HL && x >= WidgetDimensions::scaled.hsep_wide * 2 + this->box.width + SETTING_BUTTON_WIDTH) {
+			clicked_cheat = CHT_EDIT_MAX_HL;
 			SetDParam(0, value);
 			ShowQueryString(STR_JUST_INT, STR_CHEAT_EDIT_MAX_HL_QUERY_CAPT, 8, this, CS_NUMERAL, QSF_ACCEPT_UNCHANGED);
 			return;
-		} else if (btn == CHT_MONEY && x >= 20 + this->box.width + SETTING_BUTTON_WIDTH) {
-			clicked_widget = CHT_MONEY;
+		} else if (cheat == CHT_MONEY && x >= 20 + this->box.width + SETTING_BUTTON_WIDTH) {
+			clicked_cheat = CHT_MONEY;
 			SetDParam(0, value);
 			ShowQueryString(STR_JUST_INT, STR_CHEAT_EDIT_MONEY_QUERY_CAPT, 20, this, CS_NUMERAL_SIGNED, QSF_ACCEPT_UNCHANGED);
 			return;
 		} else if (ce->type == SLF_ALLOW_CONTROL && x >= 20 + this->box.width + SETTING_BUTTON_WIDTH) {
-			clicked_widget = btn;
+			clicked_cheat = cheat;
 			uint64_t val = (uint64_t)ReadValue(ce->variable, SLE_UINT64);
 			SetDParam(0, val * 1000 >> 16);
 			SetDParam(1, 3);
-			StringID str = (btn == CHT_INFLATION_COST) ? STR_CHEAT_INFLATION_COST_QUERY_CAPT : STR_CHEAT_INFLATION_INCOME_QUERY_CAPT;
+			StringID str = (cheat == CHT_INFLATION_COST) ? STR_CHEAT_INFLATION_COST_QUERY_CAPT : STR_CHEAT_INFLATION_INCOME_QUERY_CAPT;
 			std::string saved = std::move(_settings_game.locale.digit_group_separator);
 			_settings_game.locale.digit_group_separator = "";
 			ShowQueryString(STR_JUST_DECIMAL, str, 12, this, CS_NUMERAL_DECIMAL, QSF_ACCEPT_UNCHANGED);
@@ -435,6 +535,7 @@ struct CheatWindow : Window {
 		/* Not clicking a button? */
 		if (!IsInsideMM(x, WidgetDimensions::scaled.hsep_wide * 2 + this->box.width, WidgetDimensions::scaled.hsep_wide * 2 + this->box.width + SETTING_BUTTON_WIDTH)) return;
 
+		this->clicked_setting = nullptr;
 		if (!_networking) *ce->been_used = true;
 
 		auto get_arrow_button_value = [&]() -> int {
@@ -451,7 +552,7 @@ struct CheatWindow : Window {
 				uint64_t oldvalue = (uint64_t)ReadValue(ce->variable, SLE_UINT64);
 				uint64_t value = oldvalue + (uint64_t)(get_arrow_button_value() << 16);
 				value = Clamp<uint64_t>(value, 1 << 16, MAX_INFLATION);
-				DoCommandP(0, (uint32_t)btn, (uint32_t)value, CMD_CHEAT_SETTING);
+				Command<CMD_CHEAT_SETTING>::Post(cheat, static_cast<uint32_t>(value));
 				if (value != oldvalue) register_arrow_button_clicked();
 				break;
 			}
@@ -472,10 +573,10 @@ struct CheatWindow : Window {
 		}
 
 		if (value != oldvalue) {
-			if (_networking || btn == CHT_STATION_RATING || btn == CHT_TOWN_RATING) {
-				if (btn != CHT_MONEY) DoCommandP(0, (uint32_t)btn, (uint32_t)value, CMD_CHEAT_SETTING);
+			if (_networking || cheat == CHT_STATION_RATING || cheat == CHT_TOWN_RATING) {
+				if (btn != CHT_MONEY) Command<CMD_CHEAT_SETTING>::Post(cheat, static_cast<uint32_t>(value));
 			} else {
-				WriteValue(ce->variable, ce->type, (int64_t)value);
+				WriteValue(ce->variable, ce->type, static_cast<int64_t>(value));
 			}
 		}
 
@@ -484,35 +585,169 @@ struct CheatWindow : Window {
 		this->SetDirty();
 	}
 
+	void SettingsPanelClick(Point pt)
+	{
+		int row = this->GetRowFromWidget(pt.y, WID_C_SETTINGS, WidgetDimensions::scaled.framerect.top, this->line_height);
+		if (row == INT_MAX) return;
+
+		const SettingDesc *desc = this->sandbox_settings[row];
+		const IntSettingDesc *sd = desc->AsIntSetting();
+
+		if (!sd->IsEditable()) return;
+
+		Rect r = this->GetWidget<NWidgetBase>(WID_C_SETTINGS)->GetCurrentRect().Shrink(WidgetDimensions::scaled.framerect);
+		int x = pt.x - r.left;
+		bool rtl = _current_text_dir == TD_RTL;
+		if (rtl) x = r.Width() - 1 - x;
+
+		x -= this->box.width + WidgetDimensions::scaled.hsep_wide * 2;
+		if (x < 0) return;
+
+		if (x < SETTING_BUTTON_WIDTH) {
+			ChangeSettingValue(sd, x);
+		} else {
+			/* Only open editbox if clicked for the second time, and only for types where it is sensible for. */
+			if (this->last_clicked_setting == sd && !sd->IsBoolSetting() && !HasFlag(sd->flags, SF_GUI_DROPDOWN)) {
+				int64_t value64 = sd->Read(&GetGameSettings());
+
+				/* Show the correct currency-translated value */
+				if (HasFlag(sd->flags, SF_GUI_CURRENCY)) value64 *= GetCurrency().rate;
+
+				CharSetFilter charset_filter = CS_NUMERAL; //default, only numeric input allowed
+				if (sd->min < 0) charset_filter = CS_NUMERAL_SIGNED; // special case, also allow '-' sign for negative input
+
+				this->valuewindow_entry = sd;
+				SetDParam(0, value64);
+
+				/* Limit string length to 14 so that MAX_INT32 * max currency rate doesn't exceed MAX_INT64. */
+				ShowQueryString(STR_JUST_INT, STR_CONFIG_SETTING_QUERY_CAPTION, 15, this, charset_filter, QSF_ENABLE_DEFAULT);
+			}
+
+			this->clicked_setting = sd;
+		}
+	}
+
+	void ChangeSettingValue(const IntSettingDesc *sd, int x)
+	{
+		int32_t value = sd->Read(&GetGameSettings());
+		int32_t oldvalue = value;
+		if (sd->IsBoolSetting()) {
+			value ^= 1;
+		} else {
+			/* don't allow too fast scrolling */
+			if ((this->flags & WF_TIMEOUT) && this->timeout_timer > 1) {
+				_left_button_clicked = false;
+				return;
+			}
+
+			/* Add a dynamic step-size to the scroller. In a maximum of
+			 * 50-steps you should be able to get from min to max,
+			 * unless specified otherwise in the 'interval' variable
+			 * of the current setting. */
+			uint32_t step = (sd->interval == 0) ? ((sd->max - sd->min) / 50) : sd->interval;
+			if (step == 0) step = 1;
+
+			/* Increase or decrease the value and clamp it to extremes */
+			if (x >= SETTING_BUTTON_WIDTH / 2) {
+				value += step;
+				if (sd->min < 0) {
+					assert(static_cast<int32_t>(sd->max) >= 0);
+					if (value > static_cast<int32_t>(sd->max)) value = static_cast<int32_t>(sd->max);
+				} else {
+					if (static_cast<uint32_t>(value) > sd->max) value = static_cast<int32_t>(sd->max);
+				}
+				if (value < sd->min) value = sd->min; // skip between "disabled" and minimum
+			} else {
+				value -= step;
+				if (value < sd->min) value = HasFlag(sd->flags, SF_GUI_0_IS_SPECIAL) ? 0 : sd->min;
+			}
+
+			/* Set up scroller timeout for numeric values */
+			if (value != oldvalue) {
+				this->last_clicked_setting = nullptr;
+				this->clicked_setting = sd;
+				this->clicked =  (x >= SETTING_BUTTON_WIDTH / 2) != (_current_text_dir == TD_RTL) ? 2 : 1;
+				this->SetTimeout();
+				_left_button_clicked = false;
+			}
+		}
+
+		if (value != oldvalue) {
+			SetSettingValue(sd, value);
+			this->SetDirty();
+		}
+	}
+
+	bool OnTooltip([[maybe_unused]] Point pt, WidgetID widget, TooltipCloseCondition close_cond) override
+	{
+		if (widget != WID_C_SETTINGS) return false;
+
+		int row = GetRowFromWidget(pt.y, widget, WidgetDimensions::scaled.framerect.top, this->line_height);
+		if (row == INT_MAX) return false;
+
+		const SettingDesc *desc = this->sandbox_settings[row];
+		const IntSettingDesc *sd = desc->AsIntSetting();
+		GuiShowTooltips(this, sd->GetHelp(), close_cond);
+
+		return true;
+	}
+
 	void OnTimeout() override
 	{
+		this->clicked_setting = nullptr;
 		this->clicked = 0;
 		this->SetDirty();
 	}
 
-	void OnQueryTextFinished(char *str) override
+	void OnQueryTextFinished(std::optional<std::string> str) override
 	{
 		/* Was 'cancel' pressed or nothing entered? */
-		if (str == nullptr || StrEmpty(str)) return;
+		if (!str.has_value() || str->empty()) return;
 
-		const CheatEntry *ce = &_cheats_ui[clicked_widget];
+		if (this->valuewindow_entry != nullptr) {
+			const IntSettingDesc *sd = this->valuewindow_entry->AsIntSetting();
+
+			int32_t value;
+			if (!str->empty()) {
+				long long llvalue = atoll(str->c_str());
+
+				/* Save the correct currency-translated value */
+				if (HasFlag(sd->flags, SF_GUI_CURRENCY)) llvalue /= GetCurrency().rate;
+
+				value = ClampTo<int32_t>(llvalue);
+			} else {
+				value = sd->GetDefaultValue();
+			}
+
+			SetSettingValue(sd, value);
+			this->valuewindow_entry = nullptr;
+			this->SetDirty();
+			return;
+		}
+
+		const CheatEntry *ce = &_cheats_ui[clicked_cheat];
 
 		if (ce->type == SLF_ALLOW_CONTROL) {
 			char tmp_buffer[32];
-			strecpy(tmp_buffer, str, lastof(tmp_buffer));
+			strecpy(tmp_buffer, str->c_str(), lastof(tmp_buffer));
 			str_replace_wchar(tmp_buffer, lastof(tmp_buffer), GetDecimalSeparatorChar(), '.');
-			DoCommandP(0, (uint32_t)clicked_widget, (uint32_t)Clamp<uint64_t>(atof(tmp_buffer) * 65536.0, 1 << 16, MAX_INFLATION), CMD_CHEAT_SETTING);
+			DoCommandPOld(0, (uint32_t)clicked_cheat, (uint32_t)Clamp<uint64_t>(atof(tmp_buffer) * 65536.0, 1 << 16, MAX_INFLATION), CMD_CHEAT_SETTING);
 			return;
 		}
 		if (ce->mode == CNM_MONEY) {
 			if (!_networking) *ce->been_used = true;
-			DoCommandPEx(0, 0, 0, (std::strtoll(str, nullptr, 10) / _currency->rate), _network_server || _network_settings_access ? CMD_MONEY_CHEAT_ADMIN : CMD_MONEY_CHEAT);
+			Money money = std::strtoll(str->c_str(), nullptr, 10) / GetCurrency().rate;
+			if (IsNetworkSettingsAdmin()) {
+				Command<CMD_MONEY_CHEAT_ADMIN>::Post(money);
+			} else {
+				Command<CMD_MONEY_CHEAT>::Post(money);
+			}
 			return;
 		}
 
 		if (_networking) return;
 		int oldvalue = (int32_t)ReadValue(ce->variable, ce->type);
-		int value = atoi(str);
+		int value = atoi(str->c_str());
 		*ce->been_used = true;
 		value = ce->proc(value, value - oldvalue);
 
@@ -526,12 +761,12 @@ static WindowDesc _cheats_desc(__FILE__, __LINE__,
 	WDP_AUTO, "cheats", 0, 0,
 	WC_CHEATS, WC_NONE,
 	0,
-	std::begin(_nested_cheat_widgets), std::end(_nested_cheat_widgets)
+	_nested_cheat_widgets
 );
 
 bool CheatWindowMayBeShown()
 {
-	return _game_mode != GM_EDITOR && (!_networking || _network_server || _network_settings_access || _settings_game.difficulty.money_cheat_in_multiplayer);
+	return _game_mode != GM_EDITOR && (!IsNonAdminNetworkClient() || _settings_game.difficulty.money_cheat_in_multiplayer);
 }
 
 /** Open cheat window. */
@@ -539,6 +774,6 @@ void ShowCheatWindow()
 {
 	CloseWindowById(WC_CHEATS, 0);
 	if (CheatWindowMayBeShown()) {
-		new CheatWindow(&_cheats_desc);
+		new CheatWindow(_cheats_desc);
 	}
 }

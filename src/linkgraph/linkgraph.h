@@ -95,7 +95,7 @@ public:
 	 * Wrapper for an edge (const or not) allowing retrieval, but no modification.
 	 * @tparam Tedge Actual edge class, may be "const BaseEdge" or just "BaseEdge".
 	 */
-	template<typename Tedge>
+	template <typename Tedge>
 	class EdgeWrapper {
 	protected:
 		Tedge *edge; ///< Actual edge to be used.
@@ -155,7 +155,7 @@ public:
 	 * Wrapper for a node (const or not) allowing retrieval, but no modification.
 	 * @tparam Tedge Actual node class, may be "const BaseNode" or just "BaseNode".
 	 */
-	template<typename Tnode>
+	template <typename Tnode>
 	class NodeWrapper {
 	protected:
 		Tnode &node;          ///< Node being wrapped.
@@ -287,7 +287,7 @@ public:
 	static const uint MIN_TIMEOUT_DISTANCE = 32;
 
 	/** Number of days before deleting links served only by vehicles stopped in depot. */
-	static constexpr DateDelta STALE_LINK_DEPOT_TIMEOUT = 1024;
+	static constexpr EconTime::DateDelta STALE_LINK_DEPOT_TIMEOUT{1024};
 
 	/** Minimum number of ticks between subsequent compressions of a LG. */
 	static constexpr ScaledTickCounter COMPRESSION_INTERVAL = 256 * DAY_TICKS;
@@ -314,7 +314,7 @@ public:
 	LinkGraph(CargoID cargo) : cargo(cargo), last_compression(_scaled_tick_counter) {}
 
 	void Init(uint size);
-	void ShiftDates(DateDelta interval);
+	void ShiftDates(EconTime::DateDelta interval);
 	void Compress();
 	void Merge(LinkGraph *other);
 
@@ -374,18 +374,17 @@ public:
 	void UpdateEdge(NodeID from, NodeID to, uint capacity, uint usage, uint32_t time, EdgeUpdateMode mode);
 	void RemoveEdge(NodeID from, NodeID to);
 
-	inline uint64_t CalculateCostEstimate() const {
-		uint64_t size_squared = (uint32_t)this->Size() * (uint32_t)this->Size();
-		return size_squared * FindLastBit(size_squared * size_squared); // N^2 * 4log_2(N)
+	inline uint32_t CalculateCostEstimate() const {
+		return (uint32_t)this->Size() * (uint32_t)this->Size();
 	}
 
 protected:
 	friend class LinkGraph::ConstNode;
 	friend class LinkGraph::Node;
-	friend SaveLoadTable GetLinkGraphDesc();
-	friend SaveLoadTable GetLinkGraphJobDesc();
-	friend void Save_LinkGraph(LinkGraph &lg);
-	friend void Load_LinkGraph(LinkGraph &lg);
+	friend struct LinkGraphNodeStructHandler;
+	friend struct LinkGraphNonTableHelper;
+	friend NamedSaveLoadTable GetLinkGraphDesc();
+	friend NamedSaveLoadTable GetLinkGraphJobDesc();
 
 	friend upstream_sl::SaveLoadTable upstream_sl::GetLinkGraphDesc();
 	friend upstream_sl::SaveLoadTable upstream_sl::GetLinkGraphJobDesc();

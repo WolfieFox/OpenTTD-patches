@@ -19,6 +19,7 @@
 #include "../../goal_base.h"
 #include "../../string_func.h"
 #include "../../network/network_base.h"
+#include "../../goal_cmd.h"
 
 #include "../../safeguards.h"
 
@@ -34,7 +35,7 @@
 	StoryPage *story_page = nullptr;
 	if (type == GT_STORY_PAGE && ScriptStoryPage::IsValidStoryPage((ScriptStoryPage::StoryPageID)destination)) story_page = ::StoryPage::Get((ScriptStoryPage::StoryPageID)destination);
 	return (type == GT_NONE && destination == 0) ||
-			(type == GT_TILE && ScriptMap::IsValidTile(destination)) ||
+			(type == GT_TILE && ScriptMap::IsValidTile(::TileIndex(destination))) ||
 			(type == GT_INDUSTRY && ScriptIndustry::IsValidIndustry(destination)) ||
 			(type == GT_TOWN && ScriptTown::IsValidTown(destination)) ||
 			(type == GT_COMPANY && ScriptCompany::ResolveCompanyID((ScriptCompany::CompanyID)destination) != ScriptCompany::COMPANY_INVALID) ||
@@ -43,7 +44,7 @@
 
 /* static */ ScriptGoal::GoalID ScriptGoal::New(ScriptCompany::CompanyID company, Text *goal, GoalType type, SQInteger destination)
 {
-	CCountedPtr<Text> counter(goal);
+	ScriptObjectRef counter(goal);
 
 	EnforceDeityMode(GOAL_INVALID);
 	EnforcePrecondition(GOAL_INVALID, goal != nullptr);
@@ -52,7 +53,7 @@
 	EnforcePrecondition(GOAL_INVALID, company == ScriptCompany::COMPANY_INVALID || ScriptCompany::ResolveCompanyID(company) != ScriptCompany::COMPANY_INVALID);
 	EnforcePrecondition(GOAL_INVALID, IsValidGoalDestination(company, type, destination));
 
-	if (!ScriptObject::DoCommand(0, type | (company << 8), destination, CMD_CREATE_GOAL, text, &ScriptInstance::DoCommandReturnGoalID)) return GOAL_INVALID;
+	if (!ScriptObject::Command<CMD_CREATE_GOAL>::Do(&ScriptInstance::DoCommandReturnGoalID, (::CompanyID)company, (::GoalType)type, destination, text)) return GOAL_INVALID;
 
 	/* In case of test-mode, we return GoalID 0 */
 	return (ScriptGoal::GoalID)0;
@@ -63,22 +64,22 @@
 	EnforceDeityMode(false);
 	EnforcePrecondition(false, IsValidGoal(goal_id));
 
-	return ScriptObject::DoCommand(0, goal_id, 0, CMD_REMOVE_GOAL);
+	return ScriptObject::Command<CMD_REMOVE_GOAL>::Do(goal_id);
 }
 
 /* static */ bool ScriptGoal::SetDestination(GoalID goal_id, GoalType type, SQInteger destination)
 {
 	EnforceDeityMode(false);
 	EnforcePrecondition(false, IsValidGoal(goal_id));
-	Goal *g = Goal::Get(goal_id);
+	const Goal *g = Goal::Get(goal_id);
 	EnforcePrecondition(false, IsValidGoalDestination((ScriptCompany::CompanyID)g->company, type, destination));
 
-	return ScriptObject::DoCommandEx(0, goal_id, destination, type, CMD_SET_GOAL_DESTINATION);
+	return ScriptObject::Command<CMD_SET_GOAL_DESTINATION>::Do(goal_id, (::GoalType)type, destination);
 }
 
 /* static */ bool ScriptGoal::SetText(GoalID goal_id, Text *goal)
 {
-	CCountedPtr<Text> counter(goal);
+	ScriptObjectRef counter(goal);
 
 	EnforcePrecondition(false, IsValidGoal(goal_id));
 	EnforceDeityMode(false);
@@ -86,17 +87,17 @@
 	const std::string &text = goal->GetEncodedText();
 	EnforcePreconditionEncodedText(false, text);
 
-	return ScriptObject::DoCommand(0, goal_id, 0, CMD_SET_GOAL_TEXT, text);
+	return ScriptObject::Command<CMD_SET_GOAL_TEXT>::Do(goal_id, text);
 }
 
 /* static */ bool ScriptGoal::SetProgress(GoalID goal_id, Text *progress)
 {
-	CCountedPtr<Text> counter(progress);
+	ScriptObjectRef counter(progress);
 
 	EnforcePrecondition(false, IsValidGoal(goal_id));
 	EnforceDeityMode(false);
 
-	return ScriptObject::DoCommand(0, goal_id, 0, CMD_SET_GOAL_PROGRESS, progress != nullptr ? progress->GetEncodedText().c_str() : "");
+	return ScriptObject::Command<CMD_SET_GOAL_PROGRESS>::Do(goal_id, progress != nullptr ? progress->GetEncodedText() : std::string{});
 }
 
 /* static */ bool ScriptGoal::SetCompleted(GoalID goal_id, bool completed)
@@ -104,7 +105,7 @@
 	EnforcePrecondition(false, IsValidGoal(goal_id));
 	EnforceDeityMode(false);
 
-	return ScriptObject::DoCommand(0, goal_id, completed ? 1 : 0, CMD_SET_GOAL_COMPLETED);
+	return ScriptObject::Command<CMD_SET_GOAL_COMPLETED>::Do(goal_id, completed);
 }
 
 /* static */ bool ScriptGoal::IsCompleted(GoalID goal_id)
@@ -112,13 +113,13 @@
 	EnforcePrecondition(false, IsValidGoal(goal_id));
 	EnforceDeityMode(false);
 
-	Goal *g = Goal::Get(goal_id);
+	const Goal *g = Goal::Get(goal_id);
 	return g != nullptr && g->completed;
 }
 
 /* static */ bool ScriptGoal::DoQuestion(SQInteger uniqueid, uint32_t target, bool is_client, Text *question, QuestionType type, SQInteger buttons)
 {
-	CCountedPtr<Text> counter(question);
+	ScriptObjectRef counter(question);
 
 	EnforceDeityMode(false);
 	EnforcePrecondition(false, question != nullptr);
@@ -130,7 +131,7 @@
 	EnforcePrecondition(false, (int)type < ::GQT_END);
 	EnforcePrecondition(false, uniqueid >= 0 && uniqueid <= UINT16_MAX);
 
-	return ScriptObject::DoCommandEx(0, uniqueid, buttons | (type << 29) | (is_client ? (1 << 31) : 0), target, CMD_GOAL_QUESTION, text);
+	return ScriptObject::Command<CMD_GOAL_QUESTION>::Do(uniqueid, target, is_client, buttons, (::GoalQuestionType)type, text);
 }
 
 /* static */ bool ScriptGoal::Question(SQInteger uniqueid, ScriptCompany::CompanyID company, Text *question, QuestionType type, SQInteger buttons)
@@ -154,5 +155,5 @@
 	EnforceDeityMode(false);
 	EnforcePrecondition(false, uniqueid >= 0 && uniqueid <= UINT16_MAX);
 
-	return ScriptObject::DoCommand(0, uniqueid, 0, CMD_GOAL_QUESTION_ANSWER);
+	return ScriptObject::Command<CMD_GOAL_QUESTION_ANSWER>::Do(uniqueid, 0);
 }

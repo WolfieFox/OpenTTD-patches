@@ -23,8 +23,8 @@
 #include "safeguards.h"
 
 static const std::string README_FILENAME = "README.md";
-static const std::string CHANGELOG_FILENAME = "changelog.txt";
-static const std::string KNOWN_BUGS_FILENAME = "known-bugs.txt";
+static const std::string CHANGELOG_FILENAME = "changelog.md";
+static const std::string KNOWN_BUGS_FILENAME = "known-bugs.md";
 static const std::string LICENSE_FILENAME = "COPYING.md";
 
 static const std::string WEBSITE_LINK = "https://www.openttd.org/";
@@ -87,33 +87,30 @@ struct GameManualTextfileWindow : public TextfileWindow {
 		if (this->filename == CHANGELOG_FILENAME) {
 			this->link_anchors.clear();
 			this->AfterLoadChangelog();
-			if (this->GetWidget<NWidgetStacked>(WID_TF_SEL_JUMPLIST)->SetDisplayedPlane(this->jumplist.empty() ? SZSP_HORIZONTAL : 0)) this->ReInit();
-		} else {
-			this->TextfileWindow::AfterLoadText();
 		}
+		this->TextfileWindow::AfterLoadText();
 	}
 
 	/**
-	 * For changelog files, add a jumplist entry for each version.
+	 * For changelog files, truncate the file after CHANGELOG_VERSIONS_LIMIT versions.
 	 *
-	 * This is hardcoded and assumes "---" are used to separate versions.
+	 * This is hardcoded and assumes "###" is used to separate versions.
 	 */
 	void AfterLoadChangelog()
 	{
-		/* Look for lines beginning with ---, they indicate that the previous line was a release name. */
+		uint versions = 0;
+
+		/* Look for lines beginning with ###, they indicate a release name. */
 		for (size_t line_index = 0; line_index < this->lines.size(); ++line_index) {
 			const Line &line = this->lines[line_index];
-			if (line.text.find("---", 0) != 0) continue;
+			if (!line.text.starts_with("###")) continue;
 
-			if (this->jumplist.size() >= CHANGELOG_VERSIONS_LIMIT) {
+			if (versions >= CHANGELOG_VERSIONS_LIMIT) {
 				this->lines.resize(line_index - 2);
 				break;
 			}
 
-			/* Mark the version header with a colour, and add it to the jumplist. */
-			this->lines[line_index - 1].colour = TC_GOLD;
-			this->lines[line_index].colour = TC_GOLD;
-			this->jumplist.push_back(line_index - 1);
+			++versions;
 		}
 	}
 };
@@ -121,7 +118,7 @@ struct GameManualTextfileWindow : public TextfileWindow {
 /** Window class displaying the help window. */
 struct HelpWindow : public Window {
 
-	HelpWindow(WindowDesc *desc, WindowNumber number) : Window(desc)
+	HelpWindow(WindowDesc &desc, WindowNumber number) : Window(desc)
 	{
 		this->InitNested(number);
 
@@ -171,23 +168,23 @@ private:
 static constexpr NWidgetPart _nested_helpwin_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_DARK_GREEN),
-		NWidget(WWT_CAPTION, COLOUR_DARK_GREEN), SetDataTip(STR_HELP_WINDOW_CAPTION, STR_NULL),
+		NWidget(WWT_CAPTION, COLOUR_DARK_GREEN), SetStringTip(STR_HELP_WINDOW_CAPTION),
 	EndContainer(),
 
 	NWidget(WWT_PANEL, COLOUR_DARK_GREEN),
 		NWidget(NWID_HORIZONTAL), SetPIP(0, WidgetDimensions::unscaled.hsep_wide, 0), SetPadding(WidgetDimensions::unscaled.sparse),
-			NWidget(WWT_FRAME, COLOUR_DARK_GREEN), SetDataTip(STR_HELP_WINDOW_WEBSITES, STR_NULL),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_WEBSITE), SetDataTip(STR_HELP_WINDOW_MAIN_WEBSITE, STR_NULL), SetMinimalSize(128, 12), SetFill(1, 0),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_WIKI), SetDataTip(STR_HELP_WINDOW_MANUAL_WIKI, STR_NULL), SetMinimalSize(128, 12), SetFill(1, 0),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_BUGTRACKER), SetDataTip(STR_HELP_WINDOW_BUGTRACKER, STR_NULL), SetMinimalSize(128, 12), SetFill(1, 0),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_COMMUNITY), SetDataTip(STR_HELP_WINDOW_COMMUNITY, STR_NULL), SetMinimalSize(128, 12), SetFill(1, 0),
+			NWidget(WWT_FRAME, COLOUR_DARK_GREEN), SetStringTip(STR_HELP_WINDOW_WEBSITES),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_WEBSITE), SetStringTip(STR_HELP_WINDOW_MAIN_WEBSITE), SetMinimalSize(128, 12), SetFill(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_WIKI), SetStringTip(STR_HELP_WINDOW_MANUAL_WIKI), SetMinimalSize(128, 12), SetFill(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_BUGTRACKER), SetStringTip(STR_HELP_WINDOW_BUGTRACKER), SetMinimalSize(128, 12), SetFill(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_COMMUNITY), SetStringTip(STR_HELP_WINDOW_COMMUNITY), SetMinimalSize(128, 12), SetFill(1, 0),
 			EndContainer(),
 
-			NWidget(WWT_FRAME, COLOUR_DARK_GREEN), SetDataTip(STR_HELP_WINDOW_DOCUMENTS, STR_NULL),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_README), SetDataTip(STR_HELP_WINDOW_README, STR_NULL), SetMinimalSize(128, 12), SetFill(1, 0),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_CHANGELOG), SetDataTip(STR_HELP_WINDOW_CHANGELOG, STR_NULL), SetMinimalSize(128, 12), SetFill(1, 0),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_KNOWN_BUGS),SetDataTip(STR_HELP_WINDOW_KNOWN_BUGS, STR_NULL), SetMinimalSize(128, 12), SetFill(1, 0),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_LICENSE), SetDataTip(STR_HELP_WINDOW_LICENSE, STR_NULL), SetMinimalSize(128, 12), SetFill(1, 0),
+			NWidget(WWT_FRAME, COLOUR_DARK_GREEN), SetStringTip(STR_HELP_WINDOW_DOCUMENTS),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_README), SetStringTip(STR_HELP_WINDOW_README), SetMinimalSize(128, 12), SetFill(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_CHANGELOG), SetStringTip(STR_HELP_WINDOW_CHANGELOG), SetMinimalSize(128, 12), SetFill(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_KNOWN_BUGS),SetStringTip(STR_HELP_WINDOW_KNOWN_BUGS), SetMinimalSize(128, 12), SetFill(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREEN, WID_HW_LICENSE), SetStringTip(STR_HELP_WINDOW_LICENSE), SetMinimalSize(128, 12), SetFill(1, 0),
 			EndContainer(),
 		EndContainer(),
 	EndContainer(),
@@ -197,10 +194,10 @@ static WindowDesc _helpwin_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_HELPWIN, WC_NONE,
 	0,
-	std::begin(_nested_helpwin_widgets), std::end(_nested_helpwin_widgets)
+	_nested_helpwin_widgets
 );
 
 void ShowHelpWindow()
 {
-	AllocateWindowDescFront<HelpWindow>(&_helpwin_desc, 0);
+	AllocateWindowDescFront<HelpWindow>(_helpwin_desc, 0);
 }

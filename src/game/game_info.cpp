@@ -24,7 +24,7 @@
  */
 static bool CheckAPIVersion(const std::string &api_version)
 {
-	static constexpr std::initializer_list<const char*> versions{ "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "12", "13", "14" };
+	static constexpr std::initializer_list<const char*> versions{ "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "12", "13", "14", "15" };
 	return std::find_if(versions.begin(), versions.end(), [&](const char *v) { return api_version == v; }) != versions.end();
 }
 
@@ -76,7 +76,7 @@ template <> const char *GetClassName<GameInfo, ScriptType::GS>() { return "GSInf
 	if (!info->CheckMethod("GetAPIVersion")) return SQ_ERROR;
 	if (!info->engine->CallStringMethod(info->SQ_instance, "GetAPIVersion", &info->api_version, MAX_GET_OPS)) return SQ_ERROR;
 	if (!CheckAPIVersion(info->api_version)) {
-		DEBUG(script, 1, "Loading info.nut from (%s.%d): GetAPIVersion returned invalid version", info->GetName().c_str(), info->GetVersion());
+		Debug(script, 1, "Loading info.nut from ({}.{}): GetAPIVersion returned invalid version", info->GetName(), info->GetVersion());
 		return SQ_ERROR;
 	}
 

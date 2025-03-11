@@ -8,42 +8,17 @@
 /** @file engine_sl.cpp Code handling saving and loading of engines */
 
 #include "../stdafx.h"
+#include "saveload_buffer.h"
 #include "saveload_internal.h"
+#include "../debug.h"
 #include "../engine_base.h"
 #include "../engine_func.h"
+#include "../newgrf_callbacks.h"
 #include "../string_func.h"
+#include "../network/network.h"
 #include <vector>
 
 #include "../safeguards.h"
-
-static const SaveLoad _engine_desc[] = {
-	 SLE_CONDVAR(Engine, intro_date,          SLE_FILE_U16 | SLE_VAR_I32,  SL_MIN_VERSION,  SLV_31),
-	 SLE_CONDVAR(Engine, intro_date,          SLE_INT32,                  SLV_31, SL_MAX_VERSION),
-	 SLE_CONDVAR(Engine, age,                 SLE_FILE_U16 | SLE_VAR_I32,  SL_MIN_VERSION,  SLV_31),
-	 SLE_CONDVAR(Engine, age,                 SLE_INT32,                  SLV_31, SL_MAX_VERSION),
-	     SLE_VAR(Engine, reliability,         SLE_UINT16),
-	     SLE_VAR(Engine, reliability_spd_dec, SLE_UINT16),
-	     SLE_VAR(Engine, reliability_start,   SLE_UINT16),
-	     SLE_VAR(Engine, reliability_max,     SLE_UINT16),
-	     SLE_VAR(Engine, reliability_final,   SLE_UINT16),
-	     SLE_VAR(Engine, duration_phase_1,    SLE_UINT16),
-	     SLE_VAR(Engine, duration_phase_2,    SLE_UINT16),
-	     SLE_VAR(Engine, duration_phase_3,    SLE_UINT16),
-
-	SLE_CONDNULL(1,                                                        SL_MIN_VERSION, SLV_121),
-	     SLE_VAR(Engine, flags,               SLE_UINT8),
-	SLE_CONDNULL(1,                                                        SL_MIN_VERSION, SLV_179), // old preview_company_rank
-	 SLE_CONDVAR(Engine, preview_asked,       SLE_UINT16,                SLV_179, SL_MAX_VERSION),
-	 SLE_CONDVAR(Engine, preview_company,     SLE_UINT8,                 SLV_179, SL_MAX_VERSION),
-	     SLE_VAR(Engine, preview_wait,        SLE_UINT8),
-	SLE_CONDNULL(1,                                                        SL_MIN_VERSION,  SLV_45),
-	 SLE_CONDVAR(Engine, company_avail,       SLE_FILE_U8  | SLE_VAR_U16,  SL_MIN_VERSION, SLV_104),
-	 SLE_CONDVAR(Engine, company_avail,       SLE_UINT16,                SLV_104, SL_MAX_VERSION),
-	 SLE_CONDVAR(Engine, company_hidden,      SLE_UINT16,                SLV_193, SL_MAX_VERSION),
-	 SLE_CONDSTR(Engine, name,                SLE_STR, 0,                 SLV_84, SL_MAX_VERSION),
-
-	SLE_CONDNULL(16,                                                       SLV_2, SLV_144), // old reserved space
-};
 
 static std::vector<Engine*> _temp_engine;
 
@@ -80,34 +55,6 @@ Engine *GetTempDataEngine(EngineID index)
 		return _temp_engine[index];
 	} else {
 		NOT_REACHED();
-	}
-}
-
-static void Save_ENGN()
-{
-	for (Engine *e : Engine::Iterate()) {
-		SlSetArrayIndex(e->index);
-		SlObject(e, _engine_desc);
-	}
-}
-
-static void Load_ENGN()
-{
-	/* As engine data is loaded before engines are initialized we need to load
-	 * this information into a temporary array. This is then copied into the
-	 * engine pool after processing NewGRFs by CopyTempEngineData(). */
-	int index;
-	while ((index = SlIterateArray()) != -1) {
-		Engine *e = GetTempDataEngine(index);
-		SlObject(e, _engine_desc);
-
-		if (IsSavegameVersionBefore(SLV_179)) {
-			/* preview_company_rank was replaced with preview_company and preview_asked.
-			 * Just cancel any previews. */
-			e->flags &= ~4; // ENGINE_OFFER_WINDOW_OPEN
-			e->preview_company = INVALID_COMPANY;
-			e->preview_asked = MAX_UVALUE(CompanyMask);
-		}
 	}
 }
 
@@ -166,43 +113,102 @@ static void Load_ENGS()
 	}
 }
 
-/** Save and load the mapping between the engine id in the pool, and the grf file it came from. */
-static const SaveLoad _engine_id_mapping_desc[] = {
-	SLE_VAR(EngineIDMapping, grfid,         SLE_UINT32),
-	SLE_VAR(EngineIDMapping, internal_id,   SLE_UINT16),
-	SLE_VAR(EngineIDMapping, type,          SLE_UINT8),
-	SLE_VAR(EngineIDMapping, substitute_id, SLE_UINT8),
-};
-
-static void Save_EIDS()
-{
-	uint index = 0;
-	for (EngineIDMapping &eid : _engine_mngr) {
-		SlSetArrayIndex(index);
-		SlObject(&eid, _engine_id_mapping_desc);
-		index++;
-	}
-}
-
-static void Load_EIDS()
-{
-	_engine_mngr.clear();
-
-	while (SlIterateArray() != -1) {
-		EngineIDMapping *eid = &_engine_mngr.emplace_back();
-		SlObject(eid, _engine_id_mapping_desc);
-	}
-}
-
 void AfterLoadEngines()
 {
 	AnalyseEngineCallbacks();
 }
 
+void Save_ERNC()
+{
+	assert(_sl_xv_feature_versions[XSLFI_ERNC_CHUNK] != 0);
+
+	if (!IsNetworkServerSave()) {
+		SlSetLength(0);
+		return;
+	}
+
+	uint32_t count = 0;
+	std::span<uint8_t> result = SlSaveToTempBuffer([&]() {
+		for (const Engine *e : Engine::Iterate()) {
+			if (HasBit(e->info.callback_mask, CBM_VEHICLE_CUSTOM_REFIT)) {
+				count++;
+				SlWriteUint16(e->index);
+				SlWriteUint64(e->info.refit_mask);
+			}
+		}
+	});
+
+	SlSetLength(4 + (uint)result.size());
+	SlWriteUint32(count);
+	MemoryDumper::GetCurrent()->CopyBytes(result);
+}
+
+struct EngineRefitNetworkCache {
+	EngineID id;
+	CargoTypes refit_mask;
+};
+static std::vector<EngineRefitNetworkCache> _engine_refit_network_caches;
+
+void Load_ERNC()
+{
+	if (SlGetFieldLength() == 0) return;
+
+	if (!_networking || _network_server) {
+		SlSkipBytes(SlGetFieldLength());
+		return;
+	}
+
+	const uint32_t count = SlReadUint32();
+	_engine_refit_network_caches.reserve(count);
+	for (uint32_t idx = 0; idx < count; idx++) {
+		EngineID id = SlReadUint16();
+		CargoTypes refit_mask = SlReadUint64();
+		_engine_refit_network_caches.push_back({ id, refit_mask });
+	}
+}
+
+void SlResetERNC()
+{
+	_engine_refit_network_caches.clear();
+}
+
+void SlProcessERNC()
+{
+	for (const EngineRefitNetworkCache &it : _engine_refit_network_caches) {
+		Engine *e = Engine::GetIfValid(it.id);
+		if (e == nullptr) continue;
+		if (e->info.refit_mask != it.refit_mask) {
+			format_buffer buffer;
+			buffer.format("[load]: engine cache mismatch: engine: {}, refit mask: {:X} != {:X}", it.id, e->info.refit_mask, it.refit_mask);
+			debug_print(DebugLevelID::desync, 0, buffer);
+			LogDesyncMsg(buffer.to_string());
+
+			e->info.refit_mask = it.refit_mask;
+		}
+	}
+
+	_engine_refit_network_caches.clear();
+	_engine_refit_network_caches.shrink_to_fit();
+}
+
+static ChunkSaveLoadSpecialOpResult Special_ERNC(uint32_t chunk_id, ChunkSaveLoadSpecialOp op)
+{
+	switch (op) {
+		case CSLSO_SHOULD_SAVE_CHUNK:
+			if (_sl_xv_feature_versions[XSLFI_ERNC_CHUNK] == 0) return CSLSOR_DONT_SAVE_CHUNK;
+			break;
+
+		default:
+			break;
+	}
+	return CSLSOR_NONE;
+}
+
 static const ChunkHandler engine_chunk_handlers[] = {
-	{ 'EIDS', Save_EIDS, Load_EIDS, nullptr, nullptr, CH_ARRAY },
-	{ 'ENGN', Save_ENGN, Load_ENGN, nullptr, nullptr, CH_ARRAY },
-	{ 'ENGS', nullptr,   Load_ENGS, nullptr, nullptr, CH_RIFF  },
+	MakeUpstreamChunkHandler<'EIDS', GeneralUpstreamChunkLoadInfo>(),
+	MakeUpstreamChunkHandler<'ENGN', GeneralUpstreamChunkLoadInfo>(),
+	{ 'ENGS', nullptr,   Load_ENGS, nullptr, nullptr, CH_READONLY  },
+	{ 'ERNC', Save_ERNC, Load_ERNC, nullptr, nullptr, CH_RIFF, Special_ERNC },
 };
 
 extern const ChunkHandlerTable _engine_chunk_handlers(engine_chunk_handlers);

@@ -44,6 +44,7 @@
 
 #include "tbtr_template_gui_create.h"
 #include "tbtr_template_vehicle.h"
+#include "tbtr_template_vehicle_cmd.h"
 #include "tbtr_template_vehicle_func.h"
 
 #include "safeguards.h"
@@ -67,10 +68,10 @@ enum TemplateReplaceCreateWindowWidgets {
 	TCW_CLONE,
 };
 
-static constexpr NWidgetPart _widgets[] = {
+static constexpr NWidgetPart _template_create_window_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(WWT_CAPTION, COLOUR_GREY, TCW_CAPTION), SetDataTip(STR_TMPL_CREATEGUI_TITLE, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_CAPTION, COLOUR_GREY, TCW_CAPTION), SetStringTip(STR_TMPL_CREATEGUI_TITLE, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
 		NWidget(WWT_DEBUGBOX, COLOUR_GREY),
 		NWidget(WWT_SHADEBOX, COLOUR_GREY),
 		NWidget(WWT_DEFSIZEBOX, COLOUR_GREY),
@@ -78,34 +79,32 @@ static constexpr NWidgetPart _widgets[] = {
 	EndContainer(),
 	NWidget(NWID_HORIZONTAL),
 		NWidget(NWID_VERTICAL),
-			NWidget(WWT_PANEL, COLOUR_GREY, TCW_NEW_TMPL_PANEL), SetMinimalSize(250, 30), SetResize(1, 0), SetScrollbar(TCW_SCROLLBAR_H_NEW_TMPL), SetDataTip(STR_NULL, STR_DEPOT_TRAIN_LIST_TOOLTIP), EndContainer(),
+			NWidget(WWT_PANEL, COLOUR_GREY, TCW_NEW_TMPL_PANEL), SetMinimalSize(250, 30), SetResize(1, 0), SetScrollbar(TCW_SCROLLBAR_H_NEW_TMPL), SetToolTip(STR_DEPOT_TRAIN_LIST_TOOLTIP), EndContainer(),
 			NWidget(WWT_PANEL, COLOUR_GREY, TCW_INFO_PANEL), SetMinimalSize(250, 100), SetResize(1, 1), SetScrollbar(TCW_SCROLLBAR_V_NEW_TMPL), EndContainer(),
 			NWidget(NWID_HSCROLLBAR, COLOUR_GREY, TCW_SCROLLBAR_H_NEW_TMPL),
 		EndContainer(),
-		NWidget(WWT_IMGBTN, COLOUR_GREY, TCW_SELL_TMPL), SetMinimalSize(40, 40), SetDataTip(0x0, STR_NULL), SetResize(0, 1), SetFill(0, 1),
+		NWidget(WWT_IMGBTN, COLOUR_GREY, TCW_SELL_TMPL), SetMinimalSize(40, 40), SetResize(0, 1), SetFill(0, 1),
 		NWidget(NWID_VSCROLLBAR, COLOUR_GREY, TCW_SCROLLBAR_V_NEW_TMPL),
 	EndContainer(),
 	NWidget(NWID_HORIZONTAL),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TCW_OK),     SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetDataTip(STR_TMPL_CONFIRM,          STR_TMPL_CONFIRM),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TCW_NEW),    SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetDataTip(STR_TMPL_NEW,              STR_TMPL_NEW),
-		NWidget(WWT_TEXTBTN,    COLOUR_GREY, TCW_CLONE),  SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetDataTip(STR_TMPL_CREATE_CLONE_VEH, STR_TMPL_CREATE_CLONE_VEH),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TCW_REFIT),  SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetDataTip(STR_TMPL_REFIT,            STR_TMPL_REFIT),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TCW_CANCEL), SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetDataTip(STR_TMPL_CANCEL,           STR_TMPL_CANCEL),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TCW_OK),     SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetStringTip(STR_TMPL_CONFIRM,          STR_TMPL_CONFIRM),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TCW_NEW),    SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetStringTip(STR_TMPL_NEW,              STR_TMPL_NEW),
+		NWidget(WWT_TEXTBTN,    COLOUR_GREY, TCW_CLONE),  SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetStringTip(STR_TMPL_CREATE_CLONE_VEH, STR_TMPL_CREATE_CLONE_VEH),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TCW_REFIT),  SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetStringTip(STR_TMPL_REFIT,            STR_TMPL_REFIT),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TCW_CANCEL), SetMinimalSize(52, 12), SetResize(1, 0), SetFill(1, 0), SetStringTip(STR_TMPL_CANCEL,           STR_TMPL_CANCEL),
 		NWidget(WWT_RESIZEBOX,  COLOUR_GREY),
 	EndContainer(),
 };
 
 static WindowDesc _template_create_window_desc(__FILE__, __LINE__,
 	WDP_AUTO,                       // window position
-	"template create window",       // const char* ini_key
+	"template_create",              // const char* ini_key
 	456, 100,                       // window size
 	WC_CREATE_TEMPLATE,             // window class
 	WC_TEMPLATEGUI_MAIN,            // parent window class
 	WDF_CONSTRUCTION,               // window flags
-	std::begin(_widgets), std::end(_widgets)
+	_template_create_window_widgets
 );
-
-void ShowTemplateTrainBuildVehicleWindow(Train **virtual_train);
 
 static void TrainDepotMoveVehicle(const Vehicle *wagon, VehicleID sel, const Vehicle *head)
 {
@@ -122,31 +121,32 @@ static void TrainDepotMoveVehicle(const Vehicle *wagon, VehicleID sel, const Veh
 
 	if (wagon == v) return;
 
-	DoCommandP(v->tile, v->index | ((_ctrl_pressed ? 1 : 0) << 20) | (1 << 21) , wagon == nullptr ? INVALID_VEHICLE : wagon->index,
-			CMD_MOVE_VIRTUAL_RAIL_VEHICLE | CMD_MSG(STR_ERROR_CAN_T_MOVE_VEHICLE), CcVirtualTrainWagonsMoved);
+	VehicleID target = (wagon == nullptr) ? INVALID_VEHICLE : wagon->index;
+	MoveRailVehicleFlags move_flags = (_ctrl_pressed ? MoveRailVehicleFlags::MoveChain : MoveRailVehicleFlags::None);
+	Command<CMD_MOVE_VIRTUAL_RAIL_VEHICLE>::Post(STR_ERROR_CAN_T_MOVE_VEHICLE, CommandCallback::VirtualTrainWagonsMoved, v->index, target, move_flags);
 }
 
 class TemplateCreateWindow : public Window {
 private:
-	Scrollbar *hscroll;
-	Scrollbar *vscroll;
-	Train* virtual_train;
-	bool *create_window_open;         /// used to notify main window of progress (dummy way of disabling 'delete' while editing a template)
-	VehicleID sel;
-	VehicleID vehicle_over;
-	bool sell_hovered;                ///< A vehicle is being dragged/hovered over the sell button.
-	uint32_t template_index;
+	Scrollbar *hscroll = nullptr;
+	Scrollbar *vscroll = nullptr;
+	Train *virtual_train = nullptr;
+	bool *create_window_open = nullptr;            /// used to notify main window of progress (dummy way of disabling 'delete' while editing a template)
+	VehicleID sel = INVALID_VEHICLE;
+	VehicleID vehicle_over = INVALID_VEHICLE;
+	bool sell_hovered{};                           ///< A vehicle is being dragged/hovered over the sell button.
+	uint32_t template_index{};
 	btree::btree_set<VehicleID> pending_deletions; ///< Vehicle IDs where deletion is in progress
 
 public:
-	TemplateCreateWindow(WindowDesc* _wdesc, TemplateVehicle *to_edit, bool *window_open) : Window(_wdesc)
+	TemplateCreateWindow(WindowDesc &desc, TemplateVehicle *to_edit, bool *window_open) : Window(desc)
 	{
 		this->CreateNestedTree();
 		this->hscroll = this->GetScrollbar(TCW_SCROLLBAR_H_NEW_TMPL);
 		this->vscroll = this->GetScrollbar(TCW_SCROLLBAR_V_NEW_TMPL);
 		this->FinishInitNested(VEH_TRAIN);
 		/* a sprite */
-		this->GetWidget<NWidgetCore>(TCW_SELL_TMPL)->widget_data = SPR_SELL_TRAIN;
+		this->GetWidget<NWidgetCore>(TCW_SELL_TMPL)->SetSprite(SPR_SELL_TRAIN);
 
 		this->owner = _local_company;
 
@@ -158,7 +158,7 @@ public:
 		this->sell_hovered = false;
 
 		if (to_edit != nullptr) {
-			DoCommandP(0, to_edit->index, 0, CMD_VIRTUAL_TRAIN_FROM_TEMPLATE_VEHICLE | CMD_MSG(STR_TMPL_CANT_CREATE), CcSetVirtualTrain);
+			Command<CMD_VIRTUAL_TRAIN_FROM_TEMPLATE>::Post(STR_TMPL_CANT_CREATE, CommandCallback::SetVirtualTrain, to_edit->index, INVALID_CLIENT_ID);
 		}
 
 		this->resize.step_height = 1;
@@ -168,27 +168,27 @@ public:
 
 	void Close(int data = 0) override
 	{
-		if (virtual_train != nullptr) {
-			DoCommandP(0, virtual_train->index, 0, CMD_DELETE_VIRTUAL_TRAIN);
-			virtual_train = nullptr;
+		if (this->virtual_train != nullptr) {
+			Command<CMD_DELETE_VIRTUAL_TRAIN>::Post(this->virtual_train->index);
+			this->virtual_train = nullptr;
 		}
 
 		/* more cleanup */
-		*create_window_open = false;
+		*this->create_window_open = false;
 		CloseWindowById(WC_BUILD_VIRTUAL_TRAIN, this->window_number);
 		InvalidateWindowClassesData(WC_TEMPLATEGUI_MAIN);
 		this->Window::Close();
 	}
 
-	void SetVirtualTrain(Train* const train)
+	void SetVirtualTrain(Train *train)
 	{
-		if (virtual_train != nullptr) {
-			DoCommandP(0, virtual_train->index, 0, CMD_DELETE_VIRTUAL_TRAIN);
+		if (this->virtual_train != nullptr) {
+			Command<CMD_DELETE_VIRTUAL_TRAIN>::Post(this->virtual_train->index);
 		}
 
-		virtual_train = train;
-		if (virtual_train != nullptr) {
-			assert(HasBit(virtual_train->subtype, GVSF_VIRTUAL));
+		this->virtual_train = train;
+		if (this->virtual_train != nullptr) {
+			assert(HasBit(this->virtual_train->subtype, GVSF_VIRTUAL));
 		}
 		UpdateButtonState();
 	}
@@ -205,7 +205,7 @@ public:
 
 	virtual void OnInvalidateData(int data = 0, bool gui_scope = true) override
 	{
-		if(!gui_scope) return;
+		if (!gui_scope) return;
 
 		if (this->template_index != INVALID_VEHICLE) {
 			if (TemplateVehicle::GetIfValid(this->template_index) == nullptr) {
@@ -226,7 +226,7 @@ public:
 				break;
 			}
 			case TCW_NEW: {
-				ShowTemplateTrainBuildVehicleWindow(&virtual_train);
+				ShowTemplateTrainBuildVehicleWindow(&this->virtual_train);
 				break;
 			}
 			case TCW_CLONE: {
@@ -240,10 +240,10 @@ public:
 				break;
 			}
 			case TCW_OK: {
-				if (virtual_train != nullptr) {
-					DoCommandP(0, this->template_index, virtual_train->index, CMD_REPLACE_TEMPLATE_VEHICLE);
+				if (this->virtual_train != nullptr) {
+					Command<CMD_REPLACE_TEMPLATE>::Post(STR_ERROR_CAN_T_DO_THIS, this->template_index, this->virtual_train->index);
 				} else if (this->template_index != INVALID_VEHICLE) {
-					DoCommandP(0, this->template_index, 0, CMD_DELETE_TEMPLATE_VEHICLE);
+					Command<CMD_DELETE_TEMPLATE_VEHICLE>::Post(this->template_index);
 				}
 				this->Close();
 				break;
@@ -253,8 +253,8 @@ public:
 				break;
 			}
 			case TCW_REFIT: {
-				if (virtual_train != nullptr) {
-					ShowVehicleRefitWindow(virtual_train, INVALID_VEH_ORDER_ID, this, false, true);
+				if (this->virtual_train != nullptr) {
+					ShowVehicleRefitWindow(this->virtual_train, INVALID_VEH_ORDER_ID, this, false, true);
 				}
 				break;
 			}
@@ -264,13 +264,13 @@ public:
 	virtual bool OnVehicleSelect(const Vehicle *v) override
 	{
 		// throw away the current virtual train
-		if (virtual_train != nullptr) {
-			DoCommandP(0, virtual_train->index, 0, CMD_DELETE_VIRTUAL_TRAIN);
-			virtual_train = nullptr;
+		if (this->virtual_train != nullptr) {
+			Command<CMD_DELETE_VIRTUAL_TRAIN>::Post(this->virtual_train->index);
+			this->virtual_train = nullptr;
 		}
 
 		// create a new one
-		DoCommandP(0, v->index, 0, CMD_VIRTUAL_TRAIN_FROM_TRAIN | CMD_MSG(STR_TMPL_CANT_CREATE), CcSetVirtualTrain);
+		Command<CMD_VIRTUAL_TRAIN_FROM_TRAIN>::Post(STR_TMPL_CANT_CREATE, CommandCallback::SetVirtualTrain, v->index, INVALID_CLIENT_ID);
 		this->ToggleWidgetLoweredState(TCW_CLONE);
 		ResetObjectToPlace();
 		this->SetDirty();
@@ -291,8 +291,8 @@ public:
 		switch(widget) {
 			case TCW_NEW_TMPL_PANEL: {
 				if (this->virtual_train) {
-					DrawTrainImage(virtual_train, r.Shrink(TRAIN_FRONT_SPACE, 2, 25, 0), this->sel, EIT_IN_DEPOT, this->hscroll->GetPosition(), this->vehicle_over);
-					SetDParam(0, CeilDiv(virtual_train->gcache.cached_total_length * 10, TILE_SIZE));
+					DrawTrainImage(this->virtual_train, r.Shrink(TRAIN_FRONT_SPACE, 2, 25, 0), this->sel, EIT_IN_DEPOT, this->hscroll->GetPosition(), this->vehicle_over);
+					SetDParam(0, CeilDiv(this->virtual_train->gcache.cached_total_length * 10, TILE_SIZE));
 					SetDParam(1, 1);
 					DrawString(r.left, r.right, r.top, STR_JUST_DECIMAL, TC_BLACK, SA_RIGHT, false, FS_SMALL);
 				}
@@ -458,8 +458,7 @@ public:
 
 				if (this->GetVehicleFromDepotWndPt(pt.x - nwi->pos_x, pt.y - nwi->pos_y, &v, &gdvp) == MODE_DRAG_VEHICLE && sel != INVALID_VEHICLE) {
 					if (gdvp.wagon != nullptr && gdvp.wagon->index == sel && _ctrl_pressed) {
-						DoCommandP(Vehicle::Get(sel)->tile, Vehicle::Get(sel)->index, true,
-								CMD_REVERSE_TRAIN_DIRECTION | CMD_MSG(STR_ERROR_CAN_T_REVERSE_DIRECTION_RAIL_VEHICLE), CcVirtualTrainWagonsMoved);
+						Command<CMD_REVERSE_TRAIN_DIRECTION>::Post(STR_ERROR_CAN_T_REVERSE_DIRECTION_RAIL_VEHICLE, CommandCallback::VirtualTrainWagonsMoved, Vehicle::Get(sel)->tile, Vehicle::Get(sel)->index, true);
 					} else if (gdvp.wagon == nullptr || gdvp.wagon->index != sel) {
 						this->vehicle_over = INVALID_VEHICLE;
 						TrainDepotMoveVehicle(gdvp.wagon, sel, gdvp.head);
@@ -471,21 +470,20 @@ public:
 				if (this->IsWidgetDisabled(widget)) return;
 				if (this->sel == INVALID_VEHICLE) return;
 
-				int sell_cmd = (_ctrl_pressed) ? 1 : 0;
-
-				Train* train_to_delete = Train::Get(this->sel);
+				Train *train_to_delete = Train::Get(this->sel);
 
 				this->pending_deletions.insert(this->sel);
 
-				if (virtual_train == train_to_delete) {
+				if (this->virtual_train == train_to_delete) {
 					if (_ctrl_pressed) {
-						virtual_train = nullptr;
+						this->virtual_train = nullptr;
 					} else {
 						this->RearrangeVirtualTrain();
 					}
 				}
 
-				DoCommandP(0, this->sel | (sell_cmd << 20) | (1 << 21), 0, CMD_SELL_VIRTUAL_VEHICLE | CMD_MSG(STR_ERROR_CAN_T_SELL_TRAIN), CcDeleteVirtualTrain);
+				SellVehicleFlags sell_flags = _ctrl_pressed ? SellVehicleFlags::SellChain : SellVehicleFlags::None;
+				Command<CMD_SELL_VIRTUAL_VEHICLE>::Post(STR_ERROR_CAN_T_SELL_TRAIN, CommandCallback::DeleteVirtualTrain, this->sel, sell_flags, INVALID_CLIENT_ID);
 
 				this->sel = INVALID_VEHICLE;
 
@@ -556,10 +554,10 @@ public:
 		uint height = ScaleGUITrad(8) + (3 * GetCharacterHeight(FS_NORMAL));
 		CargoArray cargo_caps{};
 
-		if (virtual_train != nullptr) {
+		if (this->virtual_train != nullptr) {
 			bool buildable = true;
 			uint32_t full_cargo_weight = 0;
-			for (Train *train = virtual_train; train != nullptr; train = train->GetNextUnit()) {
+			for (Train *train = this->virtual_train; train != nullptr; train = train->GetNextUnit()) {
 				width += train->GetDisplayImageWidth();
 				cargo_caps[train->cargo_type] += train->cargo_cap;
 				if (!IsEngineBuildable(train->engine_type, VEH_TRAIN, train->owner)) buildable = false;
@@ -612,7 +610,7 @@ public:
 		bool wagon = false;
 
 		x += this->hscroll->GetPosition();
-		const Train *v = virtual_train;
+		const Train *v = this->virtual_train;
 		d->head = d->wagon = v;
 
 		if (xm <= this->header_width) {
@@ -651,7 +649,7 @@ public:
 			TrainDepotMoveVehicle(v, sel, gdvp.head);
 		} else if (v != nullptr) {
 			SetObjectToPlaceWnd(SPR_CURSOR_MOUSE, PAL_NONE, HT_DRAG, this);
-			SetMouseCursorVehicle(v, EIT_PURCHASE);
+			SetMouseCursorVehicle(v, EIT_IN_DEPOT);
 			_cursor.vehchain = _ctrl_pressed;
 
 			this->sel = v->index;
@@ -689,7 +687,7 @@ public:
 
 	void UpdateButtonState()
 	{
-		this->SetWidgetDisabledState(TCW_REFIT, virtual_train == nullptr);
+		this->SetWidgetDisabledState(TCW_REFIT, this->virtual_train == nullptr);
 	}
 
 	bool IsNewGRFInspectable() const override
@@ -708,39 +706,39 @@ public:
 void ShowTemplateCreateWindow(TemplateVehicle *to_edit, bool *create_window_open)
 {
 	if (BringWindowToFrontById(WC_CREATE_TEMPLATE, VEH_TRAIN) != nullptr) return;
-	new TemplateCreateWindow(&_template_create_window_desc, to_edit, create_window_open);
+	new TemplateCreateWindow(_template_create_window_desc, to_edit, create_window_open);
 }
 
-void CcSetVirtualTrain(const CommandCost &result, TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint32_t cmd)
+void CcSetVirtualTrain(const CommandCost &result)
 {
 	if (result.Failed()) return;
 
 	Window *window = FindWindowById(WC_CREATE_TEMPLATE, 0);
-	if (window) {
-		Train* train = Train::From(Vehicle::Get(_new_vehicle_id));
-		((TemplateCreateWindow*)window)->SetVirtualTrain(train);
+	if (window!= nullptr) {
+		Train *train = Train::From(Vehicle::Get(_new_vehicle_id));
+		((TemplateCreateWindow *)window)->SetVirtualTrain(train);
 		window->InvalidateData();
 	}
 }
 
-void CcVirtualTrainWagonsMoved(const CommandCost &result, TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint32_t cmd)
+void CcVirtualTrainWagonsMoved(const CommandCost &result)
 {
 	if (result.Failed()) return;
 
 	Window *window = FindWindowById(WC_CREATE_TEMPLATE, 0);
-	if (window) {
-		((TemplateCreateWindow*)window)->RearrangeVirtualTrain();
+	if (window != nullptr) {
+		((TemplateCreateWindow *)window)->RearrangeVirtualTrain();
 		window->InvalidateData();
 	}
 }
 
-void CcDeleteVirtualTrain(const CommandCost &result, TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint32_t cmd)
+void CcDeleteVirtualTrain(const CommandCost &result, VehicleID veh_id, SellVehicleFlags sell_flags, ClientID client)
 {
 	if (result.Failed()) return;
 
 	Window *window = FindWindowById(WC_CREATE_TEMPLATE, 0);
-	if (window) {
-		((TemplateCreateWindow*)window)->VirtualVehicleDeleted(GB(p1, 0, 20));
+	if (window!= nullptr) {
+		((TemplateCreateWindow *)window)->VirtualVehicleDeleted(veh_id);
 		window->InvalidateData();
 	}
 }

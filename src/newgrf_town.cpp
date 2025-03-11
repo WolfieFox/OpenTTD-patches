@@ -15,8 +15,13 @@
 
 #include "safeguards.h"
 
-/* virtual */ uint32_t TownScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const
+/* virtual */ uint32_t TownScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra &extra) const
 {
+	if (this->t == nullptr) {
+		extra.available = false;
+		return UINT_MAX;
+	}
+
 	CargoID cid;
 	switch (variable) {
 		/* Larger towns */
@@ -45,8 +50,8 @@
 		}
 
 		/* Town properties */
-		case 0x80: return this->t->xy;
-		case 0x81: return GB(this->t->xy, 8, 8);
+		case 0x80: return this->t->xy.base();
+		case 0x81: return GB(this->t->xy.base(), 8, 8);
 		case 0x82: return ClampTo<uint16_t>(this->t->cache.population);
 		case 0x83: return GB(ClampTo<uint16_t>(this->t->cache.population), 8, 8);
 		case 0x8A: return this->t->grow_counter / TOWN_GROWTH_TICKS;
@@ -124,9 +129,9 @@
 			return TileY(this->t->xy) << 16 | (TileX(this->t->xy) & 0xFFFF);
 	}
 
-	DEBUG(grf, 1, "Unhandled town variable 0x%X", variable);
+	Debug(grf, 1, "Unhandled town variable 0x{:X}", variable);
 
-	extra->available = false;
+	extra.available = false;
 	return UINT_MAX;
 }
 
@@ -160,7 +165,7 @@
 	t->psa_list.push_back(psa);
 }
 
-/* virtual */ uint32_t FakeTownScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const
+/* virtual */ uint32_t FakeTownScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra &extra) const
 {
 	switch (variable) {
 		/* Town index */
@@ -186,9 +191,9 @@
 			return 0;
 	}
 
-	DEBUG(grf, 1, "Unhandled town variable 0x%X", variable);
+	Debug(grf, 1, "Unhandled town variable 0x{:X}", variable);
 
-	extra->available = false;
+	extra.available = false;
 	return UINT_MAX;
 }
 

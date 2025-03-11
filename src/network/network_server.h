@@ -24,12 +24,16 @@ extern NetworkClientSocketPool _networkclientsocket_pool;
 class ServerNetworkGameSocketHandler : public NetworkClientSocketPool::PoolItem<&_networkclientsocket_pool>, public NetworkGameSocketHandler, public TCPListenHandler<ServerNetworkGameSocketHandler, PACKET_SERVER_FULL, PACKET_SERVER_BANNED> {
 	NetworkGameKeys intl_keys;
 	uint64_t min_key_message_id = 0;
-	byte *rcon_reply_key = nullptr;
+	uint8_t *rcon_reply_key = nullptr;
 
 protected:
+	std::unique_ptr<class NetworkAuthenticationServerHandler> authentication_handler; ///< The handler for the authentication.
+	std::string peer_public_key; ///< The public key of our client.
+
 	NetworkRecvStatus Receive_CLIENT_JOIN(Packet &p) override;
+	NetworkRecvStatus Receive_CLIENT_IDENTIFY(Packet &p) override;
 	NetworkRecvStatus Receive_CLIENT_GAME_INFO(Packet &p) override;
-	NetworkRecvStatus Receive_CLIENT_GAME_PASSWORD(Packet &p) override;
+	NetworkRecvStatus Receive_CLIENT_AUTH_RESPONSE(Packet &p) override;
 	NetworkRecvStatus Receive_CLIENT_COMPANY_PASSWORD(Packet &p) override;
 	NetworkRecvStatus Receive_CLIENT_SETTINGS_PASSWORD(Packet &p) override;
 	NetworkRecvStatus Receive_CLIENT_GETMAP(Packet &p) override;
@@ -52,7 +56,8 @@ protected:
 	NetworkRecvStatus SendGameInfoExtended(PacketGameType reply_type, uint16_t flags, uint16_t version);
 	NetworkRecvStatus SendNewGRFCheck();
 	NetworkRecvStatus SendWelcome();
-	NetworkRecvStatus SendNeedGamePassword();
+	NetworkRecvStatus SendAuthRequest();
+	NetworkRecvStatus SendEnableEncryption();
 	NetworkRecvStatus SendNeedCompanyPassword();
 
 	bool ParseKeyPasswordPacket(Packet &p, NetworkSharedSecrets &ss, const std::string &password, std::string *payload, size_t length);
@@ -61,8 +66,9 @@ public:
 	/** Status of a client */
 	enum ClientStatus {
 		STATUS_INACTIVE,      ///< The client is not connected nor active.
-		STATUS_NEWGRFS_CHECK, ///< The client is checking NewGRFs.
 		STATUS_AUTH_GAME,     ///< The client is authorizing with game (server) password.
+		STATUS_IDENTIFY,      ///< The client is identifying itself.
+		STATUS_NEWGRFS_CHECK, ///< The client is checking NewGRFs.
 		STATUS_AUTH_COMPANY,  ///< The client is authorizing with company password.
 		STATUS_AUTHORIZED,    ///< The client is authorized.
 		STATUS_MAP_WAIT,      ///< The client is waiting as someone else is downloading the map.
@@ -76,11 +82,11 @@ public:
 
 	static const char *GetClientStatusName(ClientStatus status);
 
-	byte lag_test;               ///< Byte used for lag-testing the client
-	byte last_token;             ///< The last random token we did send to verify the client is listening
+	uint8_t lag_test;            ///< Byte used for lag-testing the client
+	uint8_t last_token;          ///< The last random token we did send to verify the client is listening
 	uint32_t last_token_frame;   ///< The last frame we received the right token
 	ClientStatus status;         ///< Status of this client
-	CommandQueue outgoing_queue; ///< The command-queue awaiting delivery; conceptually more a bucket to gather commands in, after which the whole bucket is sent to the client.
+	OutgoingCommandQueue outgoing_queue; ///< The command-queue awaiting delivery; conceptually more a bucket to gather commands in, after which the whole bucket is sent to the client.
 	size_t receive_limit;        ///< Amount of bytes that we can receive at this moment
 	bool settings_authed = false;///< Authorised to control all game settings
 	bool supports_zstd = false;  ///< Client supports zstd compression
@@ -99,7 +105,7 @@ public:
 
 	std::unique_ptr<Packet> ReceivePacket() override;
 	NetworkRecvStatus CloseConnection(NetworkRecvStatus status) override;
-	void GetClientName(char *client_name, const char *last) const;
+	std::string GetClientName() const;
 
 	void CheckNextClientToSendMap(NetworkClientSocket *ignore_cs = nullptr);
 
@@ -121,7 +127,7 @@ public:
 	NetworkRecvStatus SendJoin(ClientID client_id);
 	NetworkRecvStatus SendFrame();
 	NetworkRecvStatus SendSync();
-	NetworkRecvStatus SendCommand(const CommandPacket &cp);
+	NetworkRecvStatus SendCommand(const OutgoingCommandPacket &cp);
 	NetworkRecvStatus SendCompanyUpdate();
 	NetworkRecvStatus SendConfigUpdate();
 	NetworkRecvStatus SendSettingsAccessUpdate(bool ok);
@@ -150,6 +156,7 @@ public:
 	}
 
 	const char *GetClientIP();
+	std::string_view GetPeerPublicKey() const { return this->peer_public_key; }
 
 	static ServerNetworkGameSocketHandler *GetByClientID(ClientID client_id);
 };

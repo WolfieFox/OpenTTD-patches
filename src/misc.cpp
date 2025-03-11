@@ -47,8 +47,6 @@
 
 #include "safeguards.h"
 
-std::string _savegame_id; ///< Unique ID of the current savegame.
-
 extern TileIndex _cur_tileloop_tile;
 extern TileIndex _aux_tileloop_tile;
 extern void ClearAllSignalSpeedRestrictions();
@@ -71,7 +69,6 @@ void InitializeObjects();
 void InitializeTrees();
 void InitializeCompanies();
 void InitializeCheats();
-void InitializeNPF();
 void InitializeOldNames();
 
 /**
@@ -104,7 +101,7 @@ std::string GenerateUid(std::string_view subject)
  */
 void GenerateSavegameId()
 {
-	_savegame_id = GenerateUid("OpenTTD Savegame ID");
+	_game_session_stats.savegame_id = GenerateUid("OpenTTD Savegame ID");
 }
 
 void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settings)
@@ -130,29 +127,35 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 	_pause_countdown = 0;
 	_game_speed = 100;
 	CalTime::Detail::now.sub_date_fract = 0;
+	EconTime::Detail::years_elapsed = EconTime::YearDelta{0};
 	_tick_counter = 0;
 	DateDetail::_tick_skip_counter = 0;
 	_scaled_tick_counter = 0;
 	_state_ticks = INITIAL_STATE_TICKS_VALUE;
-	DateDetail::_state_ticks_offset = 0;
-	_cur_tileloop_tile = 1;
-	_aux_tileloop_tile = 1;
+	DateDetail::_state_ticks_offset = StateTicksDelta{0};
+	_cur_tileloop_tile = TileIndex{1};
+	_aux_tileloop_tile = TileIndex{1};
 	_thd.redsq = INVALID_TILE;
 	_road_layout_change_counter = 0;
 	_loaded_local_company = COMPANY_SPECTATOR;
 	_game_events_since_load = (GameEventFlags) 0;
 	_game_events_overall = (GameEventFlags) 0;
-	_game_load_cur_date_ymd = { 0, 0, 0 };
+	_game_load_cur_date_ymd = { EconTime::Year{0}, 0, 0 };
 	_game_load_date_fract = 0;
 	_game_load_tick_skip_counter = 0;
-	_game_load_state_ticks = 0;
+	_game_load_state_ticks = StateTicks{0};
 	_game_load_time = 0;
 	_extra_aspects = 0;
 	_aspect_cfg_hash = 0;
 	_station_tile_cache_hash = 0;
 	InitGRFGlobalVars();
 	_loadgame_DBGL_data.clear();
-	if (reset_settings) MakeNewgameSettingsLive();
+	if (reset_settings) {
+		MakeNewgameSettingsLive();
+	} else {
+		UpdateEffectiveDayLengthFactor();
+		SetupTickRate();
+	}
 
 	_newgrf_profilers.clear();
 
@@ -161,15 +164,13 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 		if (EconTime::UsingWallclockUnits()) {
 			EconTime::Detail::SetDate(EconTime::DAYS_TILL_ORIGINAL_BASE_YEAR_WALLCLOCK_MODE, 0);
 		} else {
-			EconTime::Detail::SetDate(CalTime::CurDate().base(), 0);
+			EconTime::Detail::SetDate(ToEconTimeCast(CalTime::CurDate()), 0);
 		}
+		EconTime::Detail::period_display_offset = EconTime::Year{1} - EconTime::CurYear();
 		InitializeOldNames();
 	} else {
 		RecalculateStateTicksOffset();
 	}
-
-	UpdateEffectiveDayLengthFactor();
-	SetupTickRate();
 
 	UpdateCachedSnowLine();
 	UpdateCachedSnowLineBounds();
@@ -183,6 +184,9 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 	extern void ClearNewSignalStyleMapping();
 	ClearNewSignalStyleMapping();
 
+	extern void ClearPendingSignalUpdates();
+	ClearPendingSignalUpdates();
+
 	RebuildStationKdtree();
 	RebuildTownKdtree();
 	RebuildViewportKdtree();
@@ -195,6 +199,7 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 	ClearZoningCaches();
 	InvalidatePlanCaches();
 	IntialiseOrderDestinationRefcountMap();
+	TraceRestrictClearRecentSlotsAndCounters();
 
 	ResetPersistentNewGRFData();
 
@@ -216,9 +221,6 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 	InitializeTrees();
 	InitializeIndustries();
 	InitializeObjects();
-	InitializeBuildingCounts();
-
-	InitializeNPF();
 
 	InitializeCompanies();
 	AI::Initialize();

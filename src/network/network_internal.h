@@ -36,19 +36,6 @@ static const uint32_t FIND_SERVER_EXTENDED_TOKEN = 0x2A49582A;
 #define ENABLE_NETWORK_SYNC_EVERY_FRAME
 #endif /* RANDOM_DEBUG */
 
-/**
- * Helper variable to make the dedicated server go fast until the (first) join.
- * Used to load the desync debug logs, i.e. for reproducing a desync.
- * There's basically no need to ever enable this, unless you really know what
- * you are doing, i.e. debugging a desync.
- * See docs/desync.txt for details.
- */
-#ifdef DEBUG_DUMP_COMMANDS
-extern bool _ddc_fastforward;
-#else
-#define _ddc_fastforward (false)
-#endif /* DEBUG_DUMP_COMMANDS */
-
 typedef class ServerNetworkGameSocketHandler NetworkClientSocket;
 
 /** Status of the clients during joining. */
@@ -121,14 +108,48 @@ struct NetworkSharedSecrets {
 /**
  * Everything we need to know about a command to be able to execute it.
  */
-struct CommandPacket : CommandContainer {
+template <typename T>
+struct GeneralCommandPacket {
 	/** Make sure the pointer is nullptr. */
-	CommandPacket() : frame(0), client_id(INVALID_CLIENT_ID), company(INVALID_COMPANY), my_cmd(false) {}
+	GeneralCommandPacket() : frame(0), client_id(INVALID_CLIENT_ID), company(INVALID_COMPANY), my_cmd(false) {}
+
 	uint32_t frame;      ///< the frame in which this packet is executed
 	ClientID client_id;  ///< originating client ID (or INVALID_CLIENT_ID if not specified)
 	CompanyID company;   ///< company that is executing the command
 	bool my_cmd;         ///< did the command originate from "me"
+
+	T command_container;              ///< command being executed.
+	CommandCallback callback;         ///< any callback function executed upon successful completion of the command.
+	CallbackParameter callback_param; ///< arbitrary data associated with callback.
 };
+
+struct CommandPacket : public GeneralCommandPacket<DynBaseCommandContainer> {};
+struct OutgoingCommandPacket : public GeneralCommandPacket<SerialisedBaseCommandContainer> {};
+
+inline OutgoingCommandPacket SerialiseCommandPacketUsingPayload(const CommandPacket &cp, const CommandPayloadBase &payload)
+{
+	OutgoingCommandPacket out;
+
+	out.frame = cp.frame;
+	out.client_id = cp.client_id;
+	out.company = cp.company;
+	out.my_cmd = cp.my_cmd;
+
+	out.command_container.cmd = cp.command_container.cmd;
+	out.command_container.error_msg = cp.command_container.error_msg;
+	out.command_container.tile = cp.command_container.tile;
+	payload.Serialise(BufferSerialisationRef(out.command_container.payload.serialised_data));
+
+	out.callback = cp.callback;
+	out.callback_param = cp.callback_param;
+
+	return out;
+}
+
+inline OutgoingCommandPacket SerialiseCommandPacket(const CommandPacket &cp)
+{
+	return SerialiseCommandPacketUsingPayload(cp, *cp.command_container.payload);
+}
 
 void NetworkDistributeCommands();
 void NetworkExecuteLocalCommandQueue();

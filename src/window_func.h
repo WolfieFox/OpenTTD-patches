@@ -22,7 +22,7 @@ Window *FindWindowByToken(WindowToken token);
 Window *GetMainWindow();
 void ChangeWindowOwner(Owner old_owner, Owner new_owner);
 
-void ResizeWindow(Window *w, int x, int y, bool clamp_to_screen = true);
+void ResizeWindow(Window *w, int x, int y, bool clamp_to_screen = true, bool schedule_resize = true);
 int PositionMainToolbar(Window *w);
 int PositionStatusbar(Window *w);
 int PositionNewsMessage(Window *w);
@@ -74,6 +74,6 @@ bool EditBoxInGlobalFocus();
 bool FocusedWindowIsConsole();
 Point GetCaretPosition();
 
-char *DumpWindowInfo(char *b, const char *last, const Window *w);
+void DumpWindowInfo(struct format_target &buffer, const Window *w);
 
 #endif /* WINDOW_FUNC_H */

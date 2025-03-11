@@ -48,6 +48,7 @@ enum StringControlCode {
 	SCC_PRESIDENT_NAME,
 	SCC_ENGINE_NAME,
 	SCC_TR_SLOT_NAME,
+	SCC_TR_SLOT_GROUP_NAME,
 	SCC_TR_COUNTER_NAME,
 
 	SCC_VIEWPORT_TOWN_LABEL1,
@@ -87,6 +88,7 @@ enum StringControlCode {
 	SCC_TT_TICKS,
 	SCC_TT_TICKS_LONG,
 	SCC_TT_TIME,
+	SCC_TT_TIME_ABS,
 
 	/* Must be consecutive */
 	SCC_STRING1,

@@ -30,7 +30,7 @@ struct CanalScopeResolver : public ScopeResolver {
 	}
 
 	uint32_t GetRandomBits() const override;
-	uint32_t GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const override;
+	uint32_t GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra &extra) const override;
 };
 
 /** Resolver object for canals. */
@@ -59,7 +59,7 @@ struct CanalResolverObject : public ResolverObject {
 	return IsTileType(this->tile, MP_WATER) ? GetWaterTileRandomBits(this->tile) : 0;
 }
 
-/* virtual */ uint32_t CanalScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra *extra) const
+/* virtual */ uint32_t CanalScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra &extra) const
 {
 	switch (variable) {
 		/* Height of tile */
@@ -85,14 +85,14 @@ struct CanalResolverObject : public ResolverObject {
 		 */
 		case 0x82: {
 			uint32_t connectivity =
-				  (!IsWateredTile(TILE_ADDXY(tile, -1,  0), DIR_SW) << 0)  // NE
-				+ (!IsWateredTile(TILE_ADDXY(tile,  0,  1), DIR_NW) << 1)  // SE
-				+ (!IsWateredTile(TILE_ADDXY(tile,  1,  0), DIR_NE) << 2)  // SW
-				+ (!IsWateredTile(TILE_ADDXY(tile,  0, -1), DIR_SE) << 3)  // NW
-				+ (!IsWateredTile(TILE_ADDXY(tile, -1,  1), DIR_W)  << 4)  // E
-				+ (!IsWateredTile(TILE_ADDXY(tile,  1,  1), DIR_N)  << 5)  // S
-				+ (!IsWateredTile(TILE_ADDXY(tile,  1, -1), DIR_E)  << 6)  // W
-				+ (!IsWateredTile(TILE_ADDXY(tile, -1, -1), DIR_S)  << 7); // N
+				  (!IsWateredTile(TileAddXY(tile, -1,  0), DIR_SW) << 0)  // NE
+				+ (!IsWateredTile(TileAddXY(tile,  0,  1), DIR_NW) << 1)  // SE
+				+ (!IsWateredTile(TileAddXY(tile,  1,  0), DIR_NE) << 2)  // SW
+				+ (!IsWateredTile(TileAddXY(tile,  0, -1), DIR_SE) << 3)  // NW
+				+ (!IsWateredTile(TileAddXY(tile, -1,  1), DIR_W)  << 4)  // E
+				+ (!IsWateredTile(TileAddXY(tile,  1,  1), DIR_N)  << 5)  // S
+				+ (!IsWateredTile(TileAddXY(tile,  1, -1), DIR_E)  << 6)  // W
+				+ (!IsWateredTile(TileAddXY(tile, -1, -1), DIR_S)  << 7); // N
 			return connectivity;
 		}
 
@@ -100,9 +100,9 @@ struct CanalResolverObject : public ResolverObject {
 		case 0x83: return IsTileType(this->tile, MP_WATER) ? GetWaterTileRandomBits(this->tile) : 0;
 	}
 
-	DEBUG(grf, 1, "Unhandled canal variable 0x%02X", variable);
+	Debug(grf, 1, "Unhandled canal variable 0x{:02X}", variable);
 
-	extra->available = false;
+	extra.available = false;
 	return UINT_MAX;
 }
 

@@ -39,7 +39,7 @@ SignID _new_sign_id;
 CommandCost CmdPlaceSign(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
 {
 	/* Try to locate a new sign */
-	if (!Sign::CanAllocateItem()) return_cmd_error(STR_ERROR_TOO_MANY_SIGNS);
+	if (!Sign::CanAllocateItem()) return CommandCost(STR_ERROR_TOO_MANY_SIGNS);
 
 	/* Check sign text length if any */
 	if (!StrEmpty(text) && Utf8StringLength(text) >= MAX_LENGTH_SIGN_NAME_CHARS) return CMD_ERROR;
@@ -116,7 +116,7 @@ CommandCost CmdRenameSign(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint
  * @param p2 unused
  * @param cmd unused
  */
-void CcPlaceSign(const CommandCost &result, TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint32_t cmd)
+void CcPlaceSign(const CommandCost &result)
 {
 	if (result.Failed()) return;
 
@@ -132,5 +132,5 @@ void CcPlaceSign(const CommandCost &result, TileIndex tile, uint32_t p1, uint32_
  */
 void PlaceProc_Sign(TileIndex tile)
 {
-	DoCommandP(tile, 0, 0, CMD_PLACE_SIGN | CMD_MSG(STR_ERROR_CAN_T_PLACE_SIGN_HERE), CcPlaceSign);
+	DoCommandPOld(tile, 0, 0, CMD_PLACE_SIGN | CMD_MSG(STR_ERROR_CAN_T_PLACE_SIGN_HERE), CommandCallback::PlaceSign);
 }

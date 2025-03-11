@@ -21,14 +21,14 @@ void ScriptTileList::AddRectangle(TileIndex t1, TileIndex t2)
 	if (!::IsValidTile(t2)) return;
 
 	TileArea ta(t1, t2);
-	for (TileIndex t : ta) this->AddItem(t);
+	for (TileIndex t : ta) this->AddItem(t.base());
 }
 
 void ScriptTileList::AddTile(TileIndex tile)
 {
 	if (!::IsValidTile(tile)) return;
 
-	this->AddItem(tile);
+	this->AddItem(tile.base());
 }
 
 void ScriptTileList::RemoveRectangle(TileIndex t1, TileIndex t2)
@@ -37,14 +37,14 @@ void ScriptTileList::RemoveRectangle(TileIndex t1, TileIndex t2)
 	if (!::IsValidTile(t2)) return;
 
 	TileArea ta(t1, t2);
-	for (TileIndex t : ta) this->RemoveItem(t);
+	for (TileIndex t : ta) this->RemoveItem(t.base());
 }
 
 void ScriptTileList::RemoveTile(TileIndex tile)
 {
 	if (!::IsValidTile(tile)) return;
 
-	this->RemoveItem(tile);
+	this->RemoveItem(tile.base());
 }
 
 /**
@@ -96,11 +96,8 @@ ScriptTileList_IndustryAccepting::ScriptTileList_IndustryAccepting(IndustryID in
 		 *  industry triggers the acceptance). */
 		CargoArray acceptance = ::GetAcceptanceAroundTiles(cur_tile, 1, 1, radius);
 		{
-			bool cargo_accepts = false;
-			for (byte j = 0; j < lengthof(i->accepts_cargo); j++) {
-				if (i->accepts_cargo[j] != INVALID_CARGO && acceptance[i->accepts_cargo[j]] != 0) cargo_accepts = true;
-			}
-			if (!cargo_accepts) continue;
+			const auto &accepted = i->Accepted();
+			if (std::none_of(std::begin(accepted), std::end(accepted), [&acceptance](const auto &a) { return ::IsValidCargoID(a.cargo) && acceptance[a.cargo] != 0; })) continue;
 		}
 
 		this->AddTile(cur_tile);
@@ -139,17 +136,17 @@ ScriptTileList_StationType::ScriptTileList_StationType(StationID station_id, Scr
 	uint station_type_value = 0;
 	/* Convert ScriptStation::StationType to ::StationType, but do it in a
 	 *  bitmask, so we can scan for multiple entries at the same time. */
-	if ((station_type & ScriptStation::STATION_TRAIN) != 0)      station_type_value |= (1 << ::STATION_RAIL);
-	if ((station_type & ScriptStation::STATION_TRUCK_STOP) != 0) station_type_value |= (1 << ::STATION_TRUCK);
-	if ((station_type & ScriptStation::STATION_BUS_STOP) != 0)   station_type_value |= (1 << ::STATION_BUS);
-	if ((station_type & ScriptStation::STATION_AIRPORT) != 0)    station_type_value |= (1 << ::STATION_AIRPORT) | (1 << ::STATION_OILRIG);
-	if ((station_type & ScriptStation::STATION_DOCK) != 0)       station_type_value |= (1 << ::STATION_DOCK)    | (1 << ::STATION_OILRIG);
+	if ((station_type & ScriptStation::STATION_TRAIN) != 0)      station_type_value |= (1 << to_underlying(::StationType::Rail));
+	if ((station_type & ScriptStation::STATION_TRUCK_STOP) != 0) station_type_value |= (1 << to_underlying(::StationType::Truck));
+	if ((station_type & ScriptStation::STATION_BUS_STOP) != 0)   station_type_value |= (1 << to_underlying(::StationType::Bus));
+	if ((station_type & ScriptStation::STATION_AIRPORT) != 0)    station_type_value |= (1 << to_underlying(::StationType::Airport)) | (1 << to_underlying(::StationType::Oilrig));
+	if ((station_type & ScriptStation::STATION_DOCK) != 0)       station_type_value |= (1 << to_underlying(::StationType::Dock))    | (1 << to_underlying(::StationType::Oilrig));
 
 	TileArea ta(::TileXY(rect->left, rect->top), rect->Width(), rect->Height());
 	for (TileIndex cur_tile : ta) {
 		if (!::IsTileType(cur_tile, MP_STATION)) continue;
 		if (::GetStationIndex(cur_tile) != station_id) continue;
-		if (!HasBit(station_type_value, ::GetStationType(cur_tile))) continue;
+		if (!HasBit(station_type_value, to_underlying(::GetStationType(cur_tile)))) continue;
 		this->AddTile(cur_tile);
 	}
 }
@@ -158,7 +155,10 @@ ScriptTileList_StationCoverage::ScriptTileList_StationCoverage(StationID station
 {
 	if (!ScriptStation::IsValidStation(station_id)) return;
 
-	BitmapTileIterator it(::Station::Get(station_id)->catchment_tiles);
+	const BitmapTileArea &ta = ::Station::Get(station_id)->catchment_tiles;
+	if (ta.tile == INVALID_TILE) return;
+
+	BitmapTileIterator it(ta);
 	for (TileIndex tile = it; tile != INVALID_TILE; tile = ++it) {
 		this->AddTile(tile);
 	}

@@ -35,7 +35,7 @@
 	return !_networking || (_network_server && _settings_game.ai.ai_in_multiplayer);
 }
 
-/* static */ void AI::StartNew(CompanyID company, bool deviate)
+/* static */ void AI::StartNew(CompanyID company)
 {
 	assert(Company::IsValidID(company));
 
@@ -58,12 +58,11 @@
 		/* Load default data and store the name in the settings */
 		config->Change(info->GetName(), -1, false);
 	}
-	if (deviate) config->AddRandomDeviation(company);
 	config->AnchorUnchangeableSettings();
 
 	c->ai_info = info;
 	assert(c->ai_instance == nullptr);
-	c->ai_instance = new AIInstance();
+	c->ai_instance = std::make_unique<AIInstance>();
 	c->ai_instance->Initialize(info);
 	c->ai_instance->LoadOnStack(config->GetToLoadData());
 	config->SetToLoadData(nullptr);
@@ -87,7 +86,7 @@
 	Backup<CompanyID> cur_company(_current_company, FILE_LINE);
 	for (const Company *c : Company::Iterate()) {
 		if (c->is_ai) {
-			SCOPE_INFO_FMT([&], "AI::GameLoop: %i: %s (v%d)\n", (int)c->index, c->ai_info->GetName().c_str(), c->ai_info->GetVersion());
+			SCOPE_INFO_FMT([&], "AI::GameLoop: {}: {} (v{})\n", (int)c->index, c->ai_info->GetName(), c->ai_info->GetVersion());
 			PerformanceMeasurer framerate((PerformanceElement)(PFE_AI0 + c->index));
 			cur_company.Change(c->index);
 			c->ai_instance->GameLoop();
@@ -116,8 +115,7 @@
 	Backup<CompanyID> cur_company(_current_company, company, FILE_LINE);
 	Company *c = Company::Get(company);
 
-	delete c->ai_instance;
-	c->ai_instance = nullptr;
+	c->ai_instance.reset();
 	c->ai_info = nullptr;
 	c->ai_config.reset();
 
@@ -211,25 +209,30 @@
 	for (CompanyID c = COMPANY_FIRST; c < MAX_COMPANIES; c++) {
 		if (_settings_game.ai_config[c] != nullptr && _settings_game.ai_config[c]->HasScript()) {
 			if (!_settings_game.ai_config[c]->ResetInfo(true)) {
-				DEBUG(script, 0, "After a reload, the AI by the name '%s' was no longer found, and removed from the list.", _settings_game.ai_config[c]->GetName().c_str());
+				Debug(script, 0, "After a reload, the AI by the name '{}' was no longer found, and removed from the list.", _settings_game.ai_config[c]->GetName());
 				_settings_game.ai_config[c]->Change(std::nullopt);
-				if (Company::IsValidAiID(c)) {
-					/* The code belonging to an already running AI was deleted. We can only do
-					 * one thing here to keep everything sane and that is kill the AI. After
-					 * killing the offending AI we start a random other one in it's place, just
-					 * like what would happen if the AI was missing during loading. */
-					AI::Stop(c);
-					AI::StartNew(c, false);
-				}
-			} else if (Company::IsValidAiID(c)) {
-				/* Update the reference in the Company struct. */
-				Company::Get(c)->ai_info = _settings_game.ai_config[c]->GetInfo();
 			}
 		}
+
 		if (_settings_newgame.ai_config[c] != nullptr && _settings_newgame.ai_config[c]->HasScript()) {
 			if (!_settings_newgame.ai_config[c]->ResetInfo(false)) {
-				DEBUG(script, 0, "After a reload, the AI by the name '%s' was no longer found, and removed from the list.", _settings_newgame.ai_config[c]->GetName().c_str());
+				Debug(script, 0, "After a reload, the AI by the name '{}' was no longer found, and removed from the list.", _settings_newgame.ai_config[c]->GetName());
 				_settings_newgame.ai_config[c]->Change(std::nullopt);
+			}
+		}
+
+		if (Company::IsValidAiID(c) && Company::Get(c)->ai_config != nullptr) {
+			AIConfig *config = Company::Get(c)->ai_config.get();
+			if (!config->ResetInfo(true)) {
+				/* The code belonging to an already running AI was deleted. We can only do
+				 * one thing here to keep everything sane and that is kill the AI. After
+				 * killing the offending AI we start a random other one in it's place, just
+				 * like what would happen if the AI was missing during loading. */
+				AI::Stop(c);
+				AI::StartNew(c);
+			} else {
+				/* Update the reference in the Company struct. */
+				Company::Get(c)->ai_info = config->GetInfo();
 			}
 		}
 	}
@@ -237,18 +240,15 @@
 
 /* static */ void AI::NewEvent(CompanyID company, ScriptEvent *event)
 {
-	/* AddRef() and Release() need to be called at least once, so do it here */
-	event->AddRef();
+	ScriptObjectRef counter(event);
 
 	/* Clients should ignore events */
 	if (_networking && !_network_server) {
-		event->Release();
 		return;
 	}
 
 	/* Only AIs can have an event-queue */
 	if (!Company::IsValidAiID(company)) {
-		event->Release();
 		return;
 	}
 
@@ -256,18 +256,14 @@
 	Backup<CompanyID> cur_company(_current_company, company, FILE_LINE);
 	Company::Get(_current_company)->ai_instance->InsertEvent(event);
 	cur_company.Restore();
-
-	event->Release();
 }
 
 /* static */ void AI::BroadcastNewEvent(ScriptEvent *event, CompanyID skip_company)
 {
-	/* AddRef() and Release() need to be called at least once, so do it here */
-	event->AddRef();
+	ScriptObjectRef counter(event);
 
 	/* Clients should ignore events */
 	if (_networking && !_network_server) {
-		event->Release();
 		return;
 	}
 
@@ -275,22 +271,24 @@
 	for (CompanyID c = COMPANY_FIRST; c < MAX_COMPANIES; c++) {
 		if (c != skip_company) AI::NewEvent(c, event);
 	}
-
-	event->Release();
 }
 
 /* static */ void AI::Save(CompanyID company)
 {
 	if (!_networking || _network_server) {
 		Company *c = Company::GetIfValid(company);
-		assert(c != nullptr && c->ai_instance != nullptr);
+		assert(c != nullptr);
 
-		Backup<CompanyID> cur_company(_current_company, company, FILE_LINE);
-		c->ai_instance->Save();
-		cur_company.Restore();
-	} else {
-		AIInstance::SaveEmpty();
+		/* When doing emergency saving, an AI can be not fully initialised. */
+		if (c->ai_instance != nullptr) {
+			Backup<CompanyID> cur_company(_current_company, company, FILE_LINE);
+			c->ai_instance->Save();
+			cur_company.Restore();
+			return;
+		}
 	}
+
+	AIInstance::SaveEmpty();
 }
 
 /* static */ std::string AI::GetConsoleList(bool newest_only)

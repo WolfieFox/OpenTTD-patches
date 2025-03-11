@@ -83,6 +83,7 @@
 #include <algorithm>
 
 #include "../safeguards.h"
+#include "window_func.h"
 
 extern bool IndividualRoadVehicleController(RoadVehicle *v, const RoadVehicle *prev);
 
@@ -169,7 +170,7 @@ void SetWaterClassDependingOnSurroundings(TileIndex t, bool include_invalid_wate
 
 static void ConvertTownOwner()
 {
-	for (TileIndex tile = 0; tile != MapSize(); tile++) {
+	for (TileIndex tile(0); tile != MapSize(); ++tile) {
 		switch (GetTileType(tile)) {
 			case MP_ROAD:
 				if (GB(_m[tile].m5, 4, 2) == ROAD_TILE_CROSSING && HasBit(_m[tile].m3, 7)) {
@@ -203,7 +204,7 @@ static void UpdateExclusiveRights()
 	 */
 }
 
-static const byte convert_currency[] = {
+static const uint8_t convert_currency[] = {
 	 0,  1, 12,  8,  3,
 	10, 14, 19,  4,  5,
 	 9, 11, 13,  6, 17,
@@ -279,6 +280,8 @@ static void InitializeWindowsAndCaches()
 		 * thus the MIN_YEAR (which is really nothing more than Zero, initialized value) test */
 		if (_file_to_saveload.abstract_ftype == FT_SCENARIO && c->inaugurated_year != CalTime::MIN_YEAR) {
 			c->inaugurated_year = CalTime::CurYear();
+			c->display_inaugurated_period = EconTime::Detail::WallClockYearToDisplay(EconTime::CurYear());
+			c->age_years = EconTime::YearDelta{0};
 		}
 	}
 
@@ -306,10 +309,8 @@ static void InitializeWindowsAndCaches()
 			it->tile = t->xy;
 		}
 	}
-	for (RoadVehicle *rv : RoadVehicle::Iterate()) {
-		if (rv->IsFrontEngine()) {
-			rv->CargoChanged();
-		}
+	for (RoadVehicle *rv : RoadVehicle::IterateFrontOnly()) {
+		rv->CargoChanged();
 	}
 
 	RecomputePrices();
@@ -388,16 +389,16 @@ static void ResetSignalHandlers()
  * @param c the GRF to get the 'previous' version of.
  * @return the GRF identifier or \a c if none could be found.
  */
-static const GRFIdentifier *GetOverriddenIdentifier(const GRFConfig *c)
+static const GRFIdentifier &GetOverriddenIdentifier(const GRFConfig *c)
 {
 	const LoggedAction &la = _gamelog_actions.back();
-	if (la.at != GLAT_LOAD) return &c->ident;
+	if (la.at != GLAT_LOAD) return c->ident;
 
 	for (const LoggedChange &lc : la.changes) {
-		if (lc.ct == GLCT_GRFCOMPAT && lc.grfcompat.grfid == c->ident.grfid) return &lc.grfcompat;
+		if (lc.ct == GLCT_GRFCOMPAT && lc.grfcompat.grfid == c->ident.grfid) return lc.grfcompat;
 	}
 
-	return &c->ident;
+	return c->ident;
 }
 
 /** Was the saveload crash because of missing NewGRFs? */
@@ -427,16 +428,15 @@ static void CDECL HandleSavegameLoadCrash(int signum)
 {
 	ResetSignalHandlers();
 
-	char buffer[8192];
-	char *p = buffer;
-	p += seprintf(p, lastof(buffer), "Loading your savegame caused OpenTTD to crash.\n");
+	format_buffer buffer;
+	buffer.append("Loading your savegame caused OpenTTD to crash.\n");
 
 	for (const GRFConfig *c = _grfconfig; !_saveload_crash_with_missing_newgrfs && c != nullptr; c = c->next) {
 		_saveload_crash_with_missing_newgrfs = HasBit(c->flags, GCF_COMPATIBLE) || c->status == GCS_NOT_FOUND;
 	}
 
 	if (_saveload_crash_with_missing_newgrfs) {
-		p += seprintf(p, lastof(buffer),
+		buffer.append(
 			"This is most likely caused by a missing NewGRF or a NewGRF that\n"
 			"has been loaded as replacement for a missing NewGRF. OpenTTD\n"
 			"cannot easily determine whether a replacement NewGRF is of a newer\n"
@@ -451,21 +451,16 @@ static void CDECL HandleSavegameLoadCrash(int signum)
 
 		for (const GRFConfig *c = _grfconfig; c != nullptr; c = c->next) {
 			if (HasBit(c->flags, GCF_COMPATIBLE)) {
-				const GRFIdentifier *replaced = GetOverriddenIdentifier(c);
-				char original_md5[40];
-				char replaced_md5[40];
-				md5sumToString(original_md5, lastof(original_md5), c->original_md5sum);
-				md5sumToString(replaced_md5, lastof(replaced_md5), replaced->md5sum);
-				p += seprintf(p, lastof(buffer), "NewGRF %08X (checksum %s) not found.\n  Loaded NewGRF \"%s\" (checksum %s) with same GRF ID instead.\n", BSWAP32(c->ident.grfid), original_md5, c->filename.c_str(), replaced_md5);
+				const GRFIdentifier &replaced = GetOverriddenIdentifier(c);
+				buffer.format("NewGRF {:08X} (checksum {}) not found.\n  Loaded NewGRF \"{}\" (checksum {}) with same GRF ID instead.\n",
+						BSWAP32(c->ident.grfid), c->original_md5sum, c->filename, replaced.md5sum);
 			}
 			if (c->status == GCS_NOT_FOUND) {
-				char buf[40];
-				md5sumToString(buf, lastof(buf), c->ident.md5sum);
-				p += seprintf(p, lastof(buffer), "NewGRF %08X (%s) not found; checksum %s.\n", BSWAP32(c->ident.grfid), c->filename.c_str(), buf);
+				buffer.format("NewGRF {:08X} ({}) not found; checksum {}.\n", BSWAP32(c->ident.grfid), c->filename, c->ident.md5sum);
 			}
 		}
 	} else {
-		p += seprintf(p, lastof(buffer),
+		buffer.append(
 			"This is probably caused by a corruption in the savegame.\n"
 			"Please file a bug report and attach this savegame.\n");
 	}
@@ -571,12 +566,12 @@ static uint FixVehicleInclination(Vehicle *v, Direction dir)
 		case INVALID_DIR: break;
 		default: NOT_REACHED();
 	}
-	byte entry_z = GetSlopePixelZ(entry_x, entry_y, true);
+	uint8_t entry_z = GetSlopePixelZ(entry_x, entry_y, true);
 
 	/* Compute middle of the tile. */
 	int middle_x = (v->x_pos & ~TILE_UNIT_MASK) + TILE_SIZE / 2;
 	int middle_y = (v->y_pos & ~TILE_UNIT_MASK) + TILE_SIZE / 2;
-	byte middle_z = GetSlopePixelZ(middle_x, middle_y, true);
+	uint8_t middle_z = GetSlopePixelZ(middle_x, middle_y, true);
 
 	/* middle_z == entry_z, no height change. */
 	if (middle_z == entry_z) return 0;
@@ -647,13 +642,24 @@ static void StartScripts()
 
 	/* Start the AIs. */
 	for (const Company *c : Company::Iterate()) {
-		if (Company::IsValidAiID(c->index)) AI::StartNew(c->index, false);
+		if (Company::IsValidAiID(c->index)) AI::StartNew(c->index);
 	}
 
 	/* Start the GameScript. */
-	Game::StartNew(false);
+	Game::StartNew();
 
 	ShowScriptDebugWindowIfScriptError();
+}
+
+template <typename F>
+void IterateVehicleAndOrderListOrders(F func)
+{
+	IterateAllNonVehicleOrders([&](Order *order) {
+		func(order);
+	});
+	for (Vehicle *v : Vehicle::IterateFrontOnly()) {
+		func(&(v->current_order));
+	}
 }
 
 /**
@@ -665,17 +671,26 @@ bool AfterLoadGame()
 {
 	SetSignalHandlers();
 
-	TileIndex map_size = MapSize();
+	const uint32_t map_size = MapSize();
 
+	/* Only new games can use wallclock units. */
+	if (SlXvIsFeatureMissing(XSLFI_VARIABLE_DAY_LENGTH, 5) && IsSavegameVersionBefore(SLV_ECONOMY_MODE_TIMEKEEPING_UNITS)) {
+		_settings_game.economy.timekeeping_units = TKU_CALENDAR;
+	}
+	/* Wallclock unit games which previously ran at an effective day length of 1 should remain that way */
+	if (SlXvIsFeatureMissing(XSLFI_VARIABLE_DAY_LENGTH, 7) && _settings_game.economy.timekeeping_units == TKU_WALLCLOCK) {
+		_settings_game.economy.day_length_factor = 1;
+	}
 	UpdateEffectiveDayLengthFactor();
+
 	SetupTickRate();
 
 	extern TileIndex _cur_tileloop_tile; // From landscape.cpp.
 	/* The LFSR used in RunTileLoop iteration cannot have a zeroed state, make it non-zeroed. */
-	if (_cur_tileloop_tile == 0) _cur_tileloop_tile = 1;
+	if (_cur_tileloop_tile == 0) _cur_tileloop_tile = TileIndex{1};
 
 	extern TileIndex _aux_tileloop_tile;
-	if (_aux_tileloop_tile == 0) _aux_tileloop_tile = 1;
+	if (_aux_tileloop_tile == 0) _aux_tileloop_tile = TileIndex{1};
 
 	if (IsSavegameVersionBefore(SLV_98)) GamelogOldver();
 
@@ -694,8 +709,8 @@ bool AfterLoadGame()
 	if (IsSavegameVersionBefore(SLV_119)) {
 		_pause_mode = (_pause_mode == 2) ? PM_PAUSED_NORMAL : PM_UNPAUSED;
 	} else if (_network_dedicated && (_pause_mode & PM_PAUSED_ERROR) != 0) {
-		DEBUG(net, 0, "The loading savegame was paused due to an error state");
-		DEBUG(net, 0, "  This savegame cannot be used for multiplayer");
+		Debug(net, 0, "The loading savegame was paused due to an error state");
+		Debug(net, 0, "  This savegame cannot be used for multiplayer");
 		/* Restore the signals */
 		ResetSignalHandlers();
 		return false;
@@ -720,7 +735,7 @@ bool AfterLoadGame()
 		for (Station *st : Station::Iterate()) {
 			st->train_station.w = st->train_station.h = 0;
 		}
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (!IsTileType(t, MP_STATION)) continue;
 			if (_m[t].m5 > 7) continue; // is it a rail station tile?
 			Station *st = Station::Get(_m[t].m2);
@@ -737,7 +752,7 @@ bool AfterLoadGame()
 		_settings_game.construction.map_height_limit = 15;
 
 		/* In old savegame versions, the heightlevel was coded in bits 0..3 of the type field */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			_m[t].height = GB(_m[t].type, 0, 4);
 			SB(_m[t].type, 0, 2, GB(_me[t].m6, 0, 2));
 			SB(_me[t].m6, 0, 2, 0);
@@ -749,7 +764,7 @@ bool AfterLoadGame()
 			}
 		}
 	} else if (IsSavegameVersionBefore(SLV_194) && SlXvIsFeaturePresent(XSLFI_HEIGHT_8_BIT)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			SB(_m[t].type, 0, 2, GB(_me[t].m6, 0, 2));
 			SB(_me[t].m6, 0, 2, 0);
 			if (MayHaveBridgeAbove(t)) {
@@ -775,7 +790,7 @@ bool AfterLoadGame()
 	 * (4.3) version, so I just check when versions are older, and then
 	 * walk through the whole map.. */
 	if (IsSavegameVersionBefore(SLV_4, 3)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_WATER) && GetTileOwner(t) >= MAX_COMPANIES) {
 				SetTileOwner(t, OWNER_WATER);
 			}
@@ -829,7 +844,7 @@ bool AfterLoadGame()
 		if (c->status == GCS_NOT_FOUND) {
 			GamelogGRFRemove(c->ident.grfid);
 		} else if (HasBit(c->flags, GCF_COMPATIBLE)) {
-			GamelogGRFCompatible(&c->ident);
+			GamelogGRFCompatible(c->ident);
 		}
 	}
 
@@ -865,23 +880,21 @@ bool AfterLoadGame()
 		_scaled_tick_counter = (uint64_t)((_tick_counter * DayLengthFactor()) + TickSkipCounter());
 	}
 	if (SlXvIsFeaturePresent(XSLFI_VARIABLE_DAY_LENGTH, 1, 3)) {
-		_state_ticks = GetStateTicksFromCurrentDateWithoutOffset() + DateDetail::_state_ticks_offset;
+		/* CalTime is used here because EconTime hasn't been set yet, but this needs to be done before setting EconTime::Detail::SetDate,
+		 * because that calls RecalculateStateTicksOffset which overwrites DateDetail::_state_ticks_offset which is an input here */
+		_state_ticks = GetStateTicksFromDateWithoutOffset(ToEconTimeCast(CalTime::CurDate()), CalTime::CurDateFract());
+		if (SlXvIsFeaturePresent(XSLFI_VARIABLE_DAY_LENGTH, 3, 3)) _state_ticks += DateDetail::_state_ticks_offset;
 	}
 
 	/* Update current year
 	 * must be done before loading sprites as some newgrfs check it */
 	CalTime::Detail::SetDate(CalTime::CurDate(), CalTime::CurDateFract());
 
-	/* Only new games can use wallclock units. */
-	if (SlXvIsFeatureMissing(XSLFI_VARIABLE_DAY_LENGTH, 5) && IsSavegameVersionBefore(SLV_ECONOMY_MODE_TIMEKEEPING_UNITS)) {
-		_settings_game.economy.timekeeping_units = TKU_CALENDAR;
-	}
-
 	if (SlXvIsFeaturePresent(XSLFI_VARIABLE_DAY_LENGTH, 5) || !IsSavegameVersionBefore(SLV_ECONOMY_DATE)) {
 		EconTime::Detail::SetDate(EconTime::CurDate(), EconTime::CurDateFract());
 	} else {
 		/* Set economy date from calendar date */
-		EconTime::Detail::SetDate(CalTime::CurDate().base(), CalTime::CurDateFract());
+		EconTime::Detail::SetDate(ToEconTimeCast(CalTime::CurDate()), CalTime::CurDateFract());
 	}
 
 	SetupTileLoopCounts();
@@ -944,6 +957,12 @@ bool AfterLoadGame()
 		LinkGraphFixupAfterLoad(SlXvIsFeatureMissing(XSLFI_LINKGRAPH_DAY_SCALE, 4));
 	}
 
+	/* Set link graph job day length factor setting. */
+	if (SlXvIsFeatureMissing(XSLFI_LINKGRAPH_DAY_SCALE, 7)) {
+		extern void LinkGraphJobSetDayLengthFactor();
+		LinkGraphJobSetDayLengthFactor();
+	}
+
 	/* Load the sprites */
 	GfxLoadSprites();
 	LoadStringWidthTable();
@@ -966,17 +985,6 @@ bool AfterLoadGame()
 	 * vehicle which causes different results when getting their caches
 	 * filled; and that could eventually lead to desyncs. */
 	CargoPacket::AfterLoad();
-
-	/* Oilrig was moved from id 15 to 9. We have to do this conversion
-	 * here as AfterLoadVehicles can check it indirectly via the newgrf
-	 * code. */
-	if (IsSavegameVersionBefore(SLV_139)) {
-		for (Station *st : Station::Iterate()) {
-			if (st->airport.tile != INVALID_TILE && st->airport.type == 15) {
-				st->airport.type = AT_OILRIG;
-			}
-		}
-	}
 
 	if (SlXvIsFeaturePresent(XSLFI_SPRINGPP)) {
 		/*
@@ -1008,7 +1016,7 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeaturePresent(XSLFI_SPRINGPP, 1, 1)) {
 		/*
-		 * Reject helicopters aproaching oil rigs using the wrong aircraft movement data
+		 * Reject helicopters approaching oil rigs using the wrong aircraft movement data
 		 * Annoyingly SpringPP v2.0.102 has a bug where it uses the same ID for AT_INTERCONTINENTAL2 and AT_OILRIG
 		 * Do this here as AfterLoadVehicles can also check it indirectly via the newgrf code.
 		 */
@@ -1043,8 +1051,8 @@ bool AfterLoadGame()
 	extern void AnalyseHouseSpriteGroups();
 	AnalyseHouseSpriteGroups();
 
-	/* Update all vehicles */
-	AfterLoadVehicles(true);
+	/* Update all vehicles: Phase 1 */
+	AfterLoadVehiclesPhase1(true);
 
 	CargoPacket::PostVehiclesAfterLoad();
 
@@ -1071,9 +1079,29 @@ bool AfterLoadGame()
 		cp->current_station = cp->front->last_station_visited;
 	}
 
+	if (IsSavegameVersionBefore(SLV_WATER_TILE_TYPE) && SlXvIsFeatureMissing(XSLFI_WATER_TILE_TYPE)) {
+		/* Prior to SLV_WATER_TILE_TYPE, the water tile type was stored differently from the enumeration. This has to be
+		 * converted before SLV_72 and SLV_82 conversions which use GetWaterTileType. */
+		static constexpr uint8_t WBL_COAST_FLAG = 0; ///< Flag for coast.
+
+		for (TileIndex t(0); t < MapSize(); t++) {
+			if (!IsTileType(t, MP_WATER)) continue;
+
+			switch (GB(_m[t].m5, 4, 4)) {
+				case 0x0: /* Previously WBL_TYPE_NORMAL, Clear water or coast. */
+					SetWaterTileType(t, HasBit(_m[t].m5, WBL_COAST_FLAG) ? WATER_TILE_COAST : WATER_TILE_CLEAR);
+					break;
+
+				case 0x1: SetWaterTileType(t, WATER_TILE_LOCK); break; /* Previously WBL_TYPE_LOCK */
+				case 0x8: SetWaterTileType(t, WATER_TILE_DEPOT); break; /* Previously WBL_TYPE_DEPOT */
+				default: SetWaterTileType(t, WATER_TILE_CLEAR); break; /* Shouldn't happen... */
+			}
+		}
+	}
+
 	if (IsSavegameVersionBefore(SLV_72)) {
 		/* Locks in very old savegames had OWNER_WATER as owner */
-		for (TileIndex t = 0; t < MapSize(); t++) {
+		for (TileIndex t(0); t < MapSize(); t++) {
 			switch (GetTileType(t)) {
 				default: break;
 
@@ -1086,57 +1114,57 @@ bool AfterLoadGame()
 					StationGfx gfx = GetStationGfx(t);
 					StationType st;
 					if (       IsInsideMM(gfx,   0,   8)) { // Rail station
-						st = STATION_RAIL;
+						st = StationType::Rail;
 						SetStationGfx(t, gfx - 0);
 					} else if (IsInsideMM(gfx,   8,  67)) { // Airport
-						st = STATION_AIRPORT;
+						st = StationType::Airport;
 						SetStationGfx(t, gfx - 8);
 					} else if (IsInsideMM(gfx,  67,  71)) { // Truck
-						st = STATION_TRUCK;
+						st = StationType::Truck;
 						SetStationGfx(t, gfx - 67);
 					} else if (IsInsideMM(gfx,  71,  75)) { // Bus
-						st = STATION_BUS;
+						st = StationType::Bus;
 						SetStationGfx(t, gfx - 71);
 					} else if (gfx == 75) {                 // Oil rig
-						st = STATION_OILRIG;
+						st = StationType::Oilrig;
 						SetStationGfx(t, gfx - 75);
 					} else if (IsInsideMM(gfx,  76,  82)) { // Dock
-						st = STATION_DOCK;
+						st = StationType::Dock;
 						SetStationGfx(t, gfx - 76);
 					} else if (gfx == 82) {                 // Buoy
-						st = STATION_BUOY;
+						st = StationType::Buoy;
 						SetStationGfx(t, gfx - 82);
 					} else if (IsInsideMM(gfx,  83, 168)) { // Extended airport
-						st = STATION_AIRPORT;
+						st = StationType::Airport;
 						SetStationGfx(t, gfx - 83 + 67 - 8);
 					} else if (IsInsideMM(gfx, 168, 170)) { // Drive through truck
-						st = STATION_TRUCK;
+						st = StationType::Truck;
 						SetStationGfx(t, gfx - 168 + GFX_TRUCK_BUS_DRIVETHROUGH_OFFSET);
 					} else if (IsInsideMM(gfx, 170, 172)) { // Drive through bus
-						st = STATION_BUS;
+						st = StationType::Bus;
 						SetStationGfx(t, gfx - 170 + GFX_TRUCK_BUS_DRIVETHROUGH_OFFSET);
 					} else {
 						/* Restore the signals */
 						ResetSignalHandlers();
 						return false;
 					}
-					SB(_me[t].m6, 3, 3, st);
+					SB(_me[t].m6, 3, 3, to_underlying(st));
 					break;
 				}
 			}
 		}
 	}
 
-	if (SlXvIsFeatureMissing(XSLFI_MORE_STATION_TYPES)) {
+	if (SlXvIsFeatureMissing(XSLFI_MORE_STATION_TYPES) && IsSavegameVersionBefore(SLV_INCREASE_STATION_TYPE_FIELD_SIZE)) {
 		/* Expansion of station type field in m6 */
-		for (TileIndex t = 0; t < MapSize(); t++) {
+		for (TileIndex t(0); t < MapSize(); t++) {
 			if (IsTileType(t, MP_STATION)) {
 				ClrBit(_me[t].m6, 6);
 			}
 		}
 	}
 
-	for (TileIndex t = 0; t < map_size; t++) {
+	for (TileIndex t(0); t < map_size; t++) {
 		switch (GetTileType(t)) {
 			case MP_STATION: {
 				BaseStation *bst = BaseStation::GetByTile(t);
@@ -1152,8 +1180,8 @@ bool AfterLoadGame()
 				Station *st = Station::From(bst);
 
 				switch (GetStationType(t)) {
-					case STATION_TRUCK:
-					case STATION_BUS:
+					case StationType::Truck:
+					case StationType::Bus:
 						if (IsSavegameVersionBefore(SLV_6)) {
 							/* Before version 5 you could not have more than 250 stations.
 							 * Version 6 adds large maps, so you could only place 253*253
@@ -1174,7 +1202,7 @@ bool AfterLoadGame()
 						}
 						break;
 
-					case STATION_OILRIG: {
+					case StationType::Oilrig: {
 						/* The internal encoding of oil rigs was changed twice.
 						 * It was 3 (till 2.2) and later 5 (till 5.1).
 						 * DeleteOilRig asserts on the correct type, and
@@ -1186,7 +1214,7 @@ bool AfterLoadGame()
 						 * an oil rig which got shut down, but not completely removed from
 						 * the map
 						 */
-						TileIndex t1 = TILE_ADDXY(t, 0, 1);
+						TileIndex t1 = TileAddXY(t, 0, 1);
 						if (!IsTileType(t1, MP_INDUSTRY) || GetIndustryGfx(t1) != GFX_OILRIG_1) {
 							DeleteOilRig(t);
 						}
@@ -1206,7 +1234,7 @@ bool AfterLoadGame()
 	 *  to use m2 (16bit big), so we need to clean m2, and that is where this is
 	 *  all about ;) */
 	if (IsSavegameVersionBefore(SLV_6, 1)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_HOUSE:
 					_m[t].m4 = _m[t].m2;
@@ -1264,7 +1292,7 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_48)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_RAILWAY:
 					if (IsPlainRail(t)) {
@@ -1294,7 +1322,7 @@ bool AfterLoadGame()
 	if (IsSavegameVersionBefore(SLV_61)) {
 		/* Added the RoadType */
 		bool old_bridge = IsSavegameVersionBefore(SLV_42);
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_ROAD:
 					SB(_m[t].m5, 6, 2, GB(_m[t].m5, 4, 2));
@@ -1334,7 +1362,7 @@ bool AfterLoadGame()
 		bool fix_roadtypes = !IsSavegameVersionBefore(SLV_61);
 		bool old_bridge = IsSavegameVersionBefore(SLV_42);
 
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_ROAD:
 					if (fix_roadtypes) SB(_me[t].m7, 6, 2, (RoadTypes)GB(_me[t].m7, 5, 3));
@@ -1405,7 +1433,7 @@ bool AfterLoadGame()
 			if (has_extra_bit) rt |= (GB(_m[t].m1, 7, 1) << 4);
 			SetRailType(t, (RailType)rt);
 		};
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_RAILWAY:
 					update_railtype(t);
@@ -1436,7 +1464,7 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_42)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (MayHaveBridgeAbove(t)) ClearBridgeMiddle(t);
 			if (IsBridgeTile(t)) {
 				if (HasBit(_m[t].m5, 6)) { // middle part
@@ -1518,7 +1546,7 @@ bool AfterLoadGame()
 
 	if (IsSavegameVersionBefore(SLV_ROAD_TYPES) && !SlXvIsFeaturePresent(XSLFI_JOKERPP, SL_JOKER_1_27)) {
 		/* Add road subtypes */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			bool has_road = false;
 			switch (GetTileType(t)) {
 				case MP_ROAD:
@@ -1572,7 +1600,7 @@ bool AfterLoadGame()
 				}
 			}
 		}
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			bool has_road = false;
 			switch (GetTileType(t)) {
 				case MP_ROAD:
@@ -1598,7 +1626,7 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeatureMissing(XSLFI_DUAL_RAIL_TYPES)) {
 		/* Introduced dual rail types. */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsPlainRailTile(t) || (IsRailTunnelBridgeTile(t) && IsBridge(t))) {
 				SetSecondaryRailType(t, GetRailType(t));
 			}
@@ -1607,7 +1635,7 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeaturePresent(XSLFI_SIG_TUNNEL_BRIDGE, 1, 6)) {
 		/* m2 signal state bit allocation has shrunk */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL && IsBridge(t) && IsTunnelBridgeSignalSimulationEntrance(t)) {
 				extern void ShiftBridgeEntranceSimulatedSignalsExtended(TileIndex t, int shift, uint64_t in);
 				const uint shift = 15 - BRIDGE_M2_SIGNAL_STATE_COUNT;
@@ -1619,7 +1647,7 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeaturePresent(XSLFI_CHILLPP)) {
 		/* fix signal tunnel/bridge PBS */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL && IsTunnelBridgeSignalSimulationEntrance(t)) {
 				UnreserveAcrossRailTunnelBridge(t);
 			}
@@ -1628,7 +1656,7 @@ bool AfterLoadGame()
 
 	if (!SlXvIsFeaturePresent(XSLFI_CUSTOM_BRIDGE_HEADS, 2)) {
 		/* change map bits for rail bridge heads */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsBridgeTile(t) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL) {
 				SetCustomBridgeHeadTrackBits(t, DiagDirToDiagTrackBits(GetTunnelBridgeDirection(t)));
 				SetBridgeReservationTrackBits(t, HasBit(_m[t].m5, 4) ? DiagDirToDiagTrackBits(GetTunnelBridgeDirection(t)) : TRACK_BIT_NONE);
@@ -1639,14 +1667,14 @@ bool AfterLoadGame()
 
 	if (!SlXvIsFeaturePresent(XSLFI_CUSTOM_BRIDGE_HEADS, 3)) {
 		/* fence/ground type support for custom rail bridges */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TUNNELBRIDGE)) SB(_me[t].m7, 6, 2, 0);
 		}
 	}
 
 	if (SlXvIsFeaturePresent(XSLFI_CUSTOM_BRIDGE_HEADS, 1, 3)) {
 		/* fix any mismatched road/tram bits */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsBridgeTile(t) && GetTunnelBridgeTransportType(t) == TRANSPORT_ROAD) {
 				for (RoadTramType rtt : { RTT_TRAM, RTT_ROAD }) {
 					RoadType rt = GetRoadType(t, rtt);
@@ -1656,27 +1684,27 @@ bool AfterLoadGame()
 					if (!(rb & DiagDirToRoadBits(dir))) continue;
 
 					if (HasAtMostOneBit(rb)) {
-						DEBUG(misc, 0, "Fixing road bridge head state (case A) at tile 0x%X", t);
+						Debug(misc, 0, "Fixing road bridge head state (case A) at tile 0x{:X}", t);
 						rb |= DiagDirToRoadBits(ReverseDiagDir(dir));
 						SetCustomBridgeHeadRoadBits(t, rtt, rb);
 					}
 
 					TileIndex end = GetOtherBridgeEnd(t);
 					if (GetRoadType(end, rtt) == INVALID_ROADTYPE) {
-						DEBUG(misc, 0, "Fixing road bridge head state (case B) at tile 0x%X -> 0x%X", t, end);
+						Debug(misc, 0, "Fixing road bridge head state (case B) at tile 0x{:X} -> 0x{:X}", t, end);
 						SetRoadType(end, rtt, rt);
 						SetCustomBridgeHeadRoadBits(end, rtt, AxisToRoadBits(DiagDirToAxis(dir)));
 						continue;
 					}
 
 					if (GetRoadType(end, rtt) != rt) {
-						DEBUG(misc, 0, "Fixing road bridge head state (case C) at tile 0x%X -> 0x%X", t, end);
+						Debug(misc, 0, "Fixing road bridge head state (case C) at tile 0x{:X} -> 0x{:X}", t, end);
 						SetRoadType(end, rtt, rt);
 					}
 
 					RoadBits end_rb = GetCustomBridgeHeadRoadBits(end, rtt);
 					if (!(end_rb & DiagDirToRoadBits(ReverseDiagDir(dir)))) {
-						DEBUG(misc, 0, "Fixing road bridge head state (case D) at tile 0x%X -> 0x%X", t, end);
+						Debug(misc, 0, "Fixing road bridge head state (case D) at tile 0x{:X} -> 0x{:X}", t, end);
 						end_rb |= DiagDirToRoadBits(ReverseDiagDir(dir));
 						if (HasAtMostOneBit(end_rb)) end_rb |= DiagDirToRoadBits(dir);
 						SetCustomBridgeHeadRoadBits(end, rtt, end_rb);
@@ -1698,7 +1726,7 @@ bool AfterLoadGame()
 		}
 
 		/* .. so we convert the entire map from normal to elrail (so maintain "fairness") */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_RAILWAY:
 					SetRailType(t, UpdateRailType(GetRailType(t), min_rail));
@@ -1729,11 +1757,6 @@ bool AfterLoadGame()
 				SetSecondaryRailType(t, GetRailType(t));
 			}
 		}
-
-		for (Train *v : Train::Iterate()) {
-			if (v->IsFrontEngine() || v->IsFreeWagon()) v->ConsistChanged(CCF_TRACK);
-		}
-
 	}
 
 	/* In version 16.1 of the savegame a company can decide if trains, which get
@@ -1753,7 +1776,7 @@ bool AfterLoadGame()
 	/* From version 15, we moved a semaphore bit from bit 2 to bit 3 in m4, making
 	 *  room for PBS. Now in version 21 move it back :P. */
 	if (IsSavegameVersionBefore(SLV_21) && !IsSavegameVersionBefore(SLV_15)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_RAILWAY:
 					if (HasSignals(t)) {
@@ -1813,6 +1836,9 @@ bool AfterLoadGame()
 
 	AfterLoadStations();
 
+	/* Station blocked, wires and pylon flags need to be stored in the map. */
+	UpdateStationTileCacheFlags(SlXvIsFeatureMissing(XSLFI_STATION_TILE_CACHE_FLAGS));
+
 	/* Time starts at 0 instead of 1920.
 	 * Account for this in older games by adding an offset */
 	if (IsSavegameVersionBefore(SLV_31)) {
@@ -1827,7 +1853,7 @@ bool AfterLoadGame()
 		for (Waypoint *wp : Waypoint::Iterate()) wp->build_date      += CalTime::DAYS_TILL_ORIGINAL_BASE_YEAR.AsDelta();
 		for (Engine *e : Engine::Iterate())      e->intro_date       += CalTime::DAYS_TILL_ORIGINAL_BASE_YEAR.AsDelta();
 		for (Company *c : Company::Iterate())    c->inaugurated_year += CalTime::ORIGINAL_BASE_YEAR.AsDelta();
-		for (Industry *i : Industry::Iterate())  i->last_prod_year   += CalTime::ORIGINAL_BASE_YEAR.AsDelta();
+		for (Industry *i : Industry::Iterate())  i->last_prod_year   += EconTime::ORIGINAL_BASE_YEAR.AsDelta();
 
 		for (Vehicle *v : Vehicle::Iterate()) {
 			v->date_of_last_service += EconTime::DAYS_TILL_ORIGINAL_BASE_YEAR.AsDelta();
@@ -1835,11 +1861,32 @@ bool AfterLoadGame()
 		}
 	}
 
+	if (SlXvIsFeatureMissing(XSLFI_VARIABLE_DAY_LENGTH, 6)) {
+		EconTime::Detail::years_elapsed = EconTime::CurYear() - EconTime::Year{1};
+		EconTime::Detail::period_display_offset = EconTime::YearDelta{0};
+		for (Company *c : Company::Iterate()) {
+			if (!IsSavegameVersionBefore(SLV_COMPANY_INAUGURATED_PERIOD_V2)) {
+				/* inaugurated_year is calendar time, loaded from upstream inaugurated_year_calendar.
+				 * display_inaugurated_period is loaded from upstream inaugurated_year. */
+				c->age_years = std::max<EconTime::YearDelta>(EconTime::YearDelta{0}, ToEconTimeCast(CalTime::CurYear() - c->inaugurated_year));
+				c->display_inaugurated_period = EconTime::Detail::WallClockYearToDisplay(EconTime::Year{c->display_inaugurated_period});
+			} else if (SlXvIsFeaturePresent(XSLFI_VARIABLE_DAY_LENGTH, 5, 5)) {
+				/* inaugurated_year is calendar time in XSLFI_VARIABLE_DAY_LENGTH version 5 */
+				c->age_years = std::max<EconTime::YearDelta>(EconTime::YearDelta{0}, ToEconTimeCast(CalTime::CurYear() - c->inaugurated_year));
+				c->display_inaugurated_period = EconTime::Detail::WallClockYearToDisplay(EconTime::Year{c->inaugurated_year.base() + EconTime::CurYear().base() - CalTime::CurYear().base()});
+			} else {
+				c->age_years = std::max<EconTime::YearDelta>(EconTime::YearDelta{0}, EconTime::YearDelta{EconTime::CurYear().base() - c->inaugurated_year.base()});
+				c->display_inaugurated_period = EconTime::Detail::WallClockYearToDisplay(EconTime::Year{c->inaugurated_year.base()});
+				c->inaugurated_year += CalTime::YearDelta{CalTime::CurYear().base() - EconTime::CurYear().base()};
+			}
+		}
+	}
+
 	/* From 32 on we save the industry who made the farmland.
 	 *  To give this prettiness to old savegames, we remove all farmfields and
 	 *  plant new ones. */
 	if (IsSavegameVersionBefore(SLV_32)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_CLEAR) && IsClearGround(t, CLEAR_FIELDS)) {
 				/* remove fields */
 				MakeClear(t, CLEAR_GRASS, 3);
@@ -1857,26 +1904,22 @@ bool AfterLoadGame()
 
 	/* Setting no refit flags to all orders in savegames from before refit in orders were added */
 	if (IsSavegameVersionBefore(SLV_36)) {
-		for (Order *order : Order::Iterate()) {
+		IterateVehicleAndOrderListOrders([](Order *order) {
 			order->SetRefit(CARGO_NO_REFIT);
-		}
-
-		for (Vehicle *v : Vehicle::Iterate()) {
-			v->current_order.SetRefit(CARGO_NO_REFIT);
-		}
+		});
 	}
 
 	/* from version 38 we have optional elrails, since we cannot know the
 	 * preference of a user, let elrails enabled; it can be disabled manually */
 	if (IsSavegameVersionBefore(SLV_38)) _settings_game.vehicle.disable_elrails = false;
 	/* do the same as when elrails were enabled/disabled manually just now */
-	SettingsDisableElrail(_settings_game.vehicle.disable_elrails);
+	UpdateDisableElrailSettingState(_settings_game.vehicle.disable_elrails, false);
 	InitializeRailGUI();
 
 	/* From version 53, the map array was changed for house tiles to allow
 	 * space for newhouses grf features. A new byte, m7, was also added. */
 	if (IsSavegameVersionBefore(SLV_53)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_HOUSE)) {
 				if (GB(_m[t].m3, 6, 2) != TOWN_HOUSE_COMPLETED) {
 					/* Move the construction stage from m3[7..6] to m5[5..4].
@@ -1889,7 +1932,7 @@ bool AfterLoadGame()
 				} else {
 					/* The "lift has destination" bit has been moved from
 					 * m5[7] to m7[0]. */
-					SB(_me[t].m7, 0, 1, HasBit(_m[t].m5, 7));
+					AssignBit(_me[t].m7, 0, HasBit(_m[t].m5, 7));
 					ClrBit(_m[t].m5, 7);
 
 					/* The "lift is moving" bit has been removed, as it does
@@ -1899,7 +1942,7 @@ bool AfterLoadGame()
 					/* The position of the lift goes from m1[7..0] to m6[7..2],
 					 * making m1 totally free, now. The lift position does not
 					 * have to be a full byte since the maximum value is 36. */
-					SetLiftPosition(t, GB(_m[t].m1, 0, 6 ));
+					SetLiftPosition(t, GB(_m[t].m1, 0, 6));
 
 					_m[t].m1 = 0;
 					_m[t].m3 = 0;
@@ -1909,11 +1952,27 @@ bool AfterLoadGame()
 		}
 	}
 
+	if (IsSavegameVersionBefore(SLV_INCREASE_HOUSE_LIMIT) && SlXvIsFeatureMissing(XSLFI_MORE_HOUSES, 3)) {
+		for (TileIndex t(0); t < map_size; t++) {
+			if (IsTileType(t, MP_HOUSE)) {
+				if (SlXvIsFeaturePresent(XSLFI_MORE_HOUSES, 1, 2)) {
+					/* House type is moved from m4 + m3[6..5] to m8. */
+					SetHouseType(t, _m[t].m4 | (GB(_m[t].m3, 5, 2) << 8));
+					SB(_m[t].m3, 5, 2, 0);
+				} else {
+					/* House type is moved from m4 + m3[6] to m8. */
+					SetHouseType(t, _m[t].m4 | (GB(_m[t].m3, 6, 1) << 8));
+					ClrBit(_m[t].m3, 6);
+				}
+			}
+		}
+	}
+
 	/* Check and update house and town values */
-	UpdateHousesAndTowns(gcf_res != GLC_ALL_GOOD, true);
+	UpdateHousesAndTowns(gcf_res != GLC_ALL_GOOD);
 
 	if (IsSavegameVersionBefore(SLV_43)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_INDUSTRY)) {
 				switch (GetIndustryGfx(t)) {
 					case GFX_POWERPLANT_SPARKS:
@@ -1973,7 +2032,7 @@ bool AfterLoadGame()
 	if (IsSavegameVersionBefore(SLV_49)) for (Company *c : Company::Iterate()) c->face = ConvertFromOldCompanyManagerFace(c->face);
 
 	if (IsSavegameVersionBefore(SLV_52)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_OBJECT) && _m[t].m5 == OBJECT_STATUE) {
 				_m[t].m2 = CalcClosestTownFromTile(t)->index;
 			}
@@ -2029,7 +2088,7 @@ bool AfterLoadGame()
 	if (IsSavegameVersionBefore(SLV_64)) {
 		/* Since now we allow different signal types and variants on a single tile.
 		 * Move signal states to m4 to make room and clone the signal type/variant. */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_RAILWAY) && HasSignals(t)) {
 				/* move signal states */
 				SetSignalStates(t, GB(_m[t].m2, 4, 4));
@@ -2057,7 +2116,7 @@ bool AfterLoadGame()
 	/* From version 82, old style canals (above sealevel (0), WATER owner) are no longer supported.
 	    Replace the owner for those by OWNER_NONE. */
 	if (IsSavegameVersionBefore(SLV_82)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_WATER) &&
 					GetWaterTileType(t) == WATER_TILE_CLEAR &&
 					GetTileOwner(t) == OWNER_WATER &&
@@ -2074,7 +2133,7 @@ bool AfterLoadGame()
 	 * making floods using the removal of ship depots.
 	 */
 	if (IsSavegameVersionBefore(SLV_83)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsShipDepotTile(t)) {
 				_m[t].m4 = (TileHeight(t) == 0) ? OWNER_WATER : OWNER_NONE;
 			}
@@ -2090,16 +2149,25 @@ bool AfterLoadGame()
 		}
 	}
 
+	/* At version 78, industry cargo types can be changed, and are stored with the industry. For older save versions
+	 * copy the IndustrySpec's cargo types over to the Industry. */
 	if (IsSavegameVersionBefore(SLV_78)) {
-		uint j;
-		for (Industry * i : Industry::Iterate()) {
+		for (Industry *i : Industry::Iterate()) {
 			const IndustrySpec *indsp = GetIndustrySpec(i->type);
-			for (j = 0; j < lengthof(i->produced_cargo); j++) {
-				i->produced_cargo[j] = indsp->produced_cargo[j];
+			for (uint8_t j = 0; j < i->produced_cargo_count; j++) {
+				i->produced[j].cargo = indsp->produced_cargo[j];
 			}
-			for (j = 0; j < lengthof(i->accepts_cargo); j++) {
-				i->accepts_cargo[j] = indsp->accepts_cargo[j];
+			for (uint8_t j = 0; j < i->accepted_cargo_count; j++) {
+				i->accepted[j].cargo = indsp->accepts_cargo[j];
 			}
+		}
+	}
+
+	/* Industry cargo slots were fixed size before (and including) SLV_VEHICLE_ECONOMY_AGE (either 2/3 or 16/16),
+	 * after this they are dynamic. Trim excess slots. */
+	if (SlXvIsFeatureMissing(XSLFI_INDUSTRY_CARGO_REORGANISE) && IsSavegameVersionBeforeOrAt(SLV_VEHICLE_ECONOMY_AGE)) {
+		for (Industry *i : Industry::Iterate()) {
+			TrimIndustryAcceptedProduced(i);
 		}
 	}
 
@@ -2108,7 +2176,7 @@ bool AfterLoadGame()
 	 * land used to have zero density, now they have full density. Therefore,
 	 * make all grassy/rough land trees have a density of 3. */
 	if (IsSavegameVersionBefore(SLV_81)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (GetTileType(t) == MP_TREES) {
 				TreeGround groundType = (TreeGround)GB(_m[t].m2, 4, 2);
 				if (groundType != TREE_GROUND_SNOW_DESERT) SB(_m[t].m2, 6, 2, 3);
@@ -2119,7 +2187,9 @@ bool AfterLoadGame()
 
 	if (IsSavegameVersionBefore(SLV_93)) {
 		/* Rework of orders. */
-		for (Order *order : Order::Iterate()) order->ConvertFromOldSavegame();
+		IterateAllNonVehicleOrders([&](Order *order) {
+			order->ConvertFromOldSavegame();
+		});
 
 		for (Vehicle *v : Vehicle::Iterate()) {
 			if (v->orders != nullptr && v->orders->GetFirstOrder() != nullptr && v->orders->GetFirstOrder()->IsType(OT_NOTHING)) {
@@ -2135,49 +2205,50 @@ bool AfterLoadGame()
 		IntialiseOrderDestinationRefcountMap();
 	} else if (IsSavegameVersionBefore(SLV_94)) {
 		/* Unload and transfer are now mutual exclusive. */
-		for (Order *order : Order::Iterate()) {
+		IterateVehicleAndOrderListOrders([](Order *order) {
 			if ((order->GetUnloadType() & (OUFB_UNLOAD | OUFB_TRANSFER)) == (OUFB_UNLOAD | OUFB_TRANSFER)) {
 				order->SetUnloadType(OUFB_TRANSFER);
 				order->SetLoadType(OLFB_NO_LOAD);
 			}
-		}
-
-		for (Vehicle *v : Vehicle::Iterate()) {
-			if ((v->current_order.GetUnloadType() & (OUFB_UNLOAD | OUFB_TRANSFER)) == (OUFB_UNLOAD | OUFB_TRANSFER)) {
-				v->current_order.SetUnloadType(OUFB_TRANSFER);
-				v->current_order.SetLoadType(OLFB_NO_LOAD);
-			}
-		}
+		});
 	}
 
 	if (IsSavegameVersionBefore(SLV_DEPOT_UNBUNCHING) && SlXvIsFeatureMissing(XSLFI_DEPOT_UNBUNCHING)) {
 		/* OrderDepotActionFlags were moved, instead of starting at bit 4 they now start at bit 3,
 		 * this clobbers the wait is timetabled flag of XSLFI_TT_WAIT_IN_DEPOT (version 1). */
-		for (Order *order : Order::Iterate()) {
-			if (!order->IsType(OT_GOTO_DEPOT)) continue;
+		IterateVehicleAndOrderListOrders([](Order *order) {
+			if (!order->IsType(OT_GOTO_DEPOT)) return;
 			if (SlXvIsFeaturePresent(XSLFI_TT_WAIT_IN_DEPOT, 1, 1)) {
 				/* Bit 3 was previously the wait is timetabled flag, move that to xflags (version 2 of XSLFI_TT_WAIT_IN_DEPOT) */
 				order->SetWaitTimetabled(HasBit(order->GetRawFlags(), 3));
 			}
 			OrderDepotActionFlags flags = (OrderDepotActionFlags)(order->GetDepotActionType() >> 1);
-			if (((flags & (1 << 2)) != 0) && !SlXvIsFeatureMissing(XSLFI_DEPOT_UNBUNCHING)) {
-				flags ^= (ODATFB_SELL | ODATFB_UNBUNCH); // Unbunch moved from bit 2 to bit 3
-			}
 			order->SetDepotActionType(flags);
-		}
+		});
 	} else if (SlXvIsFeaturePresent(XSLFI_TT_WAIT_IN_DEPOT, 1, 1)) {
-		for (Order *order : Order::Iterate()) {
+		IterateVehicleAndOrderListOrders([](Order *order) {
 			/* Bit 3 was previously the wait is timetabled flag, move that to xflags (version 2 of XSLFI_TT_WAIT_IN_DEPOT) */
 			if (order->IsType(OT_GOTO_DEPOT)) order->SetWaitTimetabled(HasBit(order->GetRawFlags(), 3));
-		}
+		});
+	}
+	if (!IsSavegameVersionBefore(SLV_DEPOT_UNBUNCHING)) {
+		/* Move unbunch depot action from bit 2 to bit 3 */
+		IterateVehicleAndOrderListOrders([](Order *order) {
+			if (!order->IsType(OT_GOTO_DEPOT)) return;
+			OrderDepotActionFlags flags = order->GetDepotActionType();
+			if ((flags & ODATFB_SELL) != 0) {
+				flags ^= (ODATFB_SELL | ODATFB_UNBUNCH); // Move unbunch from bit 2 to bit 3 (sell to unbunch)
+				order->SetDepotActionType(flags);
+			}
+		});
 	}
 
 	if (SlXvIsFeaturePresent(XSLFI_JOKERPP, 1, SL_JOKER_1_23)) {
-		for (Order *order : Order::Iterate()) {
+		IterateAllNonVehicleOrders([&](Order *order) {
 			if (order->IsType(OT_CONDITIONAL) && order->GetConditionVariable() == OCV_SLOT_OCCUPANCY) {
 				order->GetXDataRef() = order->GetConditionValue();
 			}
-		}
+		});
 	}
 
 	if (IsSavegameVersionBefore(SLV_84)) {
@@ -2197,13 +2268,13 @@ bool AfterLoadGame()
 
 	/* The water class was moved/unified. */
 	if (IsSavegameVersionBefore(SLV_146)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_STATION:
 					switch (GetStationType(t)) {
-						case STATION_OILRIG:
-						case STATION_DOCK:
-						case STATION_BUOY:
+						case StationType::Oilrig:
+						case StationType::Dock:
+						case StationType::Buoy:
 							SetWaterClass(t, (WaterClass)GB(_m[t].m3, 0, 2));
 							SB(_m[t].m3, 0, 2, 0);
 							break;
@@ -2231,7 +2302,7 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_86)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			/* Move river flag and update canals to use water class */
 			if (IsTileType(t, MP_WATER)) {
 				if (GetWaterClass(t) != WATER_CLASS_RIVER) {
@@ -2253,7 +2324,7 @@ bool AfterLoadGame()
 		/* Update locks, depots, docks and buoys to have a water class based
 		 * on its neighbouring tiles. Done after river and canal updates to
 		 * ensure neighbours are correct. */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (!IsTileFlat(t)) continue;
 
 			if (IsTileType(t, MP_WATER) && IsLock(t)) SetWaterClassDependingOnSurroundings(t, false);
@@ -2262,7 +2333,7 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_87)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			/* skip oil rigs at borders! */
 			if ((IsTileType(t, MP_WATER) || IsBuoyTile(t)) &&
 					(TileX(t) == 0 || TileY(t) == 0 || TileX(t) == MapMaxX() - 1 || TileY(t) == MapMaxY() - 1)) {
@@ -2297,25 +2368,6 @@ bool AfterLoadGame()
 				if (!Company::IsValidID(GetTileOwner(t))) FixOwnerOfRailTrack(t);
 			}
 		}
-
-		/* Convert old PF settings to new */
-		if (_settings_game.pf.yapf.rail_use_yapf || IsSavegameVersionBefore(SLV_28)) {
-			_settings_game.pf.pathfinder_for_trains = VPF_YAPF;
-		} else {
-			_settings_game.pf.pathfinder_for_trains = VPF_NPF;
-		}
-
-		if (_settings_game.pf.yapf.road_use_yapf || IsSavegameVersionBefore(SLV_28)) {
-			_settings_game.pf.pathfinder_for_roadvehs = VPF_YAPF;
-		} else {
-			_settings_game.pf.pathfinder_for_roadvehs = VPF_NPF;
-		}
-
-		if (_settings_game.pf.yapf.ship_use_yapf) {
-			_settings_game.pf.pathfinder_for_ships = VPF_YAPF;
-		} else {
-			_settings_game.pf.pathfinder_for_ships = VPF_NPF;
-		}
 	}
 
 	if (IsSavegameVersionBefore(SLV_88)) {
@@ -2329,7 +2381,7 @@ bool AfterLoadGame()
 
 	if (IsSavegameVersionBefore(SLV_91)) {
 		/* Increase HouseAnimationFrame from 5 to 7 bits */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_HOUSE) && GetHouseType(t) >= NEW_HOUSE_OFFSET) {
 				SB(_me[t].m6, 2, 6, GB(_me[t].m6, 3, 5));
 				SB(_m[t].m3, 5, 1, 0);
@@ -2341,8 +2393,8 @@ bool AfterLoadGame()
 		GroupStatistics::UpdateAfterLoad(); // Ensure statistics pool is initialised before trying to delete vehicles
 		/* Remove all trams from savegames without tram support.
 		 * There would be trams without tram track under causing crashes sooner or later. */
-		for (RoadVehicle *v : RoadVehicle::Iterate()) {
-			if (v->First() == v && HasBit(EngInfo(v->engine_type)->misc_flags, EF_ROAD_TRAM)) {
+		for (RoadVehicle *v : RoadVehicle::IterateFrontOnly()) {
+			if (HasBit(EngInfo(v->engine_type)->misc_flags, EF_ROAD_TRAM)) {
 				ShowErrorMessage(STR_WARNING_LOADGAME_REMOVED_TRAMS, INVALID_STRING_ID, WL_CRITICAL);
 				delete v;
 			}
@@ -2350,7 +2402,7 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_99)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			/* Set newly introduced WaterClass of industry tiles */
 			if (IsTileType(t, MP_STATION) && IsOilRig(t)) {
 				SetWaterClassDependingOnSurroundings(t, true);
@@ -2372,7 +2424,7 @@ bool AfterLoadGame()
 
 	/* Tunnel pool has to be initiated before reservations. */
 	if (SlXvIsFeatureMissing(XSLFI_CHUNNEL)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTunnelTile(t)) {
 				DiagDirection dir = GetTunnelBridgeDirection(t);
 				if (dir == DIAGDIR_SE || dir == DIAGDIR_SW) {
@@ -2399,7 +2451,7 @@ bool AfterLoadGame()
 	 * format here, as an old layout wouldn't work properly anyway. To be safe, we
 	 * clear any possible PBS reservations as well. */
 	if (IsSavegameVersionBefore(SLV_100)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_RAILWAY:
 					if (HasSignals(t)) {
@@ -2437,13 +2489,13 @@ bool AfterLoadGame()
 
 	/* Reserve all tracks trains are currently on. */
 	if (IsSavegameVersionBefore(SLV_101)) {
-		for (const Train *t : Train::Iterate()) {
-			if (t->First() == t) t->ReserveTrackUnderConsist();
+		for (const Train *t : Train::IterateFrontOnly()) {
+			t->ReserveTrackUnderConsist();
 		}
 	}
 
 	if (IsSavegameVersionBefore(SLV_102)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			/* Now all crossings should be in correct state */
 			if (IsLevelCrossingTile(t)) UpdateLevelCrossing(t, false);
 		}
@@ -2489,7 +2541,7 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_112)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			/* Check for HQ bit being set, instead of using map accessor,
 			 * since we've already changed it code-wise */
 			if (IsTileType(t, MP_OBJECT) && HasBit(_m[t].m5, 7)) {
@@ -2501,7 +2553,7 @@ bool AfterLoadGame()
 		}
 	}
 	if (IsSavegameVersionBefore(SLV_144)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (!IsTileType(t, MP_OBJECT)) continue;
 
 			/* Reordering/generalisation of the object bits. */
@@ -2517,7 +2569,7 @@ bool AfterLoadGame()
 
 	if (IsSavegameVersionBefore(SLV_147) && Object::GetNumItems() == 0) {
 		/* Make real objects for object tiles. */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (!IsTileType(t, MP_OBJECT)) continue;
 
 			if (Town::GetNumItems() == 0) {
@@ -2551,7 +2603,7 @@ bool AfterLoadGame()
 					Object::IncTypeCount(type);
 				} else {
 					/* We're at an offset, so get the ID from our "root". */
-					TileIndex northern_tile = t - TileXY(GB(offset, 0, 4), GB(offset, 4, 4));
+					TileIndex northern_tile = t - TileDiffXY(GB(offset, 0, 4), GB(offset, 4, 4));
 					assert_tile(IsTileType(northern_tile, MP_OBJECT), northern_tile);
 					_m[t].m2 = _m[northern_tile].m2;
 				}
@@ -2578,7 +2630,7 @@ bool AfterLoadGame()
 			}
 
 			/* Use old layout randomizer code */
-			byte layout = TileHash(TileX(t->xy), TileY(t->xy)) % 6;
+			uint8_t layout = TileHash(TileX(t->xy), TileY(t->xy)) % 6;
 			switch (layout) {
 				default: break;
 				case 5: layout = 1; break;
@@ -2599,9 +2651,9 @@ bool AfterLoadGame()
 
 	/* Trains could now stop in a specific location. */
 	if (IsSavegameVersionBefore(SLV_117)) {
-		for (Order *o : Order::Iterate()) {
+		IterateVehicleAndOrderListOrders([](Order *o) {
 			if (o->IsType(OT_GOTO_STATION)) o->SetStopLocation(OSL_PLATFORM_FAR_END);
-		}
+		});
 	}
 
 	if (IsSavegameVersionBefore(SLV_120)) {
@@ -2615,7 +2667,7 @@ bool AfterLoadGame()
 		/* Delete small ufos heading for non-existing vehicles */
 		for (DisasterVehicle *v : DisasterVehicle::Iterate()) {
 			if (v->subtype == 2 /* ST_SMALL_UFO */ && v->state != 0) {
-				const Vehicle *u = Vehicle::GetIfValid(v->dest_tile);
+				const Vehicle *u = Vehicle::GetIfValid(v->dest_tile.base());
 				if (u == nullptr || u->type != VEH_ROAD || !RoadVehicle::From(u)->IsFrontEngine()) {
 					delete v;
 				}
@@ -2645,7 +2697,7 @@ bool AfterLoadGame()
 
 		for (auto tile = _animated_tiles.begin(); tile != _animated_tiles.end(); /* Nothing */) {
 			/* Remove if tile is not animated */
-			bool remove = _tile_type_procs[GetTileType(tile->first)]->animate_tile_proc == nullptr;
+			bool remove = !MayAnimateTile(tile->first);
 
 			if (remove) {
 				tile = _animated_tiles.erase(tile);
@@ -2752,7 +2804,7 @@ bool AfterLoadGame()
 			/* At some point, invalid depots were saved into the game (possibly those removed in the past?)
 			 * Remove them here, so they don't cause issues further down the line */
 			if (!IsDepotTile(d->xy)) {
-				DEBUG(sl, 0, "Removing invalid depot %d at %d, %d", d->index, TileX(d->xy), TileY(d->xy));
+				Debug(sl, 0, "Removing invalid depot {} at {}, {}", d->index, TileX(d->xy), TileY(d->xy));
 				delete d;
 				d = nullptr;
 				continue;
@@ -2775,7 +2827,7 @@ bool AfterLoadGame()
 	/* The bits for the tree ground and tree density have
 	 * been swapped (m2 bits 7..6 and 5..4. */
 	if (IsSavegameVersionBefore(SLV_135)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_CLEAR)) {
 				if (GetRawClearGround(t) == CLEAR_SNOW) {
 					SetClearGroundDensity(t, CLEAR_GRASS, GetClearDensity(t));
@@ -2806,10 +2858,10 @@ bool AfterLoadGame()
 	/* Airport tile animation uses animation frame instead of other graphics id */
 	if (IsSavegameVersionBefore(SLV_137)) {
 		struct AirportTileConversion {
-			byte old_start;
-			byte num_frames;
+			uint8_t old_start;
+			uint8_t num_frames;
 		};
-		static const AirportTileConversion atc[] = {
+		static const AirportTileConversion atcs[] = {
 			{31,  12}, // APT_RADAR_GRASS_FENCE_SW
 			{50,   4}, // APT_GRASS_FENCE_NE_FLAG
 			{62,   2}, // 1 unused tile
@@ -2820,22 +2872,31 @@ bool AfterLoadGame()
 			{119, 15}, // 14 unused tiles (radar)
 			{140,  4}, // APT_GRASS_FENCE_NE_FLAG_2
 		};
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsAirportTile(t)) {
 				StationGfx old_gfx = GetStationGfx(t);
-				byte offset = 0;
-				for (uint i = 0; i < lengthof(atc); i++) {
-					if (old_gfx < atc[i].old_start) {
+				uint8_t offset = 0;
+				for (const auto &atc : atcs) {
+					if (old_gfx < atc.old_start) {
 						SetStationGfx(t, old_gfx - offset);
 						break;
 					}
-					if (old_gfx < atc[i].old_start + atc[i].num_frames) {
-						SetAnimationFrame(t, old_gfx - atc[i].old_start);
-						SetStationGfx(t, atc[i].old_start - offset);
+					if (old_gfx < atc.old_start + atc.num_frames) {
+						SetAnimationFrame(t, old_gfx - atc.old_start);
+						SetStationGfx(t, atc.old_start - offset);
 						break;
 					}
-					offset += atc[i].num_frames - 1;
+					offset += atc.num_frames - 1;
 				}
+			}
+		}
+	}
+
+	/* Oilrig was moved from id 15 to 9. */
+	if (IsSavegameVersionBefore(SLV_139)) {
+		for (Station *st : Station::Iterate()) {
+			if (st->airport.tile != INVALID_TILE && st->airport.type == 15) {
+				st->airport.type = AT_OILRIG;
 			}
 		}
 	}
@@ -2850,7 +2911,7 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_141)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			/* Reset tropic zone for VOID tiles, they shall not have any. */
 			if (IsTileType(t, MP_VOID)) SetTropicZone(t, TROPICZONE_NORMAL);
 		}
@@ -2907,7 +2968,7 @@ bool AfterLoadGame()
 
 	/* Move the animation frame to the same location (m7) for all objects. */
 	if (IsSavegameVersionBefore(SLV_147)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			switch (GetTileType(t)) {
 				case MP_HOUSE:
 					if (GetHouseType(t) >= NEW_HOUSE_OFFSET) {
@@ -2946,7 +3007,7 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_149)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (!IsTileType(t, MP_STATION)) continue;
 			if (!IsBuoy(t) && !IsOilRig(t) && !(IsDock(t) && IsTileFlat(t))) {
 				SetWaterClass(t, WATER_CLASS_INVALID);
@@ -2992,9 +3053,9 @@ bool AfterLoadGame()
 			const DiagDirection vdir = DirToDiagDir(v->direction);
 
 			/* Have we passed the visibility "switch" state already? */
-			byte pos = (DiagDirToAxis(vdir) == AXIS_X ? v->x_pos : v->y_pos) & TILE_UNIT_MASK;
-			byte frame = (vdir == DIAGDIR_NE || vdir == DIAGDIR_NW) ? TILE_SIZE - 1 - pos : pos;
-			extern const byte _tunnel_visibility_frame[DIAGDIR_END];
+			uint8_t pos = (DiagDirToAxis(vdir) == AXIS_X ? v->x_pos : v->y_pos) & TILE_UNIT_MASK;
+			uint8_t frame = (vdir == DIAGDIR_NE || vdir == DIAGDIR_NW) ? TILE_SIZE - 1 - pos : pos;
+			extern const uint8_t _tunnel_visibility_frame[DIAGDIR_END];
 
 			/* Should the vehicle be hidden or not? */
 			bool hidden;
@@ -3042,7 +3103,7 @@ bool AfterLoadGame()
 
 			bool loading = rv->current_order.IsType(OT_LOADING) || rv->current_order.IsType(OT_LEAVESTATION);
 			if (HasBit(rv->state, RVS_IN_ROAD_STOP)) {
-				extern const byte _road_stop_stop_frame[];
+				extern const uint8_t _road_stop_stop_frame[];
 				SB(rv->state, RVS_ENTERED_STOP, 1, loading || rv->frame > _road_stop_stop_frame[rv->state - RVSB_IN_ROAD_STOP + (_settings_game.vehicle.road_side << RVS_DRIVE_SIDE)]);
 			} else if (HasBit(rv->state, RVS_IN_DT_ROAD_STOP)) {
 				SB(rv->state, RVS_ENTERED_STOP, 1, loading || rv->frame > RVC_DRIVE_THROUGH_STOP_FRAME);
@@ -3167,7 +3228,7 @@ bool AfterLoadGame()
 		}
 
 		/* Fill Vehicle::cur_real_order_index */
-		for (Vehicle *v : Vehicle::Iterate()) {
+		for (Vehicle *v : Vehicle::IterateFrontOnly()) {
 			if (!v->IsPrimaryVehicle()) continue;
 
 			/* Older versions are less strict with indices being in range and fix them on the fly */
@@ -3259,16 +3320,16 @@ bool AfterLoadGame()
 
 	if (IsSavegameVersionBefore(SLV_164) && !IsSavegameVersionBefore(SLV_32)) {
 		/* We store 4 fences in the field tiles instead of only SE and SW. */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (!IsTileType(t, MP_CLEAR) && !IsTileType(t, MP_TREES)) continue;
 			if (IsTileType(t, MP_CLEAR) && IsClearGround(t, CLEAR_FIELDS)) continue;
 			uint fence = GB(_m[t].m4, 5, 3);
-			if (fence != 0 && IsTileType(TILE_ADDXY(t, 1, 0), MP_CLEAR) && IsClearGround(TILE_ADDXY(t, 1, 0), CLEAR_FIELDS)) {
-				SetFence(TILE_ADDXY(t, 1, 0), DIAGDIR_NE, fence);
+			if (fence != 0 && IsTileType(TileAddXY(t, 1, 0), MP_CLEAR) && IsClearGround(TileAddXY(t, 1, 0), CLEAR_FIELDS)) {
+				SetFence(TileAddXY(t, 1, 0), DIAGDIR_NE, fence);
 			}
 			fence = GB(_m[t].m4, 2, 3);
-			if (fence != 0 && IsTileType(TILE_ADDXY(t, 0, 1), MP_CLEAR) && IsClearGround(TILE_ADDXY(t, 0, 1), CLEAR_FIELDS)) {
-				SetFence(TILE_ADDXY(t, 0, 1), DIAGDIR_NW, fence);
+			if (fence != 0 && IsTileType(TileAddXY(t, 0, 1), MP_CLEAR) && IsClearGround(TileAddXY(t, 0, 1), CLEAR_FIELDS)) {
+				SetFence(TileAddXY(t, 0, 1), DIAGDIR_NW, fence);
 			}
 			SB(_m[t].m4, 2, 3, 0);
 			SB(_m[t].m4, 5, 3, 0);
@@ -3293,9 +3354,9 @@ bool AfterLoadGame()
 
 	if (IsSavegameVersionBefore(SLV_165)) {
 		/* Adjust zoom level to account for new levels */
-		_saved_scrollpos_zoom = static_cast<ZoomLevel>(_saved_scrollpos_zoom + ZOOM_LVL_SHIFT);
-		_saved_scrollpos_x *= ZOOM_LVL_BASE;
-		_saved_scrollpos_y *= ZOOM_LVL_BASE;
+		_saved_scrollpos_zoom = static_cast<ZoomLevel>(_saved_scrollpos_zoom + ZOOM_BASE_SHIFT);
+		_saved_scrollpos_x *= ZOOM_BASE;
+		_saved_scrollpos_y *= ZOOM_BASE;
 	}
 
 	/* When any NewGRF has been changed the availability of some vehicles might
@@ -3364,7 +3425,7 @@ bool AfterLoadGame()
 
 	/* The road owner of standard road stops was not properly accounted for. */
 	if (IsSavegameVersionBefore(SLV_172)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (!IsBayRoadStopTile(t)) continue;
 			Owner o = GetTileOwner(t);
 			SetRoadOwner(t, RTT_ROAD, o);
@@ -3388,10 +3449,6 @@ bool AfterLoadGame()
 		}
 	}
 
-	/* Station blocked, wires and pylon flags need to be stored in the map.
-	 * This is done here as the SLV_182 check below needs the blocked status. */
-	UpdateStationTileCacheFlags(SlXvIsFeatureMissing(XSLFI_STATION_TILE_CACHE_FLAGS));
-
 	if (IsSavegameVersionBefore(SLV_182)) {
 		/* Aircraft acceleration variable was bonkers */
 		for (Aircraft *v : Aircraft::Iterate()) {
@@ -3403,7 +3460,7 @@ bool AfterLoadGame()
 
 		/* Blocked tiles could be reserved due to a bug, which causes
 		 * other places to assert upon e.g. station reconstruction. */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (HasStationTileRail(t) && IsStationTileBlocked(t)) {
 				SetRailStationReservation(t, false);
 			}
@@ -3428,7 +3485,7 @@ bool AfterLoadGame()
 
 	if (IsSavegameVersionBefore(SLV_186)) {
 		/* Move ObjectType from map to pool */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_OBJECT)) {
 				Object *o = Object::Get(_m[t].m2);
 				o->type = _m[t].m5;
@@ -3437,6 +3494,14 @@ bool AfterLoadGame()
 		}
 	}
 
+	/* Beyond this point, tile types which can be accessed by vehicles must be in a valid state. */
+
+	/* Update all vehicles: Phase 2 */
+	AfterLoadVehiclesPhase2(true);
+
+	/* The center of train vehicles was changed, fix up spacing. */
+	if (IsSavegameVersionBefore(SLV_164)) FixupTrainLengths();
+
 	/* In version 2.2 of the savegame, we have new airports, so status of all aircraft is reset.
 	 * This has to be called after all map array updates */
 	if (IsSavegameVersionBefore(SLV_2, 2)) UpdateOldAircraft();
@@ -3444,7 +3509,7 @@ bool AfterLoadGame()
 	if (SlXvIsFeaturePresent(XSLFI_SPRINGPP)) {
 		// re-arrange vehicle_flags
 		for (Vehicle *v : Vehicle::Iterate()) {
-			SB(v->vehicle_flags, VF_AUTOMATE_TIMETABLE, 1, GB(v->vehicle_flags, 6, 1));
+			AssignBit(v->vehicle_flags, VF_AUTOMATE_TIMETABLE, HasBit(v->vehicle_flags, 6));
 			SB(v->vehicle_flags, VF_STOP_LOADING, 4, GB(v->vehicle_flags, 7, 4));
 		}
 	}
@@ -3452,14 +3517,14 @@ bool AfterLoadGame()
 	if (SlXvIsFeaturePresent(XSLFI_CHILLPP, SL_CHILLPP_232)) {
 		// re-arrange vehicle_flags
 		for (Vehicle *v : Vehicle::Iterate()) {
-			SB(v->vehicle_flags, VF_AUTOMATE_TIMETABLE, 1, GB(v->vehicle_flags, 7, 1));
-			SB(v->vehicle_flags, VF_PATHFINDER_LOST, 1, GB(v->vehicle_flags, 8, 1));
+			AssignBit(v->vehicle_flags, VF_AUTOMATE_TIMETABLE, HasBit(v->vehicle_flags, 7));
+			AssignBit(v->vehicle_flags, VF_PATHFINDER_LOST, HasBit(v->vehicle_flags, 8));
 			SB(v->vehicle_flags, VF_SERVINT_IS_CUSTOM, 7, 0);
 		}
 	} else if (SlXvIsFeaturePresent(XSLFI_CHILLPP)) {
 		// re-arrange vehicle_flags
 		for (Vehicle *v : Vehicle::Iterate()) {
-			SB(v->vehicle_flags, VF_AUTOMATE_TIMETABLE, 1, GB(v->vehicle_flags, 6, 1));
+			AssignBit(v->vehicle_flags, VF_AUTOMATE_TIMETABLE, HasBit(v->vehicle_flags, 6));
 			SB(v->vehicle_flags, VF_STOP_LOADING, 9, 0);
 		}
 	}
@@ -3472,7 +3537,7 @@ bool AfterLoadGame()
 		 * So, make articulated parts catch up. */
 		bool roadside = _settings_game.vehicle.road_side == 1;
 		std::vector<uint> skip_frames;
-		for (RoadVehicle *v : RoadVehicle::Iterate()) {
+		for (RoadVehicle *v : RoadVehicle::IterateFrontOnly()) {
 			if (!v->IsFrontEngine()) continue;
 			skip_frames.clear();
 			TileIndex prev_tile = v->tile;
@@ -3524,16 +3589,16 @@ bool AfterLoadGame()
 	}
 
 	if (IsSavegameVersionBefore(SLV_190)) {
-		for (Order *order : Order::Iterate()) {
+		IterateAllNonVehicleOrders([&](Order *order) {
 			order->SetTravelTimetabled(order->GetTravelTime() > 0);
 			order->SetWaitTimetabled(order->GetWaitTime() > 0);
-		}
+		});
 	} else if (SlXvIsFeatureMissing(XSLFI_TIMETABLE_EXTRA)) {
-		for (Order *order : Order::Iterate()) {
+		IterateAllNonVehicleOrders([&](Order *order) {
 			if (order->IsType(OT_CONDITIONAL)) {
 				order->SetWaitTimetabled(order->GetWaitTime() > 0);
 			}
-		}
+		});
 	}
 
 	if (SlXvIsFeaturePresent(XSLFI_TT_WAIT_IN_DEPOT, 1, 1) || IsSavegameVersionBefore(SLV_190) || SlXvIsFeatureMissing(XSLFI_TIMETABLE_EXTRA)) {
@@ -3555,7 +3620,7 @@ bool AfterLoadGame()
 	}
 
 	if (SlXvIsFeaturePresent(XSLFI_JOKERPP)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_RAILWAY) && HasSignals(t)) {
 				if (GetSignalType(t, TRACK_LOWER) == SIGTYPE_PROG) SetSignalType(t, TRACK_LOWER, SIGTYPE_BLOCK);
 				if (GetSignalType(t, TRACK_UPPER) == SIGTYPE_PROG) SetSignalType(t, TRACK_UPPER, SIGTYPE_BLOCK);
@@ -3582,7 +3647,7 @@ bool AfterLoadGame()
 		_jokerpp_non_auto_separation.clear();
 	}
 	if (SlXvIsFeaturePresent(XSLFI_CHILLPP, SL_CHILLPP_232)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_RAILWAY) && HasSignals(t)) {
 				if (GetSignalType(t, TRACK_LOWER) == 7) SetSignalType(t, TRACK_LOWER, SIGTYPE_BLOCK);
 				if (GetSignalType(t, TRACK_UPPER) == 7) SetSignalType(t, TRACK_UPPER, SIGTYPE_BLOCK);
@@ -3622,27 +3687,13 @@ bool AfterLoadGame()
 	if (IsSavegameVersionBefore(SLV_EXTEND_INDUSTRY_CARGO_SLOTS)) {
 		/* Make sure added industry cargo slots are cleared */
 		for (Industry *i : Industry::Iterate()) {
-			for (size_t ci = 2; ci < lengthof(i->produced_cargo); ci++) {
-				i->produced_cargo[ci] = INVALID_CARGO;
-				i->produced_cargo_waiting[ci] = 0;
-				i->production_rate[ci] = 0;
-				i->last_month_production[ci] = 0;
-				i->last_month_transported[ci] = 0;
-				i->last_month_pct_transported[ci] = 0;
-				i->this_month_production[ci] = 0;
-				i->this_month_transported[ci] = 0;
-			}
-			for (size_t ci = 3; ci < lengthof(i->accepts_cargo); ci++) {
-				i->accepts_cargo[ci] = INVALID_CARGO;
-				i->incoming_cargo_waiting[ci] = 0;
-			}
 			/* Make sure last_cargo_accepted_at is copied to elements for every valid input cargo.
 			 * The loading routine should put the original singular value into the first array element. */
-			for (size_t ci = 0; ci < lengthof(i->accepts_cargo); ci++) {
-				if (i->accepts_cargo[ci] != INVALID_CARGO) {
-					i->last_cargo_accepted_at[ci] = i->last_cargo_accepted_at[0];
+			for (auto &a : i->Accepted()) {
+				if (a.cargo != INVALID_CARGO) {
+					a.last_accepted = i->GetAccepted(0).last_accepted;
 				} else {
-					i->last_cargo_accepted_at[ci] = 0;
+					a.last_accepted = EconTime::MIN_DATE;
 				}
 			}
 		}
@@ -3654,7 +3705,7 @@ bool AfterLoadGame()
 			/* If the start date is 0, the vehicle is not waiting to start and can be ignored. */
 			if (v->timetable_start == 0) continue;
 
-			v->timetable_start += _state_ticks.base() - _tick_counter;
+			v->timetable_start += StateTicksDelta{_state_ticks.base() - (int64_t)_tick_counter};
 		}
 	} else if (!SlXvIsFeaturePresent(XSLFI_TIMETABLES_START_TICKS, 3)) {
 		extern btree::btree_map<VehicleID, uint16_t> _old_timetable_start_subticks_map;
@@ -3666,10 +3717,10 @@ bool AfterLoadGame()
 				v->timetable_start.edit_base() *= DAY_TICKS;
 			}
 
-			v->timetable_start = DateTicksToStateTicks(v->timetable_start.base());
+			v->timetable_start = DateTicksToStateTicks(EconTime::DateTicks{v->timetable_start.base()});
 
 			if (SlXvIsFeaturePresent(XSLFI_TIMETABLES_START_TICKS, 2, 2)) {
-				v->timetable_start += _old_timetable_start_subticks_map[v->index];
+				v->timetable_start += StateTicksDelta{_old_timetable_start_subticks_map[v->index]};
 			}
 		}
 
@@ -3677,15 +3728,15 @@ bool AfterLoadGame()
 	}
 
 	if (!IsSavegameVersionBefore(SLV_DEPOT_UNBUNCHING)) {
-		for (Vehicle *v : Vehicle::Iterate()) {
+		for (Vehicle *v : Vehicle::IterateFrontOnly()) {
 			if (v->unbunch_state != nullptr) {
 				if (v->unbunch_state->depot_unbunching_last_departure > 0) {
-					v->unbunch_state->depot_unbunching_last_departure += _state_ticks.base() - _tick_counter;
+					v->unbunch_state->depot_unbunching_last_departure += StateTicksDelta{_state_ticks.base() - (int64_t)_tick_counter};
 				} else {
 					v->unbunch_state->depot_unbunching_last_departure = INVALID_STATE_TICKS;
 				}
 				if (v->unbunch_state->depot_unbunching_next_departure > 0) {
-					v->unbunch_state->depot_unbunching_next_departure += _state_ticks.base() - _tick_counter;
+					v->unbunch_state->depot_unbunching_next_departure += StateTicksDelta{_state_ticks.base() - (int64_t)_tick_counter};
 				} else {
 					v->unbunch_state->depot_unbunching_next_departure = INVALID_STATE_TICKS;
 				}
@@ -3701,19 +3752,19 @@ bool AfterLoadGame()
 		 * To avoid making things too cheap, clamp the price inflation factor to no lower than the payment inflation factor.
 		 */
 
-		DEBUG(sl, 3, "Inflation prices: %f", _economy.inflation_prices / 65536.0);
-		DEBUG(sl, 3, "Inflation payments: %f", _economy.inflation_payment / 65536.0);
+		Debug(sl, 3, "Inflation prices: {}", _economy.inflation_prices / 65536.0);
+		Debug(sl, 3, "Inflation payments: {}", _economy.inflation_payment / 65536.0);
 
 		_economy.inflation_prices >>= 3;
 		if (_economy.inflation_prices < _economy.inflation_payment) {
 			_economy.inflation_prices = _economy.inflation_payment;
 		}
 
-		DEBUG(sl, 3, "New inflation prices: %f", _economy.inflation_prices / 65536.0);
+		Debug(sl, 3, "New inflation prices: {}", _economy.inflation_prices / 65536.0);
 	}
 
 	if (SlXvIsFeaturePresent(XSLFI_MIGHT_USE_PAX_SIGNALS) || SlXvIsFeatureMissing(XSLFI_TRACE_RESTRICT)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (HasStationTileRail(t)) {
 				/* clear station PAX bit */
 				ClrBit(_me[t].m6, 6);
@@ -3735,7 +3786,7 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeaturePresent(XSLFI_TRAFFIC_LIGHTS)) {
 		/* remove traffic lights */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_ROAD) && (GetRoadTileType(t) == ROAD_TILE_NORMAL)) {
 				DeleteAnimatedTile(t);
 				ClrBit(_me[t].m7, 4);
@@ -3745,7 +3796,7 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeaturePresent(XSLFI_RAIL_AGEING)) {
 		/* remove rail aging data */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsPlainRailTile(t)) {
 				SB(_me[t].m7, 0, 8, 0);
 			}
@@ -3754,17 +3805,17 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeaturePresent(XSLFI_SPRINGPP)) {
 		/* convert wait for cargo orders to ordinary load if possible */
-		for (Order *order : Order::Iterate()) {
+		IterateVehicleAndOrderListOrders([](Order *order) {
 			if ((order->IsType(OT_GOTO_STATION) || order->IsType(OT_LOADING) || order->IsType(OT_IMPLICIT)) && order->GetLoadType() == static_cast<OrderLoadFlags>(1)) {
 				order->SetLoadType(OLF_LOAD_IF_POSSIBLE);
 			}
-		}
+		});
 	}
 
 	if (SlXvIsFeaturePresent(XSLFI_SIG_TUNNEL_BRIDGE, 1, 1)) {
 		/* set the semaphore bit to match what it would have been in v1 */
 		/* clear the PBS bit, update the end signal state */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL && IsTunnelBridgeWithSignalSimulation(t)) {
 				SetTunnelBridgeSemaphore(t, CalTime::CurYear() < _settings_client.gui.semaphore_build_before);
 				SetTunnelBridgePBS(t, false);
@@ -3776,7 +3827,7 @@ bool AfterLoadGame()
 		/* red/green signal state bit for tunnel entrances moved
 		 * to no longer re-use signalled tunnel exit bit
 		 */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL && IsTunnelBridgeWithSignalSimulation(t)) {
 				if (HasBit(_m[t].m5, 5)) {
 					/* signalled tunnel entrance */
@@ -3799,7 +3850,7 @@ bool AfterLoadGame()
 	}
 	if (SlXvIsFeaturePresent(XSLFI_SIG_TUNNEL_BRIDGE, 1, 5)) {
 		/* entrance and exit signal red/green states now have separate bits */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL && IsTunnelBridgeSignalSimulationExit(t)) {
 				SetTunnelBridgeExitSignalState(t, HasBit(_me[t].m6, 0) ? SIGNAL_STATE_GREEN : SIGNAL_STATE_RED);
 			}
@@ -3813,7 +3864,7 @@ bool AfterLoadGame()
 	}
 	if (SlXvIsFeaturePresent(XSLFI_SIG_TUNNEL_BRIDGE, 1, 8)) {
 		/* spacing made per tunnel/bridge */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL && IsTunnelBridgeWithSignalSimulation(t)) {
 				DiagDirection dir = GetTunnelBridgeDirection(t);
 				if (dir == DIAGDIR_NE || dir == DIAGDIR_SE) {
@@ -3838,7 +3889,7 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeatureMissing(XSLFI_CUSTOM_BRIDGE_HEADS)) {
 		/* ensure that previously unused custom bridge-head bits are cleared */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsBridgeTile(t) && GetTunnelBridgeTransportType(t) == TRANSPORT_ROAD) {
 				SB(_m[t].m2, 0, 8, 0);
 			}
@@ -3904,14 +3955,14 @@ bool AfterLoadGame()
 
 	if (IsSavegameVersionBefore(SLV_TREES_WATER_CLASS) && !SlXvIsFeaturePresent(XSLFI_CHUNNEL, 2)) {
 		/* Update water class for trees. */
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TREES)) SetWaterClass(t, GetTreeGround(t) == TREE_GROUND_SHORE ? WATER_CLASS_SEA : WATER_CLASS_INVALID);
 		}
 	}
 
 	/* Update structures for multitile docks */
 	if (IsSavegameVersionBefore(SLV_MULTITILE_DOCKS)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			/* Clear docking tile flag from relevant tiles as it
 			 * was not previously cleared. */
 			if (IsTileType(t, MP_WATER) || IsTileType(t, MP_RAILWAY) || IsTileType(t, MP_STATION) || IsTileType(t, MP_TUNNELBRIDGE)) {
@@ -3924,7 +3975,7 @@ bool AfterLoadGame()
 		}
 	}
 
-	if (IsSavegameVersionUntil(SLV_ENDING_YEAR) || !SlXvIsFeaturePresent(XSLFI_MULTIPLE_DOCKS, 2) || !SlXvIsFeaturePresent(XSLFI_DOCKING_CACHE_VER, 3)) {
+	if (IsSavegameVersionBeforeOrAt(SLV_ENDING_YEAR) || !SlXvIsFeaturePresent(XSLFI_MULTIPLE_DOCKS, 2) || !SlXvIsFeaturePresent(XSLFI_DOCKING_CACHE_VER, 3)) {
 		/* Update station docking tiles. Was only needed for pre-SLV_MULTITLE_DOCKS
 		 * savegames, but a bug in docking tiles touched all savegames between
 		 * SLV_MULTITILE_DOCKS and SLV_ENDING_YEAR. */
@@ -3958,12 +4009,11 @@ bool AfterLoadGame()
 			if (c->settings.renew_keep_length) SetBit(wagon_removal, c->index);
 		}
 		for (Group *g : Group::Iterate()) {
-			if (g->flags != 0) {
+			if (to_underlying(g->flags) != 0) {
 				/* Convert old replace_protection value to flag. */
-				g->flags = 0;
-				SetBit(g->flags, GroupFlags::GF_REPLACE_PROTECTION);
+				g->flags = GroupFlags::ReplaceProtection;
 			}
-			if (HasBit(wagon_removal, g->owner)) SetBit(g->flags, GroupFlags::GF_REPLACE_WAGON_REMOVAL);
+			if (HasBit(wagon_removal, g->owner)) g->flags |= GroupFlags::ReplaceWagonRemoval;
 		}
 	}
 
@@ -3973,10 +4023,10 @@ bool AfterLoadGame()
 			v->last_loading_tick = _state_ticks - v->current_order_time;
 		}
 	} else if (SlXvIsFeatureMissing(XSLFI_LAST_LOADING_TICK, 3)) {
-		const StateTicksDelta delta = _state_ticks.base() - (int64_t)_scaled_tick_counter;
+		const StateTicksDelta delta = StateTicksDelta{_state_ticks.base() - (int64_t)_scaled_tick_counter};
 		for (Vehicle *v : Vehicle::Iterate()) {
 			if (v->last_loading_tick != 0) {
-				if (SlXvIsFeaturePresent(XSLFI_LAST_LOADING_TICK, 1, 1)) v->last_loading_tick = v->last_loading_tick.base() * DayLengthFactor();
+				if (SlXvIsFeaturePresent(XSLFI_LAST_LOADING_TICK, 1, 1)) v->last_loading_tick = StateTicks{v->last_loading_tick.base() * DayLengthFactor()};
 				v->last_loading_tick += delta;
 			}
 		}
@@ -4012,7 +4062,7 @@ bool AfterLoadGame()
 
 	if (SlXvIsFeaturePresent(XSLFI_AUTO_TIMETABLE, 1, 3)) {
 		for (Vehicle *v : Vehicle::Iterate()) {
-			SB(v->vehicle_flags, VF_TIMETABLE_SEPARATION, 1, _settings_game.order.old_timetable_separation);
+			AssignBit(v->vehicle_flags, VF_TIMETABLE_SEPARATION, _settings_game.order.old_timetable_separation);
 		}
 	}
 
@@ -4031,7 +4081,7 @@ bool AfterLoadGame()
 			_settings_game.economy.town_cargo_scale = ScaleQuantity(100, _settings_game.old_economy.town_cargo_scale_factor);
 		}
 		if (!SlXvIsFeaturePresent(XSLFI_TOWN_CARGO_ADJ, 3)) {
-			_settings_game.economy.town_cargo_scale_mode = CSM_MONTHLY;
+			_settings_game.economy.town_cargo_scale_mode = CSM_NORMAL;
 		}
 
 		if (SlXvIsFeatureMissing(XSLFI_INDUSTRY_CARGO_ADJ)) {
@@ -4039,13 +4089,13 @@ bool AfterLoadGame()
 		} else if (SlXvIsFeaturePresent(XSLFI_INDUSTRY_CARGO_ADJ, 1, 1)) {
 			_settings_game.economy.industry_cargo_scale = ScaleQuantity(100, _settings_game.old_economy.industry_cargo_scale_factor);
 		}
-		if (!SlXvIsFeaturePresent(XSLFI_TOWN_CARGO_ADJ, 2)) {
-			_settings_game.economy.industry_cargo_scale_mode = CSM_MONTHLY;
+		if (!SlXvIsFeaturePresent(XSLFI_INDUSTRY_CARGO_ADJ, 2)) {
+			_settings_game.economy.industry_cargo_scale_mode = CSM_NORMAL;
 		}
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_SAFER_CROSSINGS)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsLevelCrossingTile(t)) {
 				SetCrossingOccupiedByRoadVehicle(t, IsTrainCollidableRoadVehicleOnGround(t));
 			}
@@ -4059,14 +4109,14 @@ bool AfterLoadGame()
 		for (OrderBackup *bckup : OrderBackup::Iterate()) {
 			bckup->cur_timetable_order_index = INVALID_VEH_ORDER_ID;
 		}
-		for (Order *order : Order::Iterate()) {
+		IterateAllNonVehicleOrders([&](Order *order) {
 			if (order->IsType(OT_CONDITIONAL)) {
 				if (order->GetTravelTime() != 0) {
-					DEBUG(sl, 1, "Fixing: order->GetTravelTime() != 0, %u", order->GetTravelTime());
+					Debug(sl, 1, "Fixing: order->GetTravelTime() != 0, {}", order->GetTravelTime());
 					order->SetTravelTime(0);
 				}
 			}
-		}
+		});
 #ifdef WITH_ASSERT
 		for (OrderList *order_list : OrderList::Iterate()) {
 			order_list->DebugCheckSanity();
@@ -4099,12 +4149,12 @@ bool AfterLoadGame()
 	}
 
 	if (SlXvIsFeaturePresent(XSLFI_MORE_COND_ORDERS, 1, 1)) {
-		for (Order *order : Order::Iterate()) {
+		IterateAllNonVehicleOrders([&](Order *order) {
 			/* Insertion of OCV_MAX_RELIABILITY between OCV_REMAINING_LIFETIME and OCV_CARGO_WAITING */
 			if (order->IsType(OT_CONDITIONAL) && order->GetConditionVariable() > OCV_REMAINING_LIFETIME) {
 				order->SetConditionVariable(static_cast<OrderConditionVariable>((uint)order->GetConditionVariable() + 1));
 			}
-		}
+		});
 	}
 	if (SlXvIsFeaturePresent(XSLFI_MORE_COND_ORDERS, 1, 14)) {
 		for (OrderList *order_list : OrderList::Iterate()) {
@@ -4113,23 +4163,23 @@ bool AfterLoadGame()
 				for (uint i = 0; i < max; i++) {
 					if (order->IsType(OT_GOTO_STATION) && Station::IsValidID(order->GetDestination())) return order->GetDestination();
 
-					order = (order->next != nullptr) ? order->next : order_list->GetFirstOrder();
+					order = order_list->GetNext(order);
 				}
 				return INVALID_STATION;
 			};
 
-			for (Order *order = order_list->GetFirstOrder(); order != nullptr; order = order->next) {
-				/* Fixup station ID for OCV_CARGO_WAITING, OCV_CARGO_ACCEPTANCE, OCV_FREE_PLATFORMS, OCV_CARGO_WAITING_AMOUNT */
+			for (Order *order : order_list->Orders()) {
+				/* Fixup station ID for OCV_CARGO_WAITING, OCV_CARGO_ACCEPTANCE, OCV_FREE_PLATFORMS, OCV_CARGO_WAITING_AMOUNT, OCV_CARGO_WAITING_AMOUNT_PERCENTAGE */
 				if (order->IsType(OT_CONDITIONAL) && ConditionVariableHasStationID(order->GetConditionVariable())) {
-					StationID next_id =  get_real_station(order);
-					SB(order->GetXData2Ref(), 0, 16, next_id + 1);
-					if (next_id != INVALID_STATION && GB(order->GetXData(), 16, 16) - 2 == next_id) {
+					StationID next_id = get_real_station(order);
+					order->SetConditionStationID(next_id);
+					if (next_id != INVALID_STATION && order->GetConditionViaStationID() == next_id) {
 						/* Duplicate next and via, remove via */
-						SB(order->GetXDataRef(), 16, 16, 0);
+						order->ClearConditionViaStation();
 					}
-					if (GB(order->GetXData(), 16, 16) != 0 && !Station::IsValidID(GB(order->GetXData(), 16, 16) - 2)) {
+					if (order->HasConditionViaStation() && !Station::IsValidID(order->GetConditionViaStationID())) {
 						/* Via station is invalid */
-						SB(order->GetXDataRef(), 16, 16, INVALID_STATION + 2);
+						order->SetConditionViaStationID(INVALID_STATION);
 					}
 				}
 			}
@@ -4158,7 +4208,7 @@ bool AfterLoadGame()
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_ONE_WAY_DT_ROAD_STOP)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsDriveThroughStopTile(t)) {
 				SetDriveThroughStopDisallowedRoadDirections(t, DRD_NONE);
 			}
@@ -4188,7 +4238,7 @@ bool AfterLoadGame()
 	}
 
 	if (!SlXvIsFeaturePresent(XSLFI_REALISTIC_TRAIN_BRAKING, 5) && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
-		for (Train *t : Train::Iterate()) {
+		for (Train *t : Train::IterateFrontOnly()) {
 			if (t->lookahead != nullptr) {
 				t->lookahead->SetNextExtendPosition();
 			}
@@ -4196,7 +4246,7 @@ bool AfterLoadGame()
 	}
 
 	if (!SlXvIsFeaturePresent(XSLFI_REALISTIC_TRAIN_BRAKING, 6) && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
-		for (Train *t : Train::Iterate()) {
+		for (Train *t : Train::IterateFrontOnly()) {
 			if (t->lookahead != nullptr) {
 				t->lookahead->cached_zpos = t->CalculateOverallZPos();
 				t->lookahead->zpos_refresh_remaining = t->GetZPosCacheUpdateInterval();
@@ -4208,15 +4258,6 @@ bool AfterLoadGame()
 		_settings_game.economy.inflation_fixed_dates = !IsSavegameVersionBefore(SLV_GS_INDUSTRY_CONTROL);
 	}
 
-	if (SlXvIsFeatureMissing(XSLFI_MORE_HOUSES)) {
-		for (TileIndex t = 0; t < map_size; t++) {
-			if (IsTileType(t, MP_HOUSE)) {
-				/* Move upper bit of house ID from bit 6 of m3 to bits 6..5 of m3. */
-				SB(_m[t].m3, 5, 2, GB(_m[t].m3, 6, 1));
-			}
-		}
-	}
-
 	if (SlXvIsFeatureMissing(XSLFI_CUSTOM_TOWN_ZONE)) {
 		_settings_game.economy.city_zone_0_mult = _settings_game.economy.town_zone_0_mult;
 		_settings_game.economy.city_zone_1_mult = _settings_game.economy.town_zone_1_mult;
@@ -4226,7 +4267,7 @@ bool AfterLoadGame()
 	}
 
 	if (!SlXvIsFeaturePresent(XSLFI_WATER_FLOODING, 2)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_WATER)) {
 				SetNonFloodingWaterTile(t, false);
 			}
@@ -4234,7 +4275,7 @@ bool AfterLoadGame()
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_TRACE_RESTRICT_TUNBRIDGE)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL && IsTunnelBridgeWithSignalSimulation(t)) {
 				SetTunnelBridgeRestrictedSignal(t, false);
 			}
@@ -4242,7 +4283,7 @@ bool AfterLoadGame()
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_OBJECT_GROUND_TYPES, 3)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_OBJECT)) {
 				if (SlXvIsFeatureMissing(XSLFI_OBJECT_GROUND_TYPES)) _m[t].m4 = 0;
 				if (SlXvIsFeatureMissing(XSLFI_OBJECT_GROUND_TYPES, 2)) {
@@ -4291,7 +4332,7 @@ bool AfterLoadGame()
 
 		for (OrderList *order_list : OrderList::Iterate()) {
 			for (DispatchSchedule &ds : order_list->GetScheduledDispatchScheduleSet()) {
-				StateTicks start_tick = DateToStateTicks(ds.GetScheduledDispatchStartTick().base()) + _old_scheduled_dispatch_start_full_date_fract_map[&ds];
+				StateTicks start_tick = DateToStateTicks(EconTime::DeserialiseDateClamped(ds.GetScheduledDispatchStartTick().base())) + _old_scheduled_dispatch_start_full_date_fract_map[&ds];
 				ds.SetScheduledDispatchStartTick(start_tick);
 			}
 		}
@@ -4320,7 +4361,7 @@ bool AfterLoadGame()
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_NEW_SIGNAL_STYLES)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_RAILWAY) && HasSignals(t)) {
 				/* clear signal style field */
 				_me[t].m6 = 0;
@@ -4332,12 +4373,27 @@ bool AfterLoadGame()
 		}
 	}
 
+	if (SlXvIsFeaturePresent(XSLFI_NEW_SIGNAL_STYLES) && SlXvIsFeatureMissing(XSLFI_NEW_SIGNAL_STYLES, 5)) {
+		/* Previously both tunnel ends shared the same style, set second style field to be a copy of the first */
+		for (Tunnel *tunnel : Tunnel::Iterate()) {
+			tunnel->style_s = tunnel->style_n;
+		}
+	}
+
+	if (SlXvIsFeatureMissing(XSLFI_NEW_SIGNAL_STYLES, 5)) {
+		for (TileIndex t(0); t < map_size; t++) {
+			if (IsRailTunnelBridgeTile(t) && IsTunnelBridgeSignalSimulationEntranceOnly(t)) {
+				SetTunnelBridgePBS(t, false);
+			}
+		}
+	}
+
 	if (SlXvIsFeatureMissing(XSLFI_REALISTIC_TRAIN_BRAKING, 8)) {
 		_aspect_cfg_hash = 0;
 	}
 
 	if (!SlXvIsFeaturePresent(XSLFI_REALISTIC_TRAIN_BRAKING, 9) && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
-		for (Train *t : Train::Iterate()) {
+		for (Train *t : Train::IterateFrontOnly()) {
 			if (t->lookahead != nullptr) {
 				t->lookahead->lookahead_end_position = t->lookahead->reservation_end_position + 1;
 			}
@@ -4345,7 +4401,7 @@ bool AfterLoadGame()
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_NO_TREE_COUNTER)) {
-		for (TileIndex t = 0; t < map_size; t++) {
+		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_TREES)) {
 				ClearOldTreeCounter(t);
 			}
@@ -4364,7 +4420,7 @@ bool AfterLoadGame()
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_VARIABLE_TICK_RATE)) {
-		_settings_game.economy.tick_rate = IsSavegameVersionUntil(SLV_MORE_CARGO_AGE) ? TRM_TRADITIONAL : TRM_MODERN;
+		_settings_game.economy.tick_rate = IsSavegameVersionBeforeOrAt(SLV_MORE_CARGO_AGE) ? TRM_TRADITIONAL : TRM_MODERN;
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_ROAD_VEH_FLAGS)) {
@@ -4382,7 +4438,7 @@ bool AfterLoadGame()
 		/* We did load the "period" of the timer, but not the fired/elapsed. We can deduce that here. */
 		extern TimeoutTimer<TimerGameTick> _new_competitor_timeout;
 		_new_competitor_timeout.storage.elapsed = 0;
-		_new_competitor_timeout.fired = _new_competitor_timeout.period == 0;
+		_new_competitor_timeout.fired = _new_competitor_timeout.period.value == 0;
 	}
 
 	if (SlXvIsFeatureMissing(XSLFI_SAVEGAME_ID) && IsSavegameVersionBefore(SLV_SAVEGAME_ID)) {
@@ -4392,7 +4448,7 @@ bool AfterLoadGame()
 	if (IsSavegameVersionBefore(SLV_NEWGRF_LAST_SERVICE) && SlXvIsFeatureMissing(XSLFI_NEWGRF_LAST_SERVICE)) {
 		/* Set service date provided to NewGRF. */
 		for (Vehicle *v : Vehicle::Iterate()) {
-			v->date_of_last_service_newgrf = v->date_of_last_service.base();
+			v->date_of_last_service_newgrf = ToCalTimeCast(v->date_of_last_service);
 		}
 	}
 
@@ -4413,8 +4469,23 @@ bool AfterLoadGame()
 		ScriptObject::InitializeRandomizers();
 	}
 
+	if (IsSavegameVersionBeforeOrAt(SLV_MULTITRACK_LEVEL_CROSSINGS) && SlXvIsFeatureMissing(XSLFI_AUX_TILE_LOOP)) {
+		_settings_game.construction.flood_from_edges = false;
+	}
+
 	for (Company *c : Company::Iterate()) {
 		UpdateCompanyLiveries(c);
+	}
+
+	/* Update free group numbers data for each company, required regardless of savegame version. */
+	for (Group *g : Group::Iterate()) {
+		Company *c = Company::Get(g->owner);
+		if (IsSavegameVersionBefore(SLV_GROUP_NUMBERS) && SlXvIsFeatureMissing(XSLFI_GROUP_NUMBERS)) {
+			/* Use the index as group number when converting old savegames. */
+			g->number = c->freegroups.UseID(g->index);
+		} else {
+			c->freegroups.UseID(g->number);
+		}
 	}
 
 	/*
@@ -4428,6 +4499,7 @@ bool AfterLoadGame()
 	/* This needs to be done after conversion. */
 	RebuildViewportKdtree();
 	ViewportMapBuildTunnelCache();
+	AddIndustriesToLocationCaches();
 
 	/* Road stops is 'only' updating some caches */
 	AfterLoadRoadStops();
@@ -4464,10 +4536,15 @@ bool AfterLoadGame()
 	bool update_always_reserve_through = SlXvIsFeaturePresent(XSLFI_REALISTIC_TRAIN_BRAKING, 8, 10);
 	UpdateExtraAspectsVariable(update_always_reserve_through);
 
+	if (SlXvIsFeatureMissing(XSLFI_SIGNAL_SPECIAL_PROPAGATION_FLAG, 2)) {
+		UpdateAllSignalsSpecialPropagationFlag();
+	}
+
 	UpdateCargoScalers();
 
 	if (_networking && !_network_server) {
 		SlProcessVENC();
+		SlProcessERNC();
 
 		if (!_settings_client.client_locale.sync_locale_network_server) {
 			_settings_game.locale = _settings_newgame.locale;
@@ -4540,11 +4617,13 @@ void ReloadNewGRFData()
 	LoadStringWidthTable();
 	/* reload vehicles */
 	ResetVehicleHash();
+	AfterLoadLabelMaps();
 	AfterLoadEngines();
 	AnalyseIndustryTileSpriteGroups();
 	extern void AnalyseHouseSpriteGroups();
 	AnalyseHouseSpriteGroups();
-	AfterLoadVehicles(false);
+	AfterLoadVehiclesPhase1(false);
+	AfterLoadVehiclesPhase2(false);
 	StartupEngines();
 	GroupStatistics::UpdateAfterLoad();
 	/* update station graphics */
@@ -4558,8 +4637,7 @@ void ReloadNewGRFData()
 	}
 
 	/* Restore correct railtype for all rail tiles.*/
-	const TileIndex map_size = MapSize();
-	for (TileIndex t = 0; t < map_size; t++) {
+	for (TileIndex t(0); t < MapSize(); t++) {
 		if (GetTileType(t) == MP_RAILWAY ||
 				IsLevelCrossingTile(t) ||
 				IsRailStationTile(t) ||
@@ -4580,13 +4658,14 @@ void ReloadNewGRFData()
 	/* Update company statistics. */
 	AfterLoadCompanyStats();
 	/* Check and update house and town values */
-	UpdateHousesAndTowns(true, false);
+	UpdateHousesAndTowns(true);
 	/* Delete news referring to no longer existing entities */
 	DeleteInvalidEngineNews();
 	/* Update livery selection windows */
 	for (CompanyID i = COMPANY_FIRST; i < MAX_COMPANIES; i++) InvalidateWindowData(WC_COMPANY_COLOUR, i);
 	/* Update company infrastructure counts. */
 	InvalidateWindowClassesData(WC_COMPANY_INFRASTRUCTURE);
+	InvalidateWindowClassesData(WC_BUILD_TOOLBAR);
 	/* redraw the whole screen */
 	MarkWholeScreenDirty();
 	CheckTrainsLengths();

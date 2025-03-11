@@ -11,6 +11,7 @@
 #define POOL_TYPE_HPP
 
 #include "enum_type.hpp"
+#include "debug_dbg_assert.h"
 #include <vector>
 
 /** Various types of a pool. */
@@ -66,6 +67,19 @@ private:
 	PoolBase(const PoolBase &other);
 };
 
+struct DefaultPoolItemParam{};
+
+template <class Titem>
+struct DefaultPoolOps {
+	using Tptr = Titem *;
+	using Tparam_type = DefaultPoolItemParam;
+
+	static constexpr Titem *GetPtr(Titem *ptr) { return ptr; }
+	static constexpr Titem *PutPtr(Titem *ptr, DefaultPoolItemParam param) { return ptr; }
+	static constexpr Titem *NullValue() { return nullptr; }
+	static constexpr DefaultPoolItemParam DefaultItemParam() { return {}; }
+};
+
 /**
  * Base class for all pools.
  * @tparam Titem        Type of the class/struct that is going to be pooled
@@ -77,10 +91,13 @@ private:
  * @tparam Tzero        Whether to zero the memory
  * @warning when Tcache is enabled *all* instances of this pool's item must be of the same size.
  */
-template <class Titem, typename Tindex, size_t Tgrowth_step, size_t Tmax_size, PoolType Tpool_type = PT_NORMAL, bool Tcache = false, bool Tzero = true>
+template <class Titem, typename Tindex, size_t Tgrowth_step, size_t Tmax_size, PoolType Tpool_type = PT_NORMAL, bool Tcache = false, bool Tzero = true, typename Tops = DefaultPoolOps<Titem> >
 struct Pool : PoolBase {
-	/* Ensure Tmax_size is within the bounds of Tindex. */
-	static_assert((uint64_t)(Tmax_size - 1) >> 8 * sizeof(Tindex) == 0);
+	using ParamType = typename Tops::Tparam_type;
+	using PtrType = typename Tops::Tptr;
+
+	/* Ensure the highest possible index, i.e. Tmax_size -1, is within the bounds of Tindex. */
+	static_assert(Tmax_size - 1 <= MAX_UVALUE(Tindex));
 
 	static constexpr size_t MAX_SIZE = Tmax_size; ///< Make template parameter accessible from outside
 
@@ -95,11 +112,22 @@ struct Pool : PoolBase {
 #endif /* WITH_ASSERT */
 	bool cleaning;       ///< True if cleaning pool (deleting all items)
 
-	Titem **data;        ///< Pointer to array of pointers to Titem
+	PtrType *data;       ///< Pointer to array of Tops::Tptr (by default: pointers to Titem)
 	uint64_t *free_bitmap; ///< Pointer to free bitmap
 
 	Pool(const char *name);
 	void CleanPool() override;
+
+	inline PtrType &GetRawRef(size_t index)
+	{
+		dbg_assert_msg(index < this->first_unused, "index: {}, first_unused: {}, name: {}", index, this->first_unused, this->name);
+		return this->data[index];
+	}
+
+	inline PtrType GetRaw(size_t index)
+	{
+		return this->GetRawRef(index);
+	}
 
 	/**
 	 * Returns Titem with given index
@@ -109,8 +137,7 @@ struct Pool : PoolBase {
 	 */
 	inline Titem *Get(size_t index)
 	{
-		dbg_assert_msg(index < this->first_unused, "index: " PRINTF_SIZE ", first_unused: " PRINTF_SIZE ", name: %s", index, this->first_unused, this->name);
-		return this->data[index];
+		return Tops::GetPtr(this->GetRaw(index));
 	}
 
 	/**
@@ -120,7 +147,7 @@ struct Pool : PoolBase {
 	 */
 	inline bool IsValidID(size_t index)
 	{
-		return index < this->first_unused && this->Get(index) != nullptr;
+		return index < this->first_unused && this->GetRaw(index) != Tops::NullValue();
 	}
 
 	/**
@@ -231,13 +258,25 @@ struct Pool : PoolBase {
 	 * Base class for all PoolItems
 	 * @tparam Tpool The pool this item is going to be part of
 	 */
-	template <struct Pool<Titem, Tindex, Tgrowth_step, Tmax_size, Tpool_type, Tcache, Tzero> *Tpool>
+	template <struct Pool<Titem, Tindex, Tgrowth_step, Tmax_size, Tpool_type, Tcache, Tzero, Tops> *Tpool>
 	struct PoolItem {
 		Tindex index; ///< Index of this pool item
 
 		/** Type of the pool this item is going to be part of */
-		typedef struct Pool<Titem, Tindex, Tgrowth_step, Tmax_size, Tpool_type, Tcache, Tzero> Pool;
+		typedef struct Pool<Titem, Tindex, Tgrowth_step, Tmax_size, Tpool_type, Tcache, Tzero, Tops> Pool;
 
+protected:
+		static inline void *NewWithParam(size_t size, ParamType param)
+		{
+			return Tpool->GetNew(size, param);
+		}
+
+		static inline void *NewWithParam(size_t size, size_t index, ParamType param)
+		{
+			return Tpool->GetNew(size, index, param);
+		}
+
+public:
 		/**
 		 * Allocates space for new Titem
 		 * @param size size of Titem
@@ -246,7 +285,7 @@ struct Pool : PoolBase {
 		 */
 		inline void *operator new(size_t size)
 		{
-			return Tpool->GetNew(size);
+			return NewWithParam(size, Tops::DefaultItemParam());
 		}
 
 		/**
@@ -257,8 +296,8 @@ struct Pool : PoolBase {
 		inline void operator delete(void *p)
 		{
 			if (p == nullptr) return;
-			Titem *pn = (Titem *)p;
-			dbg_assert_msg(pn == Tpool->Get(pn->index), "name: %s", Tpool->name);
+			Titem *pn = static_cast<Titem *>(p);
+			dbg_assert_msg(pn == Tpool->Get(pn->index), "name: {}", Tpool->name);
 			Tpool->FreeItem(pn->index);
 		}
 
@@ -272,7 +311,7 @@ struct Pool : PoolBase {
 		 */
 		inline void *operator new(size_t size, size_t index)
 		{
-			return Tpool->GetNew(size, index);
+			return NewWithParam(size, index, Tops::DefaultItemParam());
 		}
 
 		/**
@@ -291,7 +330,7 @@ struct Pool : PoolBase {
 				 * memory are the same (because of possible inheritance).
 				 * Use { size_t index = item->index; delete item; new (index) item; }
 				 * instead to make sure destructor is called and no memory leaks. */
-				dbg_assert_msg(ptr != Tpool->data[i], "name: %s", Tpool->name);
+				dbg_assert_msg(ptr != Tpool->data[i], "name: {}", Tpool->name);
 			}
 			return ptr;
 		}
@@ -408,12 +447,12 @@ private:
 	/** Cache of freed pointers */
 	AllocCache *alloc_cache;
 
-	void *AllocateItem(size_t size, size_t index);
+	void *AllocateItem(size_t size, size_t index, ParamType param);
 	void ResizeFor(size_t index);
 	size_t FindFirstFree();
 
-	void *GetNew(size_t size);
-	void *GetNew(size_t size, size_t index);
+	void *GetNew(size_t size, ParamType param);
+	void *GetNew(size_t size, size_t index, ParamType param);
 
 	void FreeItem(size_t index);
 };

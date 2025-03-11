@@ -14,10 +14,9 @@
 #include "../vehicle_func.h"
 #include "../road_type.h"
 #include "../group.h"
-#include "../goal_type.h"
-#include "../story_type.h"
 #include "../3rdparty/robin_hood/robin_hood.h"
 
+#include "script_types.hpp"
 #include "script_log_types.hpp"
 
 #include "table/strings.h"
@@ -43,7 +42,6 @@ private:
 	class ScriptObject *mode_instance;       ///< The instance belonging to the current build mode.
 	ScriptAsyncModeProc *async_mode;         ///< The current command async mode we are in.
 	class ScriptObject *async_mode_instance; ///< The instance belonging to the current command async mode.
-	bool time_mode;                          ///< True if we in calendar time mode, or false (default) if we are in economy time mode.
 	CompanyID root_company;                  ///< The root company, the company that the script really belongs to.
 	CompanyID company;                       ///< The current company.
 
@@ -53,21 +51,17 @@ private:
 	CommandCost costs;               ///< The costs the script is tracking.
 	Money last_cost;                 ///< The last cost of the command.
 	uint32_t last_result;            ///< The last result data of the command.
-	uint last_error;                 ///< The last error of the command.
+	uint32_t last_result_valid;      ///< The last result data of the command is valid.
+	ScriptErrorType last_error{};    ///< The last error of the command.
 	bool last_command_res;           ///< The last result of the command.
 
+	Commands last_cmd;               ///< The last cmd passed to a command.
 	TileIndex last_tile;             ///< The last tile passed to a command.
-	uint32_t last_p1;                ///< The last p1 passed to a command.
-	uint32_t last_p2;                ///< The last p2 passed to a command.
-	uint64_t last_p3;                ///< The last p3 passed to a command.
-	uint32_t last_cmd;               ///< The last cmd passed to a command.
+	CallbackParameter last_cb_param; ///< The last callback parameter passed to a command.
 
 	VehicleID new_vehicle_id;        ///< The ID of the new Vehicle.
 	SignID new_sign_id;              ///< The ID of the new Sign.
 	GroupID new_group_id;            ///< The ID of the new Group.
-	GoalID new_goal_id;              ///< The ID of the new Goal.
-	StoryPageID new_story_page_id;   ///< The ID of the new StoryPage.
-	StoryPageID new_story_page_element_id; ///< The ID of the new StoryPageElement.
 
 	std::vector<int> callback_value; ///< The values which need to survive a callback.
 
@@ -85,7 +79,6 @@ public:
 		mode_instance     (nullptr),
 		async_mode        (nullptr),
 		async_mode_instance (nullptr),
-		time_mode         (false),
 		root_company      (INVALID_OWNER),
 		company           (INVALID_OWNER),
 		delay             (1),
@@ -93,19 +86,14 @@ public:
 		/* costs (can't be set) */
 		last_cost         (0),
 		last_result       (0),
-		last_error        (STR_NULL),
+		last_result_valid (false),
 		last_command_res  (true),
-		last_tile         (INVALID_TILE),
-		last_p1           (0),
-		last_p2           (0),
-		last_p3           (0),
 		last_cmd          (CMD_END),
+		last_tile         (INVALID_TILE),
+		last_cb_param     (0),
 		new_vehicle_id    (0),
 		new_sign_id       (0),
 		new_group_id      (0),
-		new_goal_id       (0),
-		new_story_page_id (0),
-		new_story_page_element_id(0),
 		/* calback_value (can't be set) */
 		road_type         (INVALID_ROADTYPE),
 		rail_type         (INVALID_RAILTYPE),

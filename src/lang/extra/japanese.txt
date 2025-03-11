@@ -15,7 +15,6 @@ STR_CONFIG_SETTING_AUTOSAVE                                     :オートセー
 STR_CONFIG_SETTING_AUTOSAVE_HELPTEXT                            :オートセーブの間隔を設定します
 
 STR_CONFIG_SETTING_INTERFACE_DEPARTUREBOARDS                    :{ORANGE}発車標
-STR_CONFIG_SETTING_INTERFACE_WALLCLOCK                          :{ORANGE}時刻
 STR_CONFIG_SETTING_INTERFACE_TIMETABLE                          :{ORANGE}ダイヤ
 STR_CONFIG_SETTING_INTERFACE_SIGNALS                            :{ORANGE}信号
 
@@ -28,8 +27,6 @@ STR_TRANSPARENT_LOADING_TOOLTIP                                 :{BLACK}積み�
 
 # Programmable Pre-Signals
 
-#House construction window (for SE only)
-
 #Town select window (for SE only)
 
 STR_MAPGEN_SNOW_LINE_HEIGHT                                     :{BLACK}雪線の位置:
@@ -40,35 +37,27 @@ STR_MAPGEN_SNOW_LINE_QUERY_CAPT                                 :{WHITE}雪線�
 STR_STATION_VIEW_DEPARTURES_BUTTON                              :{BLACK}発車標
 STR_STATION_VIEW_DEPARTURES_TOOLTIP                             :{BLACK}発車標を表示します。
 
-STR_DEPARTURES_CAPTION                                          :{WHITE}{STATION} 発車標
-STR_DEPARTURES_CAPTION_WAYPOINT                                 :{WHITE}{WAYPOINT} 発車標
-STR_DEPARTURES_PAX                                              :{BLACK}{TINY_FONT}旅客
-STR_DEPARTURES_FREIGHT                                          :{BLACK}{TINY_FONT}貨物
+STR_DEPARTURES_CAPTION                                          :{WHITE}{STRING} 発車標
 STR_DEPARTURES_DEPARTURES                                       :{BLACK}{TINY_FONT}発車
 STR_DEPARTURES_ARRIVALS                                         :{BLACK}{TINY_FONT}到着
-STR_DEPARTURES_VIA_BUTTON                                       :{BLACK}{TINY_FONT}経由
-STR_DEPARTURES_PAX_TOOLTIP                                      :{BLACK}旅客を運搬できる車両を表示
-STR_DEPARTURES_FREIGHT_TOOLTIP                                  :{BLACK}貨物を運搬できる車両を表示
-STR_DEPARTURES_DEPARTURES_TOOLTIP                               :{BLACK}発車時刻表を表示
-STR_DEPARTURES_ARRIVALS_TOOLTIP                                 :{BLACK}到着時刻表を表示
+STR_DEPARTURES_VIA_BUTTON                                       :{BLACK}経由
 STR_DEPARTURES_VIA_TOOLTIP                                      :{BLACK}通過車両を表示
 STR_DEPARTURES_EMPTY                                            :{ORANGE}現在、ダイヤを設定している車両はありません。
 STR_DEPARTURES_NONE_SELECTED                                    :{ORANGE}発車標が設定されていません。
-STR_DEPARTURES_TIME                                             :{ORANGE}{TT_TIME}
-STR_DEPARTURES_TIME_DEP                                         :{ORANGE}{TT_TIME} {GREEN}{UP_ARROW}
-STR_DEPARTURES_TIME_ARR                                         :{ORANGE}{TT_TIME} {RED}{DOWN_ARROW}
-STR_DEPARTURES_TIME_BOTH                                        :{ORANGE}{1:TT_TIME} {RED}{DOWN_ARROW} {ORANGE}{0:TT_TIME} {GREEN}{UP_ARROW}
-STR_DEPARTURES_TERMINUS                                         :{ORANGE}{STATION}{STRING}
-STR_DEPARTURES_TERMINUS_VIA_STATION                             :{ORANGE}{STATION}{STRING} 経由 {STRING}経由
-STR_DEPARTURES_TERMINUS_VIA                                     :{ORANGE}{STATION}{STRING} 経由
+STR_DEPARTURES_TIME                                             :{COLOUR}{STRING}
+STR_DEPARTURES_TIME_DEP                                         :{COLOUR}{STRING} {GREEN}{UP_ARROW}
+STR_DEPARTURES_TIME_ARR                                         :{COLOUR}{STRING} {RED}{DOWN_ARROW}
+STR_DEPARTURES_TIME_BOTH                                        :{COLOUR}{STRING} {RED}{DOWN_ARROW} {COLOUR}{STRING} {GREEN}{UP_ARROW}
+STR_DEPARTURES_TERMINUS                                         :{ORANGE}{STRING}{STRING}
+STR_DEPARTURES_TERMINUS_VIA_STATION                             :{ORANGE}{STRING}{STRING} 経由 {STRING}経由
+STR_DEPARTURES_TERMINUS_VIA                                     :{ORANGE}{STRING}{STRING} 経由
 STR_DEPARTURES_VIA                                              :{ORANGE} {STRING} 経由
 STR_DEPARTURES_TOC                                              :{ORANGE}{COMPANY}
 STR_DEPARTURES_GROUP                                            :{ORANGE}{GROUP}
 STR_DEPARTURES_VEH                                              :{ORANGE}{VEHICLE}
 STR_DEPARTURES_CALLING_AT                                       :{ORANGE}停車場:
-STR_DEPARTURES_CALLING_AT_FIRST_STATION                         :{STATION}
-STR_DEPARTURES_CALLING_AT_STATION                               :{STRING}, {STATION}
-STR_DEPARTURES_CALLING_AT_LAST_STATION                          :{STRING} 終点、{STATION}でございます
+STR_DEPARTURES_CALLING_AT_STATION                               :{STRING}, {STRING}
+STR_DEPARTURES_CALLING_AT_LAST_STATION                          :{STRING} 終点、{STRING}でございます
 STR_DEPARTURES_CALLING_AT_LIST                                  :{ORANGE}{STRING}.
 
 STR_DEPARTURES_TYPE_TRAIN                                       :{ORANGE}{TRAIN}
@@ -90,7 +79,7 @@ STR_DEPARTURES_STATION_PORTAIRPORT                              :{ORANGE} {SHIP}
 STR_DEPARTURES_ON_TIME                                          :{GREEN}定時
 STR_DEPARTURES_ARRIVED                                          :{GREEN}到着しました
 STR_DEPARTURES_DELAYED                                          :{YELLOW}遅れています
-STR_DEPARTURES_EXPECTED                                         :{YELLOW} {TT_TIME}見込み
+STR_DEPARTURES_EXPECTED                                         :{YELLOW} {STRING}見込み
 STR_DEPARTURES_CANCELLED                                        :{RED}運休
 
 STR_CONFIG_SETTING_DEPARTUREBOARDS                              :{ORANGE}発車標
@@ -105,14 +94,23 @@ STR_CONFIG_DEPARTURE_LARGER_FONT                                :発車標の停
 STR_CONFIG_DEPARTURE_LARGER_FONT_HELPTEXT                       :発車標に表示されている停車場案内を通常より大きいめのフォントで表示します。
 STR_CONFIG_DEPARTURE_DESTINATION_TYPE                           :発車標にて行先が港湾や空港の場合はアイコンを表示: {STRING}
 STR_CONFIG_DEPARTURE_DESTINATION_TYPE_HELPTEXT                  :発車標にて、行先が港湾や空港の場合は、船や飛行機のアイコンを表示します。
-STR_CONFIG_DEPARTURE_ONLY_PASSENGERS                            :発車標を旅客車両のみ表示: {STRING}
-STR_CONFIG_DEPARTURE_ONLY_PASSENGERS_HELPTEXT                   :発車標を、旅客を運搬できる車両のみ表示します。
-STR_CONFIG_DEPARTURE_SHOW_ALL_STOPS                             :発車標の停車場案内に運転停車の停車場を含む: {STRING}
-STR_CONFIG_DEPARTURE_SHOW_ALL_STOPS_HELPTEXT                    :発車標に表示されている停車場案内に運転停車の停車場を含めて表示します。
 
 # Town tooltip
 
 STR_PURCHASE_INFO_DESIGNED                                      :{BLACK}設計年: {GOLD}{NUM}
+
+STR_VEHICLE_STATUS_TRAIN_STOPPING_VEL_END                       :{RED}減速中　{VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_STATION_VEL_END                  :{LTBLUE}{STATION}へ向かっています　{VELOCITY}
+STR_VEHICLE_STATUS_NO_ORDERS_VEL_END                            :{LTBLUE}指令なし　{VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_WAYPOINT_VEL_END                 :{LTBLUE}{WAYPOINT}へ向かっています　{VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_VEL_END                    :{ORANGE}{DEPOT}へ回送中です　{VELOCITY}
+STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_SERVICE_VEL_END            :{LTBLUE}{DEPOT}へ保守回送中です　{VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_STATION_VEL_END                 :{LTBLUE}{STATION}に到達できません, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_WAYPOINT_VEL_END                :{LTBLUE}{WAYPOINT}に到達できません, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_VEL_END                   :{ORANGE} {DEPOT}車両基地に到達できません, {VELOCITY}
+STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_SERVICE_VEL_END           :{LTBLUE} {DEPOT}車両基地に到達できません, {VELOCITY}
+
+STR_ORDERS_GO_TO_TOOLTIP_EXTRA                                  :{BLACK}選択した指令の前またはリストの終わりに新規指令を挿入します。Ctrlを押しながら停留施設をクリックした場合は指令に「いずれかの貨物の満載まで待機」、中継駅の場合は「直通運転」、車両庫では「保守回送」がそれぞれ付きます。「指令を共有」またはCtrlを押しながら他の輸送機器をクリックするとその輸送機器と指令を共有します。普通に他の輸送機器をクリックした場合は指令をコピーします。指令で車両庫を経由するよう設定すると自動点検は無効になります
 
 STR_TIMETABLE_ARRIVAL_ABBREVIATION                              :着:
 STR_TIMETABLE_DEPARTURE_ABBREVIATION                            :発:
@@ -169,3 +167,21 @@ STR_COMPANY_VIEW_SELL_SHARE_TOOLTIP                             :{BLACK}この�
 STR_ERROR_CAN_T_BUY_25_SHARE_IN_THIS                            :{WHITE}この会社の株を25%購入できません
 STR_ERROR_CAN_T_SELL_25_SHARE_IN                                :{WHITE}この会社の株を25%売却できません
 STR_ERROR_PROTECTED                                             :{WHITE}この会社は開設から6年が経過していません
+
+STR_CONFIG_SETTING_CYCLE_SIGNAL_PBS                             :パス・一方通行パス
+
+STR_WARNING_PASSWORD_SECURITY                                   :{YELLOW}警告: サーバーの管理者はここに入力された文章をすべて読めます。
+STR_NETWORK_NEED_COMPANY_PASSWORD_CAPTION                       :{WHITE}この会社は保護されています。経営に参画するにはパスワードを入力してください
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_UNLOCK                    :パスワードのアンロック
+STR_NETWORK_CLIENT_LIST_ASK_COMPANY_UNLOCK                      :{YELLOW}会社 '{COMPANY}'のパスワードをリセットしてもよろしいですか？
+
+# Network set password
+STR_COMPANY_PASSWORD_CANCEL                                     :{BLACK}入力したパスワードを保存しない
+STR_COMPANY_PASSWORD_OK                                         :{BLACK}会社パスワードを変更
+STR_COMPANY_PASSWORD_CAPTION                                    :{WHITE}会社パスワード
+STR_COMPANY_PASSWORD_MAKE_DEFAULT                               :{BLACK}デフォルトの会社パスワード
+STR_COMPANY_PASSWORD_MAKE_DEFAULT_TOOLTIP                       :{BLACK}このパスワードを新しい交通会社の規定パスワードとして使用します
+
+STR_COMPANY_VIEW_PASSWORD                                       :{BLACK}パスワード
+STR_COMPANY_VIEW_PASSWORD_TOOLTIP                               :{BLACK}認証されていないプレーヤーの参加を防ぐために、会社をパスワードで保護します
+STR_COMPANY_VIEW_SET_PASSWORD                                   :{BLACK}会社パスワードを設定

@@ -38,7 +38,7 @@ inline void LinkGraph::BaseNode::Init(TileIndex xy, StationID st, uint demand)
  * This is useful if the date has been modified with the cheat menu.
  * @param interval Number of days to be added or subtracted.
  */
-void LinkGraph::ShiftDates(DateDelta interval)
+void LinkGraph::ShiftDates(EconTime::DateDelta interval)
 {
 	for (NodeID node1 = 0; node1 < this->Size(); ++node1) {
 		BaseNode &source = this->nodes[node1];
@@ -271,15 +271,17 @@ void LinkGraphFixupAfterLoad(bool compression_was_date)
 	/* last_compression was previously a Date, change it to a StateTicks */
 	for (LinkGraph *lg : LinkGraph::Iterate()) {
 		if (compression_was_date) lg->last_compression = DateToStateTicks((EconTime::Date)lg->last_compression).base();
-		lg->last_compression -= _state_ticks.base();
 		lg->last_compression += _scaled_tick_counter;
+		lg->last_compression -= _state_ticks.base();
+		if (lg->last_compression > _scaled_tick_counter) lg->last_compression = _scaled_tick_counter;
 	}
 
 	for (LinkGraphJob *lgj : LinkGraphJob::Iterate()) {
 		LinkGraph *lg = &(const_cast<LinkGraph &>(lgj->Graph()));
 		if (compression_was_date) lg->last_compression = DateToStateTicks((EconTime::Date)lg->last_compression).base();
-		lg->last_compression -= _state_ticks.base();
 		lg->last_compression += _scaled_tick_counter;
+		lg->last_compression -= _state_ticks.base();
+		if (lg->last_compression > _scaled_tick_counter) lg->last_compression = _scaled_tick_counter;
 
 		/* Change start and join ticks from DateTicks to ScaledTickCounter */
 		auto convert = [&](ScaledTickCounter &tick) {
@@ -287,5 +289,11 @@ void LinkGraphFixupAfterLoad(bool compression_was_date)
 		};
 		convert(lgj->join_tick);
 		convert(lgj->start_tick);
+	}
+}
+
+void LinkGraphJobSetDayLengthFactor() {
+	for (LinkGraphJob *lgj : LinkGraphJob::Iterate()) {
+		lgj->day_length_factor = DayLengthFactor();
 	}
 }

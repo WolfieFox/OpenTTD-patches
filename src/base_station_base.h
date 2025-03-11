@@ -22,17 +22,15 @@
 typedef Pool<BaseStation, StationID, 32, 64000> StationPool;
 extern StationPool _station_pool;
 
-struct StationSpecList {
-	const StationSpec *spec;
+template <typename T>
+struct SpecMapping {
+	const T *spec;       ///< Custom spec.
 	uint32_t grfid;      ///< GRF ID of this custom station
 	uint16_t localidx;   ///< Station ID within GRF of station
 };
 
-struct RoadStopSpecList {
-	const RoadStopSpec *spec;
-	uint32_t grfid;      ///< GRF ID of this custom road stop
-	uint16_t localidx;   ///< Station ID within GRF of road stop
-};
+using StationSpecList = SpecMapping<StationSpec>;
+using RoadStopSpecList = SpecMapping<RoadStopSpec>;
 
 struct RoadStopTileData {
 	TileIndex tile;
@@ -82,8 +80,8 @@ struct BaseStation : StationPool::PoolItem<&_station_pool> {
 	std::vector<RoadStopSpecList> roadstop_speclist; ///< List of road stop specs of this station
 
 	uint16_t random_bits;           ///< Random bits assigned to this station
-	byte waiting_triggers;          ///< Waiting triggers (NewGRF) for this station
-	byte delete_ctr;                ///< Delete counter. If greater than 0 then it is decremented until it reaches 0; the waypoint is then is deleted.
+	uint8_t waiting_triggers;       ///< Waiting triggers (NewGRF) for this station
+	uint8_t delete_ctr;             ///< Delete counter. If greater than 0 then it is decremented until it reaches 0; the waypoint is then is deleted.
 	uint8_t cached_anim_triggers;              ///< NOSAVE: Combined animation trigger bitmask, used to determine if trigger processing should happen.
 	uint8_t cached_roadstop_anim_triggers;     ///< NOSAVE: Combined animation trigger bitmask for road stops, used to determine if trigger processing should happen.
 	CargoTypes cached_cargo_triggers;          ///< NOSAVE: Combined cargo trigger bitmask
@@ -121,7 +119,7 @@ struct BaseStation : StationPool::PoolItem<&_station_pool> {
 	 * @param available will return false if ever the variable asked for does not exist
 	 * @return the value stored in the corresponding variable
 	 */
-	virtual uint32_t GetNewGRFVariable(const struct ResolverObject &object, uint16_t variable, byte parameter, bool *available) const = 0;
+	virtual uint32_t GetNewGRFVariable(const struct ResolverObject &object, uint16_t variable, uint8_t parameter, bool &available) const = 0;
 
 	/**
 	 * Update the coordinated of the sign (as shown in the viewport).
@@ -197,7 +195,7 @@ struct BaseStation : StationPool::PoolItem<&_station_pool> {
 		return (this->facilities & facilities) != 0;
 	}
 
-	inline byte GetRoadStopRandomBits(TileIndex tile) const
+	inline uint8_t GetRoadStopRandomBits(TileIndex tile) const
 	{
 		for (const RoadStopTileData &tile_data : this->custom_roadstop_tile_data) {
 			if (tile_data.tile == tile) return tile_data.random_bits;
@@ -205,7 +203,7 @@ struct BaseStation : StationPool::PoolItem<&_station_pool> {
 		return 0;
 	}
 
-	inline byte GetRoadStopAnimationFrame(TileIndex tile) const
+	inline uint8_t GetRoadStopAnimationFrame(TileIndex tile) const
 	{
 		for (const RoadStopTileData &tile_data : this->custom_roadstop_tile_data) {
 			if (tile_data.tile == tile) return tile_data.animation_frame;
@@ -214,11 +212,11 @@ struct BaseStation : StationPool::PoolItem<&_station_pool> {
 	}
 
 private:
-	bool SetRoadStopTileData(TileIndex tile, byte data, bool animation);
+	bool SetRoadStopTileData(TileIndex tile, uint8_t data, bool animation);
 
 public:
-	inline void SetRoadStopRandomBits(TileIndex tile, byte random_bits) { this->SetRoadStopTileData(tile, random_bits, false); }
-	inline bool SetRoadStopAnimationFrame(TileIndex tile, byte frame) { return this->SetRoadStopTileData(tile, frame, true); }
+	inline void SetRoadStopRandomBits(TileIndex tile, uint8_t random_bits) { this->SetRoadStopTileData(tile, random_bits, false); }
+	inline bool SetRoadStopAnimationFrame(TileIndex tile, uint8_t frame) { return this->SetRoadStopTileData(tile, frame, true); }
 	void RemoveRoadStopTileData(TileIndex tile);
 
 	static void PostDestructor(size_t index);
@@ -239,7 +237,7 @@ struct SpecializedStation : public BaseStation {
 	 * Set station type correctly
 	 * @param tile The base tile of the station.
 	 */
-	inline SpecializedStation<T, Tis_waypoint>(TileIndex tile) :
+	inline SpecializedStation(TileIndex tile) :
 			BaseStation(tile)
 	{
 		this->facilities = EXPECTED_FACIL;
@@ -322,5 +320,15 @@ struct SpecializedStation : public BaseStation {
 	 */
 	static Pool::IterateWrapper<T> Iterate(size_t from = 0) { return Pool::IterateWrapper<T>(from); }
 };
+
+/**
+ * Get spec mapping list for each supported custom spec type.
+ * @tparam T Spec type.
+ * @param bst Station of custom spec list.
+ * @return Speclist of custom spec type.
+ */
+template <class T> std::vector<SpecMapping<T>> &GetStationSpecList(BaseStation *bst);
+template <> inline std::vector<SpecMapping<StationSpec>> &GetStationSpecList<StationSpec>(BaseStation *bst) { return bst->speclist; }
+template <> inline std::vector<SpecMapping<RoadStopSpec>> &GetStationSpecList<RoadStopSpec>(BaseStation *bst) { return bst->roadstop_speclist; }
 
 #endif /* BASE_STATION_BASE_H */

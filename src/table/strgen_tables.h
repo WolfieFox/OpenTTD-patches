@@ -108,6 +108,7 @@ static const CmdStruct _cmd_structs[] = {
 	{"TT_TICKS",          EmitSingleChar, SCC_TT_TICKS,           1, -1, C_NONE},
 	{"TT_TICKS_LONG",     EmitSingleChar, SCC_TT_TICKS_LONG,      1, -1, C_NONE},
 	{"TT_TIME",           EmitSingleChar, SCC_TT_TIME,            1, -1, C_NONE},
+	{"TT_TIME_ABS",       EmitSingleChar, SCC_TT_TIME_ABS,        1, -1, C_NONE},
 
 	{"STRING",            EmitSingleChar, SCC_STRING,             1, -1, C_CASE | C_GENDER},
 	{"RAW_STRING",        EmitSingleChar, SCC_RAW_STRING_POINTER, 1, -1, C_NONE | C_GENDER},
@@ -137,11 +138,13 @@ static const CmdStruct _cmd_structs[] = {
 	{"COMPANY_NUM",       EmitSingleChar, SCC_COMPANY_NUM,        1, -1, C_NONE},
 	{"PRESIDENT_NAME",    EmitSingleChar, SCC_PRESIDENT_NAME,     1, -1, C_NONE | C_GENDER},
 	{"TRSLOT",            EmitSingleChar, SCC_TR_SLOT_NAME,       1, -1, C_NONE | C_GENDER},
+	{"TRSLOTGROUP",       EmitSingleChar, SCC_TR_SLOT_GROUP_NAME, 1, -1, C_NONE | C_GENDER},
 	{"TRCOUNTER",         EmitSingleChar, SCC_TR_COUNTER_NAME,    1, -1, C_NONE | C_GENDER},
 
 	{"VP_TOWN_LABEL1",    EmitSingleChar, SCC_VIEWPORT_TOWN_LABEL1, 2, -1, C_NONE},
 	{"VP_TOWN_LABEL2",    EmitSingleChar, SCC_VIEWPORT_TOWN_LABEL2, 2, -1, C_NONE},
 
+	{"SPACE",             EmitSingleChar, ' ',                    0, -1, C_DONTCOUNT},
 	{"",                  EmitSingleChar, '\n',                   0, -1, C_DONTCOUNT},
 	{"{",                 EmitSingleChar, '{',                    0, -1, C_DONTCOUNT},
 	{"UP_ARROW",          EmitSingleChar, SCC_UP_ARROW,           0, -1, C_DONTCOUNT},
@@ -152,7 +155,6 @@ static const CmdStruct _cmd_structs[] = {
 	{"BUS",               EmitSingleChar, SCC_BUS,                0, -1, C_DONTCOUNT},
 	{"PLANE",             EmitSingleChar, SCC_PLANE,              0, -1, C_DONTCOUNT},
 	{"SHIP",              EmitSingleChar, SCC_SHIP,               0, -1, C_DONTCOUNT},
-	{"SP",                EmitSingleChar, 0x20,                   0, -1, C_DONTCOUNT},
 	{"NBSP",              EmitSingleChar, 0xA0,                   0, -1, C_DONTCOUNT},
 	{"COPYRIGHT",         EmitSingleChar, 0xA9,                   0, -1, C_DONTCOUNT},
 	{"DOWN_ARROW",        EmitSingleChar, SCC_DOWN_ARROW,         0, -1, C_DONTCOUNT},

@@ -11,20 +11,24 @@
 #define COMMAND_TYPE_H
 
 #include "economy_type.h"
+#include "string_type.h"
 #include "strings_type.h"
 #include "tile_type.h"
+#include "core/serialisation.hpp"
 #include <optional>
 #include <string>
+#include <tuple>
+#include <type_traits>
 
 struct GRFFile;
+enum ClientID : uint32_t;
 
 enum CommandCostIntlFlags : uint8_t {
 	CCIF_NONE                     = 0,
 	CCIF_SUCCESS                  = 1 << 0,
-	CCIF_INLINE_EXTRA_MSG         = 1 << 1,
-	CCIF_INLINE_TILE              = 1 << 2,
-	CCIF_INLINE_RESULT            = 1 << 3,
-	CCIF_VALID_RESULT             = 1 << 4,
+	CCIF_VALID_RESULT             = 1 << 1,
+
+	CCIF_TYPE_MASK                = 0xF0,
 };
 DECLARE_ENUM_AS_BIT_SET(CommandCostIntlFlags)
 
@@ -37,13 +41,26 @@ class CommandCost {
 	ExpensesType expense_type;                  ///< the type of expence as shown on the finances view
 	CommandCostIntlFlags flags;                 ///< Flags: see CommandCostIntlFlags
 	StringID message;                           ///< Warning message for when success is unset
-	union {
-		uint32_t result = 0;
-		StringID extra_message;                 ///< Additional warning message for when success is unset
-		TileIndex tile;
-	} inl;
+
+	enum class CommandCostInlineType {
+		None,
+		AuxiliaryData,
+		ExtraMsg,
+		Tile,
+		Result,
+		AdditionalCash,
+	};
+
+	CommandCostInlineType GetInlineType() const { return static_cast<CommandCostInlineType>(this->flags >> 4); }
+
+	void SetInlineType(CommandCostInlineType inl_type)
+	{
+		this->flags &= ~CCIF_TYPE_MASK;
+		this->flags |= static_cast<CommandCostIntlFlags>(to_underlying(inl_type) << 4);
+	}
 
 	struct CommandCostAuxiliaryData {
+		Money additional_cash_required = 0;
 		uint32_t textref_stack[16] = {};
 		const GRFFile *textref_stack_grffile = nullptr; ///< NewGRF providing the #TextRefStack content.
 		uint textref_stack_size = 0;                    ///< Number of uint32_t values to put on the #TextRefStack for the error message.
@@ -51,10 +68,17 @@ class CommandCost {
 		TileIndex tile = INVALID_TILE;
 		uint32_t result = 0;
 	};
-	std::unique_ptr<CommandCostAuxiliaryData> aux_data;
+
+	union {
+		uint32_t result = 0;
+		StringID extra_message;                 ///< Additional warning message for when success is unset
+		uint32_t tile;
+		int64_t additional_cash_required;
+		CommandCostAuxiliaryData *aux_data;
+	} inl;
 
 	void AllocAuxData();
-	bool AddInlineData(CommandCostIntlFlags inline_flag);
+	bool AddInlineData(CommandCostInlineType inl_type);
 
 public:
 	/**
@@ -68,9 +92,28 @@ public:
 	explicit CommandCost(StringID msg) : cost(0), expense_type(INVALID_EXPENSES), flags(CCIF_NONE), message(msg) {}
 
 	CommandCost(const CommandCost &other);
-	CommandCost(CommandCost &&other) = default;
 	CommandCost &operator=(const CommandCost &other);
-	CommandCost &operator=(CommandCost &&other) = default;
+
+	CommandCost(CommandCost &&other)
+	{
+		*this = std::move(other);
+	}
+
+	CommandCost &operator=(CommandCost &&other)
+	{
+		this->cost = other.cost;
+		this->expense_type = other.expense_type;
+		this->flags = other.flags;
+		this->message = other.message;
+		this->inl = other.inl;
+		other.flags = CCIF_NONE; // Clear any ownership of other.inl.aux_data
+		return *this;
+	}
+
+	~CommandCost()
+	{
+		if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) delete this->inl.aux_data;
+	}
 
 	/**
 	 * Creates a command return value the is failed with the given message
@@ -78,7 +121,7 @@ public:
 	static CommandCost DualErrorMessage(StringID msg, StringID extra_msg)
 	{
 		CommandCost cc(msg);
-		cc.flags |= CCIF_INLINE_EXTRA_MSG;
+		cc.SetInlineType(CommandCostInlineType::ExtraMsg);
 		cc.inl.extra_message = extra_msg;
 		return cc;
 	}
@@ -142,9 +185,15 @@ public:
 	void MakeError(StringID message)
 	{
 		assert(message != INVALID_STRING_ID);
-		this->flags &= ~(CCIF_SUCCESS | CCIF_INLINE_EXTRA_MSG);
+		this->flags &= ~CCIF_SUCCESS;
 		this->message = message;
-		if (this->aux_data) this->aux_data->extra_message = INVALID_STRING_ID;
+
+		/* Cleary any extra message */
+		if (this->GetInlineType() == CommandCostInlineType::ExtraMsg) {
+			this->SetInlineType(CommandCostInlineType::None);
+		} else if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
+			this->inl.aux_data->extra_message = INVALID_STRING_ID;
+		}
 	}
 
 	void UseTextRefStack(const GRFFile *grffile, uint num_registers);
@@ -155,7 +204,7 @@ public:
 	 */
 	const GRFFile *GetTextRefStackGRF() const
 	{
-		return this->aux_data != nullptr ? this->aux_data->textref_stack_grffile : 0;
+		return this->GetInlineType() == CommandCostInlineType::AuxiliaryData ? this->inl.aux_data->textref_stack_grffile : 0;
 	}
 
 	/**
@@ -164,7 +213,7 @@ public:
 	 */
 	uint GetTextRefStackSize() const
 	{
-		return this->aux_data != nullptr ? this->aux_data->textref_stack_size : 0;
+		return this->GetInlineType() == CommandCostInlineType::AuxiliaryData ? this->inl.aux_data->textref_stack_size : 0;
 	}
 
 	/**
@@ -173,7 +222,7 @@ public:
 	 */
 	const uint32_t *GetTextRefStack() const
 	{
-		return this->aux_data != nullptr ? this->aux_data->textref_stack : nullptr;
+		return this->GetInlineType() == CommandCostInlineType::AuxiliaryData ? this->inl.aux_data->textref_stack : nullptr;
 	}
 
 	/**
@@ -193,8 +242,13 @@ public:
 	StringID GetExtraErrorMessage() const
 	{
 		if (this->Succeeded()) return INVALID_STRING_ID;
-		if (this->flags & CCIF_INLINE_EXTRA_MSG) return this->inl.extra_message;
-		return this->aux_data != nullptr ? this->aux_data->extra_message : INVALID_STRING_ID;
+		if (this->GetInlineType() == CommandCostInlineType::ExtraMsg) {
+			return this->inl.extra_message;
+		} else if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
+			return this->inl.aux_data->extra_message;
+		} else {
+			return INVALID_STRING_ID;
+		}
 	}
 
 	/**
@@ -242,11 +296,29 @@ public:
 
 	TileIndex GetTile() const
 	{
-		if (this->flags & CCIF_INLINE_TILE) return this->inl.tile;
-		return this->aux_data != nullptr ? this->aux_data->tile : INVALID_TILE;
+		if (this->GetInlineType() == CommandCostInlineType::Tile) {
+			return TileIndex(this->inl.tile);
+		} else if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
+			return this->inl.aux_data->tile;
+		} else {
+			return INVALID_TILE;
+		}
 	}
 
 	void SetTile(TileIndex tile);
+
+	Money GetAdditionalCashRequired() const
+	{
+		if (this->GetInlineType() == CommandCostInlineType::AdditionalCash) {
+			return this->inl.additional_cash_required;
+		} else if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
+			return this->inl.aux_data->additional_cash_required;
+		} else {
+			return 0;
+		}
+	}
+
+	void SetAdditionalCashRequired(Money cash);
 
 	bool HasResultData() const
 	{
@@ -255,12 +327,26 @@ public:
 
 	uint32_t GetResultData() const
 	{
-		if (this->flags & CCIF_INLINE_RESULT) return this->inl.result;
-		return this->aux_data != nullptr ? this->aux_data->result : 0;
+		if (this->GetInlineType() == CommandCostInlineType::Result) {
+			return this->inl.result;
+		} else if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
+			return this->inl.aux_data->result;
+		} else {
+			return 0;
+		}
 	}
 
 	void SetResultData(uint32_t result);
 };
+
+/**
+ * Define a default return value for a failed command.
+ *
+ * This variable contains a CommandCost object with is declared as "failed".
+ * Other functions just need to return this error if there is an error,
+ * which doesn't need to specific by a StringID.
+ */
+static const CommandCost CMD_ERROR = CommandCost(INVALID_STRING_ID);
 
 /**
  * List of commands.
@@ -272,7 +358,7 @@ public:
  *
  * @see _command_proc_table
  */
-enum Commands {
+enum Commands : uint16_t {
 	CMD_BUILD_RAILROAD_TRACK,         ///< build a rail track
 	CMD_REMOVE_RAILROAD_TRACK,        ///< remove a rail track
 	CMD_BUILD_SINGLE_RAIL,            ///< build a single rail track
@@ -287,7 +373,6 @@ enum Commands {
 	CMD_BUILD_OBJECT,                 ///< build an object
 	CMD_PURCHASE_LAND_AREA,           ///< purchase an area of landscape
 	CMD_BUILD_OBJECT_AREA,            ///< build an area of objects
-	CMD_BUILD_HOUSE,                  ///< build a house
 	CMD_BUILD_TUNNEL,                 ///< build a tunnel
 
 	CMD_REMOVE_FROM_RAIL_STATION,     ///< remove a (rectangle of) tiles from a rail station
@@ -321,6 +406,7 @@ enum Commands {
 	CMD_SELL_VEHICLE,                 ///< sell a vehicle
 	CMD_REFIT_VEHICLE,                ///< refit the cargo space of a vehicle
 	CMD_SEND_VEHICLE_TO_DEPOT,        ///< send a vehicle to a depot
+	CMD_MASS_SEND_VEHICLE_TO_DEPOT,   ///< mass send vehicles to depots
 	CMD_SET_VEHICLE_VISIBILITY,       ///< hide or unhide a vehicle in the build vehicle and autoreplace GUIs
 
 	CMD_MOVE_RAIL_VEHICLE,            ///< move a rail vehicle (in the depot)
@@ -335,7 +421,7 @@ enum Commands {
 	CMD_DUPLICATE_ORDER,              ///< duplicate an order
 	CMD_MASS_CHANGE_ORDER,            ///< mass change the target of an order
 
-	CMD_CHANGE_SERVICE_INT,           ///< change the server interval of a vehicle
+	CMD_CHANGE_SERVICE_INT,           ///< change the service interval of a vehicle
 
 	CMD_BUILD_INDUSTRY,               ///< build a new industry
 	CMD_INDUSTRY_SET_FLAGS,           ///< change industry control flags
@@ -352,8 +438,6 @@ enum Commands {
 
 	CMD_WANT_ENGINE_PREVIEW,          ///< confirm the preview of an engine
 	CMD_ENGINE_CTRL,                  ///< control availability of the engine for companies
-
-	CMD_SET_VEHICLE_UNIT_NUMBER,      ///< sets the unit number of a vehicle
 
 	CMD_RENAME_VEHICLE,               ///< rename a whole vehicle
 	CMD_RENAME_ENGINE,                ///< rename a engine (in the engine list)
@@ -388,6 +472,7 @@ enum Commands {
 	CMD_TOWN_SET_TEXT,                ///< set the custom text of a town
 	CMD_EXPAND_TOWN,                  ///< expand a town
 	CMD_DELETE_TOWN,                  ///< delete a town
+	CMD_PLACE_HOUSE,                  ///< place a house
 
 	CMD_ORDER_REFIT,                  ///< change the refit information of an order (for "goto depot" )
 	CMD_CLONE_ORDER,                  ///< clone (and share) an order
@@ -401,6 +486,7 @@ enum Commands {
 
 	CMD_CREATE_SUBSIDY,               ///< create a new subsidy
 	CMD_COMPANY_CTRL,                 ///< used in multiplayer to create a new companies etc.
+	CMD_COMPANY_ALLOW_LIST_CTRL,      ///< Used in multiplayer to add/remove a client's public key to/from the company's allow list.
 	CMD_CUSTOM_NEWS_ITEM,             ///< create a custom news message
 	CMD_CREATE_GOAL,                  ///< create a new goal
 	CMD_REMOVE_GOAL,                  ///< remove a goal
@@ -434,21 +520,18 @@ enum Commands {
 
 	CMD_SET_AUTOREPLACE,              ///< set an autoreplace entry
 
-	CMD_TOGGLE_REUSE_DEPOT_VEHICLES,  ///< toggle 'reuse depot vehicles' on template
-	CMD_TOGGLE_KEEP_REMAINING_VEHICLES, ///< toggle 'keep remaining vehicles' on template
-	CMD_SET_REFIT_AS_TEMPLATE,        ///< set/unset 'refit as template' on template
-	CMD_TOGGLE_TMPL_REPLACE_OLD_ONLY, ///< toggle 'replace old vehicles only' on template
-	CMD_RENAME_TMPL_REPLACE,          ///< rename a template
+	CMD_CHANGE_TEMPLATE_FLAG,         ///< change template flag
+	CMD_RENAME_TEMPLATE,              ///< rename a template
 
-	CMD_VIRTUAL_TRAIN_FROM_TEMPLATE_VEHICLE, ///< Creates a virtual train from a template
+	CMD_VIRTUAL_TRAIN_FROM_TEMPLATE,  ///< Creates a virtual train from a template
 	CMD_VIRTUAL_TRAIN_FROM_TRAIN,     ///< Creates a virtual train from a regular train
 	CMD_DELETE_VIRTUAL_TRAIN,         ///< Delete a virtual train
 	CMD_BUILD_VIRTUAL_RAIL_VEHICLE,   ///< Build a virtual train
-	CMD_REPLACE_TEMPLATE_VEHICLE,     ///< Replace a template vehicle with another one based on a virtual train
+	CMD_REPLACE_TEMPLATE,             ///< Replace a template vehicle with another one based on a virtual train
 	CMD_MOVE_VIRTUAL_RAIL_VEHICLE,    ///< Move a virtual rail vehicle
 	CMD_SELL_VIRTUAL_VEHICLE,         ///< Sell a virtual vehicle
 
-	CMD_CLONE_TEMPLATE_VEHICLE_FROM_TRAIN, ///< clone a train and create a new template vehicle based on it
+	CMD_CLONE_TEMPLATE_FROM_TRAIN,    ///< clone a train and create a new template vehicle based on it
 	CMD_DELETE_TEMPLATE_VEHICLE,      ///< delete a template vehicle
 
 	CMD_ISSUE_TEMPLATE_REPLACEMENT,   ///< issue a template replacement for a vehicle group
@@ -462,6 +545,7 @@ enum Commands {
 	CMD_TEMPLATE_REPLACE_VEHICLE,     ///< template replace a vehicle while it is in a depot
 	CMD_DEPOT_SELL_ALL_VEHICLES,      ///< sell all vehicles which are in a given depot
 	CMD_DEPOT_MASS_AUTOREPLACE,       ///< force the autoreplace to take action in a given depot
+	CMD_SET_TRAIN_SPEED_RESTRICTION,  ///< manually set train speed restriction
 
 	CMD_CREATE_GROUP,                 ///< create a new group
 	CMD_DELETE_GROUP,                 ///< delete a group
@@ -492,37 +576,42 @@ enum Commands {
 	CMD_REMOVE_LEAGUE_TABLE_ELEMENT,       ///< remove a league table element
 
 	CMD_PROGRAM_TRACERESTRICT_SIGNAL, ///< modify a signal tracerestrict program
+	CMD_MANAGE_TRACERESTRICT_SIGNAL,  ///< modify a signal tracerestrict program (management)
 	CMD_CREATE_TRACERESTRICT_SLOT,    ///< create a tracerestrict slot
 	CMD_ALTER_TRACERESTRICT_SLOT,     ///< alter a tracerestrict slot
 	CMD_DELETE_TRACERESTRICT_SLOT,    ///< delete a tracerestrict slot
 	CMD_ADD_VEHICLE_TRACERESTRICT_SLOT,    ///< add a vehicle to a tracerestrict slot
 	CMD_REMOVE_VEHICLE_TRACERESTRICT_SLOT, ///< remove a vehicle from a tracerestrict slot
+	CMD_CREATE_TRACERESTRICT_SLOT_GROUP,   ///< create a tracerestrict slot group
+	CMD_ALTER_TRACERESTRICT_SLOT_GROUP,    ///< alter a tracerestrict slot group
+	CMD_DELETE_TRACERESTRICT_SLOT_GROUP,   ///< delete a tracerestrict slot group
 	CMD_CREATE_TRACERESTRICT_COUNTER, ///< create a tracerestrict counter
 	CMD_ALTER_TRACERESTRICT_COUNTER,  ///< alter a tracerestrict counter
 	CMD_DELETE_TRACERESTRICT_COUNTER, ///< delete a tracerestrict counter
 
-	CMD_INSERT_SIGNAL_INSTRUCTION,    ///< insert a signal instruction
-	CMD_MODIFY_SIGNAL_INSTRUCTION,    ///< modifies a signal instruction
-	CMD_REMOVE_SIGNAL_INSTRUCTION,    ///< removes a signal instruction
-	CMD_SIGNAL_PROGRAM_MGMT,          ///< removes a signal program management command
+	CMD_PROGPRESIG_INSERT_INSTRUCTION,          ///< insert a signal instruction
+	CMD_PROGPRESIG_MODIFY_INSTRUCTION,          ///< modifies a signal instruction
+	CMD_PROGPRESIG_REMOVE_INSTRUCTION,          ///< removes a signal instruction
+	CMD_PROGPRESIG_PROGRAM_MGMT,                ///< signal program management command
 
-	CMD_SCHEDULED_DISPATCH,                     ///< scheduled dispatch start
-	CMD_SCHEDULED_DISPATCH_ADD,                 ///< scheduled dispatch add
-	CMD_SCHEDULED_DISPATCH_REMOVE,              ///< scheduled dispatch remove
-	CMD_SCHEDULED_DISPATCH_SET_DURATION,        ///< scheduled dispatch set schedule duration
-	CMD_SCHEDULED_DISPATCH_SET_START_DATE,      ///< scheduled dispatch set start date
-	CMD_SCHEDULED_DISPATCH_SET_DELAY,           ///< scheduled dispatch set maximum allow delay
-	CMD_SCHEDULED_DISPATCH_SET_REUSE_SLOTS,     ///< scheduled dispatch set whether to re-use dispatch slots
-	CMD_SCHEDULED_DISPATCH_RESET_LAST_DISPATCH, ///< scheduled dispatch reset last dispatch date
-	CMD_SCHEDULED_DISPATCH_CLEAR,               ///< scheduled dispatch clear schedule
-	CMD_SCHEDULED_DISPATCH_ADD_NEW_SCHEDULE,    ///< scheduled dispatch add new schedule
-	CMD_SCHEDULED_DISPATCH_REMOVE_SCHEDULE,     ///< scheduled dispatch remove schedule
-	CMD_SCHEDULED_DISPATCH_RENAME_SCHEDULE,     ///< scheduled dispatch rename schedule
-	CMD_SCHEDULED_DISPATCH_DUPLICATE_SCHEDULE,  ///< scheduled dispatch duplicate schedule
-	CMD_SCHEDULED_DISPATCH_APPEND_VEHICLE_SCHEDULE, ///< scheduled dispatch append schedules from another vehicle
-	CMD_SCHEDULED_DISPATCH_ADJUST,              ///< scheduled dispatch adjust time offsets in schedule
-	CMD_SCHEDULED_DISPATCH_SWAP_SCHEDULES,      ///< scheduled dispatch swap schedules in order
-	CMD_SCHEDULED_DISPATCH_SET_SLOT_FLAGS,      ///< scheduled dispatch set flags of dispatch slot
+	CMD_SCH_DISPATCH,                           ///< scheduled dispatch start
+	CMD_SCH_DISPATCH_ADD,                       ///< scheduled dispatch add
+	CMD_SCH_DISPATCH_REMOVE,                    ///< scheduled dispatch remove
+	CMD_SCH_DISPATCH_SET_DURATION,              ///< scheduled dispatch set schedule duration
+	CMD_SCH_DISPATCH_SET_START_DATE,            ///< scheduled dispatch set start date
+	CMD_SCH_DISPATCH_SET_DELAY,                 ///< scheduled dispatch set maximum allow delay
+	CMD_SCH_DISPATCH_SET_REUSE_SLOTS,           ///< scheduled dispatch set whether to re-use dispatch slots
+	CMD_SCH_DISPATCH_RESET_LAST_DISPATCH,       ///< scheduled dispatch reset last dispatch date
+	CMD_SCH_DISPATCH_CLEAR,                     ///< scheduled dispatch clear schedule
+	CMD_SCH_DISPATCH_ADD_NEW_SCHEDULE,          ///< scheduled dispatch add new schedule
+	CMD_SCH_DISPATCH_REMOVE_SCHEDULE,           ///< scheduled dispatch remove schedule
+	CMD_SCH_DISPATCH_RENAME_SCHEDULE,           ///< scheduled dispatch rename schedule
+	CMD_SCH_DISPATCH_DUPLICATE_SCHEDULE,        ///< scheduled dispatch duplicate schedule
+	CMD_SCH_DISPATCH_APPEND_VEH_SCHEDULE,       ///< scheduled dispatch append schedules from another vehicle
+	CMD_SCH_DISPATCH_ADJUST,                    ///< scheduled dispatch adjust time offsets in schedule
+	CMD_SCH_DISPATCH_SWAP_SCHEDULES,            ///< scheduled dispatch swap schedules in order
+	CMD_SCH_DISPATCH_SET_SLOT_FLAGS,            ///< scheduled dispatch set flags of dispatch slot
+	CMD_SCH_DISPATCH_RENAME_TAG,                ///< scheduled dispatch rename departure tag
 
 	CMD_ADD_PLAN,
 	CMD_ADD_PLAN_LINE,
@@ -531,11 +620,101 @@ enum Commands {
 	CMD_CHANGE_PLAN_VISIBILITY,
 	CMD_CHANGE_PLAN_COLOUR,
 	CMD_RENAME_PLAN,
+	CMD_ACQUIRE_UNOWNED_PLAN,
 
 	CMD_DESYNC_CHECK,                 ///< Force desync checks to be run
 
 	CMD_END,                          ///< Must ALWAYS be on the end of this list!! (period)
 };
+
+/*** All command callbacks that exist ***/
+
+enum class CommandCallback : uint8_t {
+	None, ///< No callback
+
+	/* ai/ai_instance.cpp */
+	AI,
+
+	/* airport_gui.cpp */
+	BuildAirport,
+
+	/* bridge_gui.cpp */
+	BuildBridge,
+
+	/* dock_gui.cpp */
+	BuildDocks,
+	PlaySound_CONSTRUCTION_WATER,
+
+	/* depot_gui.cpp */
+	CloneVehicle,
+
+	/* game/game_instance.cpp */
+	Game,
+
+	/* group_gui.cpp */
+	CreateGroup,
+	AddVehicleNewGroup,
+
+	/* industry_gui.cpp */
+	BuildIndustry,
+
+	/* main_gui.cpp */
+	PlaySound_EXPLOSION,
+	PlaceSign,
+	Terraform,
+	GiveMoney,
+
+	/* plans_gui.cpp */
+	AddPlan,
+
+	/* rail_gui.cpp */
+	PlaySound_CONSTRUCTION_RAIL,
+	RailDepot,
+	Station,
+	BuildRailTunnel,
+
+	/* road_gui.cpp */
+	PlaySound_CONSTRUCTION_OTHER,
+	BuildRoadTunnel,
+	RoadDepot,
+	RoadStop,
+
+	/* train_gui.cpp */
+	BuildWagon,
+
+	/* town_gui.cpp */
+	FoundTown,
+	FoundRandomTown,
+
+	/* vehicle_gui.cpp */
+	BuildPrimaryVehicle,
+	StartStopVehicle,
+
+	/* tbtr_template_gui_create.cpp */
+	SetVirtualTrain,
+	VirtualTrainWagonsMoved,
+	DeleteVirtualTrain,
+
+	/* build_vehicle_gui.cpp */
+	AddVirtualEngine,
+	MoveNewVirtualEngine,
+
+	/* schdispatch_gui.cpp */
+	AddNewSchDispatchSchedule,
+	SwapSchDispatchSchedules,
+
+	/* tracerestrict_gui.cpp */
+	CreateTraceRestrictSlot,
+	CreateTraceRestrictCounter,
+
+	End, ///< Must ALWAYS be on the end of this list
+};
+
+using CallbackParameter = uint32_t;
+
+/** Defines the traits of a command. */
+template <Commands Tcmd> struct CommandTraits;
+template <Commands Tcmd> struct CommandHandlerTraits;
 
 /**
  * List of flags for a command.
@@ -561,6 +740,14 @@ enum DoCommandFlag {
 };
 DECLARE_ENUM_AS_BIT_SET(DoCommandFlag)
 
+enum DoCommandIntlFlag : uint8_t {
+	DCIF_NONE                = 0x0, ///< no flag is set
+	DCIF_TYPE_CHECKED        = 0x1, ///< payload type has been checked
+	DCIF_NETWORK_COMMAND     = 0x2, ///< execute the command without sending it on the network
+	DCIF_NOT_MY_CMD          = 0x4, ///< not my own DoCommandP
+};
+DECLARE_ENUM_AS_BIT_SET(DoCommandIntlFlag)
+
 /**
  * Used to combine a StringID with the command.
  *
@@ -573,30 +760,11 @@ DECLARE_ENUM_AS_BIT_SET(DoCommandFlag)
 #define CMD_MSG(x) ((x) << 16)
 
 /**
- * Defines some flags.
- *
- * This enumeration defines some flags which are binary-or'ed on a command.
- */
-enum FlaggedCommands {
-	CMD_NETWORK_COMMAND       = 0x0100, ///< execute the command without sending it on the network
-	CMD_NO_SHIFT_ESTIMATE     = 0x0200, ///< do not check shift key state for whether to estimate command
-	CMD_FLAGS_MASK            = 0xFF00, ///< mask for all command flags
-	CMD_ID_MASK               = 0x00FF, ///< mask for the command ID
-};
-
-inline constexpr Commands operator|(const Commands &lhs, const FlaggedCommands &rhs)
-{
-	return static_cast<Commands>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
-}
-
-static_assert(CMD_END <= CMD_ID_MASK + 1);
-
-/**
  * Command flags for the command table _command_proc_table.
  *
  * This enumeration defines flags for the _command_proc_table.
  */
-enum CommandFlags {
+enum CommandFlags : uint16_t {
 	CMD_SERVER    =  0x001, ///< the command can only be initiated by the server
 	CMD_SPECTATOR =  0x002, ///< the command may be initiated by a spectator
 	CMD_OFFLINE   =  0x004, ///< the command cannot be executed in a multiplayer game; single-player only
@@ -608,15 +776,14 @@ enum CommandFlags {
 	CMD_DEITY     =  0x100, ///< the command may be executed by COMPANY_DEITY
 	CMD_STR_CTRL  =  0x200, ///< the command's string may contain control strings
 	CMD_NO_EST    =  0x400, ///< the command is never estimated.
-	CMD_PROCEX    =  0x800, ///< the command proc function has extended parameters
 	CMD_SERVER_NS = 0x1000, ///< the command can only be initiated by the server (this is not executed in spectator mode)
 	CMD_LOG_AUX   = 0x2000, ///< the command should be logged in the auxiliary log instead of the main log
-	CMD_P1_TILE   = 0x4000, ///< use p1 for money text and error tile
+	CMD_ERR_TILE  = 0x4000, ///< use payload error message tile for money text and error tile
 };
 DECLARE_ENUM_AS_BIT_SET(CommandFlags)
 
 /** Types of commands we have. */
-enum CommandType {
+enum CommandType : uint8_t {
 	CMDT_LANDSCAPE_CONSTRUCTION, ///< Construction and destruction of objects on the map.
 	CMDT_VEHICLE_CONSTRUCTION,   ///< Construction, modification (incl. refit) and destruction of vehicles.
 	CMDT_MONEY_MANAGEMENT,       ///< Management of money, i.e. loans and shares.
@@ -631,134 +798,481 @@ enum CommandType {
 };
 
 /** Different command pause levels. */
-enum CommandPauseLevel {
+enum CommandPauseLevel : uint8_t {
 	CMDPL_NO_ACTIONS,      ///< No user actions may be executed.
 	CMDPL_NO_CONSTRUCTION, ///< No construction actions may be executed.
 	CMDPL_NO_LANDSCAPING,  ///< No landscaping actions may be executed.
 	CMDPL_ALL_ACTIONS,     ///< All actions may be executed.
 };
 
-struct CommandAuxiliaryBase;
-
 /**
- * Defines the callback type for all command handler functions.
+ * Abstract base type for command payloads.
  *
- * This type defines the function header for all functions which handles a CMD_* command.
- * A command handler use the parameters to act according to the meaning of the command.
- * The tile parameter defines the tile to perform an action on.
- * The flag parameter is filled with flags from the DC_* enumeration. The parameters
- * p1 and p2 are filled with parameters for the command like "which road type", "which
- * order" or "direction". Each function should mentioned in there doxygen comments
- * the usage of these parameters.
- *
- * @param tile The tile to apply a command on
- * @param flags Flags for the command, from the DC_* enumeration
- * @param p1 Additional data for the command
- * @param p2 Additional data for the command
- * @param text Additional text
- * @return The CommandCost of the command, which can be succeeded or failed.
+ * Implementing types should:
+ * - Be final.
+ * - Have a deserialisation function of the form below, which returns true on success:
+ *   bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation);
+ * - Have a FormatDebugSummary implementation where even remotely useful.
+ * - Have a `TileIndex GetErrorMessageTile() const` function if used by commands with CMD_ERR_TILE.
+ * - Have a `ClientID &GetClientIDField()` function if used by commands with CMD_CLIENT_ID.
  */
-typedef CommandCost CommandProc(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text);
-typedef CommandCost CommandProcEx(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, uint64_t p3, const char *text, const CommandAuxiliaryBase *aux_data);
+struct CommandPayloadBase : public fmt_formattable {
+	virtual ~CommandPayloadBase() {}
 
-/**
- * Define a command with the flags which belongs to it.
- *
- * This struct connect a command handler function with the flags created with
- * the #CMD_AUTO, #CMD_OFFLINE and #CMD_SERVER values.
- */
-struct Command {
-	union {
-		CommandProc *proc;      ///< The procedure to actually execute
-		CommandProcEx *procex;  ///< The procedure to actually execute, extended parameters
-	};
-	const char *name;   ///< A human readable name for the procedure
-	CommandFlags flags; ///< The (command) flags to that apply to this command
-	CommandType type;   ///< The type of command.
+	virtual std::unique_ptr<CommandPayloadBase> Clone() const = 0;
 
-	Command(CommandProc *proc, const char *name, CommandFlags flags, CommandType type)
-			: proc(proc), name(name), flags(flags & ~CMD_PROCEX), type(type) {}
-	Command(CommandProcEx *procex, const char *name, CommandFlags flags, CommandType type)
-			: procex(procex), name(name), flags(flags | CMD_PROCEX), type(type) {}
+	virtual void Serialise(struct BufferSerialisationRef buffer) const = 0;
 
-	inline CommandCost Execute(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, uint64_t p3, const char *text, const CommandAuxiliaryBase *aux_data) const {
-		if (this->flags & CMD_PROCEX) {
-			return this->procex(tile, flags, p1, p2, p3, text, aux_data);
-		} else {
-			return this->proc(tile, flags, p1, p2, text);
-		}
+	virtual void SanitiseStrings(StringValidationSettings settings) {}
+
+	/* FormatDebugSummary may be called when populating the crash log so should not allocate */
+	virtual void FormatDebugSummary(struct format_target &) const {}
+
+	std::string GetDebugSummaryString() const;
+
+	/* To enable use as a format argument, see fmt_formattable */
+	inline void fmt_format_value(struct format_target &output) const
+	{
+		this->FormatDebugSummary(output);
 	}
 };
 
-/**
- * Define a callback function for the client, after the command is finished.
- *
- * Functions of this type are called after the command is finished. The parameters
- * are from the #CommandProc callback type. The boolean parameter indicates if the
- * command succeeded or failed.
- *
- * @param result The result of the executed command
- * @param tile The tile of the command action
- * @param p1 Additional data of the command
- * @param p2 Additional data of the command
- * @param p3 Additional data of the command
- * @see CommandProc
- */
-typedef void CommandCallback(const CommandCost &result, TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint32_t cmd);
-
-#define MAX_CMD_TEXT_LENGTH 32000
-
-struct CommandSerialisationBuffer;
-
-struct CommandAuxiliaryBase {
-	virtual ~CommandAuxiliaryBase() {}
-
-	virtual CommandAuxiliaryBase *Clone() const = 0;
-
-	virtual std::optional<std::span<const uint8_t>> GetDeserialisationSrc() const = 0;
-
-	virtual void Serialise(CommandSerialisationBuffer &buffer) const = 0;
+template <typename T>
+struct CommandPayloadSerialisable : public CommandPayloadBase {
+	std::unique_ptr<CommandPayloadBase> Clone() const override;
 };
 
-struct CommandAuxiliaryPtr : public std::unique_ptr<CommandAuxiliaryBase>
+template <typename T>
+std::unique_ptr<CommandPayloadBase> CommandPayloadSerialisable<T>::Clone() const
 {
-	using std::unique_ptr<CommandAuxiliaryBase>::unique_ptr;
+	static_assert(std::is_final_v<T>);
+	return std::make_unique<T>(*static_cast<const T *>(this));
+}
 
-	CommandAuxiliaryPtr() {};
+struct CommandPayloadSerialised final {
+	std::vector<uint8_t> serialised_data;
 
-	CommandAuxiliaryPtr(const CommandAuxiliaryPtr &other) :
-			std::unique_ptr<CommandAuxiliaryBase>(CommandAuxiliaryPtr::Clone(other)) {}
+	void Serialise(BufferSerialisationRef buffer) const { buffer.Send_binary(this->serialised_data.data(), this->serialised_data.size()); }
+};
 
-	CommandAuxiliaryPtr& operator=(const CommandAuxiliaryPtr &other)
+struct P123CmdData final : public CommandPayloadSerialisable<P123CmdData> {
+	uint32_t p1;
+	uint32_t p2;
+	uint64_t p3;
+	std::string text;
+
+	P123CmdData() : p1(0), p2(0), p3(0) {}
+	P123CmdData(uint32_t p1, uint32_t p2, uint64_t p3) : p1(p1), p2(p2), p3(p3) {}
+	P123CmdData(uint32_t p1, uint32_t p2, uint64_t p3, std::string text) : p1(p1), p2(p2), p3(p3), text(std::move(text)) {}
+
+	void Serialise(BufferSerialisationRef buffer) const override;
+	void SanitiseStrings(StringValidationSettings settings) override;
+	bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation);
+	TileIndex GetErrorMessageTile() const;
+	void FormatDebugSummary(struct format_target &) const override;
+};
+
+void SetPreCheckedCommandPayloadClientID(Commands cmd, CommandPayloadBase &payload, ClientID client_id);
+
+template <typename T>
+void SetCommandPayloadClientID(T &payload, ClientID client_id)
+{
+	if constexpr (std::is_same_v<T, P123CmdData>) {
+		// This case will disappear when P123CmdData is removed
+		if (payload.p2 == 0) payload.p2 = (uint32_t)client_id;
+	} else if constexpr (requires { payload.GetClientIDField(); }) {
+		if (payload.GetClientIDField() == (ClientID)0) payload.GetClientIDField() = client_id;
+	} else {
+		constexpr size_t idx = GetTupleIndexIgnoreCvRef<ClientID, decltype(payload.GetValues())>();
+		static_assert(idx < std::tuple_size_v<std::remove_cvref_t<decltype(payload.GetValues())>>,
+				"There must be exactly one ClientID value in the command payload tuple unless a GetClientIDField method is present");
+		if (std::get<idx>(payload.GetValues()) == (ClientID)0) std::get<idx>(payload.GetValues()) = client_id;
+	}
+}
+
+struct CommandProcTupleAdapter {
+	template <typename T>
+	using replace_string_t = std::conditional_t<std::is_same_v<std::string, T>, const std::string &, T>;
+};
+
+struct BaseTupleCmdDataTag{};
+
+namespace TupleCmdDataDetail {
+	/**
+	 * For internal use by TupleCmdData, AutoFmtTupleCmdData.
+	 */
+	template <typename... T>
+	struct BaseTupleCmdData : public CommandPayloadBase, public BaseTupleCmdDataTag {
+		using CommandProc = CommandCost(DoCommandFlag, TileIndex, typename CommandProcTupleAdapter::replace_string_t<T>...);
+		using CommandProcNoTile = CommandCost(DoCommandFlag, typename CommandProcTupleAdapter::replace_string_t<T>...);
+		using Tuple = std::tuple<T...>;
+		Tuple values;
+
+		template <typename... Args>
+		BaseTupleCmdData(Args&& ... args) : values(std::forward<Args>(args)...) {}
+
+		BaseTupleCmdData(Tuple&& values) : values(std::move(values)) {}
+
+		virtual void Serialise(BufferSerialisationRef buffer) const override;
+		virtual void SanitiseStrings(StringValidationSettings settings) override;
+		bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation);
+
+		Tuple &GetValues() { return this->values; }
+		const Tuple &GetValues() const { return this->values; }
+	};
+};
+
+template <typename Parent, typename... T>
+struct TupleCmdData : public TupleCmdDataDetail::BaseTupleCmdData<T...> {
+	using TupleCmdDataDetail::BaseTupleCmdData<T...>::BaseTupleCmdData;
+	using Tuple = typename TupleCmdDataDetail::BaseTupleCmdData<T...>::Tuple;
+
+	std::unique_ptr<CommandPayloadBase> Clone() const override;
+
+	static Parent Make(T... args)
 	{
-		this->reset(CommandAuxiliaryPtr::Clone(other));
+		Parent out;
+		out.values = Tuple(std::forward<T>(args)...);
+		return out;
+	}
+};
+
+template <typename Parent, typename... T>
+std::unique_ptr<CommandPayloadBase> TupleCmdData<Parent, T...>::Clone() const
+{
+	static_assert(std::is_final_v<Parent>);
+	return std::make_unique<Parent>(*static_cast<const Parent *>(this));
+}
+
+enum TupleCmdDataFlags : uint8_t {
+	TCDF_NONE    =  0x0, ///< no flags
+	TCDF_STRINGS =  0x1, ///< include strings in summary
+};
+DECLARE_ENUM_AS_BIT_SET(TupleCmdDataFlags)
+
+template <typename Parent, TupleCmdDataFlags flags, typename... T>
+struct AutoFmtTupleCmdData : public TupleCmdData<Parent, T...> {
+	using TupleCmdData<Parent, T...>::TupleCmdData;
+	static inline constexpr const char fmt_str[] = "";
+
+	void FormatDebugSummary(struct format_target &output) const override;
+};
+
+template <typename Parent, typename T>
+struct TupleRefCmdData : public CommandPayloadSerialisable<Parent>, public T, public BaseTupleCmdDataTag {
+private:
+	template <typename H> struct TupleHelper;
+
+	template <typename... Targs>
+	struct TupleHelper<std::tuple<Targs...>> {
+		using CommandProc = CommandCost(DoCommandFlag, TileIndex, typename CommandProcTupleAdapter::replace_string_t<std::remove_cvref_t<Targs>>...);
+		using CommandProcNoTile = CommandCost(DoCommandFlag, typename CommandProcTupleAdapter::replace_string_t<std::remove_cvref_t<Targs>>...);
+		using ValueTuple = std::tuple<std::remove_cvref_t<Targs>...>;
+		using ConstRefTuple = std::tuple<const std::remove_reference_t<Targs> &...>;
+
+		static_assert((std::is_lvalue_reference_v<Targs> && ...));
+	};
+	using Helper = TupleHelper<decltype(std::declval<T>().GetRefTuple())>;
+
+public:
+	using Tuple = typename Helper::ValueTuple;
+	using CommandProc = typename Helper::CommandProc;
+	using CommandProcNoTile = typename Helper::CommandProcNoTile;
+
+private:
+	template <typename H> struct MakeHelper;
+
+	template <typename... Targs>
+	struct MakeHelper<std::tuple<Targs...>> {
+		Parent operator()(Targs... args) const
+		{
+			Parent out;
+			out.T::GetRefTuple() = std::forward_as_tuple(args...);
+			return out;
+		}
+	};
+
+public:
+	static inline constexpr MakeHelper<Tuple> Make{};
+
+	virtual void Serialise(BufferSerialisationRef buffer) const override;
+	virtual void SanitiseStrings(StringValidationSettings settings) override;
+	bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation);
+
+	auto GetValues() { return this->T::GetRefTuple(); }
+	typename Helper::ConstRefTuple GetValues() const { return typename Helper::ConstRefTuple(const_cast<TupleRefCmdData *>(this)->GetValues()); }
+};
+
+/** Wrapper for commands to handle the most common case where no custom/special behaviour is required. */
+template <typename... T>
+struct CmdDataT final : public AutoFmtTupleCmdData<CmdDataT<T...>, TCDF_NONE, T...> {};
+
+/** Specialisation for string which doesn't bother implementing FormatDebugSummary at all. */
+template <>
+struct CmdDataT<std::string> final : public TupleCmdData<CmdDataT<std::string>, std::string> {};
+template <>
+struct CmdDataT<std::string, std::string> final : public TupleCmdData<CmdDataT<std::string, std::string>, std::string, std::string> {};
+template <>
+struct CmdDataT<std::string, std::string, std::string> final : public TupleCmdData<CmdDataT<std::string, std::string, std::string>, std::string, std::string, std::string> {};
+
+template <>
+struct CmdDataT<> final : public CommandPayloadSerialisable<CmdDataT<>>, public BaseTupleCmdDataTag {
+	using CommandProc = CommandCost(TileIndex, DoCommandFlag);
+	using CommandProcNoTile = CommandCost(DoCommandFlag);
+	using Tuple = std::tuple<>;
+
+	Tuple GetValues() const { return {}; }
+	void Serialise(BufferSerialisationRef buffer) const override {}
+	bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation) { return true; }
+	static inline CmdDataT<> Make() { return CmdDataT<>{}; }
+};
+using EmptyCmdData = CmdDataT<>;
+
+template <typename T>
+struct BaseCommandContainer {
+	Commands cmd{};                              ///< command being executed.
+	StringID error_msg{};                        ///< error message
+	TileIndex tile{};                            ///< tile command being executed on.
+	T payload{};                                 ///< payload
+};
+
+template <typename T>
+struct CommandContainer : public BaseCommandContainer<T> {
+	CommandCallback callback = CommandCallback::None; ///< any callback function executed upon successful completion of the command.
+	CallbackParameter callback_param{};
+};
+
+struct SerialisedBaseCommandContainer : public BaseCommandContainer<CommandPayloadSerialised> {
+	void Serialise(BufferSerialisationRef buffer) const;
+};
+
+struct DynBaseCommandContainer {
+	Commands cmd{};                              ///< command being executed.
+	StringID error_msg{};                        ///< error message
+	TileIndex tile{};                            ///< tile command being executed on.
+	std::unique_ptr<CommandPayloadBase> payload; ///< payload
+
+	DynBaseCommandContainer() = default;
+	DynBaseCommandContainer(Commands cmd, TileIndex tile, std::unique_ptr<CommandPayloadBase> payload, StringID error_msg)
+			: cmd(cmd), error_msg(error_msg), tile(tile), payload(std::move(payload)) {}
+
+	template <typename T>
+	DynBaseCommandContainer(const BaseCommandContainer<T> &src) : cmd(src.cmd), error_msg(src.error_msg), tile(src.tile), payload(src.payload.Clone()) {}
+
+	DynBaseCommandContainer(DynBaseCommandContainer &&) = default;
+	DynBaseCommandContainer(const DynBaseCommandContainer &src) { *this = src; }
+	DynBaseCommandContainer &operator=(DynBaseCommandContainer &&other) = default;
+
+	DynBaseCommandContainer &operator=(const DynBaseCommandContainer &other)
+	{
+		this->cmd = other.cmd;
+		this->error_msg = other.error_msg;
+		this->tile = other.tile;
+		this->payload = (other.payload != nullptr) ? other.payload->Clone() : nullptr;
 		return *this;
 	}
 
-private:
-	static CommandAuxiliaryBase *Clone(const CommandAuxiliaryPtr &other)
-	{
-		return other != nullptr ? other->Clone() : nullptr;
-	}
+	void Serialise(BufferSerialisationRef buffer) const;
+	const char *Deserialise(DeserialisationBuffer &buffer);
 };
 
-/**
- * Structure for buffering the build command when selecting a station to join.
- */
-struct CommandContainer {
-	TileIndex tile;                  ///< tile command being executed on.
-	uint32_t p1;                     ///< parameter p1.
-	uint32_t p2;                     ///< parameter p2.
-	uint32_t cmd;                    ///< command being executed.
-	uint64_t p3;                     ///< parameter p3. (here for alignment)
-	CommandCallback *callback;       ///< any callback function executed upon successful completion of the command.
-	std::string text;                ///< possible text sent for name changes etc.
-	CommandAuxiliaryPtr aux_data;    ///< Auxiliary command data
+struct DynCommandContainer {
+	DynBaseCommandContainer command{};
+	CommandCallback callback = CommandCallback::None; ///< any callback function executed upon successful completion of the command.
+	CallbackParameter callback_param{};
+
+	DynCommandContainer() = default;
+	DynCommandContainer(Commands cmd, TileIndex tile, std::unique_ptr<CommandPayloadBase> payload, StringID error_msg, CommandCallback callback, CallbackParameter callback_param)
+			: command(cmd, tile, std::move(payload), error_msg), callback(callback), callback_param(callback_param) {}
+
+	template <typename T>
+	DynCommandContainer(const CommandContainer<T> &src) : command(src), callback(src.callback), callback_param(src.callback_param) {}
 };
 
-inline CommandContainer NewCommandContainerBasic(TileIndex tile, uint32_t p1, uint32_t p2, uint32_t cmd, CommandCallback *callback = nullptr)
+inline BaseCommandContainer<P123CmdData> NewBaseCommandContainerBasic(TileIndex tile, uint32_t p1, uint32_t p2, uint32_t cmd)
 {
-	return { tile, p1, p2, cmd, 0, callback, {}, nullptr };
+	return { static_cast<Commands>(cmd & 0xFFFF), static_cast<StringID>(cmd >> 16), tile, P123CmdData(p1, p2, 0) };
 }
+
+inline CommandContainer<P123CmdData> NewCommandContainerBasic(TileIndex tile, uint32_t p1, uint32_t p2, uint32_t cmd, CommandCallback callback = CommandCallback::None)
+{
+	return { NewBaseCommandContainerBasic(tile, p1, p2, cmd), callback, 0 };
+}
+
+struct CommandExecData {
+	TileIndex tile;
+	DoCommandFlag flags;
+	const CommandPayloadBase &payload;
+};
+
+using CommandPayloadDeserialiser = std::unique_ptr<CommandPayloadBase>(DeserialisationBuffer &, StringValidationSettings default_string_validation);
+
+using CommandProc = CommandCost(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text);
+using CommandProcEx = CommandCost(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, uint64_t p3, const char *text);
+
+template <typename T>
+using CommandProcDirect = CommandCost(DoCommandFlag flags, TileIndex tile, const T &data);
+template <typename T>
+using CommandProcDirectNoTile = CommandCost(DoCommandFlag flags, const T &data);
+
+#ifdef CMD_DEFINE
+#define DEF_CMD_HANDLER(cmd_, proctype_, proc_, flags_, type_) \
+template <> struct CommandHandlerTraits<cmd_> { \
+	static constexpr auto &proc = proc_; \
+	static inline constexpr const char *name = #proc_; \
+};
+#else
+#define DEF_CMD_HANDLER(cmd_, proctype_, proc_, flags_, type_)
+#endif
+
+#define DEF_CMD_PROC_GENERAL(cmd_, proctype_, proc_, payload_, flags_, type_, input_no_tile_, output_no_tile_) \
+proctype_ proc_; \
+DEF_CMD_HANDLER(cmd_, proctype_, proc_, flags_, type_) \
+template <> struct CommandTraits<cmd_> { \
+	using PayloadType = payload_; \
+	static constexpr Commands cmd = cmd_; \
+	static constexpr CommandFlags flags = flags_; \
+	static constexpr CommandType type = type_; \
+	static constexpr bool input_no_tile = input_no_tile_; \
+	static constexpr bool output_no_tile = output_no_tile_; \
+};
+
+#define DEF_CMD_PROC(cmd_, proc_, flags_, type_) DEF_CMD_PROC_GENERAL(cmd_, CommandProc, proc_, P123CmdData, flags_, type_, false, false)
+#define DEF_CMD_PROCEX(cmd_, proc_, flags_, type_) DEF_CMD_PROC_GENERAL(cmd_, CommandProcEx, proc_, P123CmdData, flags_, type_, false, false)
+
+/*
+ * Command macro variants:
+ *
+ * DEF_CMD_TUPLE:
+ * Command<...>::Do/Post assemble the payload according the payload's Tuple typedef, using Payload::Make(...).
+ * The payload is unpacked at the other end for the call to the handler.
+ *
+ * DEF_CMD_DIRECT:
+ * The payload is passed to DoCommand/DoCommandP directly and forwarded to the command handler as a `const T &` with no packing/unpacking
+ *
+ * Suffixes:
+ * <none>: Normal command, call and handler both use the tile index
+ * _LT:    Location tile only, the call on the input side uses the tile index (for error message location, etc), but this is not passed to the command handler. For scripts the tile index is omitted.
+ * _NT:    No tile, neither the call nor handler use the tile index
+ */
+
+#define DEF_CMD_DIRECT(cmd_, proc_, flags_, type_, payload_) DEF_CMD_PROC_GENERAL(cmd_, CommandProcDirect<payload_>, proc_, payload_, flags_, type_, false, false)
+#define DEF_CMD_DIRECT_LT(cmd_, proc_, flags_, type_, payload_) DEF_CMD_PROC_GENERAL(cmd_, CommandProcDirectNoTile<payload_>, proc_, payload_, flags_, type_, false, true)
+#define DEF_CMD_DIRECT_NT(cmd_, proc_, flags_, type_, payload_) DEF_CMD_PROC_GENERAL(cmd_, CommandProcDirectNoTile<payload_>, proc_, payload_, flags_, type_, true, true)
+
+/* The .../__VA_ARGS__ part is the payload type, this is to support template types which include comma ',' characters. */
+#define DEF_CMD_TUPLE(cmd_, proc_, flags_, type_, ...) \
+namespace cmd_detail { using payload_ ## cmd_ = __VA_ARGS__ ; }; \
+DEF_CMD_PROC_GENERAL(cmd_, cmd_detail::payload_ ## cmd_ ::CommandProc, proc_, cmd_detail::payload_ ## cmd_, flags_, type_, false, false)
+#define DEF_CMD_TUPLE_LT(cmd_, proc_, flags_, type_, ...) \
+namespace cmd_detail { using payload_ ## cmd_ = __VA_ARGS__ ; }; \
+DEF_CMD_PROC_GENERAL(cmd_, cmd_detail::payload_ ## cmd_ ::CommandProcNoTile, proc_, cmd_detail::payload_ ## cmd_, flags_, type_, false, true)
+#define DEF_CMD_TUPLE_NT(cmd_, proc_, flags_, type_, ...) \
+namespace cmd_detail { using payload_ ## cmd_ = __VA_ARGS__ ; }; \
+DEF_CMD_PROC_GENERAL(cmd_, cmd_detail::payload_ ## cmd_ ::CommandProcNoTile, proc_, cmd_detail::payload_ ## cmd_, flags_, type_, true, true)
+
+DEF_CMD_PROC  (CMD_BUILD_RAILROAD_TRACK, CmdBuildRailroadTrack,       CMD_NO_WATER | CMD_AUTO | CMD_ERR_TILE, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_REMOVE_RAILROAD_TRACK, CmdRemoveRailroadTrack,                     CMD_AUTO | CMD_ERR_TILE, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_SINGLE_RAIL, CmdBuildSingleRail,          CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_REMOVE_SINGLE_RAIL, CmdRemoveSingleRail,                        CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_LANDSCAPE_CLEAR, CmdLandscapeClear,                         CMD_DEITY, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_BRIDGE, CmdBuildBridge,  CMD_DEITY | CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROCEX(CMD_BUILD_RAIL_STATION, CmdBuildRailStation,         CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_TRAIN_DEPOT, CmdBuildTrainDepot,          CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_SIGNALS, CmdBuildSingleSignal,                       CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_REMOVE_SIGNALS, CmdRemoveSingleSignal,                      CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_TERRAFORM_LAND, CmdTerraformLand,           CMD_ALL_TILES | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_OBJECT, CmdBuildObject,  CMD_DEITY | CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_PURCHASE_LAND_AREA, CmdPurchaseLandArea, CMD_NO_WATER | CMD_AUTO | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_OBJECT_AREA, CmdBuildObjectArea,  CMD_NO_WATER | CMD_AUTO | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_TUNNEL, CmdBuildTunnel,                 CMD_DEITY | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_REMOVE_FROM_RAIL_STATION, CmdRemoveFromRailStation,                          {}, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_CONVERT_RAIL, CmdConvertRail,                                    {}, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_CONVERT_RAIL_TRACK, CmdConvertRailTrack,                               {}, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROCEX(CMD_BUILD_RAIL_WAYPOINT, CmdBuildRailWaypoint,                              {}, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROCEX(CMD_BUILD_ROAD_WAYPOINT, CmdBuildRoadWaypoint,                              {}, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_RENAME_WAYPOINT, CmdRenameWaypoint,                                 {}, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_SET_WAYPOINT_LABEL_HIDDEN, CmdSetWaypointLabelHidden,                         {}, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_REMOVE_FROM_RAIL_WAYPOINT, CmdRemoveFromRailWaypoint,                         {}, CMDT_LANDSCAPE_CONSTRUCTION)
+
+DEF_CMD_PROCEX(CMD_BUILD_ROAD_STOP, CmdBuildRoadStop,            CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_REMOVE_ROAD_STOP, CmdRemoveRoadStop,                                 {}, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_LONG_ROAD, CmdBuildLongRoad,CMD_DEITY | CMD_NO_WATER | CMD_AUTO | CMD_ERR_TILE, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_REMOVE_LONG_ROAD, CmdRemoveLongRoad,            CMD_NO_TEST | CMD_AUTO | CMD_ERR_TILE, CMDT_LANDSCAPE_CONSTRUCTION) // towns may disallow removing road bits (as they are connected) in test, but in exec they're removed and thus removing is allowed.
+DEF_CMD_PROC  (CMD_BUILD_ROAD, CmdBuildRoad,    CMD_DEITY | CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_ROAD_DEPOT, CmdBuildRoadDepot,           CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_CONVERT_ROAD, CmdConvertRoad,                                    {}, CMDT_LANDSCAPE_CONSTRUCTION)
+
+DEF_CMD_PROC  (CMD_BUILD_AIRPORT, CmdBuildAirport,             CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_DOCK, CmdBuildDock,                               CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_SHIP_DEPOT, CmdBuildShipDepot,                          CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_BUILD_BUOY, CmdBuildBuoy,                               CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_PLANT_TREE, CmdPlantTree,                               CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+
+DEF_CMD_PROC  (CMD_SET_VEHICLE_VISIBILITY, CmdSetVehicleVisibility,                           {}, CMDT_COMPANY_SETTING       )
+
+DEF_CMD_PROC  (CMD_BUILD_INDUSTRY, CmdBuildIndustry,                          CMD_DEITY, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_INDUSTRY_SET_FLAGS, CmdIndustrySetFlags,        CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_INDUSTRY_SET_EXCLUSIVITY, CmdIndustrySetExclusivity,  CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_INDUSTRY_SET_TEXT, CmdIndustrySetText,         CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_INDUSTRY_SET_PRODUCTION, CmdIndustrySetProduction,                  CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+
+DEF_CMD_PROC  (CMD_WANT_ENGINE_PREVIEW, CmdWantEnginePreview,                              {}, CMDT_VEHICLE_MANAGEMENT    )
+DEF_CMD_PROC  (CMD_ENGINE_CTRL, CmdEngineCtrl,                             CMD_DEITY, CMDT_VEHICLE_MANAGEMENT    )
+
+DEF_CMD_PROC  (CMD_RENAME_ENGINE, CmdRenameEngine,                          CMD_SERVER, CMDT_OTHER_MANAGEMENT      )
+
+DEF_CMD_PROC  (CMD_RENAME_STATION, CmdRenameStation,                                  {}, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_RENAME_DEPOT, CmdRenameDepot,                                    {}, CMDT_OTHER_MANAGEMENT      )
+
+DEF_CMD_PROC  (CMD_EXCHANGE_STATION_NAMES, CmdExchangeStationNames,                           {}, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_SET_STATION_CARGO_ALLOWED_SUPPLY, CmdSetStationCargoAllowedSupply,                   {}, CMDT_OTHER_MANAGEMENT      )
+
+DEF_CMD_PROC  (CMD_PLACE_SIGN, CmdPlaceSign,                CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_RENAME_SIGN, CmdRenameSign,               CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+
+DEF_CMD_PROC  (CMD_FOUND_TOWN, CmdFoundTown,                CMD_DEITY | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION) // founding random town can fail only in exec run
+DEF_CMD_PROC  (CMD_RENAME_TOWN, CmdRenameTown,                CMD_DEITY | CMD_SERVER, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_RENAME_TOWN_NON_ADMIN, CmdRenameTownNonAdmin,                             {}, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_DO_TOWN_ACTION, CmdDoTownAction,                                   {}, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_TOWN_SETTING_OVERRIDE, CmdOverrideTownSetting,       CMD_DEITY | CMD_SERVER, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_TOWN_SETTING_OVERRIDE_NON_ADMIN, CmdOverrideTownSettingNonAdmin,                    {}, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_TOWN_CARGO_GOAL, CmdTownCargoGoal,            CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_TOWN_GROWTH_RATE, CmdTownGrowthRate,           CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_TOWN_RATING, CmdTownRating,               CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_TOWN_SET_TEXT, CmdTownSetText,    CMD_LOG_AUX | CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT )
+DEF_CMD_PROC  (CMD_EXPAND_TOWN, CmdExpandTown,                             CMD_DEITY, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_DELETE_TOWN, CmdDeleteTown,                           CMD_OFFLINE, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_PLACE_HOUSE, CmdPlaceHouse,                             CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+
+DEF_CMD_PROC  (CMD_CLEAR_AREA, CmdClearArea,                            CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION) // destroying multi-tile houses makes town rating differ between test and execution
+
+DEF_CMD_PROC  (CMD_BUILD_CANAL, CmdBuildCanal,                  CMD_DEITY | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROC  (CMD_CREATE_SUBSIDY, CmdCreateSubsidy,                          CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_CUSTOM_NEWS_ITEM, CmdCustomNewsItem,          CMD_STR_CTRL | CMD_DEITY | CMD_LOG_AUX, CMDT_OTHER_MANAGEMENT      )
+
+DEF_CMD_PROC  (CMD_LEVEL_LAND, CmdLevelLand, CMD_ALL_TILES | CMD_NO_TEST | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION) // test run might clear tiles multiple times, in execution that only happens once
+
+DEF_CMD_PROC  (CMD_BUILD_LOCK, CmdBuildLock,                               CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+
+DEF_CMD_PROCEX(CMD_BUILD_SIGNAL_TRACK, CmdBuildSignalTrack,                        CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+DEF_CMD_PROCEX(CMD_REMOVE_SIGNAL_TRACK, CmdRemoveSignalTrack,                       CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
+
+DEF_CMD_PROC  (CMD_SET_AUTOREPLACE, CmdSetAutoReplace,                                 {}, CMDT_VEHICLE_MANAGEMENT    )
+
+DEF_CMD_PROC  (CMD_AUTOREPLACE_VEHICLE, CmdAutoreplaceVehicle,                             {}, CMDT_VEHICLE_MANAGEMENT    )
+DEF_CMD_PROC  (CMD_CREATE_GROUP, CmdCreateGroup,                                    {}, CMDT_ROUTE_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_DELETE_GROUP, CmdDeleteGroup,                                    {}, CMDT_ROUTE_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_ALTER_GROUP, CmdAlterGroup,                                     {}, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_CREATE_GROUP_FROM_LIST, CmdCreateGroupFromList,                            {}, CMDT_OTHER_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_ADD_VEHICLE_GROUP, CmdAddVehicleGroup,                                {}, CMDT_ROUTE_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_ADD_SHARED_VEHICLE_GROUP, CmdAddSharedVehicleGroup,                          {}, CMDT_ROUTE_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_REMOVE_ALL_VEHICLES_GROUP, CmdRemoveAllVehiclesGroup,                         {}, CMDT_ROUTE_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_SET_GROUP_FLAG, CmdSetGroupFlag,                                   {}, CMDT_ROUTE_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_SET_GROUP_LIVERY, CmdSetGroupLivery,                                 {}, CMDT_ROUTE_MANAGEMENT      )
+DEF_CMD_PROC  (CMD_OPEN_CLOSE_AIRPORT, CmdOpenCloseAirport,                               {}, CMDT_ROUTE_MANAGEMENT      )
+
+template <Commands Tcmd>
+using CmdPayload = typename CommandTraits<Tcmd>::PayloadType;
 
 #endif /* COMMAND_TYPE_H */

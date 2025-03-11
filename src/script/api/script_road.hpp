@@ -23,6 +23,8 @@ class ScriptRoad : public ScriptObject {
 public:
 	/**
 	 * All road related error messages.
+	 *
+	 * @see ScriptErrorType
 	 */
 	enum ErrorMessages {
 		/** Base for road building / maintaining errors */
@@ -71,8 +73,8 @@ public:
 	 * Type of road station.
 	 */
 	enum RoadVehicleType {
-		ROADVEHTYPE_BUS,   ///< Build objects useable for busses and passenger trams
-		ROADVEHTYPE_TRUCK, ///< Build objects useable for trucks and cargo trams
+		ROADVEHTYPE_BUS,   ///< Build objects usable for busses and passenger trams
+		ROADVEHTYPE_TRUCK, ///< Build objects usable for trucks and cargo trams
 	};
 
 	/**
@@ -317,7 +319,7 @@ public:
 	 *         they are build or 2 when building the first part automatically
 	 *         builds the second part. -1 means the preconditions are not met.
 	 */
-	static SQInteger CanBuildConnectedRoadParts(ScriptTile::Slope slope, Array<> &&existing, TileIndex start, TileIndex end);
+	static SQInteger CanBuildConnectedRoadParts(ScriptTile::Slope slope, Array<TileIndexDiff> &&existing, TileIndexDiff start, TileIndexDiff end);
 
 	/**
 	 * Lookup function for building road parts independent of whether the

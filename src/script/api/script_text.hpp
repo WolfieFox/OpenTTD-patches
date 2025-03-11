@@ -11,8 +11,9 @@
 #define SCRIPT_TEXT_HPP
 
 #include "script_object.hpp"
-#include "../../core/alloc_type.hpp"
+#include "../../strings_type.h"
 
+#include <array>
 #include <variant>
 
 /**
@@ -42,7 +43,7 @@ public:
  */
 class RawText : public Text {
 public:
-	RawText(const std::string &text);
+	RawText(const std::string &text) : text(text) {}
 
 	std::string GetEncodedText() override { return this->text; }
 private:
@@ -112,14 +113,14 @@ public:
 	 * @param parameter Which parameter to set.
 	 * @param value The value of the parameter. Has to be string, integer or an instance of the class ScriptText.
 	 */
-	void SetParam(int parameter, Object value);
+	void SetParam(int parameter, object value);
 
 	/**
 	 * Add a value as parameter (appending it).
 	 * @param value The value of the parameter. Has to be string, integer or an instance of the class ScriptText.
 	 * @return The same object as on which this is called, so you can chain.
 	 */
-	ScriptText *AddParam(Object value);
+	ScriptText *AddParam(object value);
 #endif /* DOXYGEN_API */
 
 	/**
@@ -129,26 +130,28 @@ public:
 
 private:
 	using ScriptTextRef = ScriptObjectRef<ScriptText>;
-	using StringIDList = std::vector<StringID>;
+	using StringIDList = std::vector<StringIndexInTab>;
+	using ScriptTextList = std::vector<ScriptText *>;
 	using Param = std::variant<SQInteger, std::string, ScriptTextRef>;
 
 	struct ParamCheck {
-		StringID owner;
+		StringIndexInTab owner;
 		int idx;
 		Param *param;
-		bool used;
+		bool used = false;
+		const char *cmd = nullptr;
 
-		ParamCheck(StringID owner, int idx, Param *param) : owner(owner), idx(idx), param(param), used(false) {}
+		ParamCheck(StringIndexInTab owner, int idx, Param *param) : owner(owner), idx(idx), param(param) {}
 
-		void Encode(std::back_insert_iterator<std::string> &output);
+		void Encode(std::back_insert_iterator<std::string> &output, const char *cmd);
 	};
 
 	using ParamList = std::vector<ParamCheck>;
 	using ParamSpan = std::span<ParamCheck>;
 
-	StringID string;
-	Param param[SCRIPT_TEXT_MAX_PARAMETERS];
-	int paramc;
+	StringIndexInTab string;
+	std::array<Param, SCRIPT_TEXT_MAX_PARAMETERS> param = {};
+	int paramc = 0;
 
 	void _TextParamError(std::string msg);
 
@@ -157,17 +160,19 @@ private:
 	 * The parameters are added as _GetEncodedText used to encode them
 	 *  before the addition of parameter validation.
 	 * @param params The list of parameters to fill.
+	 * @param seen_texts The list of seen ScriptText.
 	 */
-	void _FillParamList(ParamList &params);
+	void _FillParamList(ParamList &params, ScriptTextList &seen_texts);
 
 	/**
 	 * Internal function for recursive calling this function over multiple
 	 *  instances, while writing in the same buffer.
 	 * @param output The output to write the encoded text to.
-	 * @param param_count The number of parameters that are in the string.
-	 * @param seen_ids The list of seen StringID.
+	 * @param param_count The number of parameters that are consumed by the string.
+	 * @param args The parameters to be consumed.
+	 * @param first Whether it's the first call in the recursion.
 	 */
-	void _GetEncodedText(std::back_insert_iterator<std::string> &output, int &param_count, StringIDList &seen_ids, ParamSpan args);
+	void _GetEncodedText(std::back_insert_iterator<std::string> &output, int &param_count, ParamSpan args, bool first);
 
 	void _GetEncodedTextTraditional(std::back_insert_iterator<std::string> &output, int &param_count, StringIDList &seen_ids);
 

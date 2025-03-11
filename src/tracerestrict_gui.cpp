@@ -12,6 +12,7 @@
 
 #include "stdafx.h"
 #include "tracerestrict.h"
+#include "tracerestrict_cmd.h"
 #include "command_func.h"
 #include "window_func.h"
 #include "strings_func.h"
@@ -21,8 +22,9 @@
 #include "company_base.h"
 #include "company_func.h"
 #include "tilehighlight_func.h"
-#include "widgets/dropdown_func.h"
-#include "widgets/dropdown_type.h"
+#include "dropdown_func.h"
+#include "dropdown_type.h"
+#include "dropdown_common_type.h"
 #include "gui.h"
 #include "gfx_func.h"
 #include "rail_map.h"
@@ -46,11 +48,70 @@
 #include "core/geometry_func.hpp"
 #include "infrastructure_func.h"
 #include "zoom_func.h"
-#include "group_gui_list.h"
 #include "newgrf_debug.h"
+#include "core/ring_buffer.hpp"
+#include "core/y_combinator.hpp"
 #include "3rdparty/cpp-btree/btree_map.h"
 
 #include "safeguards.h"
+
+static constexpr uint RECENT_SLOT_HISTORY_SIZE = 8;
+static std::array<ring_buffer<TraceRestrictSlotID>, VEH_COMPANY_END> _recent_slots;
+static ring_buffer<TraceRestrictCounterID> _recent_counters;
+
+static void EraseRecentSlotOrCounter(ring_buffer<uint16_t> &ring, uint16_t id)
+{
+	for (auto it = ring.begin(); it != ring.end();) {
+		if (*it == id) {
+			it = ring.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+static void RecordRecentSlotOrCounter(ring_buffer<uint16_t> &ring, uint16_t id)
+{
+	EraseRecentSlotOrCounter(ring, id);
+	if (ring.size() >= RECENT_SLOT_HISTORY_SIZE) ring.erase(ring.begin() + RECENT_SLOT_HISTORY_SIZE - 1, ring.end());
+	ring.push_front(id);
+}
+
+void TraceRestrictEraseRecentSlot(TraceRestrictSlotID index)
+{
+	for (ring_buffer<TraceRestrictSlotID> &ring : _recent_slots) {
+		EraseRecentSlotOrCounter(ring, index);
+	}
+}
+
+void TraceRestrictEraseRecentCounter(TraceRestrictCounterID index)
+{
+	EraseRecentSlotOrCounter(_recent_counters, index);
+}
+
+void TraceRestrictRecordRecentSlot(TraceRestrictSlotID index)
+{
+	const TraceRestrictSlot *slot = TraceRestrictSlot::GetIfValid(index);
+	if (slot != nullptr && slot->owner == _local_company && slot->vehicle_type < _recent_slots.size()) {
+		RecordRecentSlotOrCounter(_recent_slots[slot->vehicle_type], index);
+	}
+}
+
+void TraceRestrictRecordRecentCounter(TraceRestrictCounterID index)
+{
+	const TraceRestrictCounter *ctr = TraceRestrictCounter::GetIfValid(index);
+	if (ctr != nullptr && ctr->owner == _local_company) {
+		RecordRecentSlotOrCounter(_recent_counters , index);
+	}
+}
+
+void TraceRestrictClearRecentSlotsAndCounters()
+{
+	for (auto &it : _recent_slots) {
+		it.clear();
+	}
+	_recent_counters.clear();
+}
 
 /** Widget IDs */
 enum TraceRestrictWindowWidgets {
@@ -82,6 +143,7 @@ enum TraceRestrictWindowWidgets {
 	TR_WIDGET_VALUE_DEST,
 	TR_WIDGET_VALUE_SIGNAL,
 	TR_WIDGET_VALUE_TILE,
+	TR_WIDGET_LABEL,
 	TR_WIDGET_LEFT_AUX_DROPDOWN,
 
 	TR_WIDGET_BLANK_L2,
@@ -103,39 +165,40 @@ enum TraceRestrictWindowWidgets {
 
 /** Selection mappings for NWID_SELECTION selectors */
 enum PanelWidgets {
-	// Left 2
+	/* Left 2 */
 	DPL2_TYPE = 0,
 	DPL2_CONDFLAGS,
 	DPL2_BLANK,
 
-	// Left
+	/* Left */
 	DPL_TYPE = 0,
 	DPL_COUNTER_OP,
 	DPL_BLANK,
 
-	// Left aux
+	/* Left aux */
 	DPLA_DROPDOWN = 0,
 
-	// Middle
+	/* Middle */
 	DPM_COMPARATOR = 0,
 	DPM_SLOT_OP,
 	DPM_BLANK,
 
-	// Right
+	/* Right */
 	DPR_VALUE_INT = 0,
 	DPR_VALUE_DECIMAL,
 	DPR_VALUE_DROPDOWN,
 	DPR_VALUE_DEST,
 	DPR_VALUE_SIGNAL,
 	DPR_VALUE_TILE,
+	DPR_LABEL_BUTTON,
 	DPR_BLANK,
 
-	// Share
+	/* Share */
 	DPS_SHARE = 0,
 	DPS_UNSHARE,
 	DPS_SHARE_ONTO,
 
-	// Copy
+	/* Copy */
 	DPC_COPY = 0,
 	DPC_APPEND,
 	DPC_DUPLICATE,
@@ -144,13 +207,16 @@ enum PanelWidgets {
 /**
  * drop down list string array, and corresponding integer values
  *
- * value_array *must* be at least as long as string_array,
- * where the length of string_array is defined as the offset
- * of the first INVALID_STRING_ID
+ * value_array *must* be at least as long as string_array
  */
 struct TraceRestrictDropDownListSet {
-	const StringID *string_array;
-	const uint *value_array;
+	std::span<const StringID> string_array;
+	std::span<const uint> value_array;
+
+	TraceRestrictDropDownListSet(std::span<const StringID> string_array, std::span<const uint> value_array) : string_array(string_array), value_array(value_array.first(string_array.size()))
+	{
+		assert(value_array.size() >= string_array.size());
+	}
 };
 
 static const StringID _program_insert_str[] = {
@@ -158,49 +224,15 @@ static const StringID _program_insert_str[] = {
 	STR_TRACE_RESTRICT_CONDITIONAL_ELIF,
 	STR_TRACE_RESTRICT_CONDITIONAL_ORIF,
 	STR_TRACE_RESTRICT_CONDITIONAL_ELSE,
-	STR_TRACE_RESTRICT_PF_DENY,
-	STR_TRACE_RESTRICT_PF_PENALTY,
-	STR_TRACE_RESTRICT_RESERVE_THROUGH,
-	STR_TRACE_RESTRICT_LONG_RESERVE,
-	STR_TRACE_RESTRICT_SLOT_OP,
-	STR_TRACE_RESTRICT_WAIT_AT_PBS,
-	STR_TRACE_RESTRICT_REVERSE,
-	STR_TRACE_RESTRICT_SPEED_RESTRICTION,
-	STR_TRACE_RESTRICT_NEWS_CONTROL,
-	STR_TRACE_RESTRICT_COUNTER_OP,
-	STR_TRACE_RESTRICT_PF_PENALTY_CONTROL,
-	STR_TRACE_RESTRICT_SPEED_ADAPTATION_CONTROL,
-	STR_TRACE_RESTRICT_SIGNAL_MODE_CONTROL,
-	INVALID_STRING_ID
 };
 static const uint32_t _program_insert_else_hide_mask    = 8;     ///< disable bitmask for else
 static const uint32_t _program_insert_or_if_hide_mask   = 4;     ///< disable bitmask for orif
 static const uint32_t _program_insert_else_if_hide_mask = 2;     ///< disable bitmask for elif
-static const uint32_t _program_wait_pbs_hide_mask = 0x200;       ///< disable bitmask for wait at PBS
-static const uint32_t _program_reverse_hide_mask = 0x400;        ///< disable bitmask for reverse
-static const uint32_t _program_speed_res_hide_mask = 0x800;      ///< disable bitmask for speed restriction
-static const uint32_t _program_counter_hide_mask = 0x2000;       ///< disable bitmask for counter
-static const uint32_t _program_penalty_adj_hide_mask = 0x4000;   ///< disable bitmask for penalty adjust
-static const uint32_t _program_speed_adapt_hide_mask = 0x8000;   ///< disable bitmask for speed adaptation
-static const uint32_t _program_signal_mode_hide_mask = 0x10000;  ///< disable bitmask for signal mode control
 static const uint _program_insert_val[] = {
 	TRIT_COND_UNDEFINED,                               // if block
 	TRIT_COND_UNDEFINED | (TRCF_ELSE << 16),           // elif block
 	TRIT_COND_UNDEFINED | (TRCF_OR << 16),             // orif block
 	TRIT_COND_ENDIF | (TRCF_ELSE << 16),               // else block
-	TRIT_PF_DENY,                                      // deny
-	TRIT_PF_PENALTY,                                   // penalty
-	TRIT_RESERVE_THROUGH,                              // reserve through
-	TRIT_LONG_RESERVE,                                 // long reserve
-	TRIT_SLOT,                                         // slot operation
-	TRIT_WAIT_AT_PBS,                                  // wait at PBS signal
-	TRIT_REVERSE,                                      // reverse
-	TRIT_SPEED_RESTRICTION,                            // speed restriction
-	TRIT_NEWS_CONTROL,                                 // news control
-	TRIT_COUNTER,                                      // counter operation
-	TRIT_PF_PENALTY_CONTROL,                           // penalty control
-	TRIT_SPEED_ADAPTATION_CONTROL,                     // speed adaptation control
-	TRIT_SIGNAL_MODE_CONTROL,                          // signal mode control
 };
 
 /** insert drop down list strings and values */
@@ -211,7 +243,6 @@ static const TraceRestrictDropDownListSet _program_insert = {
 static const StringID _deny_value_str[] = {
 	STR_TRACE_RESTRICT_PF_DENY,
 	STR_TRACE_RESTRICT_PF_ALLOW,
-	INVALID_STRING_ID
 };
 static const uint _deny_value_val[] = {
 	0,
@@ -226,7 +257,6 @@ static const TraceRestrictDropDownListSet _deny_value = {
 static const StringID _reserve_through_value_str[] = {
 	STR_TRACE_RESTRICT_RESERVE_THROUGH,
 	STR_TRACE_RESTRICT_RESERVE_THROUGH_CANCEL,
-	INVALID_STRING_ID
 };
 static const uint _reserve_through_value_val[] = {
 	0,
@@ -242,7 +272,6 @@ static const StringID _long_reserve_value_str[] = {
 	STR_TRACE_RESTRICT_LONG_RESERVE,
 	STR_TRACE_RESTRICT_LONG_RESERVE_CANCEL,
 	STR_TRACE_RESTRICT_LONG_RESERVE_UNLESS_STOPPING,
-	INVALID_STRING_ID
 };
 static const uint _long_reserve_value_val[] = {
 	0,
@@ -260,7 +289,6 @@ static const StringID _wait_at_pbs_value_str[] = {
 	STR_TRACE_RESTRICT_WAIT_AT_PBS_CANCEL,
 	STR_TRACE_RESTRICT_PBS_RES_END_WAIT_SHORT,
 	STR_TRACE_RESTRICT_PBS_RES_END_WAIT_CANCEL_SHORT,
-	INVALID_STRING_ID
 };
 static const uint _wait_at_pbs_value_val[] = {
 	TRWAPVF_WAIT_AT_PBS,
@@ -283,7 +311,6 @@ static const StringID _direction_value_str[] = {
 	STR_TRACE_RESTRICT_DIRECTION_NW,
 	STR_TRACE_RESTRICT_DIRECTION_TUNBRIDGE_ENTRANCE,
 	STR_TRACE_RESTRICT_DIRECTION_TUNBRIDGE_EXIT,
-	INVALID_STRING_ID
 };
 static const uint _direction_value_val[] = {
 	TRDTSV_FRONT,
@@ -314,7 +341,6 @@ static const StringID _train_status_value_str[] = {
 	STR_TRACE_RESTRICT_TRAIN_STATUS_LOST,
 	STR_TRACE_RESTRICT_TRAIN_STATUS_REQUIRES_SERVICE,
 	STR_TRACE_RESTRICT_TRAIN_STATUS_STOPPING_AT_STATION_WAYPOINT,
-	INVALID_STRING_ID
 };
 static const uint _train_status_value_val[] = {
 	TRTSVF_EMPTY,
@@ -339,11 +365,14 @@ static const TraceRestrictDropDownListSet _train_status_value = {
 static const StringID _reverse_value_str[] = {
 	STR_TRACE_RESTRICT_REVERSE_SIG,
 	STR_TRACE_RESTRICT_REVERSE_SIG_CANCEL,
-	INVALID_STRING_ID
+	STR_TRACE_RESTRICT_REVERSE_AT_SIG,
+	STR_TRACE_RESTRICT_REVERSE_AT_SIG_CANCEL,
 };
 static const uint _reverse_value_val[] = {
-	TRRVF_REVERSE,
-	TRRVF_CANCEL_REVERSE,
+	TRRVF_REVERSE_BEHIND,
+	TRRVF_CANCEL_REVERSE_BEHIND,
+	TRRVF_REVERSE_AT,
+	TRRVF_CANCEL_REVERSE_AT,
 };
 
 /** value drop down list for reverse types strings and values */
@@ -354,11 +383,10 @@ static const TraceRestrictDropDownListSet _reverse_value = {
 static const StringID _news_control_value_str[] = {
 	STR_TRACE_RESTRICT_TRAIN_NOT_STUCK_SHORT,
 	STR_TRACE_RESTRICT_TRAIN_NOT_STUCK_CANCEL_SHORT,
-	INVALID_STRING_ID
 };
 static const uint _news_control_value_val[] = {
-	TRRVF_REVERSE,
-	TRRVF_CANCEL_REVERSE,
+	TRNCF_TRAIN_NOT_STUCK,
+	TRNCF_CANCEL_TRAIN_NOT_STUCK,
 };
 
 /** value drop down list for news control types strings and values */
@@ -372,7 +400,6 @@ static const StringID _time_date_value_str[] = {
 	STR_TRACE_RESTRICT_TIME_HOUR_MINUTE,
 	STR_TRACE_RESTRICT_TIME_DAY,
 	STR_TRACE_RESTRICT_TIME_MONTH,
-	INVALID_STRING_ID
 };
 static const uint _time_date_value_val[] = {
 	TRTDVF_MINUTE,
@@ -393,7 +420,6 @@ static const StringID _engine_class_value_str[] = {
 	STR_LIVERY_ELECTRIC,
 	STR_LIVERY_MONORAIL,
 	STR_LIVERY_MAGLEV,
-	INVALID_STRING_ID
 };
 static const uint _engine_class_value_val[] = {
 	EC_STEAM,    ///< Steam rail engine.
@@ -413,7 +439,6 @@ static const StringID _diagdir_value_str[] = {
 	STR_TRACE_RESTRICT_DIRECTION_SE,
 	STR_TRACE_RESTRICT_DIRECTION_SW,
 	STR_TRACE_RESTRICT_DIRECTION_NW,
-	INVALID_STRING_ID
 };
 static const uint _diagdir_value_val[] = {
 	DIAGDIR_NE,
@@ -430,7 +455,6 @@ static const TraceRestrictDropDownListSet _diagdir_value = {
 static const StringID _dtarget_direction_aux_value_str[] = {
 	STR_TRACE_RESTRICT_VARIABLE_CURRENT_ORDER,
 	STR_TRACE_RESTRICT_VARIABLE_NEXT_ORDER,
-	INVALID_STRING_ID
 };
 static const uint _target_direction_aux_value_val[] = {
 	TRTDCAF_CURRENT_ORDER,
@@ -445,7 +469,6 @@ static const TraceRestrictDropDownListSet _target_direction_aux_value = {
 static const StringID _pf_penalty_control_value_str[] = {
 	STR_TRACE_RESTRICT_NO_PBS_BACK_PENALTY_SHORT,
 	STR_TRACE_RESTRICT_NO_PBS_BACK_PENALTY_CANCEL_SHORT,
-	INVALID_STRING_ID
 };
 static const uint _pf_penalty_control_value_val[] = {
 	TRPPCF_NO_PBS_BACK_PENALTY,
@@ -460,7 +483,6 @@ static const TraceRestrictDropDownListSet _pf_penalty_control_value = {
 static const StringID _speed_adaptation_control_value_str[] = {
 	STR_TRACE_RESTRICT_MAKE_TRAIN_SPEED_ADAPTATION_EXEMPT_SHORT,
 	STR_TRACE_RESTRICT_REMOVE_TRAIN_SPEED_ADAPTATION_EXEMPT_SHORT,
-	INVALID_STRING_ID
 };
 static const uint _speed_adaptation_control_value_val[] = {
 	TRSACF_SPEED_ADAPT_EXEMPT,
@@ -475,7 +497,6 @@ static const TraceRestrictDropDownListSet _speed_adaptation_control_value = {
 static const StringID _signal_mode_control_value_str[] = {
 	STR_TRACE_RESTRICT_USE_NORMAL_ASPECT_MODE_SHORT,
 	STR_TRACE_RESTRICT_USE_SHUNT_ASPECT_MODE_SHORT,
-	INVALID_STRING_ID
 };
 static const uint _signal_mode_control_value_val[] = {
 	TRSMCF_NORMAL_ASPECT,
@@ -493,20 +514,17 @@ static const TraceRestrictDropDownListSet _signal_mode_control_value = {
  */
 static int GetDropDownListIndexByValue(const TraceRestrictDropDownListSet *list_set, uint value, bool missing_ok)
 {
-	const StringID *string_array = list_set->string_array;
-	const uint *value_array = list_set->value_array;
+	std::span<const uint> value_array = list_set->value_array;
 
-	for (; *string_array != INVALID_STRING_ID; string_array++, value_array++) {
-		if (*value_array == value) {
-			return value_array - list_set->value_array;
-		}
+	for (int i = 0; i < static_cast<int>(value_array.size()); i++) {
+		if (value_array[i] == value) return i;
 	}
 	assert(missing_ok == true);
 	return -1;
 }
 
 /**
- * Get StringID correspoding to @p value, in @list_set
+ * Get StringID corresponding to @p value, in @list_set
  * @p value must be present
  */
 static StringID GetDropDownStringByValue(const TraceRestrictDropDownListSet *list_set, uint value)
@@ -516,11 +534,11 @@ static StringID GetDropDownStringByValue(const TraceRestrictDropDownListSet *lis
 
 typedef uint TraceRestrictGuiItemType;
 
-static TraceRestrictGuiItemType GetItemGuiType(TraceRestrictItem item)
+static TraceRestrictGuiItemType GetItemGuiType(TraceRestrictInstructionItem item)
 {
-	TraceRestrictItemType type = GetTraceRestrictType(item);
+	TraceRestrictItemType type = item.GetType();
 	if (IsTraceRestrictTypeAuxSubtype(type)) {
-		return type | (GetTraceRestrictAuxField(item) << 16);
+		return type | (item.GetAuxField() << 16);
 	} else {
 		return type;
 	}
@@ -547,10 +565,7 @@ struct TraceRestrictDropDownListItem {
 	TraceRestrictDropDownListItemFlags flags;
 };
 
-/**
- * Return the appropriate type dropdown TraceRestrictDropDownListItem std::span for the given item type @p type
- */
-static std::span<const TraceRestrictDropDownListItem> GetTypeDropDownListItems(TraceRestrictGuiItemType type)
+static std::span<const TraceRestrictDropDownListItem> GetActionDropDownListItems()
 {
 	static const TraceRestrictDropDownListItem actions[] = {
 		{ TRIT_PF_DENY,                  STR_TRACE_RESTRICT_PF_DENY,                  TRDDLIF_NONE },
@@ -566,8 +581,13 @@ static std::span<const TraceRestrictDropDownListItem> GetTypeDropDownListItems(T
 		{ TRIT_PF_PENALTY_CONTROL,       STR_TRACE_RESTRICT_PF_PENALTY_CONTROL,       TRDDLIF_ADVANCED },
 		{ TRIT_SPEED_ADAPTATION_CONTROL, STR_TRACE_RESTRICT_SPEED_ADAPTATION_CONTROL, TRDDLIF_ADVANCED | TRDDLIF_SPEED_ADAPTATION },
 		{ TRIT_SIGNAL_MODE_CONTROL,      STR_TRACE_RESTRICT_SIGNAL_MODE_CONTROL,      TRDDLIF_ADVANCED | TRDDLIF_NORMAL_SHUNT_SIGNAL_STYLE },
+		{ TRIT_GUI_LABEL,                STR_TRACE_RESTRICT_GUI_LABEL,                TRDDLIF_NONE },
 	};
+	return std::span<const TraceRestrictDropDownListItem>(actions);
+}
 
+static std::span<const TraceRestrictDropDownListItem> GetConditionDropDownListItems()
+{
 	static const TraceRestrictDropDownListItem conditions[] = {
 		{ TRIT_COND_UNDEFINED,                                        STR_TRACE_RESTRICT_VARIABLE_UNDEFINED,                 TRDDLIF_HIDDEN },
 		{ TRIT_COND_TRAIN_LENGTH,                                     STR_TRACE_RESTRICT_VARIABLE_TRAIN_LENGTH,              TRDDLIF_NONE },
@@ -599,11 +619,18 @@ static std::span<const TraceRestrictDropDownListItem> GetTypeDropDownListItems(T
 		{ TRIT_COND_PBS_ENTRY_SIGNAL | (TRPESAF_RES_END << 16),       STR_TRACE_RESTRICT_VARIABLE_PBS_RES_END_SIGNAL,        TRDDLIF_ADVANCED | TRDDLIF_REALISTIC_BRAKING },
 		{ TRIT_COND_PBS_ENTRY_SIGNAL | (TRPESAF_RES_END_TILE << 16),  STR_TRACE_RESTRICT_VARIABLE_PBS_RES_END_TILE,          TRDDLIF_ADVANCED | TRDDLIF_NORMAL_SHUNT_SIGNAL_STYLE },
 	};
+	return std::span<const TraceRestrictDropDownListItem>(conditions);
+}
 
+/**
+ * Return the appropriate type dropdown TraceRestrictDropDownListItem std::span for the given item type @p type
+ */
+static std::span<const TraceRestrictDropDownListItem> GetTypeDropDownListItems(TraceRestrictGuiItemType type)
+{
 	if (IsTraceRestrictTypeConditional(ItemTypeFromGuiType(type))) {
-		return std::span<const TraceRestrictDropDownListItem>(conditions);
+		return GetConditionDropDownListItems();
 	} else {
-		return std::span<const TraceRestrictDropDownListItem>(actions);
+		return GetActionDropDownListItems();
 	}
 }
 
@@ -622,18 +649,17 @@ static bool ShouldHideTypeDropDownListItem(TraceRestrictDropDownListItemFlags fl
  */
 static const TraceRestrictDropDownListSet *GetSortedCargoTypeDropDownListSet()
 {
-	static StringID cargo_list_str[NUM_CARGO + 1];
+	static StringID cargo_list_str[NUM_CARGO];
 	static uint cargo_list_id[NUM_CARGO];
-	static const TraceRestrictDropDownListSet cargo_list = {
-		cargo_list_str, cargo_list_id,
-	};
+	static TraceRestrictDropDownListSet cargo_list({}, {});
 
 	for (size_t i = 0; i < _sorted_standard_cargo_specs.size(); ++i) {
 		const CargoSpec *cs = _sorted_cargo_specs[i];
 		cargo_list_str[i] = cs->name;
 		cargo_list_id[i] = cs->Index();
 	}
-	cargo_list_str[_sorted_standard_cargo_specs.size()] = INVALID_STRING_ID;
+	cargo_list.string_array = std::span<const StringID>(cargo_list_str, _sorted_standard_cargo_specs.size());
+	cargo_list.value_array = std::span<const uint>(cargo_list_id, _sorted_standard_cargo_specs.size());
 
 	return &cargo_list;
 }
@@ -641,52 +667,240 @@ static const TraceRestrictDropDownListSet *GetSortedCargoTypeDropDownListSet()
 /**
  * Get a DropDownList of the group list
  */
-static DropDownList GetGroupDropDownList(Owner owner, GroupID group_id, int &selected)
+static DropDownList GetGroupDropDownList(Owner owner, GroupID group_id, int &selected, bool include_default = true)
 {
-	GUIGroupList list;
+	std::vector<const Group *> list;
+	robin_hood::unordered_set<GroupID> seen_parents;
 
 	for (const Group *g : Group::Iterate()) {
 		if (g->owner == owner && g->vehicle_type == VEH_TRAIN) {
 			list.push_back(g);
+			seen_parents.insert(g->parent);
 		}
 	}
 
-	list.ForceResort();
-	SortGUIGroupList(list);
+	{
+		/* Sort the groups by their parent group, then their name */
+		const Group *last_group[2] = { nullptr, nullptr };
+		format_buffer last_name[2] = { {}, {} };
+		std::sort(list.begin(), list.end(), [&](const Group *a, const Group *b) {
+			if (a->parent != b->parent) return a->parent < b->parent;
+
+			if (a != last_group[0]) {
+				last_group[0] = a;
+				SetDParam(0, a->index);
+				last_name[0].clear();
+				AppendStringInPlace(last_name[0], STR_GROUP_NAME);
+			}
+
+			if (b != last_group[1]) {
+				last_group[1] = b;
+				SetDParam(0, b->index);
+				last_name[1].clear();
+				AppendStringInPlace(last_name[1], STR_GROUP_NAME);
+			}
+
+			int r = StrNaturalCompare(last_name[0], last_name[1]); // Sort by name (natural sorting).
+			if (r == 0) return a->index < b->index;
+			return r < 0;
+		});
+	}
 
 	DropDownList dlist;
 	selected = -1;
 
-	if (group_id == DEFAULT_GROUP) selected = DEFAULT_GROUP;
-	dlist.emplace_back(new DropDownListStringItem(STR_GROUP_DEFAULT_TRAINS, DEFAULT_GROUP, false));
-
-	for (size_t i = 0; i < list.size(); ++i) {
-		const Group *g = list[i];
-		if (group_id == g->index) selected = group_id;
-		SetDParam(0, g->index | GROUP_NAME_HIERARCHY);
-		dlist.emplace_back(new DropDownListStringItem(STR_GROUP_NAME, g->index, false));
+	if (include_default) {
+		if (group_id == DEFAULT_GROUP) selected = DEFAULT_GROUP;
+		dlist.push_back(MakeDropDownListStringItem(STR_GROUP_DEFAULT_TRAINS, DEFAULT_GROUP, false));
 	}
+
+	auto output_groups = y_combinator([&](auto output_groups, uint indent, GroupID parent_filter) -> void {
+		auto start = std::lower_bound(list.begin(), list.end(), parent_filter, [&](const Group *g, GroupID parent_filter) {
+			return g->parent < parent_filter;
+		});
+		for (auto it = start; it != list.end() && (*it)->parent == parent_filter; ++it) {
+			const Group *g = *it;
+			if (group_id == g->index) selected = group_id;
+			SetDParam(0, g->index);
+			dlist.push_back(MakeDropDownListIndentStringItem(indent, STR_GROUP_NAME, g->index, false));
+			if (seen_parents.count(g->index)) {
+				/* Output child groups */
+				output_groups(indent + 1, g->index);
+			}
+		}
+	});
+	output_groups(0, INVALID_GROUP);
 
 	return dlist;
 }
 
-/** Sort slots by their name */
-static bool SlotNameSorter(const TraceRestrictSlot * const &a, const TraceRestrictSlot * const &b)
-{
-	int r = StrNaturalCompare(a->name, b->name); // Sort by name (natural sorting).
-	if (r == 0) return a->index < b->index;
-	return r < 0;
-}
+enum class SlotItemType : uint8_t {
+	None,
+	Slot,
+	Group,
+	Special,
+};
 
-static VehicleType _slot_sort_veh_type;
+struct SlotItemInfo {
+	const std::string &name;
+	VehicleType vehicle_type;
+	TraceRestrictSlotGroupID parent;
+};
 
-/** Sort slots by their type then name */
-static bool SlotVehTypeNameSorter(const TraceRestrictSlot * const &a, const TraceRestrictSlot * const &b)
+struct SlotItem {
+	SlotItemType type{};
+	uint16_t id{};
+
+	SlotItemInfo GetInfo() const
+	{
+		if (this->type == SlotItemType::Slot) {
+			const TraceRestrictSlot *slot = TraceRestrictSlot::Get(this->id);
+			return SlotItemInfo{ slot->name, slot->vehicle_type, slot->parent_group };
+		} else if (this->type == SlotItemType::Group) {
+			const TraceRestrictSlotGroup *slot_group = TraceRestrictSlotGroup::Get(this->id);
+			return SlotItemInfo{ slot_group->name, slot_group->vehicle_type, slot_group->parent };
+		} else {
+			NOT_REACHED();
+		}
+	}
+
+	SlotItem GetParentItem() const
+	{
+		TraceRestrictSlotGroupID parent = INVALID_TRACE_RESTRICT_SLOT_GROUP;
+		if (this->type == SlotItemType::Slot) {
+			parent = TraceRestrictSlot::Get(this->id)->parent_group;
+		} else if (this->type == SlotItemType::Group) {
+			parent = TraceRestrictSlotGroup::Get(this->id)->parent;
+		}
+		if (parent == INVALID_TRACE_RESTRICT_SLOT_GROUP) {
+			return SlotItem{};
+		} else {
+			return SlotItem{ SlotItemType::Group, parent };
+		}
+	}
+
+	TraceRestrictSlotGroupID GetClosestGroupID() const
+	{
+		if (this->type == SlotItemType::Slot) {
+			return this->GetParentItem().GetClosestGroupID();
+		} else if (this->type == SlotItemType::Group) {
+			return this->id;
+		} else {
+			return INVALID_TRACE_RESTRICT_SLOT_GROUP;
+		}
+	}
+
+	bool IsInvalid() const
+	{
+		if (this->type == SlotItemType::Slot && this->id != NEW_TRACE_RESTRICT_SLOT_ID && !TraceRestrictSlot::IsValidID(this->id)) return true;
+		if (this->type == SlotItemType::Group && this->id != NEW_TRACE_RESTRICT_SLOT_GROUP && !TraceRestrictSlotGroup::IsValidID(this->id)) return true;
+		return false;
+	}
+
+	bool IsNone() const
+	{
+		return this->type == SlotItemType::None;
+	}
+
+	bool operator==(const SlotItem& c) const = default;
+	auto operator<=>(const SlotItem& c) const = default;
+};
+
+static void GetSlotDropDownListIntl(DropDownList &dlist, Owner owner, TraceRestrictSlotID slot_id, int &selected, VehicleType vehtype, bool show_other_types, bool recently_used, bool public_only)
 {
-	if (a->vehicle_type == b->vehicle_type) return SlotNameSorter(a, b);
-	if (a->vehicle_type == _slot_sort_veh_type) return true;
-	if (b->vehicle_type == _slot_sort_veh_type) return false;
-	return a->vehicle_type < b->vehicle_type;
+	selected = -1;
+
+	auto add_slot = [&](const TraceRestrictSlot *slot, TraceRestrictSlotID id, uint indent) {
+		if (slot_id == id) selected = slot_id;
+		if (indent == 0 || slot->vehicle_type == vehtype) {
+			SetDParam(0, id);
+			dlist.push_back(MakeDropDownListIndentStringItem(indent, STR_TRACE_RESTRICT_SLOT_NAME, id, false));
+		} else {
+			SetDParam(0, STR_REPLACE_VEHICLE_TRAIN + slot->vehicle_type);
+			SetDParam(1, id);
+			dlist.push_back(MakeDropDownListIndentStringItem(indent, STR_TRACE_RESTRICT_SLOT_NAME_PREFIXED, id, false));
+		}
+	};
+
+	auto add_group = [&](const TraceRestrictSlotGroup *sg, TraceRestrictSlotGroupID id, uint indent) {
+		if (indent == 0 || sg->vehicle_type == vehtype) {
+			SetDParam(0, id);
+			dlist.push_back(std::make_unique<DropDownUnselectable<DropDownListIndentStringItem>>(indent, STR_TRACE_RESTRICT_SLOT_GROUP_NAME_DOWN, id, false));
+		} else {
+			SetDParam(0, STR_REPLACE_VEHICLE_TRAIN + sg->vehicle_type);
+			SetDParam(1, id);
+			dlist.push_back(std::make_unique<DropDownUnselectable<DropDownListIndentStringItem>>(indent, STR_TRACE_RESTRICT_SLOT_GROUP_NAME_DOWN_PREFIXED, id, false));
+		}
+	};
+
+	if (recently_used) {
+		for (TraceRestrictSlotID id : _recent_slots[vehtype]) {
+			add_slot(TraceRestrictSlot::Get(id), id, 0);
+		}
+		return;
+	}
+
+	std::vector<SlotItem> list;
+	robin_hood::unordered_set<TraceRestrictSlotGroupID> seen_parents;
+
+	for (const TraceRestrictSlot *slot : TraceRestrictSlot::Iterate()) {
+		if (slot->owner != owner) continue;
+		if (!show_other_types && slot->vehicle_type != vehtype) continue;
+		if (public_only && !HasFlag(slot->flags, TraceRestrictSlot::Flags::Public)) continue;
+
+		list.push_back({ SlotItemType::Slot, slot->index });
+
+		TraceRestrictSlotGroupID parent = slot->parent_group;
+		while (parent != INVALID_TRACE_RESTRICT_SLOT_GROUP) {
+			auto res = seen_parents.insert(parent);
+			if (!res.second) {
+				/* Insert did not succeeded, was in set previously */
+				break;
+			}
+			TraceRestrictSlotGroup *slot_group = TraceRestrictSlotGroup::GetIfValid(parent);
+			if (slot_group == nullptr) break;
+			list.push_back({ SlotItemType::Group, parent });
+			parent = slot_group->parent;
+		}
+	}
+
+	/* Sort the slots/groups by the vehicle type (if in use), then their parent group, then their name */
+	std::sort(list.begin(), list.end(), [&](const SlotItem &a_item, const SlotItem &b_item) {
+		SlotItemInfo a = a_item.GetInfo();
+		SlotItemInfo b = b_item.GetInfo();
+
+		if (a.vehicle_type != b.vehicle_type) {
+			if (a.vehicle_type == vehtype) return true;
+			if (b.vehicle_type == vehtype) return false;
+			return a.vehicle_type < b.vehicle_type;
+		}
+
+		if (a.parent != b.parent) return a.parent < b.parent;
+
+		int r = StrNaturalCompare(a.name, b.name); // Sort by name (natural sorting).
+		if (r == 0) return a_item < b_item;
+		return r < 0;
+	});
+
+	auto output_items = y_combinator([&](auto output_items, uint indent, TraceRestrictSlotGroupID parent_filter) -> void {
+		for (const SlotItem &item : list) {
+			if (item.type == SlotItemType::Slot) {
+				const TraceRestrictSlot *slot = TraceRestrictSlot::Get(item.id);
+				if (slot->parent_group != parent_filter) continue;
+				add_slot(slot, item.id, indent);
+			} else if (item.type == SlotItemType::Group) {
+				const TraceRestrictSlotGroup *sg = TraceRestrictSlotGroup::Get(item.id);
+				if (sg->parent != parent_filter) continue;
+				add_group(sg, item.id, indent);
+
+				if (seen_parents.count(item.id)) {
+					/* Output child items */
+					output_items(indent + 1, item.id);
+				}
+			}
+		}
+	});
+	output_items(0, INVALID_TRACE_RESTRICT_SLOT_GROUP);
 }
 
 /**
@@ -694,35 +908,30 @@ static bool SlotVehTypeNameSorter(const TraceRestrictSlot * const &a, const Trac
  */
 DropDownList GetSlotDropDownList(Owner owner, TraceRestrictSlotID slot_id, int &selected, VehicleType vehtype, bool show_other_types)
 {
-	GUIList<const TraceRestrictSlot*> list;
 	DropDownList dlist;
 
-	for (const TraceRestrictSlot *slot : TraceRestrictSlot::Iterate()) {
-		if (!show_other_types && slot->vehicle_type != vehtype) continue;
-		if (slot->owner == owner) {
-			list.push_back(slot);
+	if (_shift_pressed && _settings_game.economy.infrastructure_sharing[VEH_TRAIN]) {
+		for (const Company *c : Company::Iterate()) {
+			if (c->index == owner) continue;
+
+			int cselected;
+			DropDownList clist;
+			GetSlotDropDownListIntl(clist, c->index, slot_id, cselected, vehtype, show_other_types, false, true);
+			if (clist.empty()) continue;
+
+			if (!dlist.empty()) dlist.push_back(MakeDropDownListDividerItem());
+			dlist.push_back(MakeCompanyDropDownListItem(c->index, false));
+
+			if (cselected != -1) selected = cselected;
+			dlist.insert(dlist.end(), std::make_move_iterator(clist.begin()), std::make_move_iterator(clist.end()));
 		}
-	}
+	} else {
+		std::unique_ptr<DropDownListStringItem> new_item = std::make_unique<DropDownListStringItem>(STR_TRACE_RESTRICT_SLOT_CREATE_CAPTION, NEW_TRACE_RESTRICT_SLOT_ID, false);
+		new_item->SetColourFlags(TC_FORCED);
+		dlist.emplace_back(std::move(new_item));
+		dlist.push_back(MakeDropDownListDividerItem());
 
-	if (list.size() == 0) return dlist;
-
-	list.ForceResort();
-	_slot_sort_veh_type = vehtype;
-	list.Sort(show_other_types ? &SlotVehTypeNameSorter : &SlotNameSorter);
-
-	selected = -1;
-
-	for (size_t i = 0; i < list.size(); ++i) {
-		const TraceRestrictSlot *s = list[i];
-		if (slot_id == s->index) selected = slot_id;
-		if (s->vehicle_type == vehtype) {
-			SetDParam(0, s->index);
-			dlist.emplace_back(new DropDownListStringItem(STR_TRACE_RESTRICT_SLOT_NAME, s->index, false));
-		} else {
-			SetDParam(0, STR_REPLACE_VEHICLE_TRAIN + s->vehicle_type);
-			SetDParam(1, s->index);
-			dlist.emplace_back(new DropDownListStringItem(STR_TRACE_RESTRICT_SLOT_NAME_PREFIXED, s->index, false));
-		}
+		GetSlotDropDownListIntl(dlist, owner, slot_id, selected, vehtype, show_other_types, _ctrl_pressed, false);
 	}
 
 	return dlist;
@@ -736,32 +945,66 @@ static bool CounterNameSorter(const TraceRestrictCounter * const &a, const Trace
 	return r < 0;
 }
 
+static void GetCounterDropDownListIntl(DropDownList &dlist, Owner owner, TraceRestrictCounterID ctr_id, int &selected, bool recently_used, bool public_only)
+{
+	GUIList<const TraceRestrictCounter*> list;
+
+	if (recently_used) {
+		for (TraceRestrictCounterID id : _recent_counters) {
+			list.push_back(TraceRestrictCounter::Get(id));
+		}
+	} else {
+		for (const TraceRestrictCounter *ctr : TraceRestrictCounter::Iterate()) {
+			if (public_only && !HasFlag(ctr->flags, TraceRestrictCounter::Flags::Public)) continue;
+			if (ctr->owner == owner) {
+				list.push_back(ctr);
+			}
+		}
+
+		if (list.size() > 0) {
+			list.ForceResort();
+			list.Sort(&CounterNameSorter);
+		}
+	}
+
+	selected = -1;
+
+	for (const TraceRestrictCounter *s : list) {
+		if (ctr_id == s->index) selected = ctr_id;
+		SetDParam(0, s->index);
+		dlist.push_back(MakeDropDownListStringItem(STR_TRACE_RESTRICT_COUNTER_NAME, s->index, false));
+	}
+}
+
 /**
  * Get a DropDownList of the counter list
  */
 DropDownList GetCounterDropDownList(Owner owner, TraceRestrictCounterID ctr_id, int &selected)
 {
-	GUIList<const TraceRestrictCounter*> list;
 	DropDownList dlist;
 
-	for (const TraceRestrictCounter *ctr : TraceRestrictCounter::Iterate()) {
-		if (ctr->owner == owner) {
-			list.push_back(ctr);
+	if (_shift_pressed && _settings_game.economy.infrastructure_sharing[VEH_TRAIN]) {
+		for (const Company *c : Company::Iterate()) {
+			if (c->index == owner) continue;
+
+			int cselected;
+			DropDownList clist;
+			GetCounterDropDownListIntl(clist, c->index, ctr_id, cselected, false, true);
+			if (clist.empty()) continue;
+
+			if (!dlist.empty()) dlist.push_back(MakeDropDownListDividerItem());
+			dlist.push_back(MakeCompanyDropDownListItem(c->index, false));
+
+			if (cselected != -1) selected = cselected;
+			dlist.insert(dlist.end(), std::make_move_iterator(clist.begin()), std::make_move_iterator(clist.end()));
 		}
-	}
+	} else {
+		std::unique_ptr<DropDownListStringItem> new_item = std::make_unique<DropDownListStringItem>(STR_TRACE_RESTRICT_COUNTER_CREATE_CAPTION, NEW_TRACE_RESTRICT_COUNTER_ID, false);
+		new_item->SetColourFlags(TC_FORCED);
+		dlist.emplace_back(std::move(new_item));
+		dlist.push_back(MakeDropDownListDividerItem());
 
-	if (list.size() == 0) return dlist;
-
-	list.ForceResort();
-	list.Sort(&CounterNameSorter);
-
-	selected = -1;
-
-	for (size_t i = 0; i < list.size(); ++i) {
-		const TraceRestrictCounter *s = list[i];
-		if (ctr_id == s->index) selected = ctr_id;
-		SetDParam(0, s->index);
-		dlist.emplace_back(new DropDownListStringItem(STR_TRACE_RESTRICT_COUNTER_NAME, s->index, false));
+		GetCounterDropDownListIntl(dlist, owner, ctr_id, selected, _ctrl_pressed, false);
 	}
 
 	return dlist;
@@ -770,7 +1013,6 @@ DropDownList GetCounterDropDownList(Owner owner, TraceRestrictCounterID ctr_id, 
 static const StringID _cargo_cond_ops_str[] = {
 	STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_CARGO_EQUALS,
 	STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_CARGO_NOT_EQUALS,
-	INVALID_STRING_ID,
 };
 static const uint _cargo_cond_ops_val[] = {
 	TRCO_IS,
@@ -784,7 +1026,6 @@ static const TraceRestrictDropDownListSet _cargo_cond_ops = {
 static const StringID _train_status_cond_ops_str[] = {
 	STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_HAS_STATUS,
 	STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_DOESNT_HAVE_STATUS,
-	INVALID_STRING_ID,
 };
 static const uint _train_status_cond_ops_val[] = {
 	TRCO_IS,
@@ -798,7 +1039,6 @@ static const TraceRestrictDropDownListSet _train_status_cond_ops = {
 static const StringID _passes_through_cond_ops_str[] = {
 	STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_PASS,
 	STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_DOESNT_PASS,
-	INVALID_STRING_ID,
 };
 static const uint _passes_through_cond_ops_val[] = {
 	TRCO_IS,
@@ -818,7 +1058,6 @@ static const StringID _slot_op_subtypes_str[] = {
 	STR_TRACE_RESTRICT_SLOT_PBS_RES_END_ACQUIRE_WAIT,
 	STR_TRACE_RESTRICT_SLOT_PBS_RES_END_TRY_ACQUIRE,
 	STR_TRACE_RESTRICT_SLOT_PBS_RES_END_RELEASE,
-	INVALID_STRING_ID,
 };
 static const uint _slot_op_subtypes_val[] = {
 	TRSCOF_ACQUIRE_WAIT,
@@ -839,7 +1078,6 @@ static const StringID _counter_op_cond_ops_str[] = {
 	STR_TRACE_RESTRICT_COUNTER_INCREASE,
 	STR_TRACE_RESTRICT_COUNTER_DECREASE,
 	STR_TRACE_RESTRICT_COUNTER_SET,
-	INVALID_STRING_ID,
 };
 static const uint _counter_op_cond_ops_val[] = {
 	TRCCOF_INCREASE,
@@ -863,7 +1101,7 @@ static StringID GetCargoStringByID(CargoID cargo)
 /**
  * Get the StringID for a given item type @p type
  */
-static StringID GetTypeString(TraceRestrictItem item)
+static StringID GetTypeString(TraceRestrictInstructionItem item)
 {
 	TraceRestrictGuiItemType type = GetItemGuiType(item);
 	for (const TraceRestrictDropDownListItem &item : GetTypeDropDownListItems(type)) {
@@ -885,7 +1123,6 @@ static const TraceRestrictDropDownListSet *GetCondOpDropDownListSet(TraceRestric
 		STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_LESS_EQUALS,
 		STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_MORE_THAN,
 		STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_MORE_EQUALS,
-		INVALID_STRING_ID,
 	};
 	static const uint val_long[] = {
 		TRCO_IS,
@@ -902,7 +1139,6 @@ static const TraceRestrictDropDownListSet *GetCondOpDropDownListSet(TraceRestric
 	static const StringID str_short[] = {
 		STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_EQUALS,
 		STR_TRACE_RESTRICT_CONDITIONAL_COMPARATOR_NOT_EQUALS,
-		INVALID_STRING_ID,
 	};
 	static const uint val_short[] = {
 		TRCO_IS,
@@ -928,7 +1164,6 @@ static const TraceRestrictDropDownListSet *GetCondOpDropDownListSet(TraceRestric
 			return &set_long;
 	}
 	NOT_REACHED();
-	return nullptr;
 }
 
 /**
@@ -1081,7 +1316,6 @@ static const StringID _condflags_dropdown_str[] = {
 	STR_TRACE_RESTRICT_CONDITIONAL_ELSE,
 	STR_TRACE_RESTRICT_CONDITIONAL_ELIF,
 	STR_TRACE_RESTRICT_CONDITIONAL_ORIF,
-	INVALID_STRING_ID,
 };
 static const uint _condflags_dropdown_val[] = {
 	CFDDT_ELSE,
@@ -1098,7 +1332,6 @@ static const StringID _pf_penalty_dropdown_str[] = {
 	STR_TRACE_RESTRICT_PF_VALUE_MEDIUM,
 	STR_TRACE_RESTRICT_PF_VALUE_LARGE,
 	STR_TRACE_RESTRICT_PF_VALUE_CUSTOM,
-	INVALID_STRING_ID,
 };
 static const uint _pf_penalty_dropdown_val[] = {
 	TRPPPI_SMALL,
@@ -1111,14 +1344,14 @@ static const TraceRestrictDropDownListSet _pf_penalty_dropdown = {
 	_pf_penalty_dropdown_str, _pf_penalty_dropdown_val,
 };
 
-static uint GetPathfinderPenaltyDropdownIndex(TraceRestrictItem item)
+static uint GetPathfinderPenaltyDropdownIndex(TraceRestrictInstructionItem item)
 {
-	switch (static_cast<TraceRestrictPathfinderPenaltyAuxField>(GetTraceRestrictAuxField(item))) {
+	switch (static_cast<TraceRestrictPathfinderPenaltyAuxField>(item.GetAuxField())) {
 		case TRPPAF_VALUE:
 			return TRPPPI_END;
 
 		case TRPPAF_PRESET: {
-			uint16_t index = GetTraceRestrictValue(item);
+			uint16_t index = item.GetValue();
 			assert(index < TRPPPI_END);
 			return index;
 		}
@@ -1131,14 +1364,13 @@ static uint GetPathfinderPenaltyDropdownIndex(TraceRestrictItem item)
 template <typename F>
 void IterateActionsInsideConditional(const TraceRestrictProgram *prog, int index, F handler)
 {
-	size_t instruction_count = prog->GetInstructionCount();
 	int depth = 1;
-	for (size_t i = index; i < instruction_count; i++) {
-		TraceRestrictItem item = prog->items[prog->InstructionOffsetToArrayOffset(i)];
-		if (IsTraceRestrictConditional(item)) {
-			if (GetTraceRestrictCondFlags(item) & (TRCF_ELSE | TRCF_OR)) {
+	for (auto iter = TraceRestrictInstructionIteratorAt(prog->items, index); iter < prog->items.end(); ++iter) {
+		TraceRestrictInstructionItem item = iter.Instruction();
+		if (item.IsConditional()) {
+			if (item.GetCondFlags() & (TRCF_ELSE | TRCF_OR)) {
 				/* do nothing */
-			} else if (GetTraceRestrictType(item) == TRIT_COND_ENDIF) {
+			} else if (item.GetType() == TRIT_COND_ENDIF) {
 				depth--;
 				if (depth == 0) return;
 			} else {
@@ -1151,27 +1383,26 @@ void IterateActionsInsideConditional(const TraceRestrictProgram *prog, int index
 }
 
 /** Common function for drawing an ordinary conditional instruction */
-static void DrawInstructionStringConditionalCommon(TraceRestrictItem item, const TraceRestrictTypePropertySet &properties)
+static void DrawInstructionStringConditionalCommon(TraceRestrictInstructionItem item, const TraceRestrictTypePropertySet &properties)
 {
-	assert(GetTraceRestrictCondFlags(item) <= TRCF_OR);
-	SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
+	assert(item.GetCondFlags() <= TRCF_OR);
+	SetDParam(0, _program_cond_type[item.GetCondFlags()]);
 	SetDParam(1, GetTypeString(item));
-	SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
+	SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
 }
 
 /** Common function for drawing an integer conditional instruction */
-static void DrawInstructionStringConditionalIntegerCommon(TraceRestrictItem item, const TraceRestrictTypePropertySet &properties)
+static void DrawInstructionStringConditionalIntegerCommon(TraceRestrictInstructionItem item, const TraceRestrictTypePropertySet &properties)
 {
 	DrawInstructionStringConditionalCommon(item, properties);
-	SetDParam(3, GetTraceRestrictValue(item));
+	SetDParam(3, item.GetValue());
 }
 
 /** Common function for drawing an integer conditional instruction with an invalid value */
-static void DrawInstructionStringConditionalInvalidValue(TraceRestrictItem item, const TraceRestrictTypePropertySet &properties, StringID &instruction_string, bool selected)
+static void DrawInstructionStringConditionalInvalidValue(TraceRestrictInstructionItem item, const TraceRestrictTypePropertySet &properties, StringID &instruction_string, bool selected)
 {
 	instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_UNDEFINED;
 	DrawInstructionStringConditionalCommon(item, properties);
-	SetDParam(3, selected ? STR_TRACE_RESTRICT_WHITE : STR_EMPTY);
 }
 
 /**
@@ -1184,24 +1415,25 @@ static void DrawInstructionStringConditionalInvalidValue(TraceRestrictItem item,
  * @param indent How many levels the instruction is indented
  * @param left Left border for text drawing
  * @param right Right border for text drawing
+ * @param owner Owning company ID
  */
-static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestrictItem item, int index, int y, bool selected, int indent, int left, int right)
+static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestrictInstructionRecord instruction_record, int index, int y, bool selected, int indent, int left, int right, Owner owner)
 {
 	StringID instruction_string = INVALID_STRING_ID;
 
+	TraceRestrictInstructionItem item = instruction_record.instruction;
 	TraceRestrictTypePropertySet properties = GetTraceRestrictTypeProperties(item);
 
-	if (IsTraceRestrictConditional(item)) {
-		if (GetTraceRestrictType(item) == TRIT_COND_ENDIF) {
-			if (GetTraceRestrictCondFlags(item) & TRCF_ELSE) {
+	if (item.IsConditional()) {
+		if (item.GetType() == TRIT_COND_ENDIF) {
+			if (item.GetCondFlags() & TRCF_ELSE) {
 				instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ELSE;
 			} else {
 				instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ENDIF;
 			}
-		} else if (GetTraceRestrictType(item) == TRIT_COND_UNDEFINED) {
+		} else if (item.GetType() == TRIT_COND_UNDEFINED) {
 			instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_UNDEFINED;
-			SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-			SetDParam(1, selected ? STR_TRACE_RESTRICT_WHITE : STR_EMPTY);
+			SetDParam(0, _program_cond_type[item.GetCondFlags()]);
 		} else {
 			auto insert_warning = [&](uint dparam_index, StringID warning) {
 				auto tmp_params = MakeParameters(GetDParam(dparam_index));
@@ -1214,7 +1446,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				case TRVT_PERCENT:
 					instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_INTEGER;
 					DrawInstructionStringConditionalIntegerCommon(item, properties);
-					if (GetTraceRestrictType(item) == TRIT_COND_RESERVED_TILES && _settings_game.vehicle.train_braking_model != TBM_REALISTIC) {
+					if (item.GetType() == TRIT_COND_RESERVED_TILES && _settings_game.vehicle.train_braking_model != TBM_REALISTIC) {
 						insert_warning(1, STR_TRACE_RESTRICT_WARNING_REQUIRES_REALISTIC_BRAKING);
 					}
 					break;
@@ -1225,13 +1457,13 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 					break;
 
 				case TRVT_ORDER: {
-					switch (static_cast<TraceRestrictOrderCondAuxField>(GetTraceRestrictAuxField(item))) {
+					switch (static_cast<TraceRestrictOrderCondAuxField>(item.GetAuxField())) {
 						case TROCAF_STATION:
-							if (GetTraceRestrictValue(item) != INVALID_STATION) {
+							if (item.GetValue() != INVALID_STATION) {
 								instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ORDER_STATION;
 								DrawInstructionStringConditionalIntegerCommon(item, properties);
 							} else {
-								// this is an invalid station, use a seperate string
+								/* This is an invalid station, use a separate string */
 								DrawInstructionStringConditionalInvalidValue(item, properties, instruction_string, selected);
 							}
 							break;
@@ -1245,7 +1477,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 							instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ORDER_DEPOT;
 							DrawInstructionStringConditionalCommon(item, properties);
 							SetDParam(3, VEH_TRAIN);
-							SetDParam(4, GetTraceRestrictValue(item));
+							SetDParam(4, item.GetValue());
 							break;
 
 						default:
@@ -1257,46 +1489,46 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 
 				case TRVT_CARGO_ID:
 					instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_CARGO;
-					assert(GetTraceRestrictCondFlags(item) <= TRCF_OR);
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					SetDParam(1, GetDropDownStringByValue(&_cargo_cond_ops, GetTraceRestrictCondOp(item)));
-					SetDParam(2, GetCargoStringByID(GetTraceRestrictValue(item)));
+					assert(item.GetCondFlags() <= TRCF_OR);
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					SetDParam(1, GetDropDownStringByValue(&_cargo_cond_ops, item.GetCondOp()));
+					SetDParam(2, GetCargoStringByID(item.GetValue()));
 					break;
 
 				case TRVT_DIRECTION:
-					if (GetTraceRestrictValue(item) >= TRDTSV_TUNBRIDGE_ENTER) {
+					if (item.GetValue() >= TRDTSV_TUNBRIDGE_ENTER) {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ENTRY_SIGNAL_TYPE;
-					} else if (GetTraceRestrictValue(item) >= TRDTSV_FRONT) {
+					} else if (item.GetValue() >= TRDTSV_FRONT) {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ENTRY_SIGNAL_FACE;
 					} else {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ENTRY_DIRECTION;
 					}
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					SetDParam(1, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-					SetDParam(2, GetDropDownStringByValue(&_direction_value, GetTraceRestrictValue(item)));
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					SetDParam(1, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
+					SetDParam(2, GetDropDownStringByValue(&_direction_value, item.GetValue()));
 					break;
 
 				case TRVT_TILE_INDEX: {
 					assert(prog != nullptr);
-					assert(GetTraceRestrictType(item) == TRIT_COND_PBS_ENTRY_SIGNAL);
-					TileIndex tile = *(TraceRestrictProgram::InstructionAt(prog->items, index - 1) + 1);
+					assert(item.GetType() == TRIT_COND_PBS_ENTRY_SIGNAL);
+					TileIndex tile{instruction_record.secondary};
 					if (tile == INVALID_TILE) {
 						DrawInstructionStringConditionalInvalidValue(item, properties, instruction_string, selected);
 					} else {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_TILE_INDEX;
-						SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-						SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
+						SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+						SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
 						SetDParam(3, TileX(tile));
 						SetDParam(4, TileY(tile));
 					}
 					auto check_signal_mode_control = [&](bool allowed) {
 						bool warn = false;
-						IterateActionsInsideConditional(prog, index, [&](const TraceRestrictItem &item) {
-							if ((GetTraceRestrictType(item) == TRIT_SIGNAL_MODE_CONTROL) != allowed) warn = true;
+						IterateActionsInsideConditional(prog, index, [&](const TraceRestrictInstructionItem &item) {
+							if ((item.GetType() == TRIT_SIGNAL_MODE_CONTROL) != allowed) warn = true;
 						});
 						if (warn) insert_warning(1, allowed ? STR_TRACE_RESTRICT_WARNING_SIGNAL_MODE_CONTROL_ONLY : STR_TRACE_RESTRICT_WARNING_NO_SIGNAL_MODE_CONTROL);
 					};
-					switch (static_cast<TraceRestrictPBSEntrySignalAuxField>(GetTraceRestrictAuxField(item))) {
+					switch (static_cast<TraceRestrictPBSEntrySignalAuxField>(item.GetAuxField())) {
 						case TRPESAF_VEH_POS:
 							SetDParam(1, STR_TRACE_RESTRICT_VARIABLE_PBS_ENTRY_SIGNAL_LONG);
 							check_signal_mode_control(false);
@@ -1323,14 +1555,14 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 
 				case TRVT_TILE_INDEX_THROUGH: {
 					assert(prog != nullptr);
-					assert(GetTraceRestrictType(item) == TRIT_COND_RESERVATION_THROUGH);
-					TileIndex tile = *(TraceRestrictProgram::InstructionAt(prog->items, index - 1) + 1);
+					assert(item.GetType() == TRIT_COND_RESERVATION_THROUGH);
+					TileIndex tile{instruction_record.secondary};
 					if (tile == INVALID_TILE) {
 						DrawInstructionStringConditionalInvalidValue(item, properties, instruction_string, selected);
 					} else {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_PASSES_TILE_INDEX;
-						SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-						SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
+						SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+						SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
 						SetDParam(3, TileX(tile));
 						SetDParam(4, TileY(tile));
 					}
@@ -1339,34 +1571,40 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				}
 
 				case TRVT_GROUP_INDEX: {
-					assert(GetTraceRestrictCondFlags(item) <= TRCF_OR);
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					SetDParam(1, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-					if (GetTraceRestrictValue(item) == INVALID_GROUP) {
+					assert(item.GetCondFlags() <= TRCF_OR);
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					SetDParam(1, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
+					if (item.GetValue() == INVALID_GROUP) {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_GROUP_STR;
 						SetDParam(2, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED);
-						SetDParam(3, selected ? STR_TRACE_RESTRICT_WHITE : STR_EMPTY);
-					} else if (GetTraceRestrictValue(item) == DEFAULT_GROUP) {
+					} else if (item.GetValue() == DEFAULT_GROUP) {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_GROUP_STR;
 						SetDParam(2, STR_GROUP_DEFAULT_TRAINS);
-						SetDParam(3, selected ? STR_TRACE_RESTRICT_WHITE : STR_EMPTY);
 					} else {
-						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_GROUP;
-						SetDParam(2, GetTraceRestrictValue(item) | GROUP_NAME_HIERARCHY);
+						const Group *g = Group::GetIfValid(item.GetValue());
+						if (g != nullptr && g->owner != owner) {
+							instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_GROUP_STR;
+							auto tmp_params = MakeParameters(item.GetValue() | GROUP_NAME_HIERARCHY, g->owner);
+							_temp_special_strings[0] = GetStringWithArgs(STR_TRACE_RESTRICT_OTHER_COMPANY_GROUP, tmp_params);
+							SetDParam(2, SPECSTR_TEMP_START);
+						} else {
+							instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_GROUP;
+							SetDParam(2, item.GetValue() | GROUP_NAME_HIERARCHY);
+						}
 					}
 					break;
 				}
 
 				case TRVT_OWNER: {
-					assert(GetTraceRestrictCondFlags(item) <= TRCF_OR);
-					CompanyID cid = static_cast<CompanyID>(GetTraceRestrictValue(item));
+					assert(item.GetCondFlags() <= TRCF_OR);
+					CompanyID cid = static_cast<CompanyID>(item.GetValue());
 					if (cid == INVALID_COMPANY) {
 						DrawInstructionStringConditionalInvalidValue(item, properties, instruction_string, selected);
 					} else {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_OWNER;
-						SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
+						SetDParam(0, _program_cond_type[item.GetCondFlags()]);
 						SetDParam(1, GetTypeString(item));
-						SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
+						SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
 						SetDParam(3, cid);
 						SetDParam(4, cid);
 					}
@@ -1386,7 +1624,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				case TRVT_FORCE:
 					instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_FORCE;
 					DrawInstructionStringConditionalCommon(item, properties);
-					SetDParam(3, GetTraceRestrictValue(item) * 1000);
+					SetDParam(3, item.GetValue() * 1000);
 					break;
 
 				case TRVT_POWER_WEIGHT_RATIO:
@@ -1397,98 +1635,88 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				case TRVT_FORCE_WEIGHT_RATIO:
 					instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_FORCE_WEIGHT_RATIO;
 					DrawInstructionStringConditionalCommon(item, properties);
-					SetDParam(3, GetTraceRestrictValue(item) * 1000);
+					SetDParam(3, item.GetValue() * 1000);
 					break;
 
 				case TRVT_SLOT_INDEX:
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					SetDParam(1, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-					if (GetTraceRestrictValue(item) == INVALID_TRACE_RESTRICT_SLOT_ID) {
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					SetDParam(1, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
+					if (item.GetValue() == INVALID_TRACE_RESTRICT_SLOT_ID) {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_SLOT_STR;
 						SetDParam(2, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED);
-						SetDParam(3, selected ? STR_TRACE_RESTRICT_WHITE : STR_EMPTY);
 					} else {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_SLOT;
-						SetDParam(2, GetTraceRestrictValue(item));
+						SetDParam(2, item.GetValue());
 					}
 					break;
 
 				case TRVT_SLOT_INDEX_INT: {
 					assert(prog != nullptr);
-					assert(GetTraceRestrictType(item) == TRIT_COND_SLOT_OCCUPANCY);
-					uint32_t value = *(TraceRestrictProgram::InstructionAt(prog->items, index - 1) + 1);
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					SetDParam(1, GetTraceRestrictAuxField(item) ? STR_TRACE_RESTRICT_VARIABLE_SLOT_OCCUPANCY_REMAINING_SHORT : STR_TRACE_RESTRICT_VARIABLE_SLOT_OCCUPANCY_SHORT);
-					if (GetTraceRestrictValue(item) == INVALID_TRACE_RESTRICT_SLOT_ID) {
+					assert(item.GetType() == TRIT_COND_SLOT_OCCUPANCY);
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					SetDParam(1, item.GetAuxField() ? STR_TRACE_RESTRICT_VARIABLE_SLOT_OCCUPANCY_REMAINING_SHORT : STR_TRACE_RESTRICT_VARIABLE_SLOT_OCCUPANCY_SHORT);
+					if (item.GetValue() == INVALID_TRACE_RESTRICT_SLOT_ID) {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_SLOT_OCCUPANCY_STR;
 						SetDParam(2, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED);
-						SetDParam(3, selected ? STR_TRACE_RESTRICT_WHITE : STR_EMPTY);
-						SetDParam(4, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-						SetDParam(5, value);
 					} else {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_SLOT_OCCUPANCY;
-						SetDParam(2, GetTraceRestrictValue(item));
-						SetDParam(3, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-						SetDParam(4, value);
+						SetDParam(2, item.GetValue());
 					}
+					SetDParam(3, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
+					SetDParam(4, instruction_record.secondary);
 					break;
 				}
 
 				case TRVT_TRAIN_STATUS:
 					instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_TRAIN_STATUS;
-					assert(GetTraceRestrictCondFlags(item) <= TRCF_OR);
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					SetDParam(1, GetDropDownStringByValue(&_train_status_cond_ops, GetTraceRestrictCondOp(item)));
-					SetDParam(2, GetDropDownStringByValue(&_train_status_value, GetTraceRestrictValue(item)));
+					assert(item.GetCondFlags() <= TRCF_OR);
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					SetDParam(1, GetDropDownStringByValue(&_train_status_cond_ops, item.GetCondOp()));
+					SetDParam(2, GetDropDownStringByValue(&_train_status_value, item.GetValue()));
 					break;
 
 				case TRVT_COUNTER_INDEX_INT: {
 					assert(prog != nullptr);
-					assert(GetTraceRestrictType(item) == TRIT_COND_COUNTER_VALUE);
-					uint32_t value = *(TraceRestrictProgram::InstructionAt(prog->items, index - 1) + 1);
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					if (GetTraceRestrictValue(item) == INVALID_TRACE_RESTRICT_COUNTER_ID) {
+					assert(item.GetType() == TRIT_COND_COUNTER_VALUE);
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					if (item.GetValue() == INVALID_TRACE_RESTRICT_COUNTER_ID) {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_COUNTER_STR;
 						SetDParam(1, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED);
-						SetDParam(2, selected ? STR_TRACE_RESTRICT_WHITE : STR_EMPTY);
-						SetDParam(3, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-						SetDParam(4, value);
 					} else {
 						instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_COUNTER;
-						SetDParam(1, GetTraceRestrictValue(item));
-						SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-						SetDParam(3, value);
+						SetDParam(1, item.GetValue());
 					}
+					SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
+					SetDParam(3, instruction_record.secondary);
 					break;
 				}
 
 				case TRVT_TIME_DATE_INT: {
 					assert(prog != nullptr);
-					assert(GetTraceRestrictType(item) == TRIT_COND_TIME_DATE_VALUE);
-					uint32_t value = *(TraceRestrictProgram::InstructionAt(prog->items, index - 1) + 1);
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					instruction_string = GetTraceRestrictValue(item) == TRTDVF_HOUR_MINUTE ? STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_TIME_HHMM : STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_INTEGER;
-					SetDParam(1, STR_TRACE_RESTRICT_TIME_MINUTE_ITEM + GetTraceRestrictValue(item));
-					SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-					SetDParam(3, value);
+					assert(item.GetType() == TRIT_COND_TIME_DATE_VALUE);
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					instruction_string = item.GetValue() == TRTDVF_HOUR_MINUTE ? STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_TIME_HHMM : STR_TRACE_RESTRICT_CONDITIONAL_COMPARE_INTEGER;
+					SetDParam(1, STR_TRACE_RESTRICT_TIME_MINUTE_ITEM + item.GetValue());
+					SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
+					SetDParam(3, instruction_record.secondary);
 					break;
 				}
 
 				case TRVT_ENGINE_CLASS:
 					instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_ENGINE_CLASSES;
-					assert(GetTraceRestrictCondFlags(item) <= TRCF_OR);
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					SetDParam(1, GetDropDownStringByValue(&_train_status_cond_ops, GetTraceRestrictCondOp(item)));
-					SetDParam(2, GetDropDownStringByValue(&_engine_class_value, GetTraceRestrictValue(item)));
+					assert(item.GetCondFlags() <= TRCF_OR);
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					SetDParam(1, GetDropDownStringByValue(&_train_status_cond_ops, item.GetCondOp()));
+					SetDParam(2, GetDropDownStringByValue(&_engine_class_value, item.GetValue()));
 					break;
 
 				case TRVT_ORDER_TARGET_DIAGDIR:
 					instruction_string = STR_TRACE_RESTRICT_CONDITIONAL_TARGET_DIRECTION;
-					assert(GetTraceRestrictCondFlags(item) <= TRCF_OR);
-					SetDParam(0, _program_cond_type[GetTraceRestrictCondFlags(item)]);
-					SetDParam(1, GetDropDownStringByValue(&_target_direction_aux_value, GetTraceRestrictAuxField(item)));
-					SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), GetTraceRestrictCondOp(item)));
-					SetDParam(3, GetDropDownStringByValue(&_diagdir_value, GetTraceRestrictValue(item)));
+					assert(item.GetCondFlags() <= TRCF_OR);
+					SetDParam(0, _program_cond_type[item.GetCondFlags()]);
+					SetDParam(1, GetDropDownStringByValue(&_target_direction_aux_value, item.GetAuxField()));
+					SetDParam(2, GetDropDownStringByValue(GetCondOpDropDownListSet(properties), item.GetCondOp()));
+					SetDParam(3, GetDropDownStringByValue(&_diagdir_value, item.GetValue()));
 					break;
 
 				default:
@@ -1497,9 +1725,9 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 			}
 		}
 	} else {
-		switch (GetTraceRestrictType(item)) {
+		switch (item.GetType()) {
 			case TRIT_NULL:
-				switch (GetTraceRestrictValue(item)) {
+				switch (item.GetValue()) {
 					case TRNTSV_START:
 						instruction_string = STR_TRACE_RESTRICT_START;
 						break;
@@ -1515,19 +1743,19 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_PF_DENY:
-				instruction_string = GetTraceRestrictValue(item) ? STR_TRACE_RESTRICT_PF_ALLOW_LONG : STR_TRACE_RESTRICT_PF_DENY;
+				instruction_string = item.GetValue() ? STR_TRACE_RESTRICT_PF_ALLOW_LONG : STR_TRACE_RESTRICT_PF_DENY;
 				break;
 
 			case TRIT_PF_PENALTY:
-				switch (static_cast<TraceRestrictPathfinderPenaltyAuxField>(GetTraceRestrictAuxField(item))) {
+				switch (static_cast<TraceRestrictPathfinderPenaltyAuxField>(item.GetAuxField())) {
 					case TRPPAF_VALUE:
 						instruction_string = STR_TRACE_RESTRICT_PF_PENALTY_ITEM;
-						SetDParam(0, GetTraceRestrictValue(item));
+						SetDParam(0, item.GetValue());
 						break;
 
 					case TRPPAF_PRESET: {
 						instruction_string = STR_TRACE_RESTRICT_PF_PENALTY_ITEM_PRESET;
-						uint16_t idx = GetTraceRestrictValue(item);
+						uint16_t idx = item.GetValue();
 						assert(idx < TRPPPI_END);
 						SetDParam(0, _pf_penalty_dropdown_str[idx]);
 						break;
@@ -1539,11 +1767,11 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_RESERVE_THROUGH:
-				instruction_string = GetTraceRestrictValue(item) ? STR_TRACE_RESTRICT_RESERVE_THROUGH_CANCEL : STR_TRACE_RESTRICT_RESERVE_THROUGH;
+				instruction_string = (item.GetValue() != 0) ? STR_TRACE_RESTRICT_RESERVE_THROUGH_CANCEL : STR_TRACE_RESTRICT_RESERVE_THROUGH;
 				break;
 
 			case TRIT_LONG_RESERVE:
-				switch (static_cast<TraceRestrictLongReserveValueField>(GetTraceRestrictValue(item))) {
+				switch (static_cast<TraceRestrictLongReserveValueField>(item.GetValue())) {
 					case TRLRVF_LONG_RESERVE:
 						instruction_string = STR_TRACE_RESTRICT_LONG_RESERVE;
 						break;
@@ -1563,7 +1791,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_WAIT_AT_PBS:
-				switch (static_cast<TraceRestrictWaitAtPbsValueField>(GetTraceRestrictValue(item))) {
+				switch (static_cast<TraceRestrictWaitAtPbsValueField>(item.GetValue())) {
 					case TRWAPVF_WAIT_AT_PBS:
 						instruction_string = STR_TRACE_RESTRICT_WAIT_AT_PBS;
 						break;
@@ -1587,7 +1815,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_SLOT:
-				switch (static_cast<TraceRestrictSlotSubtypeField>(GetTraceRestrictCombinedAuxCondOpField(item))) {
+				switch (static_cast<TraceRestrictSlotSubtypeField>(item.GetCombinedAuxCondOpField())) {
 					case TRSCOF_ACQUIRE_WAIT:
 						instruction_string = STR_TRACE_RESTRICT_SLOT_ACQUIRE_WAIT_ITEM;
 						break;
@@ -1624,23 +1852,35 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 						NOT_REACHED();
 						break;
 				}
-				if (GetTraceRestrictValue(item) == INVALID_TRACE_RESTRICT_SLOT_ID) {
+				if (item.GetValue() == INVALID_TRACE_RESTRICT_SLOT_ID) {
 					SetDParam(0, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED);
 				} else {
 					SetDParam(0, STR_TRACE_RESTRICT_SLOT_NAME);
-					SetDParam(1, GetTraceRestrictValue(item));
+					SetDParam(1, item.GetValue());
 				}
-				SetDParam(2, selected ? STR_TRACE_RESTRICT_WHITE : STR_EMPTY);
+				break;
+
+			case TRIT_GUI_LABEL:
+				instruction_string = STR_TRACE_RESTRICT_GUI_LABEL_ITEM;
+				SetDParamStr(0, prog->GetLabel(item.GetValue()));
 				break;
 
 			case TRIT_REVERSE:
-				switch (static_cast<TraceRestrictReverseValueField>(GetTraceRestrictValue(item))) {
-					case TRRVF_REVERSE:
+				switch (static_cast<TraceRestrictReverseValueField>(item.GetValue())) {
+					case TRRVF_REVERSE_BEHIND:
 						instruction_string = STR_TRACE_RESTRICT_REVERSE_SIG;
 						break;
 
-					case TRRVF_CANCEL_REVERSE:
+					case TRRVF_CANCEL_REVERSE_BEHIND:
 						instruction_string = STR_TRACE_RESTRICT_REVERSE_SIG_CANCEL;
+						break;
+
+					case TRRVF_REVERSE_AT:
+						instruction_string = STR_TRACE_RESTRICT_REVERSE_AT_SIG;
+						break;
+
+					case TRRVF_CANCEL_REVERSE_AT:
+						instruction_string = STR_TRACE_RESTRICT_REVERSE_AT_SIG_CANCEL;
 						break;
 
 					default:
@@ -1650,8 +1890,8 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_SPEED_RESTRICTION:
-				if (GetTraceRestrictValue(item) != 0) {
-					SetDParam(0, GetTraceRestrictValue(item));
+				if (item.GetValue() != 0) {
+					SetDParam(0, item.GetValue());
 					instruction_string = STR_TRACE_RESTRICT_SET_SPEED_RESTRICTION;
 				} else {
 					instruction_string = STR_TRACE_RESTRICT_REMOVE_SPEED_RESTRICTION;
@@ -1659,7 +1899,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_NEWS_CONTROL:
-				switch (static_cast<TraceRestrictNewsControlField>(GetTraceRestrictValue(item))) {
+				switch (static_cast<TraceRestrictNewsControlField>(item.GetValue())) {
 					case TRNCF_TRAIN_NOT_STUCK:
 						instruction_string = STR_TRACE_RESTRICT_TRAIN_NOT_STUCK;
 						break;
@@ -1675,8 +1915,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_COUNTER: {
-				uint32_t value = *(TraceRestrictProgram::InstructionAt(prog->items, index - 1) + 1);
-				switch (static_cast<TraceRestrictCounterCondOpField>(GetTraceRestrictCondOp(item))) {
+				switch (static_cast<TraceRestrictCounterCondOpField>(item.GetCondOp())) {
 					case TRCCOF_INCREASE:
 						instruction_string = STR_TRACE_RESTRICT_COUNTER_INCREASE_ITEM;
 						break;
@@ -1693,18 +1932,18 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 						NOT_REACHED();
 						break;
 				}
-				if (GetTraceRestrictValue(item) == INVALID_TRACE_RESTRICT_COUNTER_ID) {
+				if (item.GetValue() == INVALID_TRACE_RESTRICT_COUNTER_ID) {
 					SetDParam(0, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED);
 				} else {
 					SetDParam(0, STR_TRACE_RESTRICT_COUNTER_NAME);
-					SetDParam(1, GetTraceRestrictValue(item));
+					SetDParam(1, item.GetValue());
 				}
-				SetDParam(2, value);
+				SetDParam(2, instruction_record.secondary);
 				break;
 			}
 
 			case TRIT_PF_PENALTY_CONTROL:
-				switch (static_cast<TraceRestrictPfPenaltyControlField>(GetTraceRestrictValue(item))) {
+				switch (static_cast<TraceRestrictPfPenaltyControlField>(item.GetValue())) {
 					case TRPPCF_NO_PBS_BACK_PENALTY:
 						instruction_string = STR_TRACE_RESTRICT_NO_PBS_BACK_PENALTY;
 						break;
@@ -1720,7 +1959,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_SPEED_ADAPTATION_CONTROL:
-				switch (static_cast<TraceRestrictSpeedAdaptationControlField>(GetTraceRestrictValue(item))) {
+				switch (static_cast<TraceRestrictSpeedAdaptationControlField>(item.GetValue())) {
 					case TRSACF_SPEED_ADAPT_EXEMPT:
 						instruction_string = STR_TRACE_RESTRICT_MAKE_TRAIN_SPEED_ADAPTATION_EXEMPT;
 						break;
@@ -1736,7 +1975,7 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 				break;
 
 			case TRIT_SIGNAL_MODE_CONTROL:
-				switch (static_cast<TraceRestrictSignalModeControlField>(GetTraceRestrictValue(item))) {
+				switch (static_cast<TraceRestrictSignalModeControlField>(item.GetValue())) {
 					case TRSMCF_NORMAL_ASPECT:
 						instruction_string = STR_TRACE_RESTRICT_USE_NORMAL_ASPECT_MODE;
 						break;
@@ -1758,7 +1997,22 @@ static void DrawInstructionString(const TraceRestrictProgram *prog, TraceRestric
 	}
 
 	bool rtl = _current_text_dir == TD_RTL;
-	DrawString(left + (rtl ? 0 : ScaleGUITrad(indent * 16)), right - (rtl ? ScaleGUITrad(indent * 16) : 0), y, instruction_string, selected ? TC_WHITE : TC_BLACK);
+	TextColour colour = selected ? TC_WHITE : TC_BLACK;
+	if (selected && item.GetType() == TRIT_GUI_LABEL) colour |= TC_FORCED;
+	DrawString(left + (rtl ? 0 : ScaleGUITrad(indent * 16)), right - (rtl ? ScaleGUITrad(indent * 16) : 0), y, instruction_string, colour);
+}
+
+
+StringID TraceRestrictPrepareSlotCounterSelectTooltip(StringID base_str, VehicleType vtype)
+{
+	if (_settings_game.economy.infrastructure_sharing[vtype]) {
+		SetDParam(0, STR_TRACE_RESTRICT_RECENTLY_USED_TOOLTIP_EXTRA);
+		SetDParam(1, base_str);
+		return STR_TRACE_RESTRICT_OTHER_COMPANY_TOOLTIP_EXTRA;
+	} else {
+		SetDParam(0, base_str);
+		return STR_TRACE_RESTRICT_RECENTLY_USED_TOOLTIP_EXTRA;
+	}
 }
 
 /** Main GUI window class */
@@ -1769,20 +2023,35 @@ class TraceRestrictWindow: public Window {
 	Scrollbar *vscroll;                                                         ///< scrollbar widget
 	btree::btree_map<int, const TraceRestrictDropDownListSet *> drop_down_list_mapping; ///< mapping of widget IDs to drop down list sets
 	bool value_drop_down_is_company;                                            ///< TR_WIDGET_VALUE_DROPDOWN is a company list
-	TraceRestrictItem expecting_inserted_item;                                  ///< set to instruction when performing an instruction insertion, used to handle selection update on insertion
+	TraceRestrictInstructionItem expecting_inserted_item;                       ///< set to instruction when performing an instruction insertion, used to handle selection update on insertion
 	int current_placement_widget;                                               ///< which widget has a SetObjectToPlaceWnd, if any
 	int current_left_aux_plane;                                                 ///< current plane for TR_WIDGET_SEL_TOP_LEFT_AUX widget
 	int base_copy_plane;                                                        ///< base plane for TR_WIDGET_SEL_COPY widget
 	int base_share_plane;                                                       ///< base plane for TR_WIDGET_SEL_SHARE widget
 
+	enum QuerySubMode {
+		QSM_DEFAULT,
+		QSM_NEW_SLOT,
+		QSM_NEW_COUNTER,
+		QSM_SET_TEXT,
+	};
+	QuerySubMode query_submode = QSM_DEFAULT;                                   ///< sub-mode for query strings
+
+	void TraceRestrictShowQueryString(StringID str, StringID caption, uint maxsize, CharSetFilter afilter, QueryStringFlags flags, QuerySubMode query_submode = QSM_DEFAULT)
+	{
+		CloseWindowByClass(WC_QUERY_STRING);
+		this->query_submode = query_submode;
+		ShowQueryString(str, caption, maxsize, this, afilter, flags);
+	}
+
 public:
-	TraceRestrictWindow(WindowDesc *desc, TileIndex tile, Track track)
+	TraceRestrictWindow(WindowDesc &desc, TileIndex tile, Track track)
 			: Window(desc)
 	{
 		this->tile = tile;
 		this->track = track;
 		this->selected_instruction = -1;
-		this->expecting_inserted_item = static_cast<TraceRestrictItem>(0);
+		this->expecting_inserted_item = {};
 		this->current_placement_widget = -1;
 
 		this->CreateNestedTree();
@@ -1813,33 +2082,33 @@ public:
 				int sel = this->GetItemIndexFromPt(pt.y);
 
 				if (_ctrl_pressed) {
-					// scroll to target (for stations, waypoints, depots)
+					/* Scroll to target (for stations, waypoints, depots) */
 
 					if (sel == -1) return;
 
-					TraceRestrictItem item = this->GetItem(this->GetProgram(), sel);
-					TraceRestrictValueType val_type = GetTraceRestrictTypeProperties(item).value_type;
+					TraceRestrictInstructionRecord item = this->GetItem(this->GetProgram(), sel);
+					TraceRestrictValueType val_type = GetTraceRestrictTypeProperties(item.instruction).value_type;
 					if (val_type == TRVT_ORDER) {
-						switch (static_cast<TraceRestrictOrderCondAuxField>(GetTraceRestrictAuxField(item))) {
+						switch (static_cast<TraceRestrictOrderCondAuxField>(item.instruction.GetAuxField())) {
 							case TROCAF_STATION:
 							case TROCAF_WAYPOINT: {
-								BaseStation *st = BaseStation::GetIfValid(GetTraceRestrictValue(item));
-								if (st) {
+								const BaseStation *st = BaseStation::GetIfValid(item.instruction.GetValue());
+								if (st != nullptr) {
 									ScrollMainWindowToTile(st->xy);
 								}
 								break;
 							}
 
 							case TROCAF_DEPOT: {
-								Depot *depot = Depot::GetIfValid(GetTraceRestrictValue(item));
-								if (depot) {
+								const Depot *depot = Depot::GetIfValid(item.instruction.GetValue());
+								if (depot != nullptr) {
 									ScrollMainWindowToTile(depot->xy);
 								}
 								break;
 							}
 						}
 					} else if (val_type == TRVT_TILE_INDEX || val_type == TRVT_TILE_INDEX_THROUGH) {
-						TileIndex tile = *(TraceRestrictProgram::InstructionAt(this->GetProgram()->items, sel - 1) + 1);
+						TileIndex tile{item.secondary};
 						if (tile != INVALID_TILE) {
 							ScrollMainWindowToTile(tile);
 						}
@@ -1851,14 +2120,15 @@ public:
 				HideDropDownMenu(this);
 
 				if (sel == -1 || this->GetOwner() != _local_company) {
-					// Deselect
+					/* Deselect */
 					this->selected_instruction = -1;
 				} else {
 					this->selected_instruction = sel;
 				}
 
-				this->expecting_inserted_item = static_cast<TraceRestrictItem>(0);
+				this->expecting_inserted_item = {};
 
+				this->RaiseButtons();
 				this->UpdateButtonState();
 				break;
 			}
@@ -1869,44 +2139,44 @@ public:
 				}
 
 				uint32_t disabled = _program_insert_or_if_hide_mask;
-				uint32_t hidden = 0;
-				TraceRestrictItem item = this->GetSelected();
-				if (GetTraceRestrictType(item) == TRIT_COND_ENDIF ||
-						(IsTraceRestrictConditional(item) && GetTraceRestrictCondFlags(item) != 0)) {
-					// this is either: an else/or if, an else, or an end if
-					// try to include else if, else in insertion list
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
+				if (item.GetType() == TRIT_COND_ENDIF ||
+						(item.IsConditional() && item.GetCondFlags() != 0)) {
+					/* This is either: an else/or if, an else, or an end if
+					 * try to include else if, else in insertion list */
 					if (!ElseInsertionDryRun(false)) disabled |= _program_insert_else_hide_mask;
 					if (!ElseIfInsertionDryRun(false)) disabled |= _program_insert_else_if_hide_mask;
 				} else {
-					// can't insert else/end if here
+					/* Can't insert else/end if here */
 					disabled |= _program_insert_else_hide_mask | _program_insert_else_if_hide_mask;
 				}
 				if (this->selected_instruction > 1) {
-					TraceRestrictItem prev_item = this->GetItem(this->GetProgram(), this->selected_instruction - 1);
-					if (IsTraceRestrictConditional(prev_item) && GetTraceRestrictType(prev_item) != TRIT_COND_ENDIF) {
-						// previous item is either: an if, or an else/or if
+					TraceRestrictInstructionItem prev_item = this->GetItem(this->GetProgram(), this->selected_instruction - 1).instruction;
+					if (prev_item.IsConditional() && prev_item.GetType() != TRIT_COND_ENDIF) {
+						/* Previous item is either: an if, or an else/or if */
 
-						// else if has same validation rules as or if, use it instead of creating another test function
+						/* Else if has same validation rules as or if, use it instead of creating another test function */
 						if (ElseIfInsertionDryRun(false)) disabled &= ~_program_insert_or_if_hide_mask;
 					}
 				}
-				if (!_settings_client.gui.show_adv_tracerestrict_features) {
-					hidden |= _program_wait_pbs_hide_mask | _program_reverse_hide_mask |
-							_program_speed_res_hide_mask | _program_counter_hide_mask | _program_penalty_adj_hide_mask;
-				}
-				if (!_settings_client.gui.show_adv_tracerestrict_features || !_settings_game.vehicle.train_speed_adaptation) {
-					hidden |= _program_speed_adapt_hide_mask;
-				}
-				if (!(_settings_client.gui.show_adv_tracerestrict_features && _settings_game.vehicle.train_braking_model == TBM_REALISTIC && _signal_style_masks.combined_normal_shunt != 0)) {
-					hidden |= _program_signal_mode_hide_mask;
-				}
 
-				this->ShowDropDownListWithValue(&_program_insert, 0, true, TR_WIDGET_INSERT, disabled, hidden);
+				DropDownList dlist;
+				uint i = 0;
+				for (StringID str : _program_insert.string_array) {
+					dlist.push_back(MakeDropDownListStringItem(str, _program_insert.value_array[i], i < 32 && HasBit(disabled, i)));
+					++i;
+				}
+				for (const TraceRestrictDropDownListItem &item : GetActionDropDownListItems()) {
+					if (!ShouldHideTypeDropDownListItem(item.flags)) {
+						dlist.push_back(MakeDropDownListStringItem(item.str, item.type, false));
+					}
+				}
+				ShowDropDownList(this, std::move(dlist), 0, TR_WIDGET_INSERT, 0);
 				break;
 			}
 
 			case TR_WIDGET_REMOVE: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				if (this->GetOwner() != _local_company || item == 0) {
 					return;
 				}
@@ -1918,7 +2188,7 @@ public:
 
 			case TR_WIDGET_UP_BTN:
 			case TR_WIDGET_DOWN_BTN: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				if (this->GetOwner() != _local_company || item == 0) {
 					return;
 				}
@@ -1937,7 +2207,7 @@ public:
 			}
 
 			case TR_WIDGET_DUPLICATE: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				if (this->GetOwner() != _local_company || item == 0) {
 					return;
 				}
@@ -1950,17 +2220,17 @@ public:
 			}
 
 			case TR_WIDGET_CONDFLAGS: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				if (this->GetOwner() != _local_company || item == 0) {
 					return;
 				}
 
 				CondFlagsDropDownType type;
-				if (GetTraceRestrictType(item) == TRIT_COND_ENDIF) {
-					if (GetTraceRestrictCondFlags(item) == 0) return; // end if
+				if (item.GetType() == TRIT_COND_ENDIF) {
+					if (item.GetCondFlags() == 0) return; // end if
 					type = CFDDT_ELSE;
-				} else if (IsTraceRestrictConditional(item) && GetTraceRestrictCondFlags(item) != 0) {
-					type = static_cast<CondFlagsDropDownType>(GetTraceRestrictCondFlags(item));
+				} else if (item.IsConditional() && item.GetCondFlags() != 0) {
+					type = static_cast<CondFlagsDropDownType>(item.GetCondFlags());
 				} else {
 					return;
 				}
@@ -1975,14 +2245,14 @@ public:
 
 			case TR_WIDGET_TYPE_COND:
 			case TR_WIDGET_TYPE_NONCOND: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				TraceRestrictGuiItemType type = GetItemGuiType(item);
 
 				if (type != TRIT_NULL) {
 					DropDownList dlist;
 					for (const TraceRestrictDropDownListItem &item : GetTypeDropDownListItems(type)) {
 						if (!ShouldHideTypeDropDownListItem(item.flags)) {
-							dlist.emplace_back(new DropDownListStringItem(item.str, item.type, false));
+							dlist.push_back(MakeDropDownListStringItem(item.str, item.type, false));
 						}
 					}
 					ShowDropDownList(this, std::move(dlist), type, widget, 0);
@@ -1991,68 +2261,68 @@ public:
 			}
 
 			case TR_WIDGET_COMPARATOR: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				const TraceRestrictDropDownListSet *list_set = GetCondOpDropDownListSet(GetTraceRestrictTypeProperties(item));
-				if (list_set) {
-					this->ShowDropDownListWithValue(list_set, GetTraceRestrictCondOp(item), false, TR_WIDGET_COMPARATOR, 0, 0);
+				if (list_set != nullptr) {
+					this->ShowDropDownListWithValue(list_set, item.GetCondOp(), false, TR_WIDGET_COMPARATOR, 0, 0);
 				}
 				break;
 			}
 
 			case TR_WIDGET_SLOT_OP: {
-				TraceRestrictItem item = this->GetSelected();
-				this->ShowDropDownListWithValue(&_slot_op_subtypes, GetTraceRestrictCombinedAuxCondOpField(item), false, TR_WIDGET_SLOT_OP, 0, 0);
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
+				this->ShowDropDownListWithValue(&_slot_op_subtypes, item.GetCombinedAuxCondOpField(), false, TR_WIDGET_SLOT_OP, 0, 0);
 				break;
 			}
 
 			case TR_WIDGET_COUNTER_OP: {
-				TraceRestrictItem item = this->GetSelected();
-				this->ShowDropDownListWithValue(&_counter_op_cond_ops, GetTraceRestrictCondOp(item), false, TR_WIDGET_COUNTER_OP, 0, 0);
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
+				this->ShowDropDownListWithValue(&_counter_op_cond_ops, item.GetCondOp(), false, TR_WIDGET_COUNTER_OP, 0, 0);
 				break;
 			}
 
 			case TR_WIDGET_VALUE_INT: {
-				TraceRestrictItem item = this->GetSelected();
-				TraceRestrictValueType type = GetTraceRestrictTypeProperties(item).value_type;
+				TraceRestrictInstructionRecord record = this->GetSelected();
+				TraceRestrictValueType type = GetTraceRestrictTypeProperties(record.instruction).value_type;
 				if (IsIntegerValueType(type)) {
-					SetDParam(0, ConvertIntegerValue(type, GetTraceRestrictValue(item), true));
-					ShowQueryString(STR_JUST_INT, STR_TRACE_RESTRICT_VALUE_CAPTION, 10, this, CS_NUMERAL, QSF_NONE);
+					SetDParam(0, ConvertIntegerValue(type, record.instruction.GetValue(), true));
+					this->TraceRestrictShowQueryString(STR_JUST_INT, STR_TRACE_RESTRICT_VALUE_CAPTION, 10, CS_NUMERAL, QSF_NONE);
 				} else if (type == TRVT_SLOT_INDEX_INT || type == TRVT_COUNTER_INDEX_INT || type == TRVT_TIME_DATE_INT) {
-					SetDParam(0, *(TraceRestrictProgram::InstructionAt(this->GetProgram()->items, this->selected_instruction - 1) + 1));
-					ShowQueryString(STR_JUST_INT, STR_TRACE_RESTRICT_VALUE_CAPTION, 10, this, CS_NUMERAL, QSF_NONE);
+					SetDParam(0, record.secondary);
+					this->TraceRestrictShowQueryString(STR_JUST_INT, STR_TRACE_RESTRICT_VALUE_CAPTION, 10, CS_NUMERAL, QSF_NONE);
 				}
 				break;
 			}
 
 			case TR_WIDGET_VALUE_DECIMAL: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				TraceRestrictValueType type = GetTraceRestrictTypeProperties(item).value_type;
 				if (IsDecimalValueType(type)) {
 					int64_t value, decimal;
-					ConvertValueToDecimal(type, GetTraceRestrictValue(item), value, decimal);
+					ConvertValueToDecimal(type, item.GetValue(), value, decimal);
 					SetDParam(0, value);
 					SetDParam(1, decimal);
 					std::string saved = std::move(_settings_game.locale.digit_group_separator);
 					_settings_game.locale.digit_group_separator.clear();
-					ShowQueryString(STR_JUST_DECIMAL, STR_TRACE_RESTRICT_VALUE_CAPTION, 16, this, CS_NUMERAL_DECIMAL, QSF_NONE);
+					this->TraceRestrictShowQueryString(STR_JUST_DECIMAL, STR_TRACE_RESTRICT_VALUE_CAPTION, 16, CS_NUMERAL_DECIMAL, QSF_NONE);
 					_settings_game.locale.digit_group_separator = std::move(saved);
 				}
 				break;
 			}
 
 			case TR_WIDGET_VALUE_DROPDOWN: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				switch (GetTraceRestrictTypeProperties(item).value_type) {
 					case TRVT_DENY:
-						this->ShowDropDownListWithValue(&_deny_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_deny_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_CARGO_ID:
-						this->ShowDropDownListWithValue(GetSortedCargoTypeDropDownListSet(), GetTraceRestrictValue(item), true, TR_WIDGET_VALUE_DROPDOWN, 0, 0); // current cargo is permitted to not be in list
+						this->ShowDropDownListWithValue(GetSortedCargoTypeDropDownListSet(), item.GetValue(), true, TR_WIDGET_VALUE_DROPDOWN, 0, 0); // current cargo is permitted to not be in list
 						break;
 
 					case TRVT_DIRECTION:
-						this->ShowDropDownListWithValue(&_direction_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_direction_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_PF_PENALTY:
@@ -2060,68 +2330,89 @@ public:
 						break;
 
 					case TRVT_RESERVE_THROUGH:
-						this->ShowDropDownListWithValue(&_reserve_through_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_reserve_through_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_LONG_RESERVE: {
 						uint hidden = 0;
 						if (_settings_game.vehicle.train_braking_model != TBM_REALISTIC) hidden |= 4;
-						this->ShowDropDownListWithValue(&_long_reserve_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, hidden);
+						this->ShowDropDownListWithValue(&_long_reserve_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, hidden);
 						break;
 					}
 
 					case TRVT_WAIT_AT_PBS:
-						this->ShowDropDownListWithValue(&_wait_at_pbs_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_wait_at_pbs_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_GROUP_INDEX: {
 						int selected;
-						DropDownList dlist = GetGroupDropDownList(this->GetOwner(), GetTraceRestrictValue(item), selected);
+						DropDownList dlist;
+						if (_shift_pressed && _settings_game.economy.infrastructure_sharing[VEH_TRAIN]) {
+							selected = -1;
+							if (item.GetValue() == DEFAULT_GROUP) selected = DEFAULT_GROUP;
+							dlist.push_back(MakeDropDownListStringItem(STR_GROUP_DEFAULT_TRAINS, DEFAULT_GROUP, false));
+
+							for (const Company *c : Company::Iterate()) {
+								if (c->index == this->GetOwner()) continue;
+
+								int cselected;
+								DropDownList clist = GetGroupDropDownList(c->index, item.GetValue(), cselected, false);
+								if (clist.empty()) continue;
+
+								dlist.push_back(MakeDropDownListDividerItem());
+								dlist.push_back(MakeCompanyDropDownListItem(c->index, false));
+
+								if (cselected != -1) selected = cselected;
+								dlist.insert(dlist.end(), std::make_move_iterator(clist.begin()), std::make_move_iterator(clist.end()));
+							}
+						} else {
+							dlist = GetGroupDropDownList(this->GetOwner(), item.GetValue(), selected);
+						}
 						ShowDropDownList(this, std::move(dlist), selected, TR_WIDGET_VALUE_DROPDOWN, 0);
 						break;
 					}
 
 					case TRVT_OWNER:
-						this->ShowCompanyDropDownListWithValue(static_cast<CompanyID>(GetTraceRestrictValue(item)), false, TR_WIDGET_VALUE_DROPDOWN);
+						this->ShowCompanyDropDownListWithValue(static_cast<CompanyID>(item.GetValue()), false, TR_WIDGET_VALUE_DROPDOWN);
 						break;
 
 					case TRVT_SLOT_INDEX: {
 						int selected;
-						DropDownList dlist = GetSlotDropDownList(this->GetOwner(), GetTraceRestrictValue(item), selected, VEH_TRAIN, IsTraceRestrictTypeNonMatchingVehicleTypeSlot(GetTraceRestrictType(item)));
+						DropDownList dlist = GetSlotDropDownList(this->GetOwner(), item.GetValue(), selected, VEH_TRAIN, IsTraceRestrictTypeNonMatchingVehicleTypeSlot(item.GetType()));
 						if (!dlist.empty()) ShowDropDownList(this, std::move(dlist), selected, TR_WIDGET_VALUE_DROPDOWN);
 						break;
 					}
 
 					case TRVT_TRAIN_STATUS:
-						this->ShowDropDownListWithValue(&_train_status_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_train_status_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_REVERSE:
-						this->ShowDropDownListWithValue(&_reverse_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_reverse_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_NEWS_CONTROL:
-						this->ShowDropDownListWithValue(&_news_control_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_news_control_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_ENGINE_CLASS:
-						this->ShowDropDownListWithValue(&_engine_class_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_engine_class_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_PF_PENALTY_CONTROL:
-						this->ShowDropDownListWithValue(&_pf_penalty_control_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);;
+						this->ShowDropDownListWithValue(&_pf_penalty_control_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);;
 						break;
 
 					case TRVT_SPEED_ADAPTATION_CONTROL:
-						this->ShowDropDownListWithValue(&_speed_adaptation_control_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_speed_adaptation_control_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_SIGNAL_MODE_CONTROL:
-						this->ShowDropDownListWithValue(&_signal_mode_control_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_signal_mode_control_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					case TRVT_ORDER_TARGET_DIAGDIR:
-						this->ShowDropDownListWithValue(&_diagdir_value, GetTraceRestrictValue(item), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_diagdir_value, item.GetValue(), false, TR_WIDGET_VALUE_DROPDOWN, 0, 0);
 						break;
 
 					default:
@@ -2131,29 +2422,29 @@ public:
 			}
 
 			case TR_WIDGET_LEFT_AUX_DROPDOWN: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				switch (GetTraceRestrictTypeProperties(item).value_type) {
 					case TRVT_SLOT_INDEX_INT: {
 						int selected;
-						DropDownList dlist = GetSlotDropDownList(this->GetOwner(), GetTraceRestrictValue(item), selected, VEH_TRAIN, IsTraceRestrictTypeNonMatchingVehicleTypeSlot(GetTraceRestrictType(item)));
+						DropDownList dlist = GetSlotDropDownList(this->GetOwner(), item.GetValue(), selected, VEH_TRAIN, IsTraceRestrictTypeNonMatchingVehicleTypeSlot(item.GetType()));
 						if (!dlist.empty()) ShowDropDownList(this, std::move(dlist), selected, TR_WIDGET_LEFT_AUX_DROPDOWN);
 						break;
 					}
 
 					case TRVT_COUNTER_INDEX_INT: {
 						int selected;
-						DropDownList dlist = GetCounterDropDownList(this->GetOwner(), GetTraceRestrictValue(item), selected);
+						DropDownList dlist = GetCounterDropDownList(this->GetOwner(), item.GetValue(), selected);
 						if (!dlist.empty()) ShowDropDownList(this, std::move(dlist), selected, TR_WIDGET_LEFT_AUX_DROPDOWN);
 						break;
 					}
 
 					case TRVT_TIME_DATE_INT: {
-						this->ShowDropDownListWithValue(&_time_date_value, GetTraceRestrictValue(item), false, TR_WIDGET_LEFT_AUX_DROPDOWN, _settings_game.game_time.time_in_minutes ? 0 : 7, 0);
+						this->ShowDropDownListWithValue(&_time_date_value, item.GetValue(), false, TR_WIDGET_LEFT_AUX_DROPDOWN, _settings_game.game_time.time_in_minutes ? 0 : 7, 0);
 						break;
 					}
 
 					case TRVT_ORDER_TARGET_DIAGDIR: {
-						this->ShowDropDownListWithValue(&_target_direction_aux_value, GetTraceRestrictAuxField(item), false, TR_WIDGET_LEFT_AUX_DROPDOWN, 0, 0);
+						this->ShowDropDownListWithValue(&_target_direction_aux_value, item.GetAuxField(), false, TR_WIDGET_LEFT_AUX_DROPDOWN, 0, 0);
 						break;
 					}
 
@@ -2180,12 +2471,13 @@ public:
 
 			case TR_WIDGET_GOTO_SIGNAL: {
 				ScrollMainWindowToTile(this->tile);
+				this->RaiseButtons();
 				this->UpdateButtonState();
 				break;
 			}
 
 			case TR_WIDGET_RESET: {
-				TraceRestrictProgMgmtDoCommandP(tile, track, TRDCT_PROG_RESET, STR_TRACE_RESTRICT_ERROR_CAN_T_RESET_SIGNAL);
+				TraceRestrictProgMgmtDoCommandP(tile, track, TRMDCT_PROG_RESET, STR_TRACE_RESTRICT_ERROR_CAN_T_RESET_SIGNAL);
 				break;
 			}
 
@@ -2217,7 +2509,7 @@ public:
 				break;
 
 			case TR_WIDGET_UNSHARE: {
-				TraceRestrictProgMgmtDoCommandP(tile, track, TRDCT_PROG_UNSHARE, STR_TRACE_RESTRICT_ERROR_CAN_T_UNSHARE_PROGRAM);
+				TraceRestrictProgMgmtDoCommandP(tile, track, TRMDCT_PROG_UNSHARE, STR_TRACE_RESTRICT_ERROR_CAN_T_UNSHARE_PROGRAM);
 				break;
 			}
 
@@ -2229,21 +2521,61 @@ public:
 				}
 				break;
 			}
+
+			case TR_WIDGET_LABEL: {
+				const TraceRestrictProgram *prog = this->GetProgram();
+				if (prog != nullptr) {
+					TraceRestrictInstructionItem item = this->GetSelected().instruction;
+					SetDParamStr(0, prog->GetLabel(item.GetValue()));
+					this->TraceRestrictShowQueryString(STR_JUST_RAW_STRING, STR_ORDER_LABEL_TEXT_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, CS_ALPHANUMERAL, QSF_LEN_IN_CHARS, QSM_SET_TEXT);
+				}
+				break;
+			}
 		}
 	}
 
-	virtual void OnQueryTextFinished(char *str) override
+	virtual void OnQueryTextFinished(std::optional<std::string> str) override
 	{
-		if (StrEmpty(str)) {
-			return;
+		if (!str.has_value() || (str->empty() && this->query_submode != QSM_SET_TEXT)) return;
+
+		TraceRestrictInstructionItem item = this->GetSelected().instruction;
+		TraceRestrictValueType type = GetTraceRestrictTypeProperties(item).value_type;
+
+		switch (this->query_submode) {
+			case QSM_DEFAULT:
+				break;
+
+			case QSM_NEW_SLOT:
+				if (type == TRVT_SLOT_INDEX || type == TRVT_SLOT_INDEX_INT) {
+					TraceRestrictCreateSlotCmdData data;
+					data.vehtype = VEH_TRAIN;
+					data.parent = INVALID_TRACE_RESTRICT_SLOT_GROUP;
+					data.name = std::move(*str);
+					data.follow_up_cmd = { GetTraceRestrictCommandContainer(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base()) };
+					DoCommandP<CMD_CREATE_TRACERESTRICT_SLOT>(data, STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_CREATE, CommandCallback::CreateTraceRestrictSlot);
+				}
+				return;
+
+			case QSM_NEW_COUNTER:
+				if (type == TRVT_COUNTER_INDEX_INT) {
+					TraceRestrictCreateCounterCmdData data;
+					data.name = std::move(*str);
+					data.follow_up_cmd = { GetTraceRestrictCommandContainer(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base()) };
+					DoCommandP<CMD_CREATE_TRACERESTRICT_COUNTER>(data, STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_CREATE, CommandCallback::CreateTraceRestrictCounter);
+				}
+				return;
+
+			case QSM_SET_TEXT:
+				if (type == TRVT_LABEL_INDEX) {
+					TraceRestrictDoCommandP(tile, track, TRDCT_SET_TEXT, this->selected_instruction - 1, 0, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM, str->c_str());
+				}
+				return;
 		}
 
-		TraceRestrictItem item = GetSelected();
-		TraceRestrictValueType type = GetTraceRestrictTypeProperties(item).value_type;
 		uint value;
 
 		if (IsIntegerValueType(type) || type == TRVT_PF_PENALTY) {
-			value = ConvertIntegerValue(type, atoi(str), false);
+			value = ConvertIntegerValue(type, atoi(str->c_str()), false);
 			if (value >= (1 << TRIFA_VALUE_COUNT)) {
 				SetDParam(0, ConvertIntegerValue(type, (1 << TRIFA_VALUE_COUNT) - 1, true));
 				SetDParam(1, 0);
@@ -2252,11 +2584,11 @@ public:
 			}
 
 			if (type == TRVT_PF_PENALTY) {
-				SetTraceRestrictAuxField(item, TRPPAF_VALUE);
+				item.SetAuxField(TRPPAF_VALUE);
 			}
 		} else if (IsDecimalValueType(type)) {
 			char tmp_buffer[32];
-			strecpy(tmp_buffer, str, lastof(tmp_buffer));
+			strecpy(tmp_buffer, str->c_str(), lastof(tmp_buffer));
 			str_replace_wchar(tmp_buffer, lastof(tmp_buffer), GetDecimalSeparatorChar(), '.');
 			value = ConvertDecimalToValue(type, atof(tmp_buffer));
 			if (value >= (1 << TRIFA_VALUE_COUNT)) {
@@ -2268,35 +2600,49 @@ public:
 				return;
 			}
 		} else if (type == TRVT_SLOT_INDEX_INT || type == TRVT_COUNTER_INDEX_INT || type == TRVT_TIME_DATE_INT) {
-			value = atoi(str);
+			value = atoi(str->c_str());
 			TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_DUAL_ITEM, this->selected_instruction - 1, value, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 			return;
 		} else {
 			return;
 		}
 
-		SetTraceRestrictValue(item, value);
-		TraceRestrictDoCommandP(tile, track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+		item.SetValue(value);
+		TraceRestrictDoCommandP(tile, track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 	}
 
 	virtual void OnDropdownSelect(WidgetID widget, int index) override
 	{
-		TraceRestrictItem item = GetSelected();
+		TraceRestrictInstructionItem item = this->GetSelected().instruction;
 		if (item == 0 || index < 0 || this->selected_instruction < 1) {
 			return;
 		}
 
 		if (widget == TR_WIDGET_VALUE_DROPDOWN || widget == TR_WIDGET_LEFT_AUX_DROPDOWN) {
 			TraceRestrictTypePropertySet type = GetTraceRestrictTypeProperties(item);
-			if (this->value_drop_down_is_company || type.value_type == TRVT_GROUP_INDEX || type.value_type == TRVT_SLOT_INDEX || type.value_type == TRVT_SLOT_INDEX_INT || type.value_type == TRVT_COUNTER_INDEX_INT || type.value_type == TRVT_TIME_DATE_INT) {
-				// this is a special company drop-down or group/slot-index drop-down
-				SetTraceRestrictValue(item, index);
-				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+			if (((widget == TR_WIDGET_VALUE_DROPDOWN && type.value_type == TRVT_SLOT_INDEX) || (widget == TR_WIDGET_LEFT_AUX_DROPDOWN && type.value_type == TRVT_SLOT_INDEX_INT)) && index == NEW_TRACE_RESTRICT_SLOT_ID) {
+				this->TraceRestrictShowQueryString(STR_EMPTY, STR_TRACE_RESTRICT_SLOT_CREATE_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS, QSM_NEW_SLOT);
+				return;
+			}
+			if (widget == TR_WIDGET_LEFT_AUX_DROPDOWN && type.value_type == TRVT_COUNTER_INDEX_INT && index == NEW_TRACE_RESTRICT_COUNTER_ID) {
+				this->TraceRestrictShowQueryString(STR_EMPTY, STR_TRACE_RESTRICT_COUNTER_CREATE_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS, QSM_NEW_COUNTER);
+				return;
+			}
+			if ((widget == TR_WIDGET_VALUE_DROPDOWN && this->value_drop_down_is_company) || type.value_type == TRVT_GROUP_INDEX || type.value_type == TRVT_SLOT_INDEX || type.value_type == TRVT_SLOT_INDEX_INT || type.value_type == TRVT_COUNTER_INDEX_INT || type.value_type == TRVT_TIME_DATE_INT) {
+				/* This is a special company drop-down or group/slot-index drop-down */
+				item.SetValue(index);
+				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+				if (type.value_type == TRVT_SLOT_INDEX || type.value_type == TRVT_SLOT_INDEX_INT) {
+					TraceRestrictRecordRecentSlot(index);
+				}
+				if (type.value_type == TRVT_COUNTER_INDEX_INT) {
+					TraceRestrictRecordRecentCounter(index);
+				}
 				return;
 			}
 			if (type.value_type == TRVT_ORDER_TARGET_DIAGDIR && widget == TR_WIDGET_LEFT_AUX_DROPDOWN) {
-				SetTraceRestrictAuxField(item, index);
-				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+				item.SetAuxField(index);
+				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 				return;
 			}
 		}
@@ -2304,7 +2650,21 @@ public:
 		if (widget == TR_WIDGET_TYPE_COND || widget == TR_WIDGET_TYPE_NONCOND) {
 			SetTraceRestrictTypeAndNormalise(item, static_cast<TraceRestrictItemType>(index & 0xFFFF), index >> 16);
 
-			TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+			TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+		}
+
+		if (widget == TR_WIDGET_INSERT) {
+			TraceRestrictInstructionItem insert_item{};
+
+			SetTraceRestrictTypeAndNormalise(insert_item, static_cast<TraceRestrictItemType>(index & 0xFFFF));
+			if (insert_item.IsConditional()) {
+				/* Inserting an if/elif/orif/else */
+				insert_item.SetCondFlags(static_cast<TraceRestrictCondFlags>(index >> 16)); // this needs to happen after calling SetTraceRestrictTypeAndNormalise
+			}
+
+			this->expecting_inserted_item = insert_item;
+			TraceRestrictDoCommandP(this->tile, this->track, TRDCT_INSERT_ITEM, this->selected_instruction - 1, insert_item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_INSERT_ITEM);
+			return;
 		}
 
 		const TraceRestrictDropDownListSet *list_set = this->drop_down_list_mapping[widget];
@@ -2315,47 +2675,34 @@ public:
 		uint value = list_set->value_array[index];
 
 		switch (widget) {
-			case TR_WIDGET_INSERT: {
-				TraceRestrictItem insert_item = 0;
-
-				TraceRestrictCondFlags cond_flags = static_cast<TraceRestrictCondFlags>(value >> 16);
-				value &= 0xFFFF;
-				SetTraceRestrictTypeAndNormalise(insert_item, static_cast<TraceRestrictItemType>(value));
-				SetTraceRestrictCondFlags(insert_item, cond_flags); // this needs to happen after calling SetTraceRestrictTypeAndNormalise
-
-				this->expecting_inserted_item = insert_item;
-				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_INSERT_ITEM, this->selected_instruction - 1, insert_item, STR_TRACE_RESTRICT_ERROR_CAN_T_INSERT_ITEM);
-				break;
-			}
-
 			case TR_WIDGET_CONDFLAGS: {
 				CondFlagsDropDownType cond_type = static_cast<CondFlagsDropDownType>(value);
 				if (cond_type == CFDDT_ELSE) {
 					SetTraceRestrictTypeAndNormalise(item, TRIT_COND_ENDIF);
-					SetTraceRestrictCondFlags(item, TRCF_ELSE);
+					item.SetCondFlags(TRCF_ELSE);
 				} else {
-					if (GetTraceRestrictType(item) == TRIT_COND_ENDIF) {
-						// item is currently an else, convert to else/or if
+					if (item.GetType() == TRIT_COND_ENDIF) {
+						/* Item is currently an else, convert to else/or if */
 						SetTraceRestrictTypeAndNormalise(item, TRIT_COND_UNDEFINED);
 					}
 
-					SetTraceRestrictCondFlags(item, static_cast<TraceRestrictCondFlags>(cond_type));
+					item.SetCondFlags(static_cast<TraceRestrictCondFlags>(cond_type));
 				}
 
-				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 				break;
 			}
 
 			case TR_WIDGET_COMPARATOR:
 			case TR_WIDGET_COUNTER_OP: {
-				SetTraceRestrictCondOp(item, static_cast<TraceRestrictCondOp>(value));
-				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+				item.SetCondOp(static_cast<TraceRestrictCondOp>(value));
+				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 				break;
 			}
 
 			case TR_WIDGET_SLOT_OP: {
-				SetTraceRestrictCombinedAuxCondOpField(item, value);
-				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+				item.SetCombinedAuxCondOpField(value);
+				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 				break;
 			}
 
@@ -2363,22 +2710,22 @@ public:
 				if (GetTraceRestrictTypeProperties(item).value_type == TRVT_PF_PENALTY) {
 					if (value == TRPPPI_END) {
 						uint16_t penalty_value;
-						if (GetTraceRestrictAuxField(item) == TRPPAF_PRESET) {
-							penalty_value = _tracerestrict_pathfinder_penalty_preset_values[GetTraceRestrictValue(item)];
+						if (item.GetAuxField() == TRPPAF_PRESET) {
+							penalty_value = _tracerestrict_pathfinder_penalty_preset_values[item.GetValue()];
 						} else {
-							penalty_value = GetTraceRestrictValue(item);
+							penalty_value = item.GetValue();
 						}
 						SetDParam(0, penalty_value);
-						ShowQueryString(STR_JUST_INT, STR_TRACE_RESTRICT_VALUE_CAPTION, 10, this, CS_NUMERAL, QSF_NONE);
+						this->TraceRestrictShowQueryString(STR_JUST_INT, STR_TRACE_RESTRICT_VALUE_CAPTION, 10, CS_NUMERAL, QSF_NONE);
 						return;
 					} else {
-						SetTraceRestrictValue(item, value);
-						SetTraceRestrictAuxField(item, TRPPAF_PRESET);
+						item.SetValue(value);
+						item.SetAuxField(TRPPAF_PRESET);
 					}
 				} else {
-					SetTraceRestrictValue(item, value);
+					item.SetValue(value);
 				}
-				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+				TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 				break;
 			}
 		}
@@ -2449,7 +2796,7 @@ public:
 			trackbits = (_tile_fract_coords.x + _tile_fract_coords.y <= 15) ? TRACK_BIT_UPPER : TRACK_BIT_LOWER;
 		}
 		Track source_track = FindFirstTrack(trackbits);
-		if(source_track == INVALID_TRACK) {
+		if (source_track == INVALID_TRACK) {
 			ShowErrorMessage(error_message, STR_ERROR_THERE_IS_NO_RAILROAD_TRACK, WL_INFO);
 			return;
 		}
@@ -2478,22 +2825,22 @@ public:
 
 		switch (widget) {
 			case TR_WIDGET_COPY:
-				TraceRestrictProgMgmtWithSourceDoCommandP(this->tile, this->track, TRDCT_PROG_COPY,
+				TraceRestrictProgMgmtWithSourceDoCommandP(this->tile, this->track, TRMDCT_PROG_COPY,
 						source_tile, source_track, STR_TRACE_RESTRICT_ERROR_CAN_T_COPY_PROGRAM);
 				break;
 
 			case TR_WIDGET_COPY_APPEND:
-				TraceRestrictProgMgmtWithSourceDoCommandP(this->tile, this->track, TRDCT_PROG_COPY_APPEND,
+				TraceRestrictProgMgmtWithSourceDoCommandP(this->tile, this->track, TRMDCT_PROG_COPY_APPEND,
 						source_tile, source_track, STR_TRACE_RESTRICT_ERROR_CAN_T_COPY_APPEND_PROGRAM);
 				break;
 
 			case TR_WIDGET_SHARE:
-				TraceRestrictProgMgmtWithSourceDoCommandP(this->tile, this->track, TRDCT_PROG_SHARE,
+				TraceRestrictProgMgmtWithSourceDoCommandP(this->tile, this->track, TRMDCT_PROG_SHARE,
 						source_tile, source_track, STR_TRACE_RESTRICT_ERROR_CAN_T_SHARE_PROGRAM);
 				break;
 
 			case TR_WIDGET_SHARE_ONTO:
-				TraceRestrictProgMgmtWithSourceDoCommandP(source_tile, source_track, TRDCT_PROG_SHARE_IF_UNMAPPED,
+				TraceRestrictProgMgmtWithSourceDoCommandP(source_tile, source_track, TRMDCT_PROG_SHARE_IF_UNMAPPED,
 						this->tile, this->track, STR_TRACE_RESTRICT_ERROR_CAN_T_SHARE_PROGRAM);
 				break;
 
@@ -2508,25 +2855,25 @@ public:
 	 */
 	void OnPlaceObjectDestination(Point pt, TileIndex tile, WidgetID widget, int error_message)
 	{
-		TraceRestrictItem item = GetSelected();
+		TraceRestrictInstructionItem item = this->GetSelected().instruction;
 		if (GetTraceRestrictTypeProperties(item).value_type != TRVT_ORDER) return;
 
-		bool stations_only = (GetTraceRestrictType(item) == TRIT_COND_LAST_STATION);
+		bool stations_only = (item.GetType() == TRIT_COND_LAST_STATION);
 
 		if (IsDepotTypeTile(tile, TRANSPORT_RAIL)) {
 			if (stations_only) return;
-			SetTraceRestrictValue(item, GetDepotIndex(tile));
-			SetTraceRestrictAuxField(item, TROCAF_DEPOT);
+			item.SetValue(GetDepotIndex(tile));
+			item.SetAuxField(TROCAF_DEPOT);
 		} else if (IsRailWaypointTile(tile)) {
 			if (stations_only) return;
-			SetTraceRestrictValue(item, GetStationIndex(tile));
-			SetTraceRestrictAuxField(item, TROCAF_WAYPOINT);
+			item.SetValue(GetStationIndex(tile));
+			item.SetAuxField(TROCAF_WAYPOINT);
 		} else if (IsTileType(tile, MP_STATION)) {
 			StationID st_index = GetStationIndex(tile);
 			const Station *st = Station::Get(st_index);
 			if (st->facilities & FACIL_TRAIN) {
-				SetTraceRestrictValue(item, st_index);
-				SetTraceRestrictAuxField(item, TROCAF_STATION);
+				item.SetValue(st_index);
+				item.SetAuxField(TROCAF_STATION);
 			} else {
 				return;
 			}
@@ -2539,7 +2886,7 @@ public:
 			return;
 		}
 
-		TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+		TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_ITEM, this->selected_instruction - 1, item.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 	}
 
 	/**
@@ -2547,7 +2894,7 @@ public:
 	 */
 	void OnPlaceObjectSignalTileValue(Point pt, TileIndex tile, WidgetID widget, int error_message)
 	{
-		TraceRestrictItem item = GetSelected();
+		TraceRestrictInstructionItem item = this->GetSelected().instruction;
 		TraceRestrictValueType val_type = GetTraceRestrictTypeProperties(item).value_type;
 		if (val_type != TRVT_TILE_INDEX && val_type != TRVT_TILE_INDEX_THROUGH) return;
 
@@ -2557,9 +2904,9 @@ public:
 		}
 
 		if (IsRailDepotTile(tile)) {
-			// OK
+			/* OK */
 		} else if (IsTileType(tile, MP_TUNNELBRIDGE) && IsTunnelBridgeWithSignalSimulation(tile)) {
-			// OK
+			/* OK */
 		} else {
 			if (!IsPlainRailTile(tile)) {
 				ShowErrorMessage(error_message, STR_ERROR_THERE_IS_NO_RAILROAD_TRACK, WL_INFO);
@@ -2572,7 +2919,7 @@ public:
 			}
 		}
 
-		TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_DUAL_ITEM, this->selected_instruction - 1, tile, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+		TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_DUAL_ITEM, this->selected_instruction - 1, tile.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 	}
 
 	/**
@@ -2580,11 +2927,11 @@ public:
 	 */
 	void OnPlaceObjectTileValue(Point pt, TileIndex tile, WidgetID widget, int error_message)
 	{
-		TraceRestrictItem item = GetSelected();
+		TraceRestrictInstructionItem item = this->GetSelected().instruction;
 		TraceRestrictValueType val_type = GetTraceRestrictTypeProperties(item).value_type;
 		if (val_type != TRVT_TILE_INDEX && val_type != TRVT_TILE_INDEX_THROUGH) return;
 
-		TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_DUAL_ITEM, this->selected_instruction - 1, tile, STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
+		TraceRestrictDoCommandP(this->tile, this->track, TRDCT_MODIFY_DUAL_ITEM, this->selected_instruction - 1, tile.base(), STR_TRACE_RESTRICT_ERROR_CAN_T_MODIFY_ITEM);
 	}
 
 	virtual void OnPlaceObjectAbort() override
@@ -2593,16 +2940,16 @@ public:
 		this->ResetObjectToPlaceAction();
 	}
 
-	virtual void UpdateWidgetSize(WidgetID widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	virtual void UpdateWidgetSize(WidgetID widget, Dimension &size, const Dimension &padding, Dimension &fill, Dimension &resize) override
 	{
 		switch (widget) {
 			case TR_WIDGET_INSTRUCTION_LIST:
-				resize->height = GetCharacterHeight(FS_NORMAL);
-				size->height = 6 * resize->height + WidgetDimensions::scaled.framerect.Vertical();
+				resize.height = GetCharacterHeight(FS_NORMAL);
+				size.height = 6 * resize.height + WidgetDimensions::scaled.framerect.Vertical();
 				break;
 
 			case TR_WIDGET_GOTO_SIGNAL:
-				size->width = std::max<uint>(12, NWidgetScrollbar::GetVerticalDimension().width);
+				size.width = std::max<uint>(12, NWidgetScrollbar::GetVerticalDimension().width);
 				break;
 		}
 	}
@@ -2626,29 +2973,29 @@ public:
 		int line_height = this->GetWidget<NWidgetBase>(TR_WIDGET_INSTRUCTION_LIST)->resize_y;
 		int scroll_position = this->vscroll->GetPosition();
 
-		// prog may be nullptr
+		/* prog may be nullptr */
 		const TraceRestrictProgram *prog = this->GetProgram();
 
 		int count = this->GetItemCount(prog);
 		uint indent = 1;
 		for (int i = 0; i < count; i++) {
-			TraceRestrictItem item = this->GetItem(prog, i);
+			TraceRestrictInstructionRecord item = this->GetItem(prog, i);
 			uint this_indent = indent;
-			if (IsTraceRestrictConditional(item)) {
-				if (GetTraceRestrictCondFlags(item) & (TRCF_ELSE | TRCF_OR)) {
+			if (item.instruction.IsConditional()) {
+				if (item.instruction.GetCondFlags() & (TRCF_ELSE | TRCF_OR)) {
 					this_indent--;
-				} else if (GetTraceRestrictType(item) == TRIT_COND_ENDIF) {
+				} else if (item.instruction.GetType() == TRIT_COND_ENDIF) {
 					indent--;
 					this_indent--;
 				} else {
 					indent++;
 				}
-			} else if (GetTraceRestrictType(item) == TRIT_NULL) {
+			} else if (item.instruction.GetType() == TRIT_NULL) {
 				this_indent = 0;
 			}
 
 			if (i >= scroll_position && this->vscroll->IsVisible(i)) {
-				DrawInstructionString(prog, item, i, y, i == this->selected_instruction, this_indent, r.left + WidgetDimensions::scaled.framerect.left, r.right - WidgetDimensions::scaled.framerect.right);
+				DrawInstructionString(prog, item, i, y, i == this->selected_instruction, this_indent, r.left + WidgetDimensions::scaled.framerect.left, r.right - WidgetDimensions::scaled.framerect.right, this->GetOwner());
 				y += line_height;
 			}
 		}
@@ -2666,16 +3013,16 @@ public:
 		switch (widget) {
 			case TR_WIDGET_VALUE_INT: {
 				SetDParam(0, STR_JUST_COMMA);
-				TraceRestrictItem item = this->GetSelected();
-				TraceRestrictValueType type = GetTraceRestrictTypeProperties(item).value_type;
-				if (type == TRVT_TIME_DATE_INT && GetTraceRestrictValue(item) == TRTDVF_HOUR_MINUTE) {
+				TraceRestrictInstructionRecord record = this->GetSelected();
+				TraceRestrictValueType type = GetTraceRestrictTypeProperties(record.instruction).value_type;
+				if (type == TRVT_TIME_DATE_INT && record.instruction.GetValue() == TRTDVF_HOUR_MINUTE) {
 					SetDParam(0, STR_JUST_TIME_HHMM);
 				}
 				SetDParam(1, 0);
 				if (IsIntegerValueType(type)) {
-					SetDParam(1, ConvertIntegerValue(type, GetTraceRestrictValue(item), true));
+					SetDParam(1, ConvertIntegerValue(type, record.instruction.GetValue(), true));
 				} else if (type == TRVT_SLOT_INDEX_INT || type == TRVT_COUNTER_INDEX_INT || type == TRVT_TIME_DATE_INT) {
-					SetDParam(1, *(TraceRestrictProgram::InstructionAt(this->GetProgram()->items, this->selected_instruction - 1) + 1));
+					SetDParam(1, record.secondary);
 				}
 				break;
 			}
@@ -2683,11 +3030,11 @@ public:
 			case TR_WIDGET_VALUE_DECIMAL: {
 				SetDParam(0, 0);
 				SetDParam(1, 0);
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				TraceRestrictValueType type = GetTraceRestrictTypeProperties(item).value_type;
 				if (IsDecimalValueType(type)) {
 					int64_t value, decimal;
-					ConvertValueToDecimal(type, GetTraceRestrictValue(item), value, decimal);
+					ConvertValueToDecimal(type, item.GetValue(), value, decimal);
 					SetDParam(0, value);
 					SetDParam(1, decimal);
 				}
@@ -2696,7 +3043,7 @@ public:
 
 			case TR_WIDGET_CAPTION: {
 				const TraceRestrictProgram *prog = this->GetProgram();
-				if (prog) {
+				if (prog != nullptr) {
 					SetDParam(0, prog->refcount);
 				} else {
 					SetDParam(0, 1);
@@ -2705,22 +3052,22 @@ public:
 			}
 
 			case TR_WIDGET_VALUE_DROPDOWN: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				TraceRestrictTypePropertySet type = GetTraceRestrictTypeProperties(item);
 				if ((type.value_type == TRVT_PF_PENALTY &&
-						GetTraceRestrictAuxField(item) == TRPPAF_VALUE)
+						item.GetAuxField() == TRPPAF_VALUE)
 						|| type.value_type == TRVT_GROUP_INDEX
 						|| type.value_type == TRVT_SLOT_INDEX) {
-					SetDParam(0, GetTraceRestrictValue(item));
+					SetDParam(0, item.GetValue());
 				}
 				break;
 			}
 
 			case TR_WIDGET_LEFT_AUX_DROPDOWN: {
-				TraceRestrictItem item = this->GetSelected();
+				TraceRestrictInstructionItem item = this->GetSelected().instruction;
 				TraceRestrictTypePropertySet type = GetTraceRestrictTypeProperties(item);
 				if (type.value_type == TRVT_SLOT_INDEX_INT || type.value_type == TRVT_COUNTER_INDEX_INT || type.value_type == TRVT_TIME_DATE_INT) {
-					SetDParam(0, GetTraceRestrictValue(item));
+					SetDParam(0, item.GetValue());
 				}
 				break;
 			}
@@ -2748,6 +3095,38 @@ public:
 				return true;
 			}
 
+			case TR_WIDGET_VALUE_DROPDOWN: {
+				switch (GetTraceRestrictTypeProperties(this->GetSelected().instruction).value_type) {
+					case TRVT_SLOT_INDEX:
+						GuiShowTooltips(this, TraceRestrictPrepareSlotCounterSelectTooltip(STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP, VEH_TRAIN), close_cond, 0);
+						return true;
+
+					case TRVT_GROUP_INDEX:
+						if (_settings_game.economy.infrastructure_sharing[VEH_TRAIN]) {
+							SetDParam(0, STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP);
+							SetDParam(1, STR_NULL);
+							GuiShowTooltips(this, STR_TRACE_RESTRICT_OTHER_COMPANY_TOOLTIP_EXTRA, close_cond, 0);
+							return true;
+						}
+						return false;
+
+					default:
+						return false;
+				}
+			}
+
+			case TR_WIDGET_LEFT_AUX_DROPDOWN: {
+				switch (GetTraceRestrictTypeProperties(this->GetSelected().instruction).value_type) {
+					case TRVT_SLOT_INDEX_INT:
+					case TRVT_COUNTER_INDEX_INT:
+						GuiShowTooltips(this, TraceRestrictPrepareSlotCounterSelectTooltip(STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP, VEH_TRAIN), close_cond, 0);
+						return true;
+
+					default:
+						return false;
+				}
+			}
+
 			default:
 				return false;
 		}
@@ -2773,11 +3152,11 @@ private:
 	/**
 	 * Helper function to make start and end instructions (these are not stored in the actual program)
 	 */
-	TraceRestrictItem MakeSpecialItem(TraceRestrictNullTypeSpecialValue value) const
+	TraceRestrictInstructionItem MakeSpecialItem(TraceRestrictNullTypeSpecialValue value) const
 	{
-		TraceRestrictItem item = 0;
-		SetTraceRestrictType(item, TRIT_NULL);
-		SetTraceRestrictValue(item, value);
+		TraceRestrictInstructionItem item{};
+		item.SetType(TRIT_NULL);
+		item.SetValue(value);
 		return item;
 	}
 
@@ -2786,8 +3165,8 @@ private:
 	 */
 	int GetItemCount(const TraceRestrictProgram *prog) const
 	{
-		if (prog) {
-			return 2 + (int)prog->GetInstructionCount();
+		if (prog != nullptr) {
+			return 2 + static_cast<int>(prog->GetInstructionCount());
 		} else {
 			return 2;
 		}
@@ -2803,39 +3182,39 @@ private:
 	}
 
 	/**
-	 * Get instruction at @p index in program @p prog
+	 * Get instruction record at @p index in program @p prog
 	 * This correctly handles start/end markers, offsets, etc.
 	 * This returns a 0 instruction if out of bounds
 	 * @p prog may be nullptr
 	 */
-	TraceRestrictItem GetItem(const TraceRestrictProgram *prog, int index) const
+	TraceRestrictInstructionRecord GetItem(const TraceRestrictProgram *prog, int index) const
 	{
 		if (index < 0) {
-			return 0;
+			return {};
 		}
 
 		if (index == 0) {
-			return MakeSpecialItem(TRNTSV_START);
+			return { MakeSpecialItem(TRNTSV_START) };
 		}
 
-		if (prog) {
+		if (prog != nullptr) {
 			size_t instruction_count = prog->GetInstructionCount();
 
 			if (static_cast<size_t>(index) == instruction_count + 1) {
-				return MakeSpecialItem(TRNTSV_END);
+				return { MakeSpecialItem(TRNTSV_END) };
 			}
 
 			if (static_cast<size_t>(index) > instruction_count + 1) {
-				return 0;
+				return {};
 			}
 
-			return prog->items[prog->InstructionOffsetToArrayOffset(index - 1)];
+			return prog->GetInstructionRecordAt(index - 1);
 		} else {
-			// No program defined, this is equivalent to an empty program
+			/* No program defined, this is equivalent to an empty program */
 			if (index == 1) {
-				return MakeSpecialItem(TRNTSV_END);
+				return { MakeSpecialItem(TRNTSV_END) };
 			} else {
-				return 0;
+				return {};
 			}
 		}
 	}
@@ -2843,7 +3222,7 @@ private:
 	/**
 	 * Get selected instruction, or a zero instruction
 	 */
-	TraceRestrictItem GetSelected() const
+	TraceRestrictInstructionRecord GetSelected() const
 	{
 		return this->GetItem(this->GetProgram(), this->selected_instruction);
 	}
@@ -2851,7 +3230,7 @@ private:
 	/**
 	 * Get owner of the signal tile this window is pointing at
 	 */
-	Owner GetOwner()
+	Owner GetOwner() const
 	{
 		return GetTileOwner(this->tile);
 	}
@@ -2862,9 +3241,9 @@ private:
 	int GetItemIndexFromPt(int y)
 	{
 		NWidgetBase *nwid = this->GetWidget<NWidgetBase>(TR_WIDGET_INSTRUCTION_LIST);
-		int sel = (y - nwid->pos_y - WidgetDimensions::scaled.framerect.top) / nwid->resize_y; // Selected line
+		int32_t sel = (y - nwid->pos_y - WidgetDimensions::scaled.framerect.top) / nwid->resize_y; // Selected line
 
-		if ((uint)sel >= this->vscroll->GetCapacity()) return -1;
+		if (sel >= this->vscroll->GetCapacity()) return -1;
 
 		sel += this->vscroll->GetPosition();
 
@@ -2879,29 +3258,30 @@ private:
 		const TraceRestrictProgram *prog = this->GetProgram();
 
 		if (this->vscroll->GetCount() != this->GetItemCount(prog)) {
-			// program length has changed
+			/* Program length has changed */
 
 			if (this->GetItemCount(prog) < this->vscroll->GetCount() ||
-					this->GetItem(prog, this->selected_instruction) != this->expecting_inserted_item) {
-				// length has shrunk or if we weren't expecting an insertion, deselect
+					this->GetItem(prog, this->selected_instruction).instruction != this->expecting_inserted_item) {
+				/* Length has shrunk or if we weren't expecting an insertion, deselect */
 				this->selected_instruction = -1;
 			}
-			this->expecting_inserted_item = static_cast<TraceRestrictItem>(0);
+			this->expecting_inserted_item = {};
 
-			// update scrollbar size
+			/* Update scrollbar size */
 			this->vscroll->SetCount(this->GetItemCount(prog));
 		}
+		this->RaiseButtons();
 		this->UpdateButtonState();
 	}
 
 	bool IsUpDownBtnUsable(bool up, bool update_selection = false) {
 		const TraceRestrictProgram *prog = this->GetProgram();
-		if (!prog) return false;
+		if (prog == nullptr) return false;
 
-		TraceRestrictItem item = this->GetSelected();
-		if (GetTraceRestrictType(item) == TRIT_NULL) return false;
+		TraceRestrictInstructionItem item = this->GetSelected().instruction;
+		if (item.GetType() == TRIT_NULL) return false;
 
-		std::vector<TraceRestrictItem> items = prog->items; // copy
+		std::vector<TraceRestrictProgramItem> items = prog->items; // copy
 		uint32_t offset = this->selected_instruction - 1;
 		if (TraceRestrictProgramMoveItemAt(items, offset, up, _ctrl_pressed).Succeeded()) {
 			TraceRestrictProgramActionsUsedFlags actions_used_flags;
@@ -2916,10 +3296,10 @@ private:
 
 	bool IsDuplicateBtnUsable() const {
 		const TraceRestrictProgram *prog = this->GetProgram();
-		if (!prog) return false;
+		if (prog == nullptr) return false;
 
-		TraceRestrictItem item = this->GetSelected();
-		if (GetTraceRestrictType(item) == TRIT_NULL) return false;
+		TraceRestrictInstructionItem item = this->GetSelected().instruction;
+		if (item.GetType() == TRIT_NULL) return false;
 
 		uint32_t offset = this->selected_instruction - 1;
 		if (TraceRestrictProgramDuplicateItemAtDryRun(prog->items, offset)) {
@@ -2946,10 +3326,7 @@ private:
 		}
 	}
 
-	/**
-	 * Update button states, text values, etc.
-	 */
-	void UpdateButtonState()
+	void RaiseButtons()
 	{
 		this->RaiseWidget(TR_WIDGET_INSERT);
 		this->RaiseWidget(TR_WIDGET_REMOVE);
@@ -2966,7 +3343,13 @@ private:
 		this->RaiseWidget(TR_WIDGET_VALUE_SIGNAL);
 		this->RaiseWidget(TR_WIDGET_VALUE_TILE);
 		this->RaiseWidget(TR_WIDGET_LEFT_AUX_DROPDOWN);
+	}
 
+	/**
+	 * Update button states, text values, etc.
+	 */
+	void UpdateButtonState()
+	{
 		NWidgetStacked *left_2_sel = this->GetWidget<NWidgetStacked>(TR_WIDGET_SEL_TOP_LEFT_2);
 		NWidgetStacked *left_sel   = this->GetWidget<NWidgetStacked>(TR_WIDGET_SEL_TOP_LEFT);
 		NWidgetStacked *left_aux_sel = this->GetWidget<NWidgetStacked>(TR_WIDGET_SEL_TOP_LEFT_AUX);
@@ -3012,8 +3395,7 @@ private:
 
 		const TraceRestrictProgram *prog = this->GetProgram();
 
-		this->GetWidget<NWidgetCore>(TR_WIDGET_CAPTION)->widget_data =
-				(prog && prog->refcount > 1) ? STR_TRACE_RESTRICT_CAPTION_SHARED : STR_TRACE_RESTRICT_CAPTION;
+		this->GetWidget<NWidgetCore>(TR_WIDGET_CAPTION)->SetString((prog != nullptr && prog->refcount > 1) ? STR_TRACE_RESTRICT_CAPTION_SHARED : STR_TRACE_RESTRICT_CAPTION);
 
 		this->SetWidgetDisabledState(TR_WIDGET_HIGHLIGHT, prog == nullptr);
 		extern const TraceRestrictProgram *_viewport_highlight_tracerestrict_program;
@@ -3026,7 +3408,7 @@ private:
 			}
 		});
 
-		// Don't allow modifications if don't own
+		/* Don't allow modifications for non-owners */
 		if (this->GetOwner() != _local_company) {
 			this->SetDirty();
 			return;
@@ -3039,33 +3421,33 @@ private:
 		this->base_share_plane = DPS_SHARE;
 
 		if (prog != nullptr && prog->refcount > 1) {
-			// program is shared, show and enable unshare button, and reset button
+			/* Program is shared, show and enable unshare button, and reset button */
 			this->base_share_plane = DPS_UNSHARE;
 			this->EnableWidget(TR_WIDGET_UNSHARE);
 			this->EnableWidget(TR_WIDGET_RESET);
 		} else if (this->GetItemCount(prog) > 2) {
-			// program is non-empty and not shared, enable reset button
+			/* Program is non-empty and not shared, enable reset button */
 			this->EnableWidget(TR_WIDGET_RESET);
 		} else {
-			// program is empty and not shared, show copy and share buttons
+			/* Program is empty and not shared, show copy and share buttons */
 			this->EnableWidget(TR_WIDGET_COPY);
 			this->EnableWidget(TR_WIDGET_SHARE);
 			this->base_copy_plane = DPC_COPY;
 		}
 
-		this->GetWidget<NWidgetCore>(TR_WIDGET_COPY_APPEND)->tool_tip = (this->base_copy_plane == DPC_DUPLICATE) ? STR_TRACE_RESTRICT_DUPLICATE_TOOLTIP : STR_TRACE_RESTRICT_COPY_TOOLTIP;
+		this->GetWidget<NWidgetCore>(TR_WIDGET_COPY_APPEND)->SetToolTip((this->base_copy_plane == DPC_DUPLICATE) ? STR_TRACE_RESTRICT_DUPLICATE_TOOLTIP : STR_TRACE_RESTRICT_COPY_TOOLTIP);
 		this->UpdatePlaceObjectPlanes();
 
-		// haven't selected instruction
+		/* Haven't selected instruction */
 		if (this->selected_instruction < 1) {
 			this->SetDirty();
 			return;
 		}
 
-		TraceRestrictItem item = this->GetItem(prog, this->selected_instruction);
+		TraceRestrictInstructionItem item = this->GetItem(prog, this->selected_instruction).instruction;
 		if (item != 0) {
-			if (GetTraceRestrictType(item) == TRIT_NULL) {
-				switch (GetTraceRestrictValue(item)) {
+			if (item.GetType() == TRIT_NULL) {
+				switch (item.GetValue()) {
 					case TRNTSV_START:
 						break;
 
@@ -3077,42 +3459,42 @@ private:
 						NOT_REACHED();
 						break;
 				}
-			} else if (GetTraceRestrictType(item) == TRIT_COND_ENDIF) {
+			} else if (item.GetType() == TRIT_COND_ENDIF) {
 				this->EnableWidget(TR_WIDGET_INSERT);
-				if (GetTraceRestrictCondFlags(item) != 0) {
-					// this is not an end if, it must be an else, enable removing
+				if (item.GetCondFlags() != 0) {
+					/* This is not an end if, it must be an else, enable removing */
 					this->EnableWidget(TR_WIDGET_REMOVE);
 
-					// setup condflags dropdown to show else
+					/* Setup condflags dropdown to show else */
 					left_2_sel->SetDisplayedPlane(DPL2_CONDFLAGS);
 					this->EnableWidget(TR_WIDGET_CONDFLAGS);
-					this->GetWidget<NWidgetCore>(TR_WIDGET_CONDFLAGS)->widget_data = STR_TRACE_RESTRICT_CONDITIONAL_ELSE;
+					this->GetWidget<NWidgetCore>(TR_WIDGET_CONDFLAGS)->SetString(STR_TRACE_RESTRICT_CONDITIONAL_ELSE);
 				}
 			} else {
 				TraceRestrictTypePropertySet properties = GetTraceRestrictTypeProperties(item);
 
 				int type_widget;
-				if (IsTraceRestrictConditional(item)) {
-					// note that else and end if items are not handled here, they are handled above
+				if (item.IsConditional()) {
+					/* Note that else and end if items are not handled here, they are handled above */
 
 					left_2_sel->SetDisplayedPlane(DPL2_CONDFLAGS);
 					left_sel->SetDisplayedPlane(DPL_TYPE);
 					type_widget = TR_WIDGET_TYPE_COND;
 
-					// setup condflags dropdown box
+					/* Setup condflags dropdown box */
 					left_2_sel->SetDisplayedPlane(DPL2_CONDFLAGS);
-					switch (GetTraceRestrictCondFlags(item)) {
+					switch (item.GetCondFlags()) {
 						case TRCF_DEFAULT:                            // opening if, leave disabled
-							this->GetWidget<NWidgetCore>(TR_WIDGET_CONDFLAGS)->widget_data = STR_TRACE_RESTRICT_CONDITIONAL_IF;
+							this->GetWidget<NWidgetCore>(TR_WIDGET_CONDFLAGS)->SetString(STR_TRACE_RESTRICT_CONDITIONAL_IF);
 							break;
 
 						case TRCF_ELSE:                               // else-if
-							this->GetWidget<NWidgetCore>(TR_WIDGET_CONDFLAGS)->widget_data = STR_TRACE_RESTRICT_CONDITIONAL_ELIF;
+							this->GetWidget<NWidgetCore>(TR_WIDGET_CONDFLAGS)->SetString(STR_TRACE_RESTRICT_CONDITIONAL_ELIF);
 							this->EnableWidget(TR_WIDGET_CONDFLAGS);
 							break;
 
 						case TRCF_OR:                                 // or-if
-							this->GetWidget<NWidgetCore>(TR_WIDGET_CONDFLAGS)->widget_data = STR_TRACE_RESTRICT_CONDITIONAL_ORIF;
+							this->GetWidget<NWidgetCore>(TR_WIDGET_CONDFLAGS)->SetString(STR_TRACE_RESTRICT_CONDITIONAL_ORIF);
 							this->EnableWidget(TR_WIDGET_CONDFLAGS);
 							break;
 
@@ -3126,8 +3508,7 @@ private:
 				}
 				this->EnableWidget(type_widget);
 
-				this->GetWidget<NWidgetCore>(type_widget)->widget_data =
-						GetTypeString(item);
+				this->GetWidget<NWidgetCore>(type_widget)->SetString(GetTypeString(item));
 
 				if (properties.cond_type == TRCOT_BINARY || properties.cond_type == TRCOT_ALL) {
 					middle_sel->SetDisplayedPlane(DPM_COMPARATOR);
@@ -3136,15 +3517,14 @@ private:
 					const TraceRestrictDropDownListSet *list_set = GetCondOpDropDownListSet(properties);
 
 					if (list_set) {
-						this->GetWidget<NWidgetCore>(TR_WIDGET_COMPARATOR)->widget_data =
-								GetDropDownStringByValue(list_set, GetTraceRestrictCondOp(item));
+						this->GetWidget<NWidgetCore>(TR_WIDGET_COMPARATOR)->SetString(GetDropDownStringByValue(list_set, item.GetCondOp()));
 					}
 				}
 
 				if (IsIntegerValueType(properties.value_type)) {
 					right_sel->SetDisplayedPlane(DPR_VALUE_INT);
 					this->EnableWidget(TR_WIDGET_VALUE_INT);
-				} else if(IsDecimalValueType(properties.value_type)) {
+				} else if (IsDecimalValueType(properties.value_type)) {
 					right_sel->SetDisplayedPlane(DPR_VALUE_DECIMAL);
 					this->EnableWidget(TR_WIDGET_VALUE_DECIMAL);
 				} else {
@@ -3152,8 +3532,7 @@ private:
 						case TRVT_DENY:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetTraceRestrictValue(item) ? STR_TRACE_RESTRICT_PF_ALLOW : STR_TRACE_RESTRICT_PF_DENY;
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(item.GetValue() ? STR_TRACE_RESTRICT_PF_ALLOW : STR_TRACE_RESTRICT_PF_DENY);
 							break;
 
 						case TRVT_ORDER:
@@ -3164,19 +3543,17 @@ private:
 						case TRVT_CARGO_ID:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetCargoStringByID(GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetCargoStringByID(item.GetValue()));
 							break;
 
 						case TRVT_DIRECTION:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_direction_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_direction_value, item.GetValue()));
 							break;
 
 						case TRVT_TILE_INDEX:
-							if (GetTraceRestrictType(item) == TRIT_COND_PBS_ENTRY_SIGNAL && GetTraceRestrictAuxField(item) == TRPESAF_RES_END_TILE) {
+							if (item.GetType() == TRIT_COND_PBS_ENTRY_SIGNAL && item.GetAuxField() == TRPESAF_RES_END_TILE) {
 								right_sel->SetDisplayedPlane(DPR_VALUE_TILE);
 								this->EnableWidget(TR_WIDGET_VALUE_TILE);
 							} else {
@@ -3193,49 +3570,46 @@ private:
 						case TRVT_PF_PENALTY:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							if (GetTraceRestrictAuxField(item) == TRPPAF_VALUE) {
-								this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data = STR_JUST_COMMA;
+							if (item.GetAuxField() == TRPPAF_VALUE) {
+								this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(STR_JUST_COMMA);
 							} else {
-								this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-										GetDropDownStringByValue(&_pf_penalty_dropdown, GetPathfinderPenaltyDropdownIndex(item));
+								this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_pf_penalty_dropdown, GetPathfinderPenaltyDropdownIndex(item)));
 							}
 							break;
 
 						case TRVT_RESERVE_THROUGH:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetTraceRestrictValue(item) ? STR_TRACE_RESTRICT_RESERVE_THROUGH_CANCEL : STR_TRACE_RESTRICT_RESERVE_THROUGH;
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(
+									item.GetValue() ? STR_TRACE_RESTRICT_RESERVE_THROUGH_CANCEL : STR_TRACE_RESTRICT_RESERVE_THROUGH);
 							break;
 
 						case TRVT_LONG_RESERVE:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_long_reserve_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_long_reserve_value, item.GetValue()));
 							break;
 
 						case TRVT_WAIT_AT_PBS:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_wait_at_pbs_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_wait_at_pbs_value, item.GetValue()));
 							break;
 
 						case TRVT_GROUP_INDEX:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							switch (GetTraceRestrictValue(item)) {
+							switch (item.GetValue()) {
 								case INVALID_GROUP:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_VARIABLE_UNDEFINED;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(STR_TRACE_RESTRICT_VARIABLE_UNDEFINED);
 									break;
 
 								case DEFAULT_GROUP:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data = STR_GROUP_DEFAULT_TRAINS;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(STR_GROUP_DEFAULT_TRAINS);
 									break;
 
 								default:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data = STR_GROUP_NAME;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(STR_GROUP_NAME);
 									break;
 							}
 							break;
@@ -3243,33 +3617,25 @@ private:
 						case TRVT_OWNER:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_COMPANY;
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(STR_TRACE_RESTRICT_COMPANY);
 							break;
 
 						case TRVT_SLOT_INDEX: {
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
-							if (!IsTraceRestrictConditional(item)) {
+							if (!item.IsConditional()) {
 								middle_sel->SetDisplayedPlane(DPM_SLOT_OP);
 								this->EnableWidget(TR_WIDGET_SLOT_OP);
 							}
+							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
 
-							for (const TraceRestrictSlot *slot : TraceRestrictSlot::Iterate()) {
-								if (slot->vehicle_type != VEH_TRAIN && !IsTraceRestrictTypeNonMatchingVehicleTypeSlot(GetTraceRestrictType(item))) continue;
-								if (slot->owner == this->GetOwner()) {
-									this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-									break;
-								}
-							}
-
-							this->GetWidget<NWidgetCore>(TR_WIDGET_SLOT_OP)->widget_data =
-									GetDropDownStringByValue(&_slot_op_subtypes, GetTraceRestrictCombinedAuxCondOpField(item));
-							switch (GetTraceRestrictValue(item)) {
+							this->GetWidget<NWidgetCore>(TR_WIDGET_SLOT_OP)->SetString(GetDropDownStringByValue(&_slot_op_subtypes, item.GetCombinedAuxCondOpField()));
+							switch (item.GetValue()) {
 								case INVALID_TRACE_RESTRICT_SLOT_ID:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_VARIABLE_UNDEFINED;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(STR_TRACE_RESTRICT_VARIABLE_UNDEFINED);
 									break;
 
 								default:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_SLOT_NAME;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(STR_TRACE_RESTRICT_SLOT_NAME);
 									break;
 							}
 							break;
@@ -3279,22 +3645,15 @@ private:
 							right_sel->SetDisplayedPlane(DPR_VALUE_INT);
 							left_aux_sel->SetDisplayedPlane(DPLA_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_INT);
+							this->EnableWidget(TR_WIDGET_LEFT_AUX_DROPDOWN);
 
-							for (const TraceRestrictSlot *slot : TraceRestrictSlot::Iterate()) {
-								if (slot->vehicle_type != VEH_TRAIN && !IsTraceRestrictTypeNonMatchingVehicleTypeSlot(GetTraceRestrictType(item))) continue;
-								if (slot->owner == this->GetOwner()) {
-									this->EnableWidget(TR_WIDGET_LEFT_AUX_DROPDOWN);
-									break;
-								}
-							}
-
-							switch (GetTraceRestrictValue(item)) {
+							switch (item.GetValue()) {
 								case INVALID_TRACE_RESTRICT_SLOT_ID:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_VARIABLE_UNDEFINED;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->SetString(STR_TRACE_RESTRICT_VARIABLE_UNDEFINED);
 									break;
 
 								default:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_SLOT_NAME;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->SetString(STR_TRACE_RESTRICT_SLOT_NAME);
 									break;
 							}
 							break;
@@ -3303,49 +3662,39 @@ private:
 						case TRVT_TRAIN_STATUS:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_train_status_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_train_status_value, item.GetValue()));
 							break;
 
 						case TRVT_REVERSE:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_reverse_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_reverse_value, item.GetValue()));
 							break;
 
 						case TRVT_NEWS_CONTROL:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_news_control_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_news_control_value, item.GetValue()));
 							break;
 
 						case TRVT_COUNTER_INDEX_INT: {
 							right_sel->SetDisplayedPlane(DPR_VALUE_INT);
 							left_aux_sel->SetDisplayedPlane(DPLA_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_INT);
-							if (!IsTraceRestrictConditional(item)) {
+							if (!item.IsConditional()) {
 								left_sel->SetDisplayedPlane(DPL_COUNTER_OP);
 								this->EnableWidget(TR_WIDGET_COUNTER_OP);
-								this->GetWidget<NWidgetCore>(TR_WIDGET_COUNTER_OP)->widget_data =
-										GetDropDownStringByValue(&_counter_op_cond_ops, GetTraceRestrictCondOp(item));
+								this->GetWidget<NWidgetCore>(TR_WIDGET_COUNTER_OP)->SetString(GetDropDownStringByValue(&_counter_op_cond_ops, item.GetCondOp()));
 							}
+							this->EnableWidget(TR_WIDGET_LEFT_AUX_DROPDOWN);
 
-							for (const TraceRestrictCounter *ctr : TraceRestrictCounter::Iterate()) {
-								if (ctr->owner == this->GetOwner()) {
-									this->EnableWidget(TR_WIDGET_LEFT_AUX_DROPDOWN);
-									break;
-								}
-							}
-
-							switch (GetTraceRestrictValue(item)) {
+							switch (item.GetValue()) {
 								case INVALID_TRACE_RESTRICT_COUNTER_ID:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_VARIABLE_UNDEFINED;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->SetString(STR_TRACE_RESTRICT_VARIABLE_UNDEFINED);
 									break;
 
 								default:
-									this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_COUNTER_NAME;
+									this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->SetString(STR_TRACE_RESTRICT_COUNTER_NAME);
 									break;
 							}
 							break;
@@ -3356,36 +3705,32 @@ private:
 							left_aux_sel->SetDisplayedPlane(DPLA_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_INT);
 							this->EnableWidget(TR_WIDGET_LEFT_AUX_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->widget_data = STR_TRACE_RESTRICT_TIME_MINUTE_SHORT + GetTraceRestrictValue(item);
+							this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->SetString(STR_TRACE_RESTRICT_TIME_MINUTE_SHORT + item.GetValue());
 							break;
 						}
 
 						case TRVT_ENGINE_CLASS:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_engine_class_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_engine_class_value, item.GetValue()));
 							break;
 
 						case TRVT_PF_PENALTY_CONTROL:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_pf_penalty_control_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_pf_penalty_control_value, item.GetValue()));
 							break;
 
 						case TRVT_SPEED_ADAPTATION_CONTROL:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_speed_adaptation_control_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_speed_adaptation_control_value, item.GetValue()));
 							break;
 
 						case TRVT_SIGNAL_MODE_CONTROL:
 							right_sel->SetDisplayedPlane(DPR_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_signal_mode_control_value, GetTraceRestrictValue(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_signal_mode_control_value, item.GetValue()));
 							break;
 
 						case TRVT_ORDER_TARGET_DIAGDIR:
@@ -3393,10 +3738,12 @@ private:
 							left_aux_sel->SetDisplayedPlane(DPLA_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_VALUE_DROPDOWN);
 							this->EnableWidget(TR_WIDGET_LEFT_AUX_DROPDOWN);
-							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_diagdir_value, GetTraceRestrictValue(item));
-							this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->widget_data =
-									GetDropDownStringByValue(&_target_direction_aux_value, GetTraceRestrictAuxField(item));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_VALUE_DROPDOWN)->SetString(GetDropDownStringByValue(&_diagdir_value, item.GetValue()));
+							this->GetWidget<NWidgetCore>(TR_WIDGET_LEFT_AUX_DROPDOWN)->SetString(GetDropDownStringByValue(&_target_direction_aux_value, item.GetAuxField()));
+							break;
+
+						case TRVT_LABEL_INDEX:
+							right_sel->SetDisplayedPlane(DPR_LABEL_BUTTON);
 							break;
 
 						default:
@@ -3425,6 +3772,7 @@ private:
 		this->drop_down_list_mapping[button] = list_set;
 		int selected = GetDropDownListIndexByValue(list_set, value, missing_ok);
 		if (button == TR_WIDGET_VALUE_DROPDOWN) this->value_drop_down_is_company = false;
+
 		ShowDropDownMenu(this, list_set->string_array, selected, button, disabled_mask, hidden_mask);
 	}
 
@@ -3436,11 +3784,11 @@ private:
 	{
 		DropDownList list;
 
-		for (Company *c : Company::Iterate()) {
+		for (const Company *c : Company::Iterate()) {
 			list.emplace_back(MakeCompanyDropDownListItem(c->index));
 			if (c->index == value) missing_ok = true;
 		}
-		list.emplace_back(new DropDownListStringItem(STR_TRACE_RESTRICT_UNDEFINED_COMPANY, INVALID_COMPANY, false));
+		list.push_back(MakeDropDownListStringItem(STR_TRACE_RESTRICT_UNDEFINED_COMPANY, INVALID_COMPANY, false));
 		if (INVALID_COMPANY == value) missing_ok = true;
 
 		assert(missing_ok == true);
@@ -3472,6 +3820,9 @@ private:
 
 	void ResetObjectToPlaceAction()
 	{
+		if (this->current_placement_widget != -1) {
+			this->RaiseWidgetWhenLowered(this->current_placement_widget);
+		}
 		this->current_placement_widget = -1;
 		this->UpdatePlaceObjectPlanes();
 	}
@@ -3481,23 +3832,23 @@ private:
 	 * If @p replace is true, replace selection with @p item, else insert @p item before selection
 	 * Returns true if resulting instruction list passes validation
 	 */
-	bool GenericElseInsertionDryRun(TraceRestrictItem item, bool replace)
+	bool GenericElseInsertionDryRun(TraceRestrictInstructionItem item, bool replace)
 	{
 		if (this->selected_instruction < 1) return false;
 		uint offset = this->selected_instruction - 1;
 
 		const TraceRestrictProgram *prog = this->GetProgram();
-		if (!prog) return false;
+		if (prog == nullptr) return false;
 
-		std::vector<TraceRestrictItem> items = prog->items; // copy
+		std::vector<TraceRestrictProgramItem> items = prog->items; // copy
 
-		if (offset >= (TraceRestrictProgram::GetInstructionCount(items) + (replace ? 0 : 1))) return false; // off the end of the program
+		if (offset >= (TraceRestrictGetInstructionCount(items) + (replace ? 0 : 1))) return false; // off the end of the program
 
-		uint array_offset = (uint)TraceRestrictProgram::InstructionOffsetToArrayOffset(items, offset);
+		auto iter = TraceRestrictInstructionIteratorAt(items, offset);
 		if (replace) {
-			items[array_offset] = item;
+			iter.InstructionRef() = item;
 		} else {
-			items.insert(items.begin() + array_offset, item);
+			items.insert(iter.ItemIter(), item.AsProgramItem());
 		}
 
 		TraceRestrictProgramActionsUsedFlags actions_used_flags;
@@ -3509,10 +3860,10 @@ private:
 	 */
 	bool ElseInsertionDryRun(bool replace)
 	{
-		TraceRestrictItem item = 0;
-		SetTraceRestrictType(item, TRIT_COND_ENDIF);
-		SetTraceRestrictCondFlags(item, TRCF_ELSE);
-		return GenericElseInsertionDryRun(item, replace);
+		TraceRestrictInstructionItem item{};
+		item.SetType(TRIT_COND_ENDIF);
+		item.SetCondFlags(TRCF_ELSE);
+		return this->GenericElseInsertionDryRun(item, replace);
 	}
 
 	/**
@@ -3520,108 +3871,110 @@ private:
 	 */
 	bool ElseIfInsertionDryRun(bool replace)
 	{
-		TraceRestrictItem item = 0;
-		SetTraceRestrictType(item, TRIT_COND_UNDEFINED);
-		SetTraceRestrictCondFlags(item, TRCF_ELSE);
-		return GenericElseInsertionDryRun(item, replace);
+		TraceRestrictInstructionItem item{};
+		item.SetType(TRIT_COND_UNDEFINED);
+		item.SetCondFlags(TRCF_ELSE);
+		return this->GenericElseInsertionDryRun(item, replace);
 	}
 };
 
 static constexpr NWidgetPart _nested_program_widgets[] = {
-	// Title bar
+	/* Title bar */
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(WWT_CAPTION, COLOUR_GREY, TR_WIDGET_CAPTION), SetDataTip(STR_TRACE_RESTRICT_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_CAPTION, COLOUR_GREY, TR_WIDGET_CAPTION), SetStringTip(STR_TRACE_RESTRICT_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
 		NWidget(WWT_DEBUGBOX, COLOUR_GREY),
-		NWidget(WWT_IMGBTN, COLOUR_GREY, TR_WIDGET_HIGHLIGHT), SetMinimalSize(12, 12), SetDataTip(SPR_SHARED_ORDERS_ICON, STR_TRACE_RESTRICT_HIGHLIGHT_TOOLTIP),
+		NWidget(WWT_IMGBTN, COLOUR_GREY, TR_WIDGET_HIGHLIGHT), SetAspect(1), SetSpriteTip(SPR_SHARED_ORDERS_ICON, STR_TRACE_RESTRICT_HIGHLIGHT_TOOLTIP),
 		NWidget(WWT_SHADEBOX, COLOUR_GREY),
 		NWidget(WWT_STICKYBOX, COLOUR_GREY),
 	EndContainer(),
 
-	// Program display
+	/* Program display */
 	NWidget(NWID_HORIZONTAL),
-		NWidget(WWT_PANEL, COLOUR_GREY, TR_WIDGET_INSTRUCTION_LIST), SetMinimalSize(372, 62), SetDataTip(0x0, STR_TRACE_RESTRICT_INSTRUCTION_LIST_TOOLTIP),
+		NWidget(WWT_PANEL, COLOUR_GREY, TR_WIDGET_INSTRUCTION_LIST), SetMinimalSize(372, 62), SetToolTip(STR_TRACE_RESTRICT_INSTRUCTION_LIST_TOOLTIP),
 				SetResize(1, 1), SetScrollbar(TR_WIDGET_SCROLLBAR), EndContainer(),
 		NWidget(NWID_VSCROLLBAR, COLOUR_GREY, TR_WIDGET_SCROLLBAR),
 	EndContainer(),
 
-	// Button Bar
+	/* Button Bar */
 	NWidget(NWID_HORIZONTAL),
-		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, TR_WIDGET_UP_BTN), SetMinimalSize(12, 12), SetDataTip(SPR_ARROW_UP, STR_TRACE_RESTRICT_UP_BTN_TOOLTIP),
-		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, TR_WIDGET_DOWN_BTN), SetMinimalSize(12, 12), SetDataTip(SPR_ARROW_DOWN, STR_TRACE_RESTRICT_DOWN_BTN_TOOLTIP),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, TR_WIDGET_UP_BTN), SetAspect(WidgetDimensions::ASPECT_UP_DOWN_BUTTON), SetSpriteTip(SPR_ARROW_UP, STR_TRACE_RESTRICT_UP_BTN_TOOLTIP),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, TR_WIDGET_DOWN_BTN), SetAspect(WidgetDimensions::ASPECT_UP_DOWN_BUTTON), SetSpriteTip(SPR_ARROW_DOWN, STR_TRACE_RESTRICT_DOWN_BTN_TOOLTIP),
 		NWidget(NWID_HORIZONTAL, NC_EQUALSIZE),
 			NWidget(NWID_SELECTION, INVALID_COLOUR, TR_WIDGET_SEL_TOP_LEFT_2),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_TYPE_NONCOND), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_NULL, STR_TRACE_RESTRICT_TYPE_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_TRACE_RESTRICT_TYPE_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_CONDFLAGS), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_NULL, STR_TRACE_RESTRICT_CONDFLAGS_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_TRACE_RESTRICT_CONDFLAGS_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_BLANK_L2), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_EMPTY, STR_NULL), SetResize(1, 0),
+														SetStringTip(STR_EMPTY, STR_NULL), SetResize(1, 0),
 			EndContainer(),
 			NWidget(NWID_SELECTION, INVALID_COLOUR, TR_WIDGET_SEL_TOP_LEFT),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_TYPE_COND), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_NULL, STR_TRACE_RESTRICT_TYPE_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_TRACE_RESTRICT_TYPE_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_COUNTER_OP), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_NULL, STR_TRACE_RESTRICT_COUNTER_OP_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_TRACE_RESTRICT_COUNTER_OP_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_BLANK_L), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_EMPTY, STR_NULL), SetResize(1, 0),
+														SetStringTip(STR_EMPTY, STR_NULL), SetResize(1, 0),
 			EndContainer(),
 			NWidget(NWID_SELECTION, INVALID_COLOUR, TR_WIDGET_SEL_TOP_LEFT_AUX),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_LEFT_AUX_DROPDOWN), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_NULL, STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP), SetResize(1, 0),
 			EndContainer(),
 			NWidget(NWID_SELECTION, INVALID_COLOUR, TR_WIDGET_SEL_TOP_MIDDLE),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_COMPARATOR), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_NULL, STR_TRACE_RESTRICT_COND_COMPARATOR_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_TRACE_RESTRICT_COND_COMPARATOR_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_SLOT_OP), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_NULL, STR_TRACE_RESTRICT_SLOT_OP_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_TRACE_RESTRICT_SLOT_OP_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_BLANK_M), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_EMPTY, STR_NULL), SetResize(1, 0),
+														SetStringTip(STR_EMPTY, STR_NULL), SetResize(1, 0),
 			EndContainer(),
 			NWidget(NWID_SELECTION, INVALID_COLOUR, TR_WIDGET_SEL_TOP_RIGHT),
-				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_VALUE_INT), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_JUST_STRING1, STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP), SetResize(1, 0),
-				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_VALUE_DECIMAL), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_JUST_DECIMAL, STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP), SetResize(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TR_WIDGET_VALUE_INT), SetMinimalSize(124, 12), SetFill(1, 0),
+														SetStringTip(STR_JUST_STRING1, STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP), SetResize(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TR_WIDGET_VALUE_DECIMAL), SetMinimalSize(124, 12), SetFill(1, 0),
+														SetStringTip(STR_JUST_DECIMAL, STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_VALUE_DROPDOWN), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_NULL, STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_TRACE_RESTRICT_COND_VALUE_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_VALUE_DEST), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_SELECT_TARGET, STR_TRACE_RESTRICT_SELECT_TARGET), SetResize(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_SELECT_TARGET, STR_TRACE_RESTRICT_SELECT_TARGET), SetResize(1, 0),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_VALUE_SIGNAL), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_SELECT_SIGNAL, STR_TRACE_RESTRICT_SELECT_SIGNAL), SetResize(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_SELECT_SIGNAL, STR_TRACE_RESTRICT_SELECT_SIGNAL), SetResize(1, 0),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_VALUE_TILE), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_SELECT_TILE, STR_TRACE_RESTRICT_SELECT_TILE), SetResize(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_SELECT_TILE, STR_TRACE_RESTRICT_SELECT_TILE), SetResize(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TR_WIDGET_LABEL), SetMinimalSize(124, 12), SetFill(1, 0),
+														SetStringTip(STR_ORDER_LABEL_TEXT_BUTTON, STR_ORDER_LABEL_TEXT_BUTTON_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_BLANK_R), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_EMPTY, STR_NULL), SetResize(1, 0),
+														SetStringTip(STR_EMPTY, STR_NULL), SetResize(1, 0),
 			EndContainer(),
 		EndContainer(),
-		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, TR_WIDGET_GOTO_SIGNAL), SetMinimalSize(12, 12), SetDataTip(SPR_GOTO_LOCATION, STR_TRACE_RESTRICT_GOTO_SIGNAL_TOOLTIP),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, TR_WIDGET_GOTO_SIGNAL), SetAspect(WidgetDimensions::ASPECT_LOCATION), SetSpriteTip(SPR_GOTO_LOCATION, STR_TRACE_RESTRICT_GOTO_SIGNAL_TOOLTIP),
 	EndContainer(),
 
 	/* Second button row. */
 	NWidget(NWID_HORIZONTAL),
 		NWidget(NWID_HORIZONTAL, NC_EQUALSIZE),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, TR_WIDGET_INSERT), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_INSERT, STR_TRACE_RESTRICT_INSERT_TOOLTIP), SetResize(1, 0),
-				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_REMOVE), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_REMOVE, STR_TRACE_RESTRICT_REMOVE_TOOLTIP), SetResize(1, 0),
-				NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_RESET), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_RESET, STR_TRACE_RESTRICT_RESET_TOOLTIP), SetResize(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_INSERT, STR_TRACE_RESTRICT_INSERT_TOOLTIP), SetResize(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TR_WIDGET_REMOVE), SetMinimalSize(124, 12), SetFill(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_REMOVE, STR_TRACE_RESTRICT_REMOVE_TOOLTIP), SetResize(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TR_WIDGET_RESET), SetMinimalSize(124, 12), SetFill(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_RESET, STR_TRACE_RESTRICT_RESET_TOOLTIP), SetResize(1, 0),
 				NWidget(NWID_SELECTION, INVALID_COLOUR, TR_WIDGET_SEL_COPY),
 					NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_COPY), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_COPY, STR_TRACE_RESTRICT_COPY_TOOLTIP), SetResize(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_COPY, STR_TRACE_RESTRICT_COPY_TOOLTIP), SetResize(1, 0),
 					NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_COPY_APPEND), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_APPEND, STR_TRACE_RESTRICT_COPY_TOOLTIP), SetResize(1, 0),
-					NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_DUPLICATE), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_DUPLICATE, STR_TRACE_RESTRICT_DUPLICATE_TOOLTIP), SetResize(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_APPEND, STR_TRACE_RESTRICT_COPY_TOOLTIP), SetResize(1, 0),
+					NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TR_WIDGET_DUPLICATE), SetMinimalSize(124, 12), SetFill(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_DUPLICATE, STR_TRACE_RESTRICT_DUPLICATE_TOOLTIP), SetResize(1, 0),
 				EndContainer(),
 				NWidget(NWID_SELECTION, INVALID_COLOUR, TR_WIDGET_SEL_SHARE),
 					NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_SHARE), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_SHARE, STR_NULL), SetResize(1, 0),
-					NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_UNSHARE), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_UNSHARE, STR_NULL), SetResize(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_SHARE, STR_NULL), SetResize(1, 0),
+					NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, TR_WIDGET_UNSHARE), SetMinimalSize(124, 12), SetFill(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_UNSHARE, STR_NULL), SetResize(1, 0),
 					NWidget(WWT_TEXTBTN, COLOUR_GREY, TR_WIDGET_SHARE_ONTO), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetDataTip(STR_TRACE_RESTRICT_SHARE_ONTO, STR_NULL), SetResize(1, 0),
+														SetStringTip(STR_TRACE_RESTRICT_SHARE_ONTO, STR_NULL), SetResize(1, 0),
 				EndContainer(),
 		EndContainer(),
 		NWidget(WWT_RESIZEBOX, COLOUR_GREY),
@@ -3632,7 +3985,7 @@ static WindowDesc _program_desc(__FILE__, __LINE__,
 	WDP_AUTO, "trace_restrict_gui", 384, 100,
 	WC_TRACE_RESTRICT, WC_BUILD_SIGNAL,
 	WDF_CONSTRUCTION,
-	std::begin(_nested_program_widgets), std::end(_nested_program_widgets)
+	_nested_program_widgets
 );
 
 /**
@@ -3644,7 +3997,7 @@ void ShowTraceRestrictProgramWindow(TileIndex tile, Track track)
 		return;
 	}
 
-	new TraceRestrictWindow(&_program_desc, tile, track);
+	new TraceRestrictWindow(_program_desc, tile, track);
 }
 
 /** Slot GUI widget IDs */
@@ -3657,6 +4010,10 @@ enum TraceRestrictSlotWindowWidgets {
 	WID_TRSL_CREATE_SLOT,
 	WID_TRSL_DELETE_SLOT,
 	WID_TRSL_RENAME_SLOT,
+	WID_TRSL_NEW_GROUP,
+	WID_TRSL_COLLAPSE_ALL_GROUPS,
+	WID_TRSL_EXPAND_ALL_GROUPS,
+	WID_TRSL_SLOT_PUBLIC,
 	WID_TRSL_SET_SLOT_MAX_OCCUPANCY,
 	WID_TRSL_SORT_BY_ORDER,
 	WID_TRSL_SORT_BY_DROPDOWN,
@@ -3669,7 +4026,7 @@ enum TraceRestrictSlotWindowWidgets {
 static constexpr NWidgetPart _nested_slot_widgets[] = {
 	NWidget(NWID_HORIZONTAL), // Window header
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(WWT_CAPTION, COLOUR_GREY, WID_TRSL_CAPTION), SetDataTip(STR_TRACE_RESTRICT_SLOT_CAPTION, STR_NULL),
+		NWidget(WWT_CAPTION, COLOUR_GREY, WID_TRSL_CAPTION), SetStringTip(STR_TRACE_RESTRICT_SLOT_CAPTION, STR_NULL),
 		NWidget(WWT_SHADEBOX, COLOUR_GREY),
 		NWidget(WWT_DEFSIZEBOX, COLOUR_GREY),
 		NWidget(WWT_STICKYBOX, COLOUR_GREY),
@@ -3686,23 +4043,31 @@ static constexpr NWidgetPart _nested_slot_widgets[] = {
 			EndContainer(),
 			NWidget(NWID_HORIZONTAL),
 				NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_TRSL_CREATE_SLOT), SetFill(0, 1),
-						SetDataTip(SPR_GROUP_CREATE_TRAIN, STR_TRACE_RESTRICT_SLOT_CREATE_TOOLTIP),
+						SetToolTip(STR_TRACE_RESTRICT_SLOT_CREATE_TOOLTIP),
 				NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_TRSL_DELETE_SLOT), SetFill(0, 1),
-						SetDataTip(SPR_GROUP_DELETE_TRAIN, STR_TRACE_RESTRICT_SLOT_DELETE_TOOLTIP),
+						SetToolTip(STR_TRACE_RESTRICT_SLOT_DELETE_TOOLTIP),
 				NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_TRSL_RENAME_SLOT), SetFill(0, 1),
-						SetDataTip(SPR_GROUP_RENAME_TRAIN, STR_TRACE_RESTRICT_SLOT_RENAME_TOOLTIP),
+						SetToolTip(STR_TRACE_RESTRICT_SLOT_RENAME_TOOLTIP),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRSL_NEW_GROUP), SetFill(0, 1),
+						SetStringTip(STR_TRACE_RESTRICT_NEW_SLOT_GROUP, STR_TRACE_RESTRICT_NEW_SLOT_GROUP_TOOLTIP),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRSL_COLLAPSE_ALL_GROUPS), SetFill(0, 1),
+						SetStringTip(STR_GROUP_COLLAPSE_ALL, STR_GROUP_COLLAPSE_ALL),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRSL_EXPAND_ALL_GROUPS), SetFill(0, 1),
+						SetStringTip(STR_GROUP_EXPAND_ALL, STR_GROUP_EXPAND_ALL),
 				NWidget(WWT_PANEL, COLOUR_GREY), SetFill(1, 1), EndContainer(),
+				NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TRSL_SLOT_PUBLIC), SetFill(0, 1),
+						SetSpriteTip(SPR_IMG_GOAL, STR_TRACE_RESTRICT_SLOT_PUBLIC_TOOLTIP),
 				NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_TRSL_SET_SLOT_MAX_OCCUPANCY), SetFill(0, 1),
-						SetDataTip(SPR_IMG_SETTINGS, STR_TRACE_RESTRICT_SLOT_SET_MAX_OCCUPANCY_TOOLTIP),
+						SetSpriteTip(SPR_IMG_SETTINGS, STR_TRACE_RESTRICT_SLOT_SET_MAX_OCCUPANCY_TOOLTIP),
 			EndContainer(),
 		EndContainer(),
 		/* right part */
 		NWidget(NWID_VERTICAL),
 			NWidget(NWID_HORIZONTAL),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRSL_SORT_BY_ORDER), SetMinimalSize(81, 12), SetDataTip(STR_BUTTON_SORT_BY, STR_TOOLTIP_SORT_ORDER),
-				NWidget(WWT_DROPDOWN, COLOUR_GREY, WID_TRSL_SORT_BY_DROPDOWN), SetMinimalSize(167, 12), SetDataTip(0x0, STR_TOOLTIP_SORT_CRITERIA),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRSL_SORT_BY_ORDER), SetMinimalSize(81, 12), SetStringTip(STR_BUTTON_SORT_BY, STR_TOOLTIP_SORT_ORDER),
+				NWidget(WWT_DROPDOWN, COLOUR_GREY, WID_TRSL_SORT_BY_DROPDOWN), SetMinimalSize(167, 12), SetToolTip(STR_TOOLTIP_SORT_CRITERIA),
 				NWidget(NWID_SELECTION, INVALID_COLOUR, WID_TRSL_FILTER_BY_CARGO_SEL),
-					NWidget(WWT_DROPDOWN, COLOUR_GREY, WID_TRSL_FILTER_BY_CARGO), SetMinimalSize(167, 12), SetDataTip(STR_JUST_STRING, STR_TOOLTIP_FILTER_CRITERIA),
+					NWidget(WWT_DROPDOWN, COLOUR_GREY, WID_TRSL_FILTER_BY_CARGO), SetMinimalSize(167, 12), SetStringTip(STR_JUST_STRING, STR_TOOLTIP_FILTER_CRITERIA),
 				EndContainer(),
 				NWidget(WWT_PANEL, COLOUR_GREY), SetMinimalSize(0, 12), SetResize(1, 0), EndContainer(),
 			EndContainer(),
@@ -3720,22 +4085,39 @@ static constexpr NWidgetPart _nested_slot_widgets[] = {
 };
 
 class TraceRestrictSlotWindow : public BaseVehicleListWindow {
+	struct GUISlotListItem {
+		SlotItem item;       ///< Slot/group item
+		uint8_t indent;      ///< Display indentation level.
+		uint16_t level_mask; ///< Bitmask of indentation continuation.
+
+		constexpr GUISlotListItem(SlotItem item, int8_t indent) : item(item), indent(indent), level_mask(0) {}
+	};
+
 private:
 	/* Columns in the group list */
 	enum ListColumns {
-		VGC_NAME,          ///< Group name.
-		VGC_NUMBER,        ///< Number of vehicles in the group.
+		VGC_FOLD,          ///< Fold / Unfold button.
+		VGC_NAME,          ///< Slot name.
+		VGC_PUBLIC,        ///< Slot public state.
+		VGC_NUMBER,        ///< Slot occupancy numbers.
 
 		VGC_END
 	};
 
-	TraceRestrictSlotID slot_sel;     ///< Selected slot (for drag/drop)
-	bool slot_set_max_occupancy;      ///< True if slot max occupancy is being changed, instead of renaming
-	TraceRestrictSlotID slot_rename;  ///< Slot being renamed or max occupancy changed, INVALID_TRACE_RESTRICT_SLOT_ID if none
-	TraceRestrictSlotID slot_over;    ///< Slot over which a vehicle is dragged, INVALID_TRACE_RESTRICT_SLOT_ID if none
-	TraceRestrictSlotID slot_confirm; ///< Slot awaiting delete confirmation
-	GUIList<const TraceRestrictSlot*> slots;   ///< List of slots
-	uint tiny_step_height; ///< Step height for the slot list
+	enum class QuerySelectorMode : uint8_t {
+		None,
+		Rename,
+		SetMaxOccupancy,
+	};
+	QuerySelectorMode qsm_mode = QuerySelectorMode::None; ///< Query selector mode
+
+	SlotItem slot_sel{};     ///< Selected slot
+	SlotItem slot_query{};   ///< Slot/group being created, renamed or max occupancy changed
+	SlotItem slot_over{};    ///< Slot over which a vehicle is dragged
+	SlotItem slot_confirm{}; ///< Slot awaiting delete confirmation
+	SlotItem slot_drag{};    ///< Slot being dragged
+	GUIList<GUISlotListItem> slots; ///< List of slots
+	uint tiny_step_height;            ///< Step height for the slot list
 	Scrollbar *slot_sb;
 
 	Dimension column_size[VGC_END]; ///< Size of the columns in the group list.
@@ -3749,18 +4131,92 @@ private:
 	{
 		if (!this->slots.NeedRebuild()) return;
 
-		this->slots.clear();
+		struct ListItem {
+			SlotItem item;
+			TraceRestrictSlotGroupID parent;
+			const std::string *name; // This is not a reference so that ListItem can be swapped/move-assigned
+		};
+		std::vector<ListItem> list;
 
 		for (const TraceRestrictSlot *slot : TraceRestrictSlot::Iterate()) {
 			if (slot->owner == owner && slot->vehicle_type == this->vli.vtype) {
-				this->slots.push_back(slot);
+				list.push_back({ SlotItem{ SlotItemType::Slot, slot->index }, slot->parent_group, &(slot->name) });
+			}
+		}
+		for (const TraceRestrictSlotGroup *sg : TraceRestrictSlotGroup::Iterate()) {
+			if (sg->owner == owner && sg->vehicle_type == this->vli.vtype) {
+				list.push_back({ SlotItem{ SlotItemType::Group, sg->index }, sg->parent, &(sg->name) });
 			}
 		}
 
-		this->slots.ForceResort();
-		this->slots.Sort(&SlotNameSorter);
-		this->slots.shrink_to_fit();
+		/* Sort the slots/groups by their parent group, then their name */
+		std::sort(list.begin(), list.end(), [&](const ListItem &a, const ListItem &b) {
+			if (a.parent != b.parent) return a.parent < b.parent;
+
+			int r = StrNaturalCompare(*(a.name), *(b.name)); // Sort by name (natural sorting).
+			if (r == 0) return a.item < b.item;
+			return r < 0;
+		});
+
+		this->slots.clear();
+
+		bool enable_expand_all = false;
+		bool enable_collapse_all = false;
+
+		auto output_items = y_combinator([&](auto output_items, uint indent, TraceRestrictSlotGroupID parent_filter) -> uint {
+			uint seen = 0;
+			for (const ListItem &item : list) {
+				if (item.parent != parent_filter) continue;
+
+				this->slots.emplace_back(item.item, indent);
+				seen++;
+
+				if (item.item.type == SlotItemType::Group) {
+					TraceRestrictSlotGroup *sg = TraceRestrictSlotGroup::Get(item.item.id);
+					if (sg->folded) {
+						/* Test if this group has children at all. If not, the folded flag should be cleared to avoid lingering unfold buttons in the list. */
+						bool has_children = std::any_of(list.begin(), list.end(), [&](const ListItem &it) { return it.parent == item.item.id; });
+						if (has_children) {
+							enable_expand_all = true;
+						} else {
+							sg->folded = false;
+						}
+					} else {
+						uint children = output_items(indent + 1, item.item.id);
+						if (children > 0) enable_collapse_all = true;
+					}
+				}
+			}
+
+			return seen;
+		});
+		output_items(0, INVALID_TRACE_RESTRICT_SLOT_GROUP);
+
+		this->SetWidgetDisabledState(WID_TRSL_EXPAND_ALL_GROUPS, !enable_expand_all);
+		this->SetWidgetDisabledState(WID_TRSL_COLLAPSE_ALL_GROUPS, !enable_collapse_all);
+
+		if (!this->slots.empty()) {
+			/* Hierarchy is complete, traverse in reverse to find where indentation levels continue. */
+			uint16_t level_mask = 0;
+			for (auto it = std::rbegin(this->slots); std::next(it) != std::rend(this->slots); ++it) {
+				auto next_it = std::next(it);
+				AssignBit(level_mask, it->indent, it->indent <= next_it->indent);
+				next_it->level_mask = level_mask;
+			}
+		}
+
 		this->slots.RebuildDone();
+
+		/* Change selection if slot/group is currently hidden by fold */
+		SlotItem it = this->slot_sel;
+		while (it.type == SlotItemType::Slot || it.type == SlotItemType::Group) {
+			it = it.GetParentItem();
+			if (it.type == SlotItemType::Group && TraceRestrictSlotGroup::Get(it.id)->folded) {
+				this->slot_sel = it;
+				this->vli.index = INVALID_TRACE_RESTRICT_SLOT_ID;
+				this->vehgroups.ForceRebuild();
+			}
+		}
 	}
 
 	/**
@@ -3769,61 +4225,105 @@ private:
 	 */
 	uint ComputeSlotInfoSize()
 	{
+		this->column_size[VGC_FOLD] = maxdim(GetSpriteSize(SPR_CIRCLE_FOLDED), GetSpriteSize(SPR_CIRCLE_UNFOLDED));
+		this->tiny_step_height = this->column_size[VGC_FOLD].height;
+
 		this->column_size[VGC_NAME] = GetStringBoundingBox(STR_GROUP_ALL_TRAINS);
 		this->column_size[VGC_NAME].width = std::max((170u * GetCharacterHeight(FS_NORMAL)) / 10u, this->column_size[VGC_NAME].width);
-		this->tiny_step_height = this->column_size[VGC_NAME].height;
+		this->tiny_step_height = std::max(this->tiny_step_height, this->column_size[VGC_NAME].height);
 
 		SetDParamMaxValue(0, 9999, 3, FS_SMALL);
 		SetDParamMaxValue(1, 9999, 3, FS_SMALL);
 		this->column_size[VGC_NUMBER] = GetStringBoundingBox(STR_TRACE_RESTRICT_SLOT_MAX_OCCUPANCY);
 		this->tiny_step_height = std::max(this->tiny_step_height, this->column_size[VGC_NUMBER].height);
 
-		this->tiny_step_height += WidgetDimensions::scaled.matrix.top + ScaleGUITrad(1);
+		this->column_size[VGC_PUBLIC] = GetScaledSpriteSize(SPR_BLOT);
+		this->tiny_step_height = std::max(this->tiny_step_height, this->column_size[VGC_PUBLIC].height);
 
-		return WidgetDimensions::scaled.framerect.Horizontal() + WidgetDimensions::scaled.vsep_wide +
-			this->column_size[VGC_NAME].width + WidgetDimensions::scaled.vsep_wide +
-			this->column_size[VGC_NUMBER].width + WidgetDimensions::scaled.vsep_normal;
+		this->tiny_step_height += WidgetDimensions::scaled.matrix.Vertical();
+
+		return WidgetDimensions::scaled.framerect.Horizontal() +
+				this->column_size[VGC_FOLD].width + WidgetDimensions::scaled.hsep_normal +
+				this->column_size[VGC_NAME].width + WidgetDimensions::scaled.hsep_wide +
+				this->column_size[VGC_PUBLIC].width + WidgetDimensions::scaled.hsep_wide +
+				this->column_size[VGC_NUMBER].width + WidgetDimensions::scaled.hsep_normal;
 	}
 
 	/**
 	 * Draw a row in the slot list.
-	 * @param y Top of the row.
-	 * @param left Left of the row.
-	 * @param right Right of the row.
-	 * @param g_id Group to list.
+	 * @param draw_area Area to draw in.
+	 * @param item GUI item.
 	 */
-	void DrawSlotInfo(int y, int left, int right, TraceRestrictSlotID slot_id) const
+	void DrawSlotInfo(Rect draw_area, const GUISlotListItem &item, bool has_shown_children = false) const
 	{
-		/* Highlight the group if a vehicle is dragged over it */
-		if (slot_id == this->slot_over) {
-			GfxFillRect(left + WidgetDimensions::scaled.framerect.left, y + WidgetDimensions::scaled.framerect.top, right - WidgetDimensions::scaled.framerect.right,
-					y + this->tiny_step_height - WidgetDimensions::scaled.framerect.bottom - WidgetDimensions::scaled.matrix.top, _colour_gradient[COLOUR_GREY][7]);
+		/* Highlight the slot if a vehicle is dragged over it */
+		if (item.item == this->slot_over) {
+			GfxFillRect(draw_area, GetColourGradient(COLOUR_GREY, SHADE_LIGHTEST));
 		}
 
-		/* draw the selected group in white, else we draw it in black */
-		TextColour colour = slot_id == this->vli.index ? TC_WHITE : TC_BLACK;
-		bool rtl = _current_text_dir == TD_RTL;
+		const bool rtl = _current_text_dir == TD_RTL;
+		Rect info_area = draw_area.Indent(WidgetDimensions::scaled.hsep_normal + this->column_size[VGC_FOLD].width, rtl).Indent(WidgetDimensions::scaled.hsep_normal, !rtl);
 
-		/* draw group name */
-		StringID str;
-		if (slot_id == ALL_TRAINS_TRACE_RESTRICT_SLOT_ID) {
-			str = STR_GROUP_ALL_TRAINS + this->vli.vtype;
-		} else {
-			SetDParam(0, slot_id);
-			str = STR_TRACE_RESTRICT_SLOT_NAME;
+		/* draw the selected slot in white, else we draw it in black */
+		TextColour colour = item.item == this->slot_sel ? TC_WHITE : TC_BLACK;
+
+		Rect r = info_area.Indent(WidgetDimensions::scaled.vsep_wide + this->column_size[VGC_NUMBER].width, !rtl);
+
+		switch (item.item.type) {
+			case SlotItemType::Slot: {
+				const TraceRestrictSlot *slot = TraceRestrictSlot::GetIfValid(item.item.id);
+				if (slot == nullptr) break;
+
+				Rect sub = info_area.WithWidth(this->column_size[VGC_NUMBER].width, !rtl);
+				SetDParam(0, slot->occupants.size());
+				SetDParam(1, slot->max_occupancy);
+				DrawString(sub.left, sub.right - 1, sub.top + (this->tiny_step_height - this->column_size[VGC_NUMBER].height) / 2, STR_TRACE_RESTRICT_SLOT_MAX_OCCUPANCY, colour, SA_RIGHT | SA_FORCE);
+
+				if (HasFlag(slot->flags, TraceRestrictSlot::Flags::Public)) {
+					DrawSpriteIgnorePadding(SPR_BLOT, PALETTE_TO_BLUE, r.WithWidth(this->column_size[VGC_PUBLIC].width, !rtl), SA_CENTER);
+				}
+				break;
+			}
+
+			case SlotItemType::Group: {
+				const TraceRestrictSlotGroup *sg = TraceRestrictSlotGroup::GetIfValid(item.item.id);
+				if (sg == nullptr) break;
+
+				if (has_shown_children || sg->folded) {
+					/* draw fold / unfold button */
+					Rect sub = draw_area.Indent(WidgetDimensions::scaled.hsep_indent * item.indent, rtl).WithWidth(this->column_size[VGC_FOLD].width, rtl);
+					DrawSprite(sg->folded ? SPR_CIRCLE_FOLDED : SPR_CIRCLE_UNFOLDED, PAL_NONE, sub.left, sub.top + (this->tiny_step_height - this->column_size[VGC_FOLD].height) / 2);
+				}
+				break;
+			}
+
+			default:
+				break;
 		}
-		int x = rtl ? right - WidgetDimensions::scaled.framerect.right - WidgetDimensions::scaled.vsep_wide - this->column_size[VGC_NAME].width + 1 : left + WidgetDimensions::scaled.framerect.left + WidgetDimensions::scaled.vsep_wide;
-		DrawString(x, x + this->column_size[VGC_NAME].width - 1, y + (this->tiny_step_height - this->column_size[VGC_NAME].height) / 2, str, colour);
 
-		if (slot_id == ALL_TRAINS_TRACE_RESTRICT_SLOT_ID) return;
+		r = r.Indent(WidgetDimensions::scaled.vsep_wide + this->column_size[VGC_PUBLIC].width, !rtl).Indent(WidgetDimensions::scaled.hsep_indent * item.indent, rtl);
 
-		const TraceRestrictSlot *slot = TraceRestrictSlot::Get(slot_id);
+		/* draw slot name */
+		StringID str = STR_NULL;
+		switch (item.item.type) {
+			case SlotItemType::Slot:
+				SetDParam(0, item.item.id);
+				str = STR_TRACE_RESTRICT_SLOT_NAME;
+				break;
 
-		/* draw the number of vehicles of the group */
-		x = rtl ? x - WidgetDimensions::scaled.vsep_normal - this->column_size[VGC_NUMBER].width : x + WidgetDimensions::scaled.vsep_normal + this->column_size[VGC_NAME].width;
-		SetDParam(0, slot->occupants.size());
-		SetDParam(1, slot->max_occupancy);
-		DrawString(x, x + this->column_size[VGC_NUMBER].width - 1, y + (this->tiny_step_height - this->column_size[VGC_NUMBER].height) / 2, STR_TRACE_RESTRICT_SLOT_MAX_OCCUPANCY, colour, SA_RIGHT | SA_FORCE);
+			case SlotItemType::Group:
+				SetDParam(0, item.item.id);
+				str = STR_TRACE_RESTRICT_SLOT_GROUP_NAME;
+				break;
+
+			case SlotItemType::Special:
+				str = STR_GROUP_ALL_TRAINS + this->vli.vtype;
+				break;
+
+			default:
+				break;
+		}
+		DrawString(r.left, r.right - 1, r.top + (this->tiny_step_height - this->column_size[VGC_NAME].height) / 2, str, colour);
 	}
 
 	/**
@@ -3831,17 +4331,28 @@ private:
 	 */
 	void DirtyHighlightedSlotWidget()
 	{
-		if (this->slot_over == INVALID_TRACE_RESTRICT_SLOT_ID) return;
+		if (this->slot_over.IsNone()) return;
 
-		if (this->slot_over == ALL_TRAINS_TRACE_RESTRICT_SLOT_ID) {
+		if (this->slot_over == SlotItem{ SlotItemType::Special, ALL_TRAINS_TRACE_RESTRICT_SLOT_ID }) {
 			this->SetWidgetDirty(WID_TRSL_ALL_VEHICLES);
 		} else {
 			this->SetWidgetDirty(WID_TRSL_LIST_SLOTS);
 		}
 	}
 
+	void SetAllSlotGroupsFoldState(bool folded)
+	{
+		for (TraceRestrictSlotGroup *sg : TraceRestrictSlotGroup::Iterate()) {
+			if (sg->owner == this->owner && sg->vehicle_type == this->vli.vtype) {
+				sg->folded = folded;
+			}
+		}
+		this->slots.ForceRebuild();
+		this->SetDirty();
+	}
+
 public:
-	TraceRestrictSlotWindow(WindowDesc *desc, WindowNumber window_number) : BaseVehicleListWindow(desc, window_number)
+	TraceRestrictSlotWindow(WindowDesc &desc, WindowNumber window_number) : BaseVehicleListWindow(desc, window_number)
 	{
 		this->CreateNestedTree();
 
@@ -3851,10 +4362,7 @@ public:
 		this->grouping = GB_NONE;
 
 		this->vli.index = ALL_TRAINS_TRACE_RESTRICT_SLOT_ID;
-		this->slot_sel = INVALID_TRACE_RESTRICT_SLOT_ID;
-		this->slot_rename = INVALID_TRACE_RESTRICT_SLOT_ID;
-		this->slot_set_max_occupancy = false;
-		this->slot_over = INVALID_TRACE_RESTRICT_SLOT_ID;
+		this->slot_sel = { SlotItemType::Special, ALL_TRAINS_TRACE_RESTRICT_SLOT_ID };
 
 		this->vehgroups.SetListing(*this->sorting);
 		this->vehgroups.ForceRebuild();
@@ -3867,10 +4375,10 @@ public:
 		this->slots.NeedResort();
 		this->BuildSlotList(vli.company);
 
-		this->GetWidget<NWidgetCore>(WID_TRSL_CREATE_SLOT)->widget_data += this->vli.vtype;
-		this->GetWidget<NWidgetCore>(WID_TRSL_DELETE_SLOT)->widget_data += this->vli.vtype;
-		this->GetWidget<NWidgetCore>(WID_TRSL_RENAME_SLOT)->widget_data += this->vli.vtype;
-		this->GetWidget<NWidgetCore>(WID_TRSL_LIST_VEHICLE)->tool_tip = STR_VEHICLE_LIST_TRAIN_LIST_TOOLTIP + this->vli.vtype;
+		this->GetWidget<NWidgetCore>(WID_TRSL_CREATE_SLOT)->SetSprite(SPR_GROUP_CREATE_TRAIN + this->vli.vtype);
+		this->GetWidget<NWidgetCore>(WID_TRSL_RENAME_SLOT)->SetSprite(SPR_GROUP_RENAME_TRAIN + this->vli.vtype);
+		this->GetWidget<NWidgetCore>(WID_TRSL_DELETE_SLOT)->SetSprite(SPR_GROUP_DELETE_TRAIN + this->vli.vtype);
+		this->GetWidget<NWidgetCore>(WID_TRSL_LIST_VEHICLE)->SetToolTip(STR_VEHICLE_LIST_TRAIN_LIST_TOOLTIP + this->vli.vtype);
 
 		this->FinishInitNested(window_number);
 		this->owner = vli.company;
@@ -3882,44 +4390,45 @@ public:
 		this->Window::Close();
 	}
 
-	virtual void UpdateWidgetSize(WidgetID widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	virtual void UpdateWidgetSize(WidgetID widget, Dimension &size, const Dimension &padding, Dimension &fill, Dimension &resize) override
 	{
 		switch (widget) {
 			case WID_TRSL_LIST_SLOTS: {
-				size->width = this->ComputeSlotInfoSize();
-				resize->height = this->tiny_step_height;
+				size.width = this->ComputeSlotInfoSize();
+				resize.height = this->tiny_step_height;
 
 				/* Minimum height is the height of the list widget minus all vehicles... */
-				size->height = 4 * GetVehicleListHeight(this->vli.vtype, this->tiny_step_height) - this->tiny_step_height;
+				size.height = 4 * GetVehicleListHeight(this->vli.vtype, this->tiny_step_height) - this->tiny_step_height;
 
 				/* ... minus the buttons at the bottom ... */
-				uint max_icon_height = GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_CREATE_SLOT)->widget_data).height;
-				max_icon_height = std::max(max_icon_height, GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_DELETE_SLOT)->widget_data).height);
-				max_icon_height = std::max(max_icon_height, GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_RENAME_SLOT)->widget_data).height);
-				max_icon_height = std::max(max_icon_height, GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_SET_SLOT_MAX_OCCUPANCY)->widget_data).height);
+				uint max_icon_height = GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_CREATE_SLOT)->GetSprite()).height;
+				max_icon_height = std::max(max_icon_height, GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_DELETE_SLOT)->GetSprite()).height);
+				max_icon_height = std::max(max_icon_height, GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_RENAME_SLOT)->GetSprite()).height);
+				max_icon_height = std::max(max_icon_height, GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_SLOT_PUBLIC)->GetSprite()).height);
+				max_icon_height = std::max(max_icon_height, GetSpriteSize(this->GetWidget<NWidgetCore>(WID_TRSL_SET_SLOT_MAX_OCCUPANCY)->GetSprite()).height);
 
 				/* Get a multiple of tiny_step_height of that amount */
-				size->height = Ceil(size->height - max_icon_height, tiny_step_height);
+				size.height = Ceil(size.height - max_icon_height, tiny_step_height);
 				break;
 			}
 
 			case WID_TRSL_ALL_VEHICLES:
-				size->width = this->ComputeSlotInfoSize();
-				size->height = this->tiny_step_height;
+				size.width = this->ComputeSlotInfoSize();
+				size.height = this->tiny_step_height;
 				break;
 
 			case WID_TRSL_SORT_BY_ORDER: {
-				Dimension d = GetStringBoundingBox(this->GetWidget<NWidgetCore>(widget)->widget_data);
+				Dimension d = GetStringBoundingBox(this->GetWidget<NWidgetCore>(widget)->GetString());
 				d.width += padding.width + Window::SortButtonWidth() * 2; // Doubled since the string is centred and it also looks better.
 				d.height += padding.height;
-				*size = maxdim(*size, d);
+				size = maxdim(size, d);
 				break;
 			}
 
 			case WID_TRSL_LIST_VEHICLE:
 				this->ComputeSlotInfoSize();
-				resize->height = GetVehicleListHeight(this->vli.vtype, this->tiny_step_height);
-				size->height = 4 * resize->height;
+				resize.height = GetVehicleListHeight(this->vli.vtype, this->tiny_step_height);
+				size.height = 4 * resize.height;
 				break;
 		}
 	}
@@ -3941,13 +4450,12 @@ public:
 		}
 
 		/* Process ID-invalidation in command-scope as well */
-		if (this->slot_rename != INVALID_TRACE_RESTRICT_SLOT_ID && this->slot_rename != NEW_TRACE_RESTRICT_SLOT_ID &&
-				!TraceRestrictSlot::IsValidID(this->slot_rename)) {
+		if (this->slot_query.IsInvalid()) {
 			CloseWindowByClass(WC_QUERY_STRING);
-			this->slot_rename = INVALID_TRACE_RESTRICT_SLOT_ID;
+			this->slot_query = {};
 		}
-
-		if (this->vli.index != ALL_TRAINS_TRACE_RESTRICT_SLOT_ID && !TraceRestrictSlot::IsValidID(this->vli.index)) {
+		if (this->slot_sel.IsInvalid()) {
+			this->slot_sel = { SlotItemType::Special, ALL_TRAINS_TRACE_RESTRICT_SLOT_ID };
 			this->vli.index = ALL_TRAINS_TRACE_RESTRICT_SLOT_ID;
 		}
 
@@ -3969,21 +4477,25 @@ public:
 
 	virtual void OnPaint() override
 	{
+		this->BuildSlotList(this->owner);
+
 		/* If we select the all vehicles, this->list will contain all vehicles of the owner
 		 * else this->list will contain all vehicles which belong to the selected group */
 		this->BuildVehicleList();
 		this->SortVehicleList();
 
-		this->BuildSlotList(this->owner);
-
-		this->slot_sb->SetCount((uint)this->slots.size());
-		this->vscroll->SetCount((uint)this->vehgroups.size());
+		this->slot_sb->SetCount(static_cast<uint>(this->slots.size()));
+		this->vscroll->SetCount(static_cast<uint>(this->vehgroups.size()));
 
 		/* Disable the slot specific function when we select all vehicles */
-		this->SetWidgetsDisabledState(this->vli.index == ALL_TRAINS_TRACE_RESTRICT_SLOT_ID || _local_company != this->vli.company,
-				WID_TRSL_DELETE_SLOT,
-				WID_TRSL_RENAME_SLOT,
+		this->SetWidgetsDisabledState(this->slot_sel.type != SlotItemType::Slot || _local_company != this->vli.company,
+				WID_TRSL_SLOT_PUBLIC,
 				WID_TRSL_SET_SLOT_MAX_OCCUPANCY);
+		this->SetWidgetsDisabledState((this->slot_sel.type != SlotItemType::Slot && this->slot_sel.type != SlotItemType::Group) || _local_company != this->vli.company,
+				WID_TRSL_DELETE_SLOT,
+				WID_TRSL_RENAME_SLOT);
+
+		this->SetWidgetLoweredState(WID_TRSL_SLOT_PUBLIC, this->slot_sel.type == SlotItemType::Slot && TraceRestrictSlot::IsValidID(this->slot_sel.id) && HasFlag(TraceRestrictSlot::Get(this->slot_sel.id)->flags, TraceRestrictSlot::Flags::Public));
 
 		/* Disable remaining buttons for non-local companies
 		 * Needed while changing _local_company, eg. by cheats
@@ -3992,12 +4504,12 @@ public:
 		 *  so it doesn't have to be disabled
 		 */
 		this->SetWidgetsDisabledState(_local_company != this->vli.company,
-				WID_TRSL_CREATE_SLOT);
+				WID_TRSL_CREATE_SLOT, WID_TRSL_NEW_GROUP);
 
 		/* Set text of sort by dropdown */
-		this->GetWidget<NWidgetCore>(WID_TRSL_SORT_BY_DROPDOWN)->widget_data = this->vehicle_group_none_sorter_names[this->vehgroups.SortType()];
+		this->GetWidget<NWidgetCore>(WID_TRSL_SORT_BY_DROPDOWN)->SetString(this->GetVehicleSorterNames()[this->vehgroups.SortType()]);
 
-		this->GetWidget<NWidgetCore>(WID_TRSL_FILTER_BY_CARGO)->widget_data = this->GetCargoFilterLabel(this->cargo_filter_criteria);
+		this->GetWidget<NWidgetCore>(WID_TRSL_FILTER_BY_CARGO)->SetString(this->GetCargoFilterLabel(this->cargo_filter_criteria));
 
 		this->DrawWidgets();
 	}
@@ -4006,20 +4518,23 @@ public:
 	{
 		switch (widget) {
 			case WID_TRSL_ALL_VEHICLES:
-				DrawSlotInfo(r.top + WidgetDimensions::scaled.framerect.top, r.left, r.right, ALL_TRAINS_TRACE_RESTRICT_SLOT_ID);
+				DrawSlotInfo(r.WithHeight(this->tiny_step_height).Shrink(WidgetDimensions::scaled.framerect), { SlotItem{ SlotItemType::Special, ALL_TRAINS_TRACE_RESTRICT_SLOT_ID }, 0 });
 				break;
 
 			case WID_TRSL_LIST_SLOTS: {
-				int y1 = r.top + WidgetDimensions::scaled.framerect.top;
-				int max = std::min<int>(this->slot_sb->GetPosition() + this->slot_sb->GetCapacity(), (int)this->slots.size());
+				Rect ir = r.WithHeight(this->tiny_step_height).Shrink(WidgetDimensions::scaled.framerect);
+				const int max = std::min<int>(this->slot_sb->GetPosition() + this->slot_sb->GetCapacity(), static_cast<int>(this->slots.size()));
 				for (int i = this->slot_sb->GetPosition(); i < max; ++i) {
-					const TraceRestrictSlot *slot = this->slots[i];
+					const GUISlotListItem &item = this->slots[i];
 
-					assert(slot->owner == this->owner);
+					bool has_shown_children = false;
+					if (item.item.type == SlotItemType::Group) {
+						has_shown_children = i + 1 < max && this->slots[i + 1].indent > item.indent;
+					}
+					DrawSlotInfo(ir, item, has_shown_children);
 
-					DrawSlotInfo(y1, r.left, r.right, slot->index);
-
-					y1 += this->tiny_step_height;
+					ir.top += this->tiny_step_height;
+					ir.bottom += this->tiny_step_height;
 				}
 				break;
 			}
@@ -4038,8 +4553,11 @@ public:
 	{
 		if (confirmed) {
 			TraceRestrictSlotWindow *w = (TraceRestrictSlotWindow*)win;
-			w->vli.index = ALL_TRAINS_TRACE_RESTRICT_SLOT_ID;
-			DoCommandP(0, w->slot_confirm, 0, CMD_DELETE_TRACERESTRICT_SLOT | CMD_MSG(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_DELETE));
+			if (w->slot_confirm.type == SlotItemType::Slot) {
+				Command<CMD_DELETE_TRACERESTRICT_SLOT>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_DELETE, w->slot_confirm.id);
+			} else if (w->slot_confirm.type == SlotItemType::Group) {
+				Command<CMD_DELETE_TRACERESTRICT_SLOT_GROUP>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_DELETE, w->slot_confirm.id);
+			}
 		}
 	}
 
@@ -4052,7 +4570,7 @@ public:
 				break;
 
 			case WID_TRSL_SORT_BY_DROPDOWN: // Select sorting criteria dropdown menu
-				ShowDropDownMenu(this, this->vehicle_group_none_sorter_names, this->vehgroups.SortType(), WID_TRSL_SORT_BY_DROPDOWN, 0,
+				ShowDropDownMenu(this, this->GetVehicleSorterNames(), this->vehgroups.SortType(), WID_TRSL_SORT_BY_DROPDOWN, 0,
 						this->GetSorterDisableMask(this->vli.vtype));
 				return;
 
@@ -4063,7 +4581,7 @@ public:
 			case WID_TRSL_ALL_VEHICLES: // All vehicles button
 				if (this->vli.index != ALL_TRAINS_TRACE_RESTRICT_SLOT_ID) {
 					this->vli.index = ALL_TRAINS_TRACE_RESTRICT_SLOT_ID;
-					this->slot_sel = INVALID_TRACE_RESTRICT_SLOT_ID;
+					this->slot_sel = { SlotItemType::Special, ALL_TRAINS_TRACE_RESTRICT_SLOT_ID };
 					this->vehgroups.ForceRebuild();
 					this->SetDirty();
 				}
@@ -4073,7 +4591,32 @@ public:
 				uint id_s = this->slot_sb->GetScrolledRowFromWidget(pt.y, this, WID_TRSL_LIST_SLOTS, 0);
 				if (id_s >= this->slots.size()) return;
 
-				this->slot_sel = this->vli.index = this->slots[id_s]->index;
+				const GUISlotListItem &clicked = this->slots[id_s];
+				if (clicked.item.type == SlotItemType::Group) {
+					TraceRestrictSlotGroup *sg = TraceRestrictSlotGroup::Get(clicked.item.id);
+					if (sg->folded || (id_s + 1 < this->slots.size() && this->slots[id_s + 1].indent > clicked.indent)) {
+						/* The slot group has children, check if the user clicked the fold / unfold button. */
+						NWidgetCore *group_display = this->GetWidget<NWidgetCore>(widget);
+						int x = _current_text_dir == TD_RTL ?
+								group_display->pos_x + group_display->current_x - WidgetDimensions::scaled.framerect.right - clicked.indent * WidgetDimensions::scaled.hsep_indent - this->column_size[VGC_FOLD].width :
+								group_display->pos_x + WidgetDimensions::scaled.framerect.left + clicked.indent * WidgetDimensions::scaled.hsep_indent;
+						if (click_count > 1 || (pt.x >= x && pt.x < (int)(x + this->column_size[VGC_FOLD].width))) {
+							sg->folded = !sg->folded;
+							this->slots.ForceRebuild();
+							this->SetDirty();
+							break;
+						}
+					}
+
+					this->slot_sel = clicked.item;
+					this->vli.index = INVALID_TRACE_RESTRICT_SLOT_ID;
+				} else {
+					this->slot_sel = clicked.item;
+					this->vli.index = clicked.item.id;
+				}
+
+				this->slot_drag = this->slot_sel;
+				SetObjectToPlaceWnd(SPR_CURSOR_MOUSE, PAL_NONE, HT_DRAG, this);
 
 				this->vehgroups.ForceRebuild();
 				this->SetDirty();
@@ -4103,17 +4646,37 @@ public:
 			}
 
 			case WID_TRSL_DELETE_SLOT: { // Delete the selected slot
-				this->slot_confirm = this->vli.index;
+				this->slot_confirm = this->slot_sel;
 				ShowQuery(STR_TRACE_RESTRICT_SLOT_QUERY_DELETE_CAPTION, STR_TRACE_RESTRICT_SLOT_DELETE_QUERY_TEXT, this, DeleteSlotCallback);
 				break;
 			}
 
 			case WID_TRSL_RENAME_SLOT: // Rename the selected slot
-				this->ShowRenameSlotWindow(this->vli.index);
+				this->ShowRenameSlotWindow();
 				break;
 
+			case WID_TRSL_SLOT_PUBLIC: { // Toggle public state of the selected slot
+				const TraceRestrictSlot *slot = TraceRestrictSlot::GetIfValid(this->vli.index);
+				if (slot != nullptr) {
+					Command<CMD_ALTER_TRACERESTRICT_SLOT>::Post(STR_ERROR_CAN_T_DO_THIS, this->vli.index, TRASO_SET_PUBLIC, HasFlag(slot->flags, TraceRestrictSlot::Flags::Public) ? 0 : 1, {});
+				}
+				break;
+			}
+
 			case WID_TRSL_SET_SLOT_MAX_OCCUPANCY: // Set max occupancy of the selected slot
-				this->ShowSetSlotMaxOccupancyWindow(this->vli.index);
+				this->ShowSetSlotMaxOccupancyWindow();
+				break;
+
+			case WID_TRSL_NEW_GROUP:
+				this->ShowCreateSlotGroupWindow();
+				break;
+
+			case WID_TRSL_COLLAPSE_ALL_GROUPS:
+				this->SetAllSlotGroupsFoldState(true);
+				break;
+
+			case WID_TRSL_EXPAND_ALL_GROUPS:
+				this->SetAllSlotGroupsFoldState(false);
 				break;
 		}
 	}
@@ -4122,11 +4685,11 @@ public:
 	{
 		switch (widget) {
 			case WID_TRSL_ALL_VEHICLES: // All vehicles
-				if (this->slot_sel != INVALID_TRACE_RESTRICT_SLOT_ID) {
-					DoCommandP(0, this->slot_sel, this->vehicle_sel, CMD_REMOVE_VEHICLE_TRACERESTRICT_SLOT | CMD_MSG(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_REMOVE_VEHICLE));
+				if (this->slot_sel.type == SlotItemType::Slot) {
+					Command<CMD_REMOVE_VEHICLE_TRACERESTRICT_SLOT>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_REMOVE_VEHICLE, this->slot_sel.id, this->vehicle_sel);
 
 					this->vehicle_sel = INVALID_VEHICLE;
-					this->slot_over = INVALID_GROUP;
+					this->slot_over = {};
 
 					this->SetDirty();
 				}
@@ -4135,24 +4698,27 @@ public:
 			case WID_TRSL_LIST_SLOTS: { // Matrix slot
 				const VehicleID vindex = this->vehicle_sel;
 				this->vehicle_sel = INVALID_VEHICLE;
-				this->slot_over = INVALID_GROUP;
+				this->slot_over = {};
 				this->SetDirty();
 
 				uint id_s = this->slot_sb->GetScrolledRowFromWidget(pt.y, this, WID_TRSL_LIST_SLOTS, 0);
 				if (id_s >= this->slots.size()) return; // click out of list bound
 
-				if (_ctrl_pressed) {
-					// remove from old group
-					DoCommandP(0, this->slot_sel, vindex, CMD_REMOVE_VEHICLE_TRACERESTRICT_SLOT | CMD_MSG(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_REMOVE_VEHICLE));
+				const GUISlotListItem &item = this->slots[id_s];
+				if (item.item.type != SlotItemType::Slot) return; // Not a slot
+
+				if (_ctrl_pressed && this->slot_sel.type == SlotItemType::Slot) {
+					/* Remove from old group */
+					Command<CMD_REMOVE_VEHICLE_TRACERESTRICT_SLOT>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_REMOVE_VEHICLE, this->slot_sel.id, vindex);
 				}
-				DoCommandP(0, this->slots[id_s]->index, vindex, CMD_ADD_VEHICLE_TRACERESTRICT_SLOT | CMD_MSG(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_ADD_VEHICLE));
+				Command<CMD_ADD_VEHICLE_TRACERESTRICT_SLOT>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_ADD_VEHICLE, item.item.id, vindex);
 				break;
 			}
 
 			case WID_TRSL_LIST_VEHICLE: { // Matrix vehicle
 				const VehicleID vindex = this->vehicle_sel;
 				this->vehicle_sel = INVALID_VEHICLE;
-				this->slot_over = INVALID_GROUP;
+				this->slot_over = {};
 				this->SetDirty();
 
 				uint id_v = this->vscroll->GetScrolledRowFromWidget(pt.y, this, WID_TRSL_LIST_VEHICLE);
@@ -4167,25 +4733,97 @@ public:
 		}
 	}
 
+	void OnDragDrop_Slot(Point pt, WidgetID widget)
+	{
+		if (this->slot_drag.IsInvalid()) {
+			this->vehicle_sel = INVALID_VEHICLE;
+			this->slot_drag = {};
+			this->SetDirty();
+			return;
+		}
+
+		auto set_parent = [&](TraceRestrictSlotGroupID parent) {
+			if (this->slot_drag.type == SlotItemType::Slot) {
+				Command<CMD_ALTER_TRACERESTRICT_SLOT>::Post(STR_ERROR_GROUP_CAN_T_SET_PARENT, this->slot_drag.id, TRASO_SET_PARENT_GROUP, parent, {});
+			} else if (this->slot_drag.type == SlotItemType::Group) {
+				Command<CMD_ALTER_TRACERESTRICT_SLOT_GROUP>::Post(STR_ERROR_GROUP_CAN_T_SET_PARENT, this->slot_drag.id, TRASGO_SET_PARENT_GROUP, parent, {});
+			}
+		};
+
+		TraceRestrictSlotGroupID current_parent = this->slot_drag.GetInfo().parent;
+		switch (widget) {
+			case WID_TRSL_ALL_VEHICLES: // All vehicles
+				if (current_parent != INVALID_TRACE_RESTRICT_SLOT_GROUP) {
+					set_parent(INVALID_TRACE_RESTRICT_SLOT_GROUP);
+				}
+
+				this->slot_drag = {};
+				this->slot_over = {};
+				this->SetDirty();
+				break;
+
+			case WID_TRSL_LIST_SLOTS: { // Matrix slot
+				uint id_s = this->slot_sb->GetScrolledRowFromWidget(pt.y, this, WID_TRSL_LIST_SLOTS, 0);
+				if (id_s >= this->slots.size()) return; // click out of list bound
+
+				const GUISlotListItem &item = this->slots[id_s];
+				if (item.item.type != SlotItemType::Group) return; // Not a slot group
+
+				if (current_parent != item.item.id && item.item != this->slot_drag) {
+					set_parent(item.item.id);
+				}
+
+				this->slot_drag = {};
+				this->slot_over = {};
+				this->SetDirty();
+				break;
+			}
+		}
+	}
+
 	virtual void OnDragDrop(Point pt, WidgetID widget) override
 	{
 		if (this->vehicle_sel != INVALID_VEHICLE) OnDragDrop_Vehicle(pt, widget);
+		if (!this->slot_drag.IsNone()) OnDragDrop_Slot(pt, widget);
 
 		_cursor.vehchain = false;
 	}
 
-	virtual void OnQueryTextFinished(char *str) override
+	virtual void OnQueryTextFinished(std::optional<std::string> str) override
 	{
-		if (str != nullptr) {
-			if (this->slot_set_max_occupancy) {
-				if (!StrEmpty(str)) DoCommandP(0, this->slot_rename | (1 << 16), atoi(str), CMD_ALTER_TRACERESTRICT_SLOT | CMD_MSG(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_SET_MAX_OCCUPANCY));
-			} else if (this->slot_rename == NEW_TRACE_RESTRICT_SLOT_ID) {
-				DoCommandP(0, this->vli.vtype, 0, CMD_CREATE_TRACERESTRICT_SLOT | CMD_MSG(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_CREATE), nullptr, str);
-			} else {
-				DoCommandP(0, this->slot_rename, 0, CMD_ALTER_TRACERESTRICT_SLOT | CMD_MSG(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_RENAME), nullptr, str);
+		if (str.has_value()) {
+			switch (this->qsm_mode) {
+				case QuerySelectorMode::None:
+					break;
+
+				case QuerySelectorMode::Rename:
+					if (this->slot_query.type == SlotItemType::Slot) {
+						if (this->slot_query.id == NEW_TRACE_RESTRICT_SLOT_ID) {
+							TraceRestrictCreateSlotCmdData data;
+							data.vehtype = this->vli.vtype;
+							data.parent = this->slot_sel.GetClosestGroupID();
+							data.name = std::move(*str);
+							DoCommandP<CMD_CREATE_TRACERESTRICT_SLOT>(data, STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_CREATE, CommandCallback::CreateTraceRestrictSlot);
+						} else {
+							Command<CMD_ALTER_TRACERESTRICT_SLOT>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_RENAME, this->slot_query.id, TRASO_RENAME, {}, std::move(*str));
+						}
+					} else if (this->slot_query.type == SlotItemType::Group) {
+						if (this->slot_query.id == NEW_TRACE_RESTRICT_SLOT_GROUP) {
+							Command<CMD_CREATE_TRACERESTRICT_SLOT_GROUP>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_CREATE, this->vli.vtype, this->slot_sel.GetClosestGroupID(), std::move(*str));
+						} else {
+							Command<CMD_ALTER_TRACERESTRICT_SLOT_GROUP>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_RENAME, this->slot_query.id, TRASGO_RENAME, {}, std::move(*str));
+						}
+					}
+					break;
+
+				case QuerySelectorMode::SetMaxOccupancy:
+					if (this->slot_query.type == SlotItemType::Slot && !str->empty()) {
+						Command<CMD_ALTER_TRACERESTRICT_SLOT>::Post(STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_SET_MAX_OCCUPANCY, this->slot_query.id, TRASO_CHANGE_MAX_OCCUPANCY, atoi(str->c_str()), {});
+					}
+					break;
 			}
 		}
-		this->slot_rename = INVALID_TRACE_RESTRICT_SLOT_ID;
+		this->slot_query = {};
 	}
 
 	virtual void OnResize() override
@@ -4221,33 +4859,48 @@ public:
 
 	virtual void OnPlaceObjectAbort() override
 	{
-		/* abort drag & drop */
+		/* Abort drag & drop */
 		this->vehicle_sel = INVALID_VEHICLE;
+		this->slot_drag = {};
 		this->DirtyHighlightedSlotWidget();
-		this->slot_over = INVALID_GROUP;
+		this->slot_over = {};
 		this->SetWidgetDirty(WID_TRSL_LIST_VEHICLE);
 	}
 
 	virtual void OnMouseDrag(Point pt, WidgetID widget) override
 	{
-		if (this->vehicle_sel == INVALID_VEHICLE) return;
+		if (this->vehicle_sel == INVALID_VEHICLE && this->slot_drag.IsNone()) return;
 
 		/* A vehicle is dragged over... */
-		TraceRestrictSlotID new_slot_over = INVALID_TRACE_RESTRICT_SLOT_ID;
+		SlotItem new_slot_over = {};
 		switch (widget) {
 			case WID_TRSL_ALL_VEHICLES: // ... all trains.
-				new_slot_over = ALL_TRAINS_TRACE_RESTRICT_SLOT_ID;
+				new_slot_over = { SlotItemType::Special, ALL_TRAINS_TRACE_RESTRICT_SLOT_ID };
 				break;
 
 			case WID_TRSL_LIST_SLOTS: { // ... the list of slots.
 				uint id_s = this->slot_sb->GetScrolledRowFromWidget(pt.y, this, WID_TRSL_LIST_SLOTS, 0);
-				if (id_s < this->slots.size()) new_slot_over = this->slots[id_s]->index;
+				if (id_s < this->slots.size()) {
+					new_slot_over = this->slots[id_s].item;
+				}
 				break;
 			}
 		}
 
-		/* Do not highlight when dragging over the current group */
-		if (this->slot_sel == new_slot_over) new_slot_over = INVALID_TRACE_RESTRICT_SLOT_ID;
+		/* Do not highlight when dragging over the current slot/group */
+		if (this->slot_sel == new_slot_over) new_slot_over = {};
+
+		if (this->vehicle_sel != INVALID_VEHICLE) {
+			/* Do not highlight dragging vehicles over groups */
+			if (new_slot_over.type == SlotItemType::Group) new_slot_over = {};
+		}
+		if (!this->slot_drag.IsNone()) {
+			/* Do not highlight dragging slots/groups over slots */
+			if (new_slot_over.type == SlotItemType::Slot) new_slot_over = {};
+
+			/* Do not highlight dragging slot/group over its current parent */
+			if (new_slot_over.type == SlotItemType::Group && this->slot_drag.GetInfo().parent == new_slot_over.id) new_slot_over = {};
+		}
 
 		/* Mark widgets as dirty if the group changed. */
 		if (new_slot_over != this->slot_over) {
@@ -4257,28 +4910,40 @@ public:
 		}
 	}
 
-	void ShowRenameSlotWindow(TraceRestrictSlotID slot_id)
+	void ShowRenameSlotWindow()
 	{
-		assert(TraceRestrictSlot::IsValidID(slot_id));
-		this->slot_set_max_occupancy = false;
-		this->slot_rename = slot_id;
-		SetDParam(0, slot_id);
-		ShowQueryString(STR_TRACE_RESTRICT_SLOT_NAME, STR_TRACE_RESTRICT_SLOT_RENAME_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
+		if (this->slot_sel.type != SlotItemType::Slot && this->slot_sel.type != SlotItemType::Group) return;
+		this->qsm_mode = QuerySelectorMode::Rename;
+		this->slot_query = this->slot_sel;
+		SetDParam(0, this->slot_sel.id);
+		if (this->slot_sel.type == SlotItemType::Slot) {
+			ShowQueryString(STR_TRACE_RESTRICT_SLOT_NAME, STR_TRACE_RESTRICT_SLOT_RENAME_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
+		} else if (this->slot_sel.type == SlotItemType::Group) {
+			ShowQueryString(STR_TRACE_RESTRICT_SLOT_GROUP_NAME, STR_TRACE_RESTRICT_SLOT_GROUP_RENAME_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
+		}
 	}
 
-	void ShowSetSlotMaxOccupancyWindow(TraceRestrictSlotID slot_id)
+	void ShowSetSlotMaxOccupancyWindow()
 	{
-		this->slot_set_max_occupancy = true;
-		this->slot_rename = slot_id;
-		SetDParam(0, TraceRestrictSlot::Get(slot_id)->max_occupancy);
+		if (this->slot_sel.type != SlotItemType::Slot) return;
+		this->qsm_mode = QuerySelectorMode::SetMaxOccupancy;
+		this->slot_query = this->slot_sel;
+		SetDParam(0, TraceRestrictSlot::Get(this->slot_sel.id)->max_occupancy);
 		ShowQueryString(STR_JUST_INT, STR_TRACE_RESTRICT_SLOT_SET_MAX_OCCUPANCY_CAPTION, 5, this, CS_NUMERAL, QSF_ENABLE_DEFAULT);
 	}
 
 	void ShowCreateSlotWindow()
 	{
-		this->slot_set_max_occupancy = false;
-		this->slot_rename = NEW_TRACE_RESTRICT_SLOT_ID;
+		this->qsm_mode = QuerySelectorMode::Rename;
+		this->slot_query = { SlotItemType::Slot, NEW_TRACE_RESTRICT_SLOT_ID };
 		ShowQueryString(STR_EMPTY, STR_TRACE_RESTRICT_SLOT_CREATE_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
+	}
+
+	void ShowCreateSlotGroupWindow()
+	{
+		this->qsm_mode = QuerySelectorMode::Rename;
+		this->slot_query = { SlotItemType::Group, NEW_TRACE_RESTRICT_SLOT_GROUP };
+		ShowQueryString(STR_EMPTY, STR_TRACE_RESTRICT_SLOT_GROUP_CREATE_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
 	}
 
 	/**
@@ -4292,11 +4957,18 @@ public:
 	}
 };
 
+void CcCreateTraceRestrictSlot(const CommandCost &result)
+{
+	if (result.Succeeded() && result.HasResultData()) {
+		TraceRestrictRecordRecentSlot(static_cast<TraceRestrictSlotID>(result.GetResultData()));
+	}
+}
+
 static WindowDesc _slot_window_desc(__FILE__, __LINE__,
 	WDP_AUTO, "list_tr_slots", 525, 246,
 	WC_TRACE_RESTRICT_SLOTS, WC_NONE,
 	0,
-	std::begin(_nested_slot_widgets), std::end(_nested_slot_widgets)
+	_nested_slot_widgets
 );
 
 /**
@@ -4308,7 +4980,7 @@ void ShowTraceRestrictSlotWindow(CompanyID company, VehicleType vehtype)
 	if (!Company::IsValidID(company)) return;
 
 	WindowNumber num = VehicleListIdentifier(VL_SLOT_LIST, vehtype, company).Pack();
-	AllocateWindowDescFront<TraceRestrictSlotWindow>(&_slot_window_desc, num);
+	AllocateWindowDescFront<TraceRestrictSlotWindow>(_slot_window_desc, num);
 }
 
 /**
@@ -4345,6 +5017,7 @@ enum TraceRestrictCounterWindowWidgets {
 	WID_TRCL_CREATE_COUNTER,
 	WID_TRCL_DELETE_COUNTER,
 	WID_TRCL_RENAME_COUNTER,
+	WID_TRCL_COUNTER_PUBLIC,
 	WID_TRCL_SET_COUNTER_VALUE,
 };
 
@@ -4352,7 +5025,7 @@ enum TraceRestrictCounterWindowWidgets {
 static constexpr NWidgetPart _nested_counter_widgets[] = {
 	NWidget(NWID_HORIZONTAL), // Window header
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(WWT_CAPTION, COLOUR_GREY, WID_TRCL_CAPTION), SetDataTip(STR_TRACE_RESTRICT_COUNTER_CAPTION, STR_NULL),
+		NWidget(WWT_CAPTION, COLOUR_GREY, WID_TRCL_CAPTION), SetStringTip(STR_TRACE_RESTRICT_COUNTER_CAPTION, STR_NULL),
 		NWidget(WWT_SHADEBOX, COLOUR_GREY),
 		NWidget(WWT_DEFSIZEBOX, COLOUR_GREY),
 		NWidget(WWT_STICKYBOX, COLOUR_GREY),
@@ -4365,13 +5038,15 @@ static constexpr NWidgetPart _nested_counter_widgets[] = {
 		EndContainer(),
 		NWidget(NWID_HORIZONTAL),
 			NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRCL_CREATE_COUNTER), SetMinimalSize(75, 12), SetFill(1, 0),
-					SetDataTip(STR_TRACE_RESTRICT_COUNTER_CREATE, STR_TRACE_RESTRICT_COUNTER_CREATE_TOOLTIP),
+					SetStringTip(STR_TRACE_RESTRICT_COUNTER_CREATE, STR_TRACE_RESTRICT_COUNTER_CREATE_TOOLTIP),
 			NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRCL_DELETE_COUNTER), SetMinimalSize(75, 12), SetFill(1, 0),
-					SetDataTip(STR_TRACE_RESTRICT_COUNTER_DELETE, STR_TRACE_RESTRICT_COUNTER_DELETE_TOOLTIP),
+					SetStringTip(STR_TRACE_RESTRICT_COUNTER_DELETE, STR_TRACE_RESTRICT_COUNTER_DELETE_TOOLTIP),
 			NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRCL_RENAME_COUNTER), SetMinimalSize(75, 12), SetFill(1, 0),
-					SetDataTip(STR_TRACE_RESTRICT_COUNTER_RENAME, STR_TRACE_RESTRICT_COUNTER_RENAME_TOOLTIP),
+					SetStringTip(STR_TRACE_RESTRICT_COUNTER_RENAME, STR_TRACE_RESTRICT_COUNTER_RENAME_TOOLTIP),
+			NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_TRCL_COUNTER_PUBLIC), SetMinimalSize(75, 12), SetFill(1, 0),
+					SetStringTip(STR_TRACE_RESTRICT_COUNTER_PUBLIC, STR_TRACE_RESTRICT_COUNTER_PUBLIC_TOOLTIP),
 			NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_TRCL_SET_COUNTER_VALUE), SetMinimalSize(75, 12), SetFill(1, 0),
-					SetDataTip(STR_TRACE_RESTRICT_COUNTER_SET_VALUE, STR_TRACE_RESTRICT_COUNTER_SET_VALUE_TOOLTIP),
+					SetStringTip(STR_TRACE_RESTRICT_COUNTER_SET_VALUE, STR_TRACE_RESTRICT_COUNTER_SET_VALUE_TOOLTIP),
 			NWidget(WWT_RESIZEBOX, COLOUR_GREY),
 		EndContainer(),
 	EndContainer(),
@@ -4389,9 +5064,10 @@ private:
 	TraceRestrictCounterID ctr_qt_op;   ///< Counter being adjusted in query text operation, INVALID_TRACE_RESTRICT_COUNTER_ID if none
 	TraceRestrictCounterID ctr_confirm; ///< Counter awaiting delete confirmation
 	TraceRestrictCounterID selected;    ///< Selected counter
-	GUIList<const TraceRestrictCounter*> ctrs;   ///< List of slots
-	uint tiny_step_height; ///< Step height for the counter list
-	uint value_col_width;  ///< Value column width
+	GUIList<const TraceRestrictCounter*> ctrs; ///< List of slots
+	uint tiny_step_height;              ///< Step height for the counter list
+	uint value_col_width;               ///< Value column width
+	uint public_col_width;              ///< Public column width
 	Scrollbar *sb;
 
 	void BuildCounterList()
@@ -4413,48 +5089,59 @@ private:
 	}
 
 	/**
-	 * Compute tiny_step_height and column_size
-	 * @return Total width required for the group list.
+	 * Compute dimensions
+	 * @return Total width required for the list.
 	 */
 	uint ComputeInfoSize()
 	{
 		SetDParamMaxValue(0, 9999, 3);
 		Dimension dim = GetStringBoundingBox(STR_JUST_COMMA);
-		this->tiny_step_height = dim.height + WidgetDimensions::scaled.matrix.top;
+		this->tiny_step_height = dim.height;
 		this->value_col_width = dim.width;
 
+		Dimension public_dim = GetScaledSpriteSize(SPR_BLOT);
+		this->tiny_step_height = std::max(this->tiny_step_height, public_dim.height);
+		this->public_col_width = public_dim.width;
+
+		this->tiny_step_height += WidgetDimensions::scaled.matrix.Vertical();
+
 		return WidgetDimensions::scaled.framerect.Horizontal() + WidgetDimensions::scaled.vsep_wide +
-			170 + WidgetDimensions::scaled.vsep_wide +
-			dim.width + WidgetDimensions::scaled.vsep_wide +
-			WidgetDimensions::scaled.framerect.right;
+				170 + WidgetDimensions::scaled.vsep_wide +
+				dim.width + WidgetDimensions::scaled.vsep_wide +
+				public_dim.width + WidgetDimensions::scaled.vsep_wide +
+				WidgetDimensions::scaled.framerect.right;
 	}
 
 	/**
-	 * Draw a row in the slot list.
-	 * @param y Top of the row.
-	 * @param left Left of the row.
-	 * @param right Right of the row.
-	 * @param g_id Group to list.
+	 * Draw a row in the counter list.
+	 * @param draw_area Area to draw in.
+	 * @param ctr_id Counter ID.
 	 */
-	void DrawCounterInfo(int y, int left, int right, TraceRestrictCounterID ctr_id) const
+	void DrawCounterInfo(Rect draw_area, TraceRestrictCounterID ctr_id) const
 	{
-		/* draw the selected counter in white, else we draw it in black */
-		TextColour colour = ctr_id == this->selected ? TC_WHITE : TC_BLACK;
+		const TraceRestrictCounter *ctr = TraceRestrictCounter::Get(ctr_id);
+		Rect info_area = draw_area.Shrink(WidgetDimensions::scaled.hsep_indent, 0);
 		bool rtl = _current_text_dir == TD_RTL;
 
-		SetDParam(0, ctr_id);
-		DrawString(left + WidgetDimensions::scaled.vsep_wide + (rtl ? this->value_col_width + WidgetDimensions::scaled.vsep_wide : 0),
-				right - WidgetDimensions::scaled.vsep_wide - (rtl ? 0 : this->value_col_width + WidgetDimensions::scaled.vsep_wide),
-				y, STR_TRACE_RESTRICT_COUNTER_NAME, colour);
+		/* draw the selected counter in white, else we draw it in black */
+		TextColour colour = ctr_id == this->selected ? TC_WHITE : TC_BLACK;
 
-		SetDParam(0, TraceRestrictCounter::Get(ctr_id)->value);
-		DrawString(rtl ? left + WidgetDimensions::scaled.vsep_wide : right - WidgetDimensions::scaled.vsep_wide - this->value_col_width,
-				rtl ? left + WidgetDimensions::scaled.vsep_wide + this->value_col_width : right - WidgetDimensions::scaled.vsep_wide,
-				y, STR_JUST_COMMA, colour, SA_RIGHT | SA_FORCE);
+		Rect r = info_area.Indent(this->value_col_width + WidgetDimensions::scaled.vsep_wide + this->public_col_width, !rtl);
+		SetDParam(0, ctr_id);
+		DrawString(r.left, r.right, r.top + (this->tiny_step_height - GetCharacterHeight(FS_NORMAL)) / 2, STR_TRACE_RESTRICT_COUNTER_NAME, colour);
+
+		if (HasFlag(ctr->flags, TraceRestrictCounter::Flags::Public)) {
+			r = info_area.Indent(this->value_col_width + WidgetDimensions::scaled.vsep_wide, !rtl).WithWidth(this->public_col_width, !rtl);
+			DrawSpriteIgnorePadding(SPR_BLOT, PALETTE_TO_BLUE, r, SA_CENTER);
+		}
+
+		r = info_area.WithWidth(this->value_col_width, !rtl);
+		SetDParam(0, ctr->value);
+		DrawString(r.left, r.right, r.top + (this->tiny_step_height - GetCharacterHeight(FS_NORMAL)) / 2, STR_JUST_COMMA, colour, SA_RIGHT | SA_FORCE);
 	}
 
 public:
-	TraceRestrictCounterWindow(WindowDesc *desc, WindowNumber window_number) : Window(desc)
+	TraceRestrictCounterWindow(WindowDesc &desc, WindowNumber window_number) : Window(desc)
 	{
 		this->ctr_company = (Owner)window_number;
 		this->CreateNestedTree();
@@ -4473,13 +5160,13 @@ public:
 		this->owner = this->ctr_company;
 	}
 
-	virtual void UpdateWidgetSize(WidgetID widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	virtual void UpdateWidgetSize(WidgetID widget, Dimension &size, const Dimension &padding, Dimension &fill, Dimension &resize) override
 	{
 		switch (widget) {
 			case WID_TRCL_LIST_COUNTERS: {
-				size->width = std::max<uint>(size->width, this->ComputeInfoSize());
-				resize->height = this->tiny_step_height;
-				size->height = std::max<uint>(size->height, 8 * resize->height);
+				size.width = std::max<uint>(size.width, this->ComputeInfoSize());
+				resize.height = this->tiny_step_height;
+				size.height = std::max<uint>(size.height, 8 * resize.height);
 				break;
 			}
 		}
@@ -4516,13 +5203,16 @@ public:
 	{
 		this->BuildCounterList();
 
-		this->sb->SetCount((uint)this->ctrs.size());
+		this->sb->SetCount(static_cast<uint>(this->ctrs.size()));
 
 		/* Disable the counter specific functions when no counter is selected */
 		this->SetWidgetsDisabledState(this->selected == INVALID_TRACE_RESTRICT_COUNTER_ID || _local_company != this->ctr_company,
 				WID_TRCL_DELETE_COUNTER,
 				WID_TRCL_RENAME_COUNTER,
+				WID_TRCL_COUNTER_PUBLIC,
 				WID_TRCL_SET_COUNTER_VALUE);
+
+		this->SetWidgetLoweredState(WID_TRCL_COUNTER_PUBLIC, this->selected != INVALID_TRACE_RESTRICT_COUNTER_ID && HasFlag(TraceRestrictCounter::Get(this->selected)->flags, TraceRestrictCounter::Flags::Public));
 
 		/* Disable remaining buttons for non-local companies
 		 * Needed while changing _local_company, eg. by cheats
@@ -4540,17 +5230,17 @@ public:
 	{
 		switch (widget) {
 			case WID_TRCL_LIST_COUNTERS: {
-				Rect ir = r.Shrink(WidgetDimensions::scaled.framerect);
-				int y1 = ir.top;
-				int max = std::min<int>(this->sb->GetPosition() + this->sb->GetCapacity(), (int)this->ctrs.size());
+				Rect ir = r.WithHeight(this->tiny_step_height).Shrink(WidgetDimensions::scaled.framerect);
+				int max = std::min<int>(this->sb->GetPosition() + this->sb->GetCapacity(), static_cast<int>(this->ctrs.size()));
 				for (int i = this->sb->GetPosition(); i < max; ++i) {
 					const TraceRestrictCounter *ctr = this->ctrs[i];
 
 					assert(ctr->owner == this->ctr_company);
 
-					DrawCounterInfo(y1, ir.left, ir.right, ctr->index);
+					DrawCounterInfo(ir, ctr->index);
 
-					y1 += this->tiny_step_height;
+					ir.top += this->tiny_step_height;
+					ir.bottom += this->tiny_step_height;
 				}
 				break;
 			}
@@ -4562,7 +5252,7 @@ public:
 		if (confirmed) {
 			TraceRestrictCounterWindow *w = (TraceRestrictCounterWindow*)win;
 			w->selected = INVALID_TRACE_RESTRICT_COUNTER_ID;
-			DoCommandP(0, w->ctr_confirm, 0, CMD_DELETE_TRACERESTRICT_COUNTER | CMD_MSG(STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_DELETE));
+			Command<CMD_DELETE_TRACERESTRICT_COUNTER>::Post(STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_DELETE, w->ctr_confirm);
 		}
 	}
 
@@ -4594,26 +5284,38 @@ public:
 				this->ShowRenameCounterWindow(this->selected);
 				break;
 
+			case WID_TRCL_COUNTER_PUBLIC: { // Toggle public state of the selected counter
+				const TraceRestrictCounter *ctr = TraceRestrictCounter::GetIfValid(this->selected);
+				if (ctr != nullptr) {
+					Command<CMD_ALTER_TRACERESTRICT_COUNTER>::Post(STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_MODIFY, this->selected, TRACO_SET_PUBLIC, HasFlag(ctr->flags, TraceRestrictCounter::Flags::Public) ? 0 : 1, {});
+				}
+				break;
+			}
+
 			case WID_TRCL_SET_COUNTER_VALUE:
 				this->ShowSetCounterValueWindow(this->selected);
 				break;
 		}
 	}
 
-	virtual void OnQueryTextFinished(char *str) override
+	virtual void OnQueryTextFinished(std::optional<std::string> str) override
 	{
-		if (str != nullptr) {
+		if (str.has_value()) {
 			switch (this->qto) {
 				case QTO_RENAME:
 					if (this->ctr_qt_op == NEW_TRACE_RESTRICT_COUNTER_ID) {
-						DoCommandP(0, 0, 0, CMD_CREATE_TRACERESTRICT_COUNTER | CMD_MSG(STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_CREATE), nullptr, str);
+						TraceRestrictCreateCounterCmdData data;
+						data.name = std::move(*str);
+						DoCommandP<CMD_CREATE_TRACERESTRICT_COUNTER>(data, STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_CREATE, CommandCallback::CreateTraceRestrictCounter);
 					} else {
-						DoCommandP(0, this->ctr_qt_op, 0, CMD_ALTER_TRACERESTRICT_COUNTER | CMD_MSG(STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_RENAME), nullptr, str);
+						Command<CMD_ALTER_TRACERESTRICT_COUNTER>::Post(STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_RENAME, this->ctr_qt_op, TRACO_RENAME, {}, std::move(*str));
 					}
 					break;
 
 				case QTO_SET_VALUE:
-					if (!StrEmpty(str)) DoCommandP(0, this->ctr_qt_op | (1 << 16), atoi(str), CMD_ALTER_TRACERESTRICT_COUNTER | CMD_MSG(STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_MODIFY));
+					if (!str->empty()) {
+						Command<CMD_ALTER_TRACERESTRICT_COUNTER>::Post(STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_MODIFY, this->ctr_qt_op, TRACO_CHANGE_VALUE, atoi(str->c_str()), {});
+					}
 					break;
 			}
 		}
@@ -4658,11 +5360,18 @@ public:
 	}
 };
 
+void CcCreateTraceRestrictCounter(const CommandCost &result)
+{
+	if (result.Succeeded() && result.HasResultData()) {
+		TraceRestrictRecordRecentCounter(static_cast<TraceRestrictCounterID>(result.GetResultData()));
+	}
+}
+
 static WindowDesc _counter_window_desc(__FILE__, __LINE__,
 	WDP_AUTO, "list_tr_counters", 525, 246,
 	WC_TRACE_RESTRICT_COUNTERS, WC_NONE,
 	0,
-	std::begin(_nested_counter_widgets), std::end(_nested_counter_widgets)
+	_nested_counter_widgets
 );
 
 /**
@@ -4673,5 +5382,5 @@ void ShowTraceRestrictCounterWindow(CompanyID company)
 {
 	if (!Company::IsValidID(company)) return;
 
-	AllocateWindowDescFront<TraceRestrictCounterWindow>(&_counter_window_desc, (WindowNumber)company);
+	AllocateWindowDescFront<TraceRestrictCounterWindow>(_counter_window_desc, (WindowNumber)company);
 }

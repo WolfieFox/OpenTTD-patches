@@ -124,15 +124,6 @@ void ScriptConfig::ResetEditableSettings(bool yet_to_start)
 	}
 }
 
-void ScriptConfig::AddRandomDeviation(CompanyID owner)
-{
-	for (const auto &item : *this->GetConfigList()) {
-		if (item.random_deviation != 0) {
-			this->SetSetting(item.name, ScriptObject::GetRandomizer(owner).Next(item.random_deviation * 2 + 1) - item.random_deviation + this->GetSetting(item.name));
-		}
-	}
-}
-
 bool ScriptConfig::HasScript() const
 {
 	return this->info != nullptr;
@@ -184,9 +175,9 @@ std::string ScriptConfig::SettingsToString() const
 	return result;
 }
 
-const char *ScriptConfig::GetTextfile(TextfileType type, CompanyID slot) const
+std::optional<std::string> ScriptConfig::GetTextfile(TextfileType type, CompanyID slot) const
 {
-	if (slot == INVALID_COMPANY || this->GetInfo() == nullptr) return nullptr;
+	if (slot == INVALID_COMPANY || this->GetInfo() == nullptr) return std::nullopt;
 
 	return ::GetTextfile(type, (slot == OWNER_DEITY) ? GAME_DIR : AI_DIR, this->GetInfo()->GetMainScript());
 }

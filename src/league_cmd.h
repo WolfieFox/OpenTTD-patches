@@ -10,45 +10,17 @@
 #ifndef LEAGUE_CMD_H
 #define LEAGUE_CMD_H
 
-#include "command_aux.h"
+#include "command_type.h"
+#include "league_type.h"
 
-struct LeagueTableCmdData : public CommandAuxiliarySerialisable<LeagueTableCmdData> {
-	std::string title;
-	std::string header;
-	std::string footer;
-
-	virtual void Serialise(CommandSerialisationBuffer &buffer) const override
-	{
-		buffer.Send_string(this->title);
-		buffer.Send_string(this->header);
-		buffer.Send_string(this->footer);
-	}
-
-	CommandCost Deserialise(CommandDeserialisationBuffer &buffer)
-	{
-		buffer.Recv_string(this->title,  SVS_ALLOW_CONTROL_CODE | SVS_REPLACE_WITH_QUESTION_MARK);
-		buffer.Recv_string(this->header, SVS_ALLOW_CONTROL_CODE | SVS_REPLACE_WITH_QUESTION_MARK);
-		buffer.Recv_string(this->footer, SVS_ALLOW_CONTROL_CODE | SVS_REPLACE_WITH_QUESTION_MARK);
-		return CommandCost();
-	}
+struct LeagueTableElementCmdData final : public AutoFmtTupleCmdData<LeagueTableElementCmdData, TCDF_NONE, LeagueTableID, int64_t, CompanyID, std::string, std::string, LinkType, LinkTargetID> {
+	static inline constexpr const char fmt_str[] = "t: {}, r: {}, c: {}, type: {}, targ: {}";
 };
 
-struct LeagueTableElementCmdData : public CommandAuxiliarySerialisable<LeagueTableElementCmdData> {
-	std::string text_str;
-	std::string score;
-
-	virtual void Serialise(CommandSerialisationBuffer &buffer) const override
-	{
-		buffer.Send_string(this->text_str);
-		buffer.Send_string(this->score);
-	}
-
-	CommandCost Deserialise(CommandDeserialisationBuffer &buffer)
-	{
-		buffer.Recv_string(this->text_str, SVS_ALLOW_CONTROL_CODE | SVS_REPLACE_WITH_QUESTION_MARK);
-		buffer.Recv_string(this->score,    SVS_ALLOW_CONTROL_CODE | SVS_REPLACE_WITH_QUESTION_MARK);
-		return CommandCost();
-	}
-};
+DEF_CMD_TUPLE_NT(CMD_CREATE_LEAGUE_TABLE,               CmdCreateLeagueTable,             CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT, CmdDataT<std::string, std::string, std::string>)
+DEF_CMD_TUPLE_NT(CMD_CREATE_LEAGUE_TABLE_ELEMENT,       CmdCreateLeagueTableElement,      CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT, LeagueTableElementCmdData)
+DEF_CMD_TUPLE_NT(CMD_UPDATE_LEAGUE_TABLE_ELEMENT_DATA,  CmdUpdateLeagueTableElementData,  CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT, CmdDataT<LeagueTableElementID, CompanyID, std::string, LinkType, LinkTargetID>)
+DEF_CMD_TUPLE_NT(CMD_UPDATE_LEAGUE_TABLE_ELEMENT_SCORE, CmdUpdateLeagueTableElementScore, CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT, CmdDataT<LeagueTableElementID, int64_t, std::string>)
+DEF_CMD_TUPLE_NT(CMD_REMOVE_LEAGUE_TABLE_ELEMENT,       CmdRemoveLeagueTableElement,                     CMD_DEITY, CMDT_OTHER_MANAGEMENT, CmdDataT<LeagueTableElementID>)
 
 #endif /* LEAGUE_CMD_H */

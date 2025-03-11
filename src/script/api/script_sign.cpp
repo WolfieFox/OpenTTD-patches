@@ -34,7 +34,7 @@
 
 /* static */ bool ScriptSign::SetName(SignID sign_id, Text *name)
 {
-	CCountedPtr<Text> counter(name);
+	ScriptObjectRef counter(name);
 
 	EnforceDeityOrCompanyModeValid(false);
 	EnforcePrecondition(false, IsValidSign(sign_id));
@@ -43,7 +43,7 @@
 	EnforcePreconditionEncodedText(false, text);
 	EnforcePreconditionCustomError(false, ::Utf8StringLength(text) < MAX_LENGTH_SIGN_NAME_CHARS, ScriptError::ERR_PRECONDITION_STRING_TOO_LONG);
 
-	return ScriptObject::DoCommand(0, sign_id, 0, CMD_RENAME_SIGN, text);
+	return ScriptObject::DoCommandOld(0, sign_id, 0, CMD_RENAME_SIGN, text);
 }
 
 /* static */ std::optional<std::string> ScriptSign::GetName(SignID sign_id)
@@ -66,12 +66,12 @@
 {
 	EnforceDeityOrCompanyModeValid(false);
 	EnforcePrecondition(false, IsValidSign(sign_id));
-	return ScriptObject::DoCommand(0, sign_id, 0, CMD_RENAME_SIGN, "");
+	return ScriptObject::DoCommandOld(0, sign_id, 0, CMD_RENAME_SIGN, "");
 }
 
 /* static */ SignID ScriptSign::BuildSign(TileIndex location, Text *name)
 {
-	CCountedPtr<Text> counter(name);
+	ScriptObjectRef counter(name);
 
 	EnforceDeityOrCompanyModeValid(INVALID_SIGN);
 	EnforcePrecondition(INVALID_SIGN, ::IsValidTile(location));
@@ -80,7 +80,7 @@
 	EnforcePreconditionEncodedText(INVALID_SIGN, text);
 	EnforcePreconditionCustomError(INVALID_SIGN, ::Utf8StringLength(text) < MAX_LENGTH_SIGN_NAME_CHARS, ScriptError::ERR_PRECONDITION_STRING_TOO_LONG);
 
-	if (!ScriptObject::DoCommand(location, 0, 0, CMD_PLACE_SIGN, text, &ScriptInstance::DoCommandReturnSignID)) return INVALID_SIGN;
+	if (!ScriptObject::DoCommandOld(location, 0, 0, CMD_PLACE_SIGN, text, &ScriptInstance::DoCommandReturnSignID)) return INVALID_SIGN;
 
 	/* In case of test-mode, we return SignID 0 */
 	return 0;

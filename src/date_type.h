@@ -26,14 +26,13 @@ static const int MONTHS_IN_YEAR    =  12; ///< months per year
 
 static const int SECONDS_PER_DAY   = 2;   ///< approximate seconds per day, not for precise calculations
 
+/** Estimation of how many ticks fit in a single second. */
+static const int TICKS_PER_SECOND = 1000 / 27 /*MILLISECONDS_PER_TICK*/;
+
 using Ticks = int32_t;                    ///< The type to store ticks in
 static constexpr Ticks INVALID_TICKS = -1; ///< Representation of an invalid number of ticks
 
 using ScaledTickCounter = uint64_t;       ///< The type for the scaled tick counter
-
-using YearDelta = StrongType::Typedef<int32_t, struct YearDeltaTag, StrongType::Compare, StrongType::IntegerScalable>;
-using DateDelta = StrongType::Typedef<int32_t, struct DateDeltaTag, StrongType::Compare, StrongType::IntegerScalable>;
-using DateTicksDelta = StrongType::Typedef<int64_t, struct DateTicksDeltaTag, StrongType::Compare, StrongType::IntegerScalable>;
 
 namespace DateDetail {
 	/* Mixin for DateTicks */
@@ -49,29 +48,46 @@ namespace DateDetail {
 			TDateFract ToDateFractRemainder() const { return this->GetBase() % DAY_TICKS; }
 		};
 	};
+};
 
+template <typename T>
+struct DateDeltaTag : public StrongType::TypedefTraits<int32_t, StrongType::Compare, StrongType::IntegerScalable> {};
+
+template <typename T>
+struct DateTicksDeltaTag : public StrongType::TypedefTraits<int64_t, StrongType::Compare, StrongType::IntegerScalable> {};
+
+template <typename T>
+struct YearDeltaTag : public StrongType::TypedefTraits<int32_t, StrongType::Compare, StrongType::IntegerScalable> {};
+
+template <typename T>
+struct DateTag : public StrongType::TypedefTraits<int32_t, StrongType::Compare, StrongType::IntegerDelta<StrongType::Typedef<DateDeltaTag<T>>>> {};
+
+template <typename T>
+struct DateTicksTag : public StrongType::TypedefTraits<int64_t, StrongType::Compare, StrongType::IntegerDelta<StrongType::Typedef<DateTicksDeltaTag<T>>>, DateDetail::DateTicksOperations<StrongType::Typedef<DateTag<T>>, uint16_t>> {};
+
+template <typename T>
+struct YearTag : public StrongType::TypedefTraits<int32_t, StrongType::Compare, StrongType::IntegerDelta<StrongType::Typedef<YearDeltaTag<T>>>> {};
+
+namespace DateDetail {
 	template <typename T>
 	struct BaseTime {
-		/* The type to store our dates in */
-		template <class ST> struct DateDeltaTag;
-
-		template <class ST> struct DateTag;
-		using Date = StrongType::Typedef<int32_t, struct DateTag<T>, StrongType::Compare, StrongType::IntegerDelta<DateDelta>>;
+		using DateDelta = StrongType::Typedef<DateDeltaTag<T>>;
+		using Date = StrongType::Typedef<DateTag<T>>;
 
 		using DateFract = uint16_t; ///< The fraction of a date we're in, i.e. the number of ticks since the last date changeover
 
 		/* The type to store dates in when tick-precision is required */
-		template <class ST> struct DateTicksTag;
-		using DateTicks = StrongType::Typedef<int64_t, struct DateTicksTag<T>, StrongType::Compare, StrongType::IntegerDelta<DateTicksDelta>, DateTicksOperations<Date, DateFract>>;
+		using DateTicksDelta = StrongType::Typedef<DateTicksDeltaTag<T>>;
+		using DateTicks = StrongType::Typedef<DateTicksTag<T>>;
 
 		static constexpr DateTicks DateToDateTicks(Date date, DateFract fract = 0)
 		{
-			return ((int64_t)date.base() * DAY_TICKS) + fract;
+			return DateTicks{((int64_t)date.base() * DAY_TICKS) + fract};
 		}
 
 		/* Year type */
-		template <class ST> struct YearTag;
-		using Year = StrongType::Typedef<int32_t, struct YearTag<T>, StrongType::Compare, StrongType::IntegerDelta<YearDelta>>;
+		using YearDelta = StrongType::Typedef<YearDeltaTag<T>>;
+		using Year = StrongType::Typedef<YearTag<T>>;
 
 		using Month = uint8_t;     ///< Type for the month, note: 0 based, i.e. 0 = January, 11 = December.
 		using Day = uint8_t;       ///< Type for the day of the month, note: 1 based, first day of a month is 1.
@@ -95,10 +111,10 @@ namespace DateDetail {
 			static constexpr Date DateAtStartOfCalendarYear(Year year)
 			{
 				int32_t year_as_int = year.base();
-				uint number_of_leap_years = (year == 0) ? 0 : ((year_as_int - 1) / 4 - (year_as_int - 1) / 100 + (year_as_int - 1) / 400 + 1);
+				int number_of_leap_years = (year == 0) ? 0 : ((year_as_int - 1) / 4 - (year_as_int - 1) / 100 + (year_as_int - 1) / 400 + 1);
 
 				/* Hardcode the number of days in a year because we can't access CalendarTime from here. */
-				return (365 * year_as_int) + number_of_leap_years;
+				return Date{(365 * year_as_int) + number_of_leap_years};
 			}
 		};
 
@@ -113,6 +129,18 @@ namespace DateDetail {
 			return year_as_int % 4 == 0 && (year_as_int % 100 != 0 || year_as_int % 400 == 0);
 		}
 
+		template <typename From, std::enable_if_t<std::is_integral<From>::value, int> = 0>
+		static constexpr Date DeserialiseDateClamped(From value)
+		{
+			return Date{Clamp<int32_t>(ClampTo<int32_t>(value), MIN_DATE.base(), MAX_DATE.base())};
+		}
+
+		template <typename From, std::enable_if_t<std::is_integral<From>::value, int> = 0>
+		static constexpr Year DeserialiseYearClamped(From value)
+		{
+			return Year{Clamp<int32_t>(ClampTo<int32_t>(value), MIN_YEAR.base(), MAX_YEAR.base())};
+		}
+
 		/*
 		 * ORIGINAL_BASE_YEAR, ORIGINAL_MAX_YEAR and DAYS_TILL_ORIGINAL_BASE_YEAR are
 		 * primarily used for loading newgrf and savegame data and returning some
@@ -121,11 +149,11 @@ namespace DateDetail {
 		 */
 
 		/** The minimum starting year/base year of the original TTD */
-		static constexpr Year ORIGINAL_BASE_YEAR = 1920;
+		static constexpr Year ORIGINAL_BASE_YEAR = Year{1920};
 		/** The original ending year */
-		static constexpr Year ORIGINAL_END_YEAR  = 2051;
+		static constexpr Year ORIGINAL_END_YEAR  = Year{2051};
 		/** The maximum year of the original TTD */
-		static constexpr Year ORIGINAL_MAX_YEAR  = 2090;
+		static constexpr Year ORIGINAL_MAX_YEAR  = Year{2090};
 
 		/**
 		 * The offset in days from the '_date == 0' till
@@ -133,13 +161,13 @@ namespace DateDetail {
 		 */
 		static constexpr Date DAYS_TILL_ORIGINAL_BASE_YEAR = Detail::DateAtStartOfCalendarYear(ORIGINAL_BASE_YEAR);
 
-		static constexpr Date MIN_DATE = 0;
+		static constexpr Date MIN_DATE = Date{0};
 
 		/** The absolute minimum & maximum years in OTTD */
-		static constexpr Year MIN_YEAR = 0;
+		static constexpr Year MIN_YEAR = Year{0};
 
 		/** The default starting year */
-		static constexpr Year DEF_START_YEAR = 1950;
+		static constexpr Year DEF_START_YEAR = Year{1950};
 		/** The default scoring end year */
 		static constexpr Year DEF_END_YEAR = ORIGINAL_END_YEAR - 1;
 
@@ -147,19 +175,19 @@ namespace DateDetail {
 		 * MAX_YEAR, nicely rounded value of the number of years that can
 		 * be encoded in a single 32 bits date, about 2^31 / 366 years.
 		 */
-		static constexpr Year MAX_YEAR  = 5000000;
+		static constexpr Year MAX_YEAR = Year{5000000};
 
 		/** The number of days till the last day */
 		static constexpr Date MAX_DATE = Detail::DateAtStartOfCalendarYear(MAX_YEAR + 1) - 1;
 
-		static constexpr Year       INVALID_YEAR        = -1; ///< Representation of an invalid year
-		static constexpr Date       INVALID_DATE        = -1; ///< Representation of an invalid date
-		static constexpr DateTicks  INVALID_DATE_TICKS  = -1; ///< Representation of an invalid date ticks
+		static constexpr Year       INVALID_YEAR        = Year{-1}; ///< Representation of an invalid year
+		static constexpr Date       INVALID_DATE        = Date{-1}; ///< Representation of an invalid date
+		static constexpr DateTicks  INVALID_DATE_TICKS  = DateTicks{-1}; ///< Representation of an invalid date ticks
 	};
 };
 
-struct CalTime : public DateDetail::BaseTime<struct CalendarTimeTag> {
-	using ParentBaseTime = DateDetail::BaseTime<struct CalendarTimeTag>;
+struct CalTime : public DateDetail::BaseTime<struct CalTag> {
+	using ParentBaseTime = DateDetail::BaseTime<struct CalTag>;
 
 	/* Use a state struct to make backup/restore/init simpler */
 	struct State {
@@ -186,6 +214,7 @@ struct CalTime : public DateDetail::BaseTime<struct CalendarTimeTag> {
 	static inline Day                 CurDay()             { return Detail::now.cal_ymd.day; }
 	static inline Date                CurDate()            { return Detail::now.cal_date; }
 	static inline DateFract           CurDateFract()       { return Detail::now.cal_date_fract; }
+	static inline uint16_t            CurSubDateFract()    { return Detail::now.sub_date_fract; }
 
 	static YearMonthDay ConvertDateToYMD(Date date);
 	static Date ConvertYMDToDate(Year year, Month month, Day day);
@@ -197,6 +226,8 @@ struct CalTime : public DateDetail::BaseTime<struct CalendarTimeTag> {
 
 	static bool IsCalendarFrozen(bool newgame = false);
 
+	static Day NumberOfDaysInMonth(Year year, Month month);
+
 	/**
 	 * Calculate the year of a given date.
 	 * @param date The date to consider.
@@ -204,7 +235,7 @@ struct CalTime : public DateDetail::BaseTime<struct CalendarTimeTag> {
 	 */
 	static constexpr Year DateToYear(Date date)
 	{
-		return date.base() / DAYS_IN_LEAP_YEAR;
+		return Year{date.base() / DAYS_IN_LEAP_YEAR};
 	}
 
 	/**
@@ -218,8 +249,8 @@ struct CalTime : public DateDetail::BaseTime<struct CalendarTimeTag> {
 	}
 };
 
-struct EconTime : public DateDetail::BaseTime<struct EconTimeTag> {
-	using ParentBaseTime = DateDetail::BaseTime<struct EconTimeTag>;
+struct EconTime : public DateDetail::BaseTime<struct EconTag> {
+	using ParentBaseTime = DateDetail::BaseTime<struct EconTag>;
 
 	/* Use a state struct to make backup/restore/init simpler */
 	struct State {
@@ -234,9 +265,12 @@ struct EconTime : public DateDetail::BaseTime<struct EconTimeTag> {
 	/* Use a detail struct/namespace to more easily control writes */
 	struct Detail {
 		static State now;
+		static YearDelta years_elapsed;
+		static YearDelta period_display_offset;
 
 		static void SetDate(Date date, DateFract fract);
 		static State NewState(Year year);
+		static int32_t WallClockYearToDisplay(Year year);
 
 		/**
 		 * Calculate the date of the first day of a given year.
@@ -245,7 +279,7 @@ struct EconTime : public DateDetail::BaseTime<struct EconTimeTag> {
 		 */
 		static constexpr Date DateAtStartOfWallclockModeYear(Year year)
 		{
-			return DAYS_IN_ECONOMY_WALLCLOCK_YEAR * year.base();
+			return Date{DAYS_IN_ECONOMY_WALLCLOCK_YEAR * year.base()};
 		}
 	};
 
@@ -253,7 +287,7 @@ struct EconTime : public DateDetail::BaseTime<struct EconTimeTag> {
 	 * The offset in days from the '_date == 0' till
 	 * 'ConvertYMDToDate(ORIGINAL_BASE_YEAR, 0, 1)', when using wallclock 30-day months
 	 */
-	static constexpr Date DAYS_TILL_ORIGINAL_BASE_YEAR_WALLCLOCK_MODE = DAYS_IN_ECONOMY_WALLCLOCK_YEAR * ORIGINAL_BASE_YEAR.base();
+	static constexpr Date DAYS_TILL_ORIGINAL_BASE_YEAR_WALLCLOCK_MODE = Date{DAYS_IN_ECONOMY_WALLCLOCK_YEAR * ORIGINAL_BASE_YEAR.base()};
 
 	static inline const YearMonthDay &CurYMD()             { return Detail::now.econ_ymd; }
 	static inline Year                CurYear()            { return Detail::now.econ_ymd.year; }
@@ -283,6 +317,12 @@ struct EconTime : public DateDetail::BaseTime<struct EconTimeTag> {
 		if (UsingWallclockUnits()) return Detail::DateAtStartOfWallclockModeYear(year);
 		return ParentBaseTime::Detail::DateAtStartOfCalendarYear(year);
 	}
+
+	static inline int32_t YearToDisplay(Year year)
+	{
+		if (UsingWallclockUnits()) return Detail::WallClockYearToDisplay(year);
+		return year.base();
+	}
 };
 
 namespace DateDetail {
@@ -294,7 +334,7 @@ namespace DateDetail {
 			TBaseType GetBase() const { return static_cast<const TType &>(*this).base(); }
 
 		public:
-			template<typename T>
+			template <typename T>
 			T AsTicksT() const { return ClampTo<T>(this->GetBase()); }
 
 			Ticks AsTicks() const { return this->AsTicksT<Ticks>(); }
@@ -303,8 +343,10 @@ namespace DateDetail {
 };
 
 /* The type to store state ticks (this always ticks at the same rate regardless of day length, even in the scenario editor */
-using StateTicksDelta = StrongType::Typedef<int64_t, struct StateTicksDeltaTag, StrongType::Compare, StrongType::IntegerScalable, DateDetail::StateTicksDeltaOperations>;
-using StateTicks = StrongType::Typedef<int64_t, struct StateTicksTag, StrongType::Compare, StrongType::IntegerDelta<StateTicksDelta>>;
+struct StateTicksDeltaTag : public StrongType::TypedefTraits<int64_t, StrongType::Compare, StrongType::IntegerScalable, DateDetail::StateTicksDeltaOperations> {};
+using StateTicksDelta = StrongType::Typedef<StateTicksDeltaTag>;
+struct StateTicksTag : public StrongType::TypedefTraits<int64_t, StrongType::Compare, StrongType::IntegerDelta<StateTicksDelta>> {};
+using StateTicks = StrongType::Typedef<StateTicksTag>;
 
 namespace DateDetail {
 	/* Mixin for TickMinutes, ClockFaceMinutes */
@@ -337,14 +379,15 @@ namespace DateDetail {
 		struct mixin {
 			static constexpr TType FromClockFace(int hours, int minutes)
 			{
-				return (TBaseType(hours) * 60) + minutes;
+				return TType{(TBaseType(hours) * 60) + minutes};
 			}
 		};
 	};
 };
 
 /* The type to store general clock-face minutes in (i.e. 0..1440) */
-using ClockFaceMinutes = StrongType::Typedef<int, struct ClockFaceMinutesTag, StrongType::Compare, StrongType::Integer, DateDetail::MinuteOperations<false>, DateDetail::ClockFaceMinuteOperations>;
+struct ClockFaceMinutesTag : public StrongType::TypedefTraits<int, StrongType::Compare, StrongType::Integer, DateDetail::MinuteOperations<false>, DateDetail::ClockFaceMinuteOperations> {};
+using ClockFaceMinutes = StrongType::Typedef<ClockFaceMinutesTag>;
 
 namespace DateDetail {
 	/* Mixin for TickMinutes */
@@ -358,21 +401,22 @@ namespace DateDetail {
 			TType ToSameDayClockTime(int hour, int minute) const
 			{
 				TBaseType day = DivTowardsNegativeInf<TBaseType>(this->GetBase(), 1440);
-				return (day * 1440) + (hour * 60) + minute;
+				return TType{(day * 1440) + (hour * 60) + minute};
 			}
 
 			ClockFaceMinutes ToClockFaceMinutes() const
 			{
 				TBaseType minutes = this->GetBase() % 1440;
 				if (minutes < 0) minutes += 1440;
-				return minutes;
+				return ClockFaceMinutes{static_cast<int>(minutes)};
 			}
 		};
 	};
 };
 
 /* The type to store StateTicks-based minutes in */
-using TickMinutes = StrongType::Typedef<int64_t, struct TickMinutesTag, StrongType::Compare, StrongType::Integer, DateDetail::MinuteOperations<true>, DateDetail::TickMinuteOperations>;
+struct TickMinutesTag : public StrongType::TypedefTraits<int64_t, StrongType::Compare, StrongType::Integer, DateDetail::MinuteOperations<true>, DateDetail::TickMinuteOperations> {};
+using TickMinutes = StrongType::Typedef<TickMinutesTag>;
 
 static const int STATION_RATING_TICKS     = 185; ///< cycle duration for updating station rating
 static const int STATION_ACCEPTANCE_TICKS = 250; ///< cycle duration for updating station acceptance
@@ -383,9 +427,12 @@ static const int TOWN_GROWTH_TICKS        = 70;  ///< cycle duration for towns t
 static const int INDUSTRY_CUT_TREE_TICKS  = INDUSTRY_PRODUCE_TICKS * 2; ///< cycle duration for lumber mill's extra action
 
 /** An initial value for StateTicks when starting a new game */
-static constexpr StateTicks INITIAL_STATE_TICKS_VALUE = 1 << 24;
+static constexpr StateTicks INITIAL_STATE_TICKS_VALUE = StateTicks{128 * 24 * 60 * 74}; // Value chosen to make it an integer multiple of various convenient values
 
 /** Invalid state ticks value */
-static constexpr StateTicks INVALID_STATE_TICKS = INT64_MIN;
+static constexpr StateTicks INVALID_STATE_TICKS = StateTicks{INT64_MIN};
+
+/** Integer maximum state ticks value (INT64_MAX) */
+static constexpr StateTicks STATE_TICKS_INT_MAX = StateTicks{INT64_MAX};
 
 #endif /* DATE_TYPE_H */

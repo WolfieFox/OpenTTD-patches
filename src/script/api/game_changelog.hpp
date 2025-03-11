@@ -6,23 +6,32 @@
  */
 
 /**
- * @file game_changelog.hpp Lists all changes / additions to the API.
+ * @page game_changelog Lists all changes / additions to the API.
  *
  * Only new / renamed / deleted api functions will be listed here. A list of
  * bug fixes can be found in the normal changelog. Note that removed API
  * functions may still be available if you return an older API version
  * in GetAPIVersion() in info.nut.
  *
- * \b 14.0
+ * \b 15.0
  *
  * This version is not yet released. The following changes are not set in stone yet.
+ *
+ * API additions:
+ * \li GSEventVehicleCrashed::GetVictims
+ * \li GSEventCompanyRenamed
+ * \li GSEventPresidentRenamed
+ *
+ * Other changes:
+ * \li GSBridge::GetBridgeID renamed to GSBridge::GetBridgeType
+ *
+ * \b 14.0
  *
  * API additions:
  * \li GSIndustry::GetConstructionDate
  * \li GSAsyncMode
  * \li GSCompanyMode::IsValid
  * \li GSCompanyMode::IsDeity
- * \li GSTimeMode
  * \li GSTown::ROAD_LAYOUT_RANDOM
  * \li GSVehicle::IsPrimaryVehicle
  * \li GSOrder::SetOrderJumpTo
@@ -93,6 +102,7 @@
  * API removals:
  * \li GSError::ERR_PRECONDITION_TOO_MANY_PARAMETERS, that error is never returned anymore.
  * \li GSInfo::CONFIG_RANDOM, no longer used.
+ * \li GSInfo::AddSettings random_deviation is no longer used.
  *
  * Other changes:
  * \li GSGroupList accepts an optional filter function
@@ -298,4 +308,18 @@
  *
  * \b 1.2.0
  * \li First stable release with the NoGo framework.
+ */
+
+/**
+ * @mainpage
+ *
+ * What's new?
+ * \li \ref game_changelog
+ *
+ * Main classes:
+ * \li \ref GSInfo
+ * \li \ref GSController
+ *
+ * Detail topics:
+ * \li \ref script_ids
  */

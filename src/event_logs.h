@@ -24,6 +24,7 @@ enum GameEventFlags : uint32_t {
 	GEF_INDUSTRY_CREATE      = 1 << 6, ///< (i) An industry has been created (in game)
 	GEF_INDUSTRY_DELETE      = 1 << 7, ///< (j) An industry has been deleted (in game)
 	GEF_VIRT_TRAIN           = 1 << 8, ///< (v) A virtual train has been created
+	GEF_RM_INVALID_RV        = 1 << 9, ///< (r) Removed uncorrectable road vehicle on load
 };
 DECLARE_ENUM_AS_BIT_SET(GameEventFlags)
 
@@ -42,12 +43,12 @@ inline void RegisterGameEvents(GameEventFlags events)
 	_game_events_overall |= events;
 }
 
-char *DumpGameEventFlags(GameEventFlags events, char *b, const char *last);
+void DumpGameEventFlags(GameEventFlags events, struct format_target &buffer);
 
 void AppendSpecialEventsLogEntry(std::string message);
-char *DumpSpecialEventsLog(char *buffer, const char *last);
+void DumpSpecialEventsLog(struct format_target &buffer);
 void ClearSpecialEventsLog();
 
-void LogGameLoadDateTimes(char *buffer, const char *last);
+void LogGameLoadDateTimes(struct format_target &buffer);
 
 #endif /* EVENT_LOGS_H */
