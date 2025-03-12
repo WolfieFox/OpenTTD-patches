@@ -10,13 +10,25 @@
 #ifndef VIEWPORT_TYPE_H
 #define VIEWPORT_TYPE_H
 
+#include "core/enum_type.hpp"
 #include "zoom_type.h"
 #include "strings_type.h"
 #include "table/strings.h"
 
+#include <limits>
 #include <vector>
 
 class LinkGraphOverlay;
+
+/** Flags to control how Viewport Strings are rendered. */
+enum class ViewportStringFlags : uint8_t {
+	Small           = (1U << 0), ///< Draw using the small font.
+	Shadow          = (1U << 1), ///< Draw an extra text shadow. Should only be used with ViewportStringFlags::Small, as normal font already has a shadow.
+	ColourRect      = (1U << 2), ///< Draw a colour rect around the sign.
+	TransparentRect = (1U << 3), ///< Draw a transparent rect around the sign.
+	TextColour      = (1U << 4), ///< Draw text in colour.
+};
+DECLARE_ENUM_AS_BIT_SET(ViewportStringFlags)
 
 enum ViewportMapType {
 	VPMT_BEGIN = 0,
@@ -30,9 +42,12 @@ enum ViewportMapType {
 	VPMT_MAX = VPMT_INDUSTRY,
 };
 
+using ViewPortBlockT = size_t;
+static constexpr uint VP_BLOCK_BITS = std::numeric_limits<ViewPortBlockT>::digits;
+
 struct ViewPortMapDrawVehiclesCache {
 	uint64_t done_hash_bits[64];
-	std::vector<bool> vehicle_pixels;
+	std::vector<ViewPortBlockT> vehicle_pixels;
 };
 
 /**
@@ -54,7 +69,8 @@ struct Viewport {
 
 	LinkGraphOverlay *overlay;
 
-	std::vector<bool> dirty_blocks;
+	std::vector<ViewPortBlockT> dirty_blocks;
+	uint dirty_blocks_column_pitch;
 	uint dirty_blocks_per_column;
 	uint dirty_blocks_per_row;
 	uint8_t dirty_block_left_margin;
@@ -64,9 +80,9 @@ struct Viewport {
 	uint64_t last_overlay_rebuild_counter = 0;
 	uint64_t last_plan_update_number = 0;
 	ViewPortMapDrawVehiclesCache map_draw_vehicles_cache;
-	std::vector<byte> land_pixel_cache;
-	std::vector<byte> overlay_pixel_cache;
-	std::vector<byte> plan_pixel_cache;
+	std::vector<uint8_t> land_pixel_cache;
+	std::vector<uint8_t> overlay_pixel_cache;
+	std::vector<uint8_t> plan_pixel_cache;
 
 	uint GetDirtyBlockWidthShift() const { return this->GetDirtyBlockShift(); }
 	uint GetDirtyBlockHeightShift() const { return this->GetDirtyBlockShift(); }
@@ -92,7 +108,7 @@ private:
 	uint GetDirtyBlockShift() const
 	{
 		if (this->zoom >= ZOOM_LVL_DRAW_MAP) return 3;
-		if (this->zoom >= ZOOM_LVL_OUT_8X) return 4;
+		if (this->zoom >= ZOOM_LVL_OUT_2X) return 4;
 		return 7 - this->zoom;
 	}
 };
@@ -209,7 +225,7 @@ enum ViewportDragDropSelectionProcess {
 /**
  * Target of the viewport scrolling GS method
  */
-enum ViewportScrollTarget {
+enum ViewportScrollTarget : uint8_t {
 	VST_EVERYONE, ///< All players
 	VST_COMPANY,  ///< All players in specific company
 	VST_CLIENT,   ///< Single player
@@ -223,7 +239,7 @@ enum FoundationPart {
 	FOUNDATION_PART_END
 };
 
-enum ViewportMarkDirtyFlags : byte {
+enum ViewportMarkDirtyFlags : uint8_t {
 	VMDF_NONE                  = 0,
 	VMDF_NOT_MAP_MODE          = 0x1,
 	VMDF_NOT_MAP_MODE_NON_VEG  = 0x2,

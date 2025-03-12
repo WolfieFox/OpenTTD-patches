@@ -27,14 +27,16 @@ bool _video_vsync; ///< Whether we should use vsync (only if active video driver
 
 void VideoDriver::GameLoop()
 {
-	this->next_game_tick += this->GetGameInterval();
-
-	/* Avoid next_game_tick getting behind more and more if it cannot keep up. */
 	auto now = std::chrono::steady_clock::now();
-	if (this->next_game_tick < now - ALLOWED_DRIFT * this->GetGameInterval()) this->next_game_tick = now;
 
 	{
 		std::lock_guard<std::recursive_mutex> lock(this->game_state_mutex);
+
+		const auto interval = this->GetGameInterval();
+		this->next_game_tick += interval;
+
+		/* Avoid next_game_tick getting behind more and more if it cannot keep up. */
+		if (this->next_game_tick < now - ALLOWED_DRIFT * interval) this->next_game_tick = now;
 
 		::GameLoop();
 	}
@@ -106,7 +108,7 @@ void VideoDriver::StartGameThread()
 
 	if (!this->is_game_threaded) SetSelfAsGameThread();
 
-	DEBUG(driver, 1, "using %sthread for game-loop", this->is_game_threaded ? "" : "no ");
+	Debug(driver, 1, "using {}thread for game-loop", this->is_game_threaded ? "" : "no ");
 }
 
 void VideoDriver::StopGameThread()
@@ -215,5 +217,5 @@ void VideoDriver::InvalidateGameOptionsWindow()
  */
 /* static */ std::string VideoDriver::GetCaption()
 {
-	return stdstr_fmt("OpenTTD %s", _openttd_revision);
+	return fmt::format("OpenTTD {}", _openttd_revision);
 }

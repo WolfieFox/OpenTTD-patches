@@ -32,9 +32,9 @@ ScriptStationList_Vehicle::ScriptStationList_Vehicle(VehicleID vehicle_id)
 {
 	if (!ScriptVehicle::IsPrimaryVehicle(vehicle_id)) return;
 
-	Vehicle *v = ::Vehicle::Get(vehicle_id);
+	const Vehicle *v = ::Vehicle::Get(vehicle_id);
 
-	for (Order *o = v->GetFirstOrder(); o != nullptr; o = o->next) {
+	for (const Order *o : v->Orders()) {
 		if (o->IsType(OT_GOTO_STATION)) this->AddItem(o->GetDestination());
 	}
 }
@@ -105,7 +105,7 @@ public:
 			StationID other);
 	~CargoCollector() ;
 
-	template<ScriptStationList_Cargo::CargoSelector Tselector>
+	template <ScriptStationList_Cargo::CargoSelector Tselector>
 	void Update(StationID from, StationID via, uint amount);
 	const GoodsEntry *GE() const { return ge; }
 
@@ -141,7 +141,7 @@ void CargoCollector::SetValue()
 	}
 }
 
-template<ScriptStationList_Cargo::CargoSelector Tselector>
+template <ScriptStationList_Cargo::CargoSelector Tselector>
 void CargoCollector::Update(StationID from, StationID via, uint amount)
 {
 	StationID key = INVALID_STATION;
@@ -169,7 +169,7 @@ void CargoCollector::Update(StationID from, StationID via, uint amount)
 }
 
 
-template<ScriptStationList_Cargo::CargoSelector Tselector>
+template <ScriptStationList_Cargo::CargoSelector Tselector>
 void ScriptStationList_CargoWaiting::Add(StationID station_id, CargoID cargo, StationID other_station)
 {
 	CargoCollector collector(this, station_id, cargo, other_station);
@@ -186,7 +186,7 @@ void ScriptStationList_CargoWaiting::Add(StationID station_id, CargoID cargo, St
 }
 
 
-template<ScriptStationList_Cargo::CargoSelector Tselector>
+template <ScriptStationList_Cargo::CargoSelector Tselector>
 void ScriptStationList_CargoPlanned::Add(StationID station_id, CargoID cargo, StationID other_station)
 {
 	CargoCollector collector(this, station_id, cargo, other_station);

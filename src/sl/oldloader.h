@@ -5,7 +5,7 @@
  * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/** @file oldloader.h Declarations of strctures and function used in loader of old savegames */
+/** @file oldloader.h Declarations of structures and functions used in loader of old savegames */
 
 #ifndef SL_OLDLOADER_H
 #define SL_OLDLOADER_H
@@ -17,16 +17,16 @@ static const uint BUFFER_SIZE = 4096;
 static const uint OLD_MAP_SIZE = 256 * 256;
 
 struct LoadgameState {
-	FILE *file;
+	std::optional<FileHandle> file;
 
 	uint chunk_size;
 
 	bool decoding;
-	byte decode_char;
+	uint8_t decode_char;
 
 	uint buffer_count;
 	uint buffer_cur;
-	byte buffer[BUFFER_SIZE];
+	uint8_t buffer[BUFFER_SIZE];
 
 	uint total_read;
 };
@@ -96,7 +96,7 @@ struct OldChunks {
 static_assert(sizeof(TileIndex) == 4);
 
 extern uint _bump_assert_value;
-byte ReadByte(LoadgameState *ls);
+uint8_t ReadByte(LoadgameState *ls);
 bool LoadChunk(LoadgameState *ls, void *base, const OldChunks *chunks);
 
 bool LoadTTDMain(LoadgameState *ls);
@@ -104,7 +104,7 @@ bool LoadTTOMain(LoadgameState *ls);
 
 inline uint16_t ReadUint16(LoadgameState *ls)
 {
-	byte x = ReadByte(ls);
+	uint8_t x = ReadByte(ls);
 	return x | ReadByte(ls) << 8;
 }
 

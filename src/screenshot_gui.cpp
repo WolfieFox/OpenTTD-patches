@@ -11,11 +11,15 @@
 #include "window_func.h"
 #include "window_gui.h"
 #include "screenshot.h"
+
 #include "widgets/screenshot_widget.h"
+
 #include "table/strings.h"
 
+#include "safeguards.h"
+
 struct ScreenshotWindow : Window {
-	ScreenshotWindow(WindowDesc *desc) : Window(desc)
+	ScreenshotWindow(WindowDesc &desc) : Window(desc)
 	{
 		this->CreateNestedTree();
 		this->FinishInitNested();
@@ -48,20 +52,20 @@ struct ScreenshotWindow : Window {
 static constexpr NWidgetPart _nested_screenshot[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(WWT_CAPTION, COLOUR_GREY), SetDataTip(STR_SCREENSHOT_CAPTION, 0),
+		NWidget(WWT_CAPTION, COLOUR_GREY), SetStringTip(STR_SCREENSHOT_CAPTION),
 		NWidget(WWT_SHADEBOX, COLOUR_GREY),
 		NWidget(WWT_STICKYBOX, COLOUR_GREY),
 	EndContainer(),
 	NWidget(NWID_VERTICAL, NC_EQUALSIZE),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_SCREENSHOT, 0), SetMinimalTextLines(2, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_ZOOMIN), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_ZOOMIN_SCREENSHOT, 0), SetMinimalTextLines(2, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_DEFAULTZOOM), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_DEFAULTZOOM_SCREENSHOT, 0), SetMinimalTextLines(2, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_WORLD), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_WORLD_SCREENSHOT_DEFAULT_ZOOM, 0), SetMinimalTextLines(2, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_WORLD_ZOOM), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_WORLD_SCREENSHOT_CURRENT_ZOOM, 0), SetMinimalTextLines(2, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_HEIGHTMAP), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_HEIGHTMAP_SCREENSHOT, 0), SetMinimalTextLines(2, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_MINIMAP), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_MINIMAP_SCREENSHOT, 0), SetMinimalTextLines(2, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_TOPOGRAPHY), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_TOPOGRAPHY_SCREENSHOT, 0), SetMinimalTextLines(2, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_INDUSTRY), SetFill(1, 1), SetDataTip(STR_SCREENSHOT_INDUSTRY_SCREENSHOT, 0), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_SCREENSHOT), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_ZOOMIN), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_ZOOMIN_SCREENSHOT), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_DEFAULTZOOM), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_DEFAULTZOOM_SCREENSHOT), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_WORLD), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_WORLD_SCREENSHOT_DEFAULT_ZOOM), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_WORLD_ZOOM), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_WORLD_SCREENSHOT_CURRENT_ZOOM), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_HEIGHTMAP), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_HEIGHTMAP_SCREENSHOT), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_MINIMAP), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_MINIMAP_SCREENSHOT), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_TOPOGRAPHY), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_TOPOGRAPHY_SCREENSHOT), SetMinimalTextLines(2, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_SC_TAKE_INDUSTRY), SetFill(1, 1), SetStringTip(STR_SCREENSHOT_INDUSTRY_SCREENSHOT), SetMinimalTextLines(2, 0),
 	EndContainer(),
 };
 
@@ -69,18 +73,18 @@ static WindowDesc _screenshot_window_desc(__FILE__, __LINE__,
 	WDP_AUTO, "take_a_screenshot", 200, 100,
 	WC_SCREENSHOT, WC_NONE,
 	0,
-	std::begin(_nested_screenshot), std::end(_nested_screenshot)
+	_nested_screenshot
 );
 
 void ShowScreenshotWindow()
 {
 	CloseWindowById(WC_SCREENSHOT, 0);
-	new ScreenshotWindow(&_screenshot_window_desc);
+	new ScreenshotWindow(_screenshot_window_desc);
 }
 
 void SetScreenshotWindowHidden(bool hidden)
 {
-	ScreenshotWindow *scw = (ScreenshotWindow *) FindWindowById(WC_SCREENSHOT, 0);
+	ScreenshotWindow *scw = dynamic_cast<ScreenshotWindow *>(FindWindowById(WC_SCREENSHOT, 0));
 	if (scw != nullptr) {
 		if (hidden) {
 			scw->SetDirtyAsBlocks();

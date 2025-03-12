@@ -51,7 +51,7 @@ enum VehicleRailFlags {
 };
 
 /** Modes for ignoring signals. */
-enum TrainForceProceeding : byte {
+enum TrainForceProceeding : uint8_t {
 	TFP_NONE   = 0,    ///< Normal operation.
 	TFP_STUCK  = 1,    ///< Proceed till next signal, but ignore being stuck till then. This includes force leaving depots.
 	TFP_SIGNAL = 2,    ///< Ignore next signal, after the signal ignore being stuck.
@@ -76,12 +76,26 @@ enum RealisticBrakingConstants {
 	RBC_BRAKE_POWER_PER_LENGTH      = 15000,     ///< Additional power-based brake force per unit of train length (excludes maglevs)
 };
 
-byte FreightWagonMult(CargoID cargo);
+uint8_t FreightWagonMult(CargoID cargo);
 
 void CheckTrainsLengths();
 
 void FreeTrainTrackReservation(Train *v, TileIndex origin = INVALID_TILE, Trackdir orig_td = INVALID_TRACKDIR);
-bool TryPathReserve(Train *v, bool mark_as_stuck = false, bool first_tile_okay = false);
+
+/** Result flags for TryPathReserveWithResultFlags */
+enum TryPathReserveResultFlags {
+	TPRRF_NONE                  = 0,      ///< No flags
+	TPRRF_RESERVATION_OK        = 0x01,   ///< Reservation OK
+	TPRRF_REVERSE_AT_SIGNAL     = 0x02,   ///< Reverse at signal
+};
+DECLARE_ENUM_AS_BIT_SET(TryPathReserveResultFlags)
+
+TryPathReserveResultFlags TryPathReserveWithResultFlags(Train *v, bool mark_as_stuck = false, bool first_tile_okay = false);
+
+inline bool TryPathReserve(Train *v, bool mark_as_stuck = false, bool first_tile_okay = false)
+{
+	return TryPathReserveWithResultFlags(v, mark_as_stuck, first_tile_okay) & TPRRF_RESERVATION_OK;
+}
 
 void DeleteVisibleTrain(Train *v);
 
@@ -93,11 +107,11 @@ void NormalizeTrainVehInDepot(const Train *u);
 
 inline int GetTrainRealisticBrakingTargetDecelerationLimit(int acceleration_type)
 {
-	return 120 + (acceleration_type * 48);
+	return _settings_game.vehicle.train_acc_braking_percent * (120 + (acceleration_type * 48)) / 100;
 }
 
 /** Flags for TrainCache::cached_tflags */
-enum TrainCacheFlags : byte {
+enum TrainCacheFlags : uint8_t {
 	TCF_NONE         = 0,        ///< No flags
 	TCF_TILT         = 0x01,     ///< Train can tilt; feature provides a bonus in curves.
 	TCF_RL_BRAKING   = 0x02,     ///< Train realistic braking (movement physics) in effect for this vehicle
@@ -110,11 +124,7 @@ struct TrainCache {
 	/* Cached wagon override spritegroup */
 	const struct SpriteGroup *cached_override;
 
-	/* cached max. speed / acceleration data */
-	int cached_max_curve_speed;     ///< max consist speed limited by curves
-
 	/* cached values, recalculated on load and each time a vehicle is added to/removed from the consist. */
-	int cached_curve_speed_mod;     ///< curve speed modifier of the entire train
 	TrainCacheFlags cached_tflags;  ///< train cached flags
 	uint8_t cached_num_engines;     ///< total number of engines, including rear ends of multiheaded engines
 	uint16_t cached_centre_mass;    ///< Cached position of the centre of mass, from the front
@@ -123,7 +133,12 @@ struct TrainCache {
 	uint16_t cached_uncapped_decel; ///< Uncapped cached deceleration for realistic braking lookahead purposes
 	uint8_t cached_deceleration;    ///< Cached deceleration for realistic braking lookahead purposes
 
-	byte user_def_data;             ///< Cached property 0x25. Can be set by Callback 0x36.
+	uint8_t user_def_data;          ///< Cached property 0x25. Can be set by Callback 0x36.
+
+	int16_t cached_curve_speed_mod; ///< curve speed modifier of the entire train
+	uint16_t cached_max_curve_speed; ///< max consist speed limited by curves
+
+	bool operator==(const TrainCache &) const = default;
 };
 
 /**
@@ -143,7 +158,7 @@ struct Train final : public GroundVehicle<Train, VEH_TRAIN> {
 	RailTypes compatible_railtypes;
 
 	TrainForceProceeding force_proceed;
-	byte critical_breakdown_count; ///< Counter for the number of critical breakdowns since last service
+	uint8_t critical_breakdown_count; ///< Counter for the number of critical breakdowns since last service
 
 	/** Ticks waiting in front of a signal, ticks being stuck or a counter for forced proceeding through signals. */
 	uint16_t wait_counter;
@@ -184,7 +199,7 @@ struct Train final : public GroundVehicle<Train, VEH_TRAIN> {
 
 	void ReserveTrackUnderConsist() const;
 
-	int GetCurveSpeedLimit() const;
+	uint16_t GetCurveSpeedLimit() const;
 
 	void ConsistChanged(ConsistChangeFlags allowed_changes);
 
@@ -403,7 +418,7 @@ protected: // These functions should not be called outside acceleration code.
 	 * Allows to know the tractive effort value that this vehicle will use.
 	 * @return Tractive effort value from the engine.
 	 */
-	inline byte GetTractiveEffort() const
+	inline uint8_t GetTractiveEffort() const
 	{
 		return GetVehicleProperty(this, PROP_TRAIN_TRACTIVE_EFFORT, RailVehInfo(this->engine_type)->tractive_effort);
 	}
@@ -412,7 +427,7 @@ protected: // These functions should not be called outside acceleration code.
 	 * Gets the area used for calculating air drag.
 	 * @return Area of the engine in m^2.
 	 */
-	inline byte GetAirDragArea() const
+	inline uint8_t GetAirDragArea() const
 	{
 		/* Air drag is higher in tunnels due to the limited cross-section. */
 		return (this->track & TRACK_BIT_WORMHOLE && this->vehstatus & VS_HIDDEN) ? 28 : 14;
@@ -422,7 +437,7 @@ protected: // These functions should not be called outside acceleration code.
 	 * Gets the air drag coefficient of this vehicle.
 	 * @return Air drag value from the engine.
 	 */
-	inline byte GetAirDrag() const
+	inline uint8_t GetAirDrag() const
 	{
 		return RailVehInfo(this->engine_type)->air_drag;
 	}
@@ -479,7 +494,7 @@ protected: // These functions should not be called outside acceleration code.
 	 * Returns the curve speed modifier of this vehicle.
 	 * @return Current curve speed modifier, in fixed-point binary representation with 8 fractional bits.
 	 */
-	inline int GetCurveSpeedModifier() const
+	inline int16_t GetCurveSpeedModifier() const
 	{
 		return GetVehicleProperty(this, PROP_TRAIN_CURVE_SPEED_MOD, RailVehInfo(this->engine_type)->curve_speed_mod, true);
 	}
@@ -503,6 +518,17 @@ protected: // These functions should not be called outside acceleration code.
 	{
 		return false;
 	}
+
+private:
+	void UpdateTrainSpeedAdaptationLimitInternal(uint16_t speed);
+
+public:
+	inline void UpdateTrainSpeedAdaptationLimit(uint16_t speed)
+	{
+		if (speed != this->signal_speed_restriction) this->UpdateTrainSpeedAdaptationLimitInternal(speed);
+	}
+
+	bool StopFoundAtVehiclePosition() const;
 };
 
 struct TrainDecelerationStats {
@@ -514,10 +540,7 @@ struct TrainDecelerationStats {
 	TrainDecelerationStats(const Train *t, int z_pos);
 };
 
-CommandCost CmdMoveRailVehicle(TileIndex, DoCommandFlag , uint32_t, uint32_t, const char *);
-CommandCost CmdMoveVirtualRailVehicle(TileIndex, DoCommandFlag, uint32_t, uint32_t, const char*);
-
-Train* BuildVirtualRailVehicle(EngineID, StringID &error, uint32_t user, bool no_consist_change);
+Train *BuildVirtualRailVehicle(EngineID, StringID &error, ClientID user, bool no_consist_change);
 
 int GetTileMarginInFrontOfTrain(const Train *v, int x_pos, int y_pos);
 

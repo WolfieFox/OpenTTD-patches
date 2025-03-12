@@ -40,18 +40,18 @@ inline StringTab GetStringTab(StringID str)
  * @param str String identifier
  * @return StringIndex from \a str
  */
-inline uint GetStringIndex(StringID str)
+inline StringIndexInTab GetStringIndex(StringID str)
 {
-	return str - (GetStringTab(str) << TAB_SIZE_BITS);
+	return StringIndexInTab{str - (GetStringTab(str) << TAB_SIZE_BITS)};
 }
 
 /**
  * Create a StringID
  * @param tab StringTab
- * @param index StringIndex
+ * @param index Index of the string within the given tab.
  * @return StringID composed from \a tab and \a index
  */
-inline StringID MakeStringID(StringTab tab, uint index)
+inline StringID MakeStringID(StringTab tab, StringIndexInTab index)
 {
 	if (tab == TEXT_TAB_NEWGRF_START) {
 		assert(index < TAB_SIZE_NEWGRF);
@@ -61,15 +61,19 @@ inline StringID MakeStringID(StringTab tab, uint index)
 		assert(tab < TEXT_TAB_END);
 		assert(index < TAB_SIZE);
 	}
-	return (tab << TAB_SIZE_BITS) + index;
+	return (tab << TAB_SIZE_BITS) + index.base();
 }
 
 std::string GetString(StringID string);
 const char *GetStringPtr(StringID string);
+void AppendStringInPlace(std::string &result, StringID string);
+void AppendStringInPlace(struct format_buffer &result, StringID string);
 uint32_t GetStringGRFID(StringID string);
 
 uint ConvertKmhishSpeedToDisplaySpeed(uint speed, VehicleType type);
 uint ConvertDisplaySpeedToKmhishSpeed(uint speed, VehicleType type);
+
+StringID GetVelocityUnitName(VehicleType type);
 
 /**
  * Pack velocity and vehicle type for use with SCC_VELOCITY string parameter.
@@ -108,9 +112,14 @@ void SetDParamMaxValue(size_t n, T max_value, uint min_count = 0, FontSize size 
 void SetDParamStr(size_t n, const char *str);
 void SetDParamStr(size_t n, std::string str);
 
+inline void SetDParamStr(size_t n, std::string_view str)
+{
+	SetDParamStr(n, std::string{str});
+}
+
 void CopyInDParam(const std::span<const StringParameterBackup> backup, uint offset = 0);
 void CopyOutDParam(std::vector<StringParameterBackup> &backup, size_t num);
-bool HaveDParamChanged(const std::vector<StringParameterBackup> &backup);
+bool HaveDParamChanged(const std::span<const StringParameterBackup> backup);
 
 /**
  * Get the current string parameter at index \a n from the global string parameter array.
@@ -126,6 +135,7 @@ extern TextDirection _current_text_dir; ///< Text direction of the currently sel
 
 void InitializeLanguagePacks();
 const char *GetCurrentLanguageIsoCode();
+std::string_view GetListSeparator();
 
 /**
  * A searcher for missing glyphs.

@@ -15,7 +15,7 @@
 /**
  * Enum for all companies/owners.
  */
-enum Owner : byte {
+enum Owner : uint8_t {
 	/* All companies below MAX_COMPANIES are playable
 	 * companies, above, they are special, computer controlled 'companies' */
 	OWNER_BEGIN     = 0x00, ///< First owner
@@ -47,7 +47,7 @@ static const uint MIN_COMPETITORS_INTERVAL = 0;   ///< The minimum interval (in 
 static const uint MAX_COMPETITORS_INTERVAL = 500; ///< The maximum interval (in minutes) between competitors.
 
 /** Define basic enum properties */
-template <> struct EnumPropsT<Owner> : MakeEnumPropsT<Owner, byte, OWNER_BEGIN, OWNER_END, INVALID_OWNER> {};
+template <> struct EnumPropsT<Owner> : MakeEnumPropsT<Owner, uint8_t, OWNER_BEGIN, OWNER_END, INVALID_OWNER> {};
 
 typedef Owner CompanyID;
 
@@ -57,22 +57,33 @@ struct Company;
 typedef uint32_t CompanyManagerFace; ///< Company manager face bits, info see in company_manager_face.h
 
 /** The reason why the company was removed. */
-enum CompanyRemoveReason {
+enum CompanyRemoveReason : uint8_t {
 	CRR_MANUAL,    ///< The company is manually removed.
 	CRR_AUTOCLEAN, ///< The company is removed due to autoclean.
 	CRR_BANKRUPT,  ///< The company went belly-up.
 
 	CRR_END,       ///< Sentinel for end.
+
+	CRR_NONE = CRR_MANUAL, ///< Dummy reason for actions that don't need one.
 };
 
 /** The action to do with CMD_COMPANY_CTRL. */
-enum CompanyCtrlAction {
+enum CompanyCtrlAction : uint8_t {
 	CCA_NEW,    ///< Create a new company.
 	CCA_NEW_AI, ///< Create a new AI company.
 	CCA_DELETE, ///< Delete a company.
 	CCA_SALE,   ///< Offer a company for sale.
+	CCA_MERGE,  ///< Merge companies.
 
 	CCA_END,    ///< Sentinel for end.
+};
+
+/** The action to do with CMD_COMPANY_ALLOW_LIST_CTRL. */
+enum CompanyAllowListCtrlAction : uint8_t {
+	CALCA_ADD, ///< Create a public key.
+	CALCA_REMOVE, ///< Remove a public key.
+
+	CALCA_END,    ///< Sentinel for end.
 };
 
 #endif /* COMPANY_TYPE_H */

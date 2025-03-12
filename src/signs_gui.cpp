@@ -11,6 +11,7 @@
 #include "company_gui.h"
 #include "company_func.h"
 #include "signs_base.h"
+#include "signs_cmd.h"
 #include "signs_func.h"
 #include "debug.h"
 #include "command_func.h"
@@ -57,15 +58,15 @@ struct SignList {
 	{
 		if (!this->signs.NeedRebuild()) return;
 
-		DEBUG(misc, 3, "Building sign list");
+		Debug(misc, 3, "Building sign list");
 
 		this->signs.clear();
+		this->signs.reserve(Sign::GetNumItems());
 
 		for (const Sign *si : Sign::Iterate()) this->signs.push_back(si);
 
 		this->signs.SetFilterState(true);
 		this->FilterSignList();
-		this->signs.shrink_to_fit();
 		this->signs.RebuildDone();
 	}
 
@@ -101,14 +102,14 @@ struct SignList {
 	}
 
 	/** Filter sign list excluding OWNER_DEITY */
-	static bool OwnerDeityFilter(const Sign * const *a, StringFilter &filter)
+	static bool OwnerDeityFilter(const Sign * const *a, StringFilter &)
 	{
 		/* You should never be able to edit signs of owner DEITY */
 		return (*a)->owner != OWNER_DEITY;
 	}
 
 	/** Filter sign list by owner */
-	static bool OwnerVisibilityFilter(const Sign * const *a, StringFilter &filter)
+	static bool OwnerVisibilityFilter(const Sign * const *a, StringFilter &)
 	{
 		assert(!HasBit(_display_opt, DO_SHOW_COMPETITOR_SIGNS));
 		/* Hide sign if non-own signs are hidden in the viewport */
@@ -139,7 +140,7 @@ struct SignListWindow : Window, SignList {
 	int text_offset; ///< Offset of the sign text relative to the left edge of the WID_SIL_LIST widget.
 	Scrollbar *vscroll;
 
-	SignListWindow(WindowDesc *desc, WindowNumber window_number) : Window(desc), filter_editbox(MAX_LENGTH_SIGN_NAME_CHARS * MAX_CHAR_LENGTH, MAX_LENGTH_SIGN_NAME_CHARS)
+	SignListWindow(WindowDesc &desc, WindowNumber window_number) : Window(desc), filter_editbox(MAX_LENGTH_SIGN_NAME_CHARS * MAX_CHAR_LENGTH, MAX_LENGTH_SIGN_NAME_CHARS)
 	{
 		this->CreateNestedTree();
 		this->vscroll = this->GetScrollbar(WID_SIL_SCROLLBAR);
@@ -208,9 +209,9 @@ struct SignListWindow : Window, SignList {
 				tr = tr.Indent(this->text_offset, rtl);
 
 				/* At least one sign available. */
-				for (uint16_t i = this->vscroll->GetPosition(); this->vscroll->IsVisible(i) && i < this->vscroll->GetCount(); i++)
-				{
-					const Sign *si = this->signs[i];
+				auto [first, last] = this->vscroll->GetVisibleRangeIterators(this->signs);
+				for (auto it = first; it != last; ++it) {
+					const Sign *si = *it;
 
 					if (si->owner != OWNER_NONE) DrawCompanyIcon(si->owner, icon_left, tr.top + sprite_offset_y);
 
@@ -236,16 +237,13 @@ struct SignListWindow : Window, SignList {
 				if (it == this->signs.end()) return;
 
 				const Sign *si = *it;
-				ScrollMainWindowToTile(TileVirtXY(si->x, si->y));
-				break;
-			}
-
-			case WID_SIL_FILTER_ENTER_BTN:
-				if (this->signs.size() >= 1) {
-					const Sign *si = this->signs[0];
+				if (_ctrl_pressed) {
+					ShowExtraViewportWindow(TileVirtXY(si->x, si->y));
+				} else {
 					ScrollMainWindowToTile(TileVirtXY(si->x, si->y));
 				}
 				break;
+			}
 
 			case WID_SIL_FILTER_MATCH_CASE_BTN:
 				SignList::match_case = !SignList::match_case; // Toggle match case
@@ -260,23 +258,23 @@ struct SignListWindow : Window, SignList {
 		this->vscroll->SetCapacityFromWidget(this, WID_SIL_LIST, WidgetDimensions::scaled.framerect.Vertical());
 	}
 
-	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension &size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
 	{
 		switch (widget) {
 			case WID_SIL_LIST: {
 				Dimension spr_dim = GetSpriteSize(SPR_COMPANY_ICON);
 				this->text_offset = WidgetDimensions::scaled.frametext.left + spr_dim.width + 2; // 2 pixels space between icon and the sign text.
-				resize->height = std::max<uint>(GetCharacterHeight(FS_NORMAL), spr_dim.height + 2);
-				Dimension d = {(uint)(this->text_offset + WidgetDimensions::scaled.frametext.right), padding.height + 5 * resize->height};
-				*size = maxdim(*size, d);
+				resize.height = std::max<uint>(GetCharacterHeight(FS_NORMAL), spr_dim.height + 2);
+				Dimension d = {(uint)(this->text_offset + WidgetDimensions::scaled.frametext.right), padding.height + 5 * resize.height};
+				size = maxdim(size, d);
 				break;
 			}
 
 			case WID_SIL_CAPTION:
 				SetDParamMaxValue(0, Sign::GetPoolSize(), 3);
-				*size = GetStringBoundingBox(STR_SIGN_LIST_CAPTION);
-				size->height += padding.height;
-				size->width  += padding.width;
+				size = GetStringBoundingBox(STR_SIGN_LIST_CAPTION);
+				size.height += padding.height;
+				size.width  += padding.width;
 				break;
 		}
 	}
@@ -298,7 +296,7 @@ struct SignListWindow : Window, SignList {
 
 	void OnEditboxChanged(WidgetID widget) override
 	{
-		if (widget == WID_SIL_FILTER_TEXT) this->SetFilterString(this->filter_editbox.text.buf);
+		if (widget == WID_SIL_FILTER_TEXT) this->SetFilterString(this->filter_editbox.text.GetText());
 	}
 
 	void BuildSortSignList()
@@ -353,14 +351,13 @@ static EventState SignListGlobalHotkeys(int hotkey)
 
 static Hotkey signlist_hotkeys[] = {
 	Hotkey('F', "focus_filter_box", SLHK_FOCUS_FILTER_BOX),
-	HOTKEY_LIST_END
 };
 HotkeyList SignListWindow::hotkeys("signlist", signlist_hotkeys, SignListGlobalHotkeys);
 
 static constexpr NWidgetPart _nested_sign_list_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_BROWN),
-		NWidget(WWT_CAPTION, COLOUR_BROWN, WID_SIL_CAPTION), SetDataTip(STR_SIGN_LIST_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_CAPTION, COLOUR_BROWN, WID_SIL_CAPTION), SetStringTip(STR_SIGN_LIST_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
 		NWidget(WWT_SHADEBOX, COLOUR_BROWN),
 		NWidget(WWT_DEFSIZEBOX, COLOUR_BROWN),
 		NWidget(WWT_STICKYBOX, COLOUR_BROWN),
@@ -371,10 +368,10 @@ static constexpr NWidgetPart _nested_sign_list_widgets[] = {
 								SetResize(1, 1), SetFill(1, 0), SetScrollbar(WID_SIL_SCROLLBAR), EndContainer(),
 			NWidget(NWID_HORIZONTAL),
 				NWidget(WWT_PANEL, COLOUR_BROWN), SetFill(1, 1),
-					NWidget(WWT_EDITBOX, COLOUR_BROWN, WID_SIL_FILTER_TEXT), SetMinimalSize(80, 12), SetResize(1, 0), SetFill(1, 0), SetPadding(2, 2, 2, 2),
-							SetDataTip(STR_LIST_FILTER_OSKTITLE, STR_LIST_FILTER_TOOLTIP),
+					NWidget(WWT_EDITBOX, COLOUR_BROWN, WID_SIL_FILTER_TEXT), SetMinimalSize(80, 0), SetResize(1, 0), SetFill(1, 0), SetPadding(2, 2, 2, 2),
+							SetStringTip(STR_LIST_FILTER_OSKTITLE, STR_LIST_FILTER_TOOLTIP),
 				EndContainer(),
-				NWidget(WWT_TEXTBTN, COLOUR_BROWN, WID_SIL_FILTER_MATCH_CASE_BTN), SetDataTip(STR_SIGN_LIST_MATCH_CASE, STR_SIGN_LIST_MATCH_CASE_TOOLTIP),
+				NWidget(WWT_TEXTBTN, COLOUR_BROWN, WID_SIL_FILTER_MATCH_CASE_BTN), SetStringTip(STR_SIGN_LIST_MATCH_CASE, STR_SIGN_LIST_MATCH_CASE_TOOLTIP),
 			EndContainer(),
 		EndContainer(),
 		NWidget(NWID_VERTICAL),
@@ -388,7 +385,7 @@ static WindowDesc _sign_list_desc(__FILE__, __LINE__,
 	WDP_AUTO, "list_signs", 358, 138,
 	WC_SIGN_LIST, WC_NONE,
 	0,
-	std::begin(_nested_sign_list_widgets), std::end(_nested_sign_list_widgets),
+	_nested_sign_list_widgets,
 	&SignListWindow::hotkeys
 );
 
@@ -399,7 +396,7 @@ static WindowDesc _sign_list_desc(__FILE__, __LINE__,
  */
 Window *ShowSignList()
 {
-	return AllocateWindowDescFront<SignListWindow>(&_sign_list_desc, 0);
+	return AllocateWindowDescFront<SignListWindow>(_sign_list_desc, 0);
 }
 
 /**
@@ -411,7 +408,7 @@ Window *ShowSignList()
 static bool RenameSign(SignID index, const char *text)
 {
 	bool remove = StrEmpty(text);
-	DoCommandP(0, index, 0, CMD_RENAME_SIGN | (StrEmpty(text) ? CMD_MSG(STR_ERROR_CAN_T_DELETE_SIGN) : CMD_MSG(STR_ERROR_CAN_T_CHANGE_SIGN_NAME)), nullptr, text);
+	Command<CMD_RENAME_SIGN>::Post(StrEmpty(text) ? STR_ERROR_CAN_T_DELETE_SIGN : STR_ERROR_CAN_T_CHANGE_SIGN_NAME, index, text);
 	return remove;
 }
 
@@ -419,7 +416,7 @@ struct SignWindow : Window, SignList {
 	QueryString name_editbox;
 	SignID cur_sign;
 
-	SignWindow(WindowDesc *desc, const Sign *si) : Window(desc), name_editbox(MAX_LENGTH_SIGN_NAME_CHARS * MAX_CHAR_LENGTH, MAX_LENGTH_SIGN_NAME_CHARS)
+	SignWindow(WindowDesc &desc, const Sign *si) : Window(desc), name_editbox(MAX_LENGTH_SIGN_NAME_CHARS * MAX_CHAR_LENGTH, MAX_LENGTH_SIGN_NAME_CHARS)
 	{
 		this->querystrings[WID_QES_TEXT] = &this->name_editbox;
 		this->name_editbox.caption = STR_EDIT_SIGN_CAPTION;
@@ -521,7 +518,7 @@ struct SignWindow : Window, SignList {
 				break;
 
 			case WID_QES_OK:
-				if (RenameSign(this->cur_sign, this->name_editbox.text.buf)) break;
+				if (RenameSign(this->cur_sign, this->name_editbox.text.GetText())) break;
 				[[fallthrough]];
 
 			case WID_QES_CANCEL:
@@ -534,19 +531,19 @@ struct SignWindow : Window, SignList {
 static constexpr NWidgetPart _nested_query_sign_edit_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(WWT_CAPTION, COLOUR_GREY, WID_QES_CAPTION), SetDataTip(STR_JUST_STRING, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS), SetTextStyle(TC_WHITE),
-		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_QES_LOCATION), SetMinimalSize(12, 14), SetDataTip(SPR_GOTO_LOCATION, STR_EDIT_SIGN_LOCATION_TOOLTIP),
+		NWidget(WWT_CAPTION, COLOUR_GREY, WID_QES_CAPTION), SetStringTip(STR_JUST_STRING, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS), SetTextStyle(TC_WHITE),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_QES_LOCATION), SetAspect(WidgetDimensions::ASPECT_LOCATION), SetSpriteTip(SPR_GOTO_LOCATION, STR_EDIT_SIGN_LOCATION_TOOLTIP),
 	EndContainer(),
 	NWidget(WWT_PANEL, COLOUR_GREY),
-		NWidget(WWT_EDITBOX, COLOUR_GREY, WID_QES_TEXT), SetMinimalSize(256, 12), SetDataTip(STR_EDIT_SIGN_SIGN_OSKTITLE, STR_NULL), SetPadding(2, 2, 2, 2),
+		NWidget(WWT_EDITBOX, COLOUR_GREY, WID_QES_TEXT), SetMinimalSize(256, 0), SetStringTip(STR_EDIT_SIGN_SIGN_OSKTITLE), SetPadding(2, 2, 2, 2),
 	EndContainer(),
 	NWidget(NWID_HORIZONTAL),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_QES_OK), SetMinimalSize(61, 12), SetDataTip(STR_BUTTON_OK, STR_NULL),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_QES_CANCEL), SetMinimalSize(60, 12), SetDataTip(STR_BUTTON_CANCEL, STR_NULL),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_QES_DELETE), SetMinimalSize(60, 12), SetDataTip(STR_TOWN_VIEW_DELETE_BUTTON, STR_NULL),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_QES_OK), SetMinimalSize(61, 12), SetStringTip(STR_BUTTON_OK),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_QES_CANCEL), SetMinimalSize(60, 12), SetStringTip(STR_BUTTON_CANCEL),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_QES_DELETE), SetMinimalSize(60, 12), SetStringTip(STR_TOWN_VIEW_DELETE_BUTTON),
 		NWidget(WWT_PANEL, COLOUR_GREY), SetFill(1, 1), EndContainer(),
-		NWidget(WWT_PUSHARROWBTN, COLOUR_GREY, WID_QES_PREVIOUS), SetMinimalSize(11, 12), SetDataTip(AWV_DECREASE, STR_EDIT_SIGN_PREVIOUS_SIGN_TOOLTIP),
-		NWidget(WWT_PUSHARROWBTN, COLOUR_GREY, WID_QES_NEXT), SetMinimalSize(11, 12), SetDataTip(AWV_INCREASE, STR_EDIT_SIGN_NEXT_SIGN_TOOLTIP),
+		NWidget(WWT_PUSHARROWBTN, COLOUR_GREY, WID_QES_PREVIOUS), SetMinimalSize(11, 12), SetArrowWidgetTypeTip(AWV_DECREASE, STR_EDIT_SIGN_PREVIOUS_SIGN_TOOLTIP),
+		NWidget(WWT_PUSHARROWBTN, COLOUR_GREY, WID_QES_NEXT), SetMinimalSize(11, 12), SetArrowWidgetTypeTip(AWV_INCREASE, STR_EDIT_SIGN_NEXT_SIGN_TOOLTIP),
 	EndContainer(),
 };
 
@@ -554,7 +551,7 @@ static WindowDesc _query_sign_edit_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_QUERY_STRING, WC_NONE,
 	WDF_CONSTRUCTION,
-	std::begin(_nested_query_sign_edit_widgets), std::end(_nested_query_sign_edit_widgets)
+	_nested_query_sign_edit_widgets
 );
 
 /**
@@ -583,7 +580,7 @@ void ShowRenameSignWindow(const Sign *si)
 	/* Delete all other edit windows */
 	CloseWindowByClass(WC_QUERY_STRING);
 
-	new SignWindow(&_query_sign_edit_desc, si);
+	new SignWindow(_query_sign_edit_desc, si);
 }
 
 /**

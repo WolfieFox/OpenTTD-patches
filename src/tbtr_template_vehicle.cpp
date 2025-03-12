@@ -47,6 +47,7 @@ INSTANTIATE_POOL_METHODS(TemplateReplacement)
 
 robin_hood::unordered_flat_map<GroupID, TemplateID> _template_replacement_index;
 robin_hood::unordered_flat_map<GroupID, TemplateID> _template_replacement_index_recursive;
+static constexpr uint32_t INDEX_RECURSIVE_GUARD_REINDEX_PENDING = 0x80000000;
 static uint32_t _template_replacement_index_recursive_guard = 0;
 
 static void MarkTrainsInGroupAsPendingTemplateReplacement(GroupID gid, const TemplateVehicle *tv);
@@ -91,7 +92,8 @@ TemplateVehicle::TemplateVehicle(VehicleType type, EngineID eid, Owner current_o
 	this->ctrl_flags = 0;
 }
 
-TemplateVehicle::~TemplateVehicle() {
+TemplateVehicle::~TemplateVehicle()
+{
 	TemplateVehicle *v = this->Next();
 	this->SetNext(nullptr);
 
@@ -123,20 +125,6 @@ TemplateVehicle* TemplateVehicle::GetPrevUnit()
 	return tv;
 }
 
-/** Length()
- * @return: length of vehicle, including current part
- */
-int TemplateVehicle::Length() const
-{
-	int l = 1;
-	const TemplateVehicle *tmp = this;
-	while (tmp->Next()) {
-		tmp = tmp->Next();
-		l++;
-	}
-	return l;
-}
-
 TemplateReplacement::~TemplateReplacement()
 {
 	if (CleaningPool()) return;
@@ -160,6 +148,7 @@ bool ShouldServiceTrainForTemplateReplacement(const Train *t, const TemplateVehi
 	if (needed_money > c->money) return false;
 	TBTRDiffFlags diff = TrainTemplateDifference(t, tv);
 	if (diff & TBTRDF_CONSIST) {
+		if (_settings_game.difficulty.infinite_money) return true;
 		/* Check money.
 		 * We want 2*(the price of the whole template) without looking at the value of the vehicle(s) we are going to sell, or not need to buy. */
 		for (const TemplateVehicle *tv_unit = tv; tv_unit != nullptr; tv_unit = tv_unit->GetNextUnit()) {
@@ -208,7 +197,7 @@ static void MarkTrainsInGroupAsPendingTemplateReplacement(GroupID gid, const Tem
 		if (!t->IsFrontEngine() || t->owner != owner || t->group_id >= NEW_GROUP) continue;
 
 		if (std::binary_search(groups.begin(), groups.end(), t->group_id)) {
-			SB(t->vehicle_flags, VF_REPLACEMENT_PENDING, 1, (tv != nullptr && ShouldServiceTrainForTemplateReplacement(t, tv)) ? 1 : 0);
+			AssignBit(t->vehicle_flags, VF_REPLACEMENT_PENDING, tv != nullptr && ShouldServiceTrainForTemplateReplacement(t, tv));
 		}
 	}
 }
@@ -221,7 +210,7 @@ void MarkTrainsUsingTemplateAsPendingTemplateReplacement(const TemplateVehicle *
 		if (!t->IsFrontEngine() || t->owner != owner || t->group_id >= NEW_GROUP) continue;
 
 		if (GetTemplateIDByGroupIDRecursive(t->group_id) == tv->index) {
-			SB(t->vehicle_flags, VF_REPLACEMENT_PENDING, 1, ShouldServiceTrainForTemplateReplacement(t, tv) ? 1 : 0);
+			AssignBit(t->vehicle_flags, VF_REPLACEMENT_PENDING, ShouldServiceTrainForTemplateReplacement(t, tv));
 		}
 	}
 }
@@ -318,7 +307,8 @@ void ReindexTemplateReplacements()
 void ReindexTemplateReplacementsRecursive()
 {
 	if (_template_replacement_index_recursive_guard != 0) {
-		_template_replacement_index_recursive_guard |= 0x80000000;
+		/* Perform the reindex later when the refcount falls to zero */
+		_template_replacement_index_recursive_guard |= INDEX_RECURSIVE_GUARD_REINDEX_PENDING;
 		return;
 	}
 
@@ -347,7 +337,8 @@ ReindexTemplateReplacementsRecursiveGuard::ReindexTemplateReplacementsRecursiveG
 ReindexTemplateReplacementsRecursiveGuard::~ReindexTemplateReplacementsRecursiveGuard()
 {
 	_template_replacement_index_recursive_guard--;
-	if (_template_replacement_index_recursive_guard == 0x80000000) {
+	if (_template_replacement_index_recursive_guard == INDEX_RECURSIVE_GUARD_REINDEX_PENDING) {
+		/* The refcount is now 0 | the reindex pending bit, clear the bit and do the reindex. */
 		_template_replacement_index_recursive_guard = 0;
 		ReindexTemplateReplacementsRecursive();
 	}

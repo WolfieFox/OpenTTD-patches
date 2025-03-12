@@ -15,20 +15,20 @@
 #include "tbtr_template_vehicle.h"
 #include "3rdparty/cpp-btree/btree_set.h"
 
-Train* VirtualTrainFromTemplateVehicle(const TemplateVehicle* tv, StringID &err, uint32_t user);
+enum ClientID : uint32_t;
 
-void BuildTemplateGuiList(GUITemplateList*, Scrollbar*, Owner, RailType);
+Train *VirtualTrainFromTemplateVehicle(const TemplateVehicle *tv, StringID &err, ClientID user);
 
-Money CalculateOverallTemplateCost(const TemplateVehicle*);
-Money CalculateOverallTemplateDisplayRunningCost(const TemplateVehicle*);
+void BuildTemplateGuiList(GUITemplateList *, Scrollbar *, Owner, RailType);
 
-void DrawTemplate(const TemplateVehicle*, int, int, int, int);
+Money CalculateOverallTemplateCost(const TemplateVehicle *);
+Money CalculateOverallTemplateDisplayRunningCost(const TemplateVehicle *);
 
-TemplateVehicle* TemplateVehicleFromVirtualTrain(Train *virt);
-Train* DeleteVirtualTrain(Train*, Train *);
+void DrawTemplate(const TemplateVehicle *, int, int, int, int);
+
+TemplateVehicle *TemplateVehicleFromVirtualTrain(Train *virt);
+Train* DeleteVirtualTrain(Train *, Train *);
 void SetupTemplateVehicleFromVirtual(TemplateVehicle *tmp, TemplateVehicle *prev, Train *virt);
-
-CommandCost CmdTemplateReplaceVehicle(Train*, bool, DoCommandFlag);
 
 TemplateVehicle *GetTemplateVehicleByGroupID(GroupID gid);
 TemplateVehicle *GetTemplateVehicleByGroupIDRecursive(GroupID gid);
@@ -42,12 +42,12 @@ struct TemplateDepotVehicles {
 	Train* ContainsEngine(EngineID eid, Train *not_in);
 };
 
-uint CountsTrainsNeedingTemplateReplacement(GroupID g_id, const TemplateVehicle *tv);
+uint CountTrainsNeedingTemplateReplacement(GroupID g_id, const TemplateVehicle *tv);
 
-CommandCost TestBuyAllTemplateVehiclesInChain(TemplateVehicle *tv, TileIndex tile);
+CommandCost TestBuyAllTemplateVehiclesInChain(const TemplateVehicle *tv, TileIndex tile);
 
-CommandCost CmdRefitTrainFromTemplate(Train *t, TemplateVehicle *tv, DoCommandFlag flags);
-CommandCost CmdSetTrainUnitDirectionFromTemplate(Train *t, TemplateVehicle *tv, DoCommandFlag flags);
+CommandCost CmdRefitTrainFromTemplate(Train *t, const TemplateVehicle *tv, DoCommandFlag flags);
+CommandCost CmdSetTrainUnitDirectionFromTemplate(Train *t, const TemplateVehicle *tv, DoCommandFlag flags);
 void BreakUpRemainders(Train *t);
 
 bool TemplateVehicleContainsEngineOfRailtype(const TemplateVehicle *tv, RailType type);

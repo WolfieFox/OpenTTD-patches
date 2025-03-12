@@ -39,12 +39,14 @@ public:
 	 * @param vehicle The vehicle that crashed.
 	 * @param crash_site Where the vehicle crashed.
 	 * @param crash_reason The reason why the vehicle crashed.
+	 * @param victims The number of victims caused by the crash.
 	 */
-	ScriptEventVehicleCrashed(VehicleID vehicle, TileIndex crash_site, CrashReason crash_reason) :
+	ScriptEventVehicleCrashed(VehicleID vehicle, TileIndex crash_site, CrashReason crash_reason, uint victims) :
 		ScriptEvent(ET_VEHICLE_CRASHED),
 		crash_site(crash_site),
 		vehicle(vehicle),
-		crash_reason(crash_reason)
+		crash_reason(crash_reason),
+		victims(victims)
 	{}
 #endif /* DOXYGEN_API */
 
@@ -73,10 +75,17 @@ public:
 	 */
 	CrashReason GetCrashReason() { return this->crash_reason; }
 
+	/**
+	 * Get the number of victims
+	 * @return The number of victims
+	 */
+	SQInteger GetVictims() { return this->victims; }
+
 private:
 	TileIndex crash_site;     ///< The location of the crash.
 	VehicleID vehicle;        ///< The crashed vehicle.
 	CrashReason crash_reason; ///< The reason for crashing.
+	uint victims; ///< The number of victims.
 };
 
 /**
@@ -273,8 +282,8 @@ public:
 
 	/**
 	 * Get the running cost of the offered engine.
-	 * @return The running cost of the vehicle per year.
-	 * @note Cost is per year; divide by 365 to get per day.
+	 * @return The running cost of the vehicle per economy-year.
+	 * @see \ref ScriptEconomyTime
 	 */
 	Money GetRunningCost();
 
@@ -336,6 +345,48 @@ public:
 
 private:
 	ScriptCompany::CompanyID owner; ///< The new company.
+};
+
+/**
+ * Event Company Renamed, indicating a company has changed name.
+ * @api ai game
+ */
+class ScriptEventCompanyRenamed : public ScriptEvent {
+public:
+#ifndef DOXYGEN_API
+	/**
+	 * @param owner The company that is renamed.
+	 */
+	ScriptEventCompanyRenamed(CompanyID company, const std::string &new_name) :
+		ScriptEvent(ET_COMPANY_RENAMED),
+		company(static_cast<ScriptCompany::CompanyID>(company)),
+		new_name(new_name)
+	{}
+#endif /* DOXYGEN_API */
+
+	/**
+	 * Convert an ScriptEvent to the real instance.
+	 * @param instance The instance to convert.
+	 * @return The converted instance.
+	 */
+	static ScriptEventCompanyRenamed *Convert(ScriptEvent *instance) { return static_cast<ScriptEventCompanyRenamed *>(instance); }
+
+	/**
+	 * Get the CompanyID of the company that has been renamed.
+	 * @return The CompanyID of the company.
+	 */
+	ScriptCompany::CompanyID GetCompanyID() { return this->company; }
+
+	/**
+	 * Get the new name of the company.
+	 * @return The new name of the company.
+	 */
+	std::optional<std::string> GetNewName() { return this->new_name; }
+
+private:
+
+	ScriptCompany::CompanyID company; ///< The company that was renamed.
+	std::string new_name; ///< The new name of the company.
 };
 
 /**
@@ -1321,6 +1372,50 @@ private:
 	StoryPageID page_id;
 	StoryPageElementID element_id;
 	VehicleID vehicle_id;
+};
+
+
+/**
+ * Event President Renamed, indicating a company's president's name has changed.
+ * This event is not sent to the company for who the president's name changed.
+ * @api ai game
+ */
+class ScriptEventPresidentRenamed : public ScriptEvent {
+public:
+#ifndef DOXYGEN_API
+	/**
+	 * @param company The company of the president.
+	 * @param new_name The new name of the president.
+	 */
+	ScriptEventPresidentRenamed(CompanyID company, const std::string &new_name) :
+		ScriptEvent(ET_PRESIDENT_RENAMED),
+		company(static_cast<ScriptCompany::CompanyID>(company)),
+		new_name(new_name)
+	{}
+#endif /* DOXYGEN_API */
+
+	/**
+	 * Convert an ScriptEvent to the real instance.
+	 * @param instance The instance to convert.
+	 * @return The converted instance.
+	 */
+	static ScriptEventPresidentRenamed *Convert(ScriptEvent *instance) { return static_cast<ScriptEventPresidentRenamed *>(instance); }
+
+	/**
+	 * Get the CompanyID of the company that got its president renamed.
+	 * @return The CompanyID of the company.
+	 */
+	ScriptCompany::CompanyID GetCompanyID() { return this->company; }
+
+	/**
+	 * Get the new name of the president.
+	 * @return The new name of the president.
+	 */
+	std::optional<std::string> GetNewName() { return this->new_name; }
+
+private:
+	ScriptCompany::CompanyID company; ///< The company of the renamed president.
+	std::string new_name; ///< The new name of the president.
 };
 
 #endif /* SCRIPT_EVENT_TYPES_HPP */

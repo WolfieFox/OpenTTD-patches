@@ -10,7 +10,7 @@
 #ifndef SCRIPT_OBJECT_HPP
 #define SCRIPT_OBJECT_HPP
 
-#include "../../misc/countedptr.hpp"
+#include "../../command_type.h"
 #include "../../road_type.h"
 #include "../../rail_type.h"
 #include "../../core/random_func.hpp"
@@ -22,8 +22,6 @@
 
 #include <utility>
 
-struct CommandAuxiliaryBase;
-
 /**
  * The callback function for Mode-classes.
  */
@@ -33,6 +31,27 @@ typedef bool (ScriptModeProc)();
  * The callback function for Async Mode-classes.
  */
 typedef bool (ScriptAsyncModeProc)();
+
+/**
+ * Simple counted object. Use it as base of your struct/class if you want to use
+ *  basic reference counting. Your struct/class will destroy and free itself when
+ *  last reference to it is released (using Release() method). The initial reference
+ *  count (when it is created) is zero (don't forget AddRef() at least one time if
+ *  not using ScriptObjectRef.
+ * @api -all
+ */
+class SimpleCountedObject {
+public:
+	SimpleCountedObject() : ref_count(0) {}
+	virtual ~SimpleCountedObject() = default;
+
+	inline void AddRef() { ++this->ref_count; }
+	void Release();
+	virtual void FinalRelease() {};
+
+private:
+	int32_t ref_count;
+};
 
 /**
  * Uper-parent object of all API classes. You should never use this class in
@@ -66,7 +85,7 @@ protected:
 
 public:
 	/**
-	 * Store the latest result of a DoCommand per company.
+	 * Store the latest result of a DoCommandOld per company.
 	 * @param res The result of the last command.
 	 */
 	static void SetLastCommandRes(bool res);
@@ -89,59 +108,126 @@ public:
 	 */
 	static void InitializeRandomizers();
 
+private:
+	static bool DoCommandImplementation(Commands cmd, TileIndex tile, CommandPayloadBase &&payload, Script_SuspendCallbackProc *callback, DoCommandIntlFlag intl_flags);
+
 protected:
+	struct OldCommandValueWrapper {
+		uint32_t value;
+
+		template <typename T>
+		OldCommandValueWrapper(const T &value) : value((uint32_t)value) {}
+		OldCommandValueWrapper(TileIndex tile) : value(tile.base()) {}
+	};
+
 	/**
-	 * Executes a raw DoCommand for the script.
+	 * Executes a raw DoCommandOld for the script.
 	 */
-	static bool DoCommandEx(TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint cmd, const char *text = nullptr, const CommandAuxiliaryBase *aux_data = nullptr, Script_SuspendCallbackProc *callback = nullptr);
-
-	static bool DoCommandEx(TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint cmd, const std::string &text, const CommandAuxiliaryBase *aux_data = nullptr, Script_SuspendCallbackProc *callback = nullptr)
+	static bool DoCommandEx(OldCommandValueWrapper tile, OldCommandValueWrapper p1, OldCommandValueWrapper p2, uint64_t p3, Commands cmd, const char *text = nullptr, Script_SuspendCallbackProc *callback = nullptr)
 	{
-		return ScriptObject::DoCommandEx(tile, p1, p2, p3, cmd, text.c_str(), aux_data, callback);
+		extern CommandFlags GetCommandFlags(Commands cmd);
+
+		P123CmdData payload(p1.value, p2.value, p3);
+		if (GetCommandFlags(cmd) & CMD_CLIENT_ID) SetCommandPayloadClientID(payload, (ClientID)UINT32_MAX);
+		if (text != nullptr) payload.text = text;
+		return ScriptObject::DoCommandImplementation(cmd, TileIndex(tile.value), std::move(payload), callback, DCIF_NONE);
 	}
 
-	static bool DoCommand(TileIndex tile, uint32_t p1, uint32_t p2, uint cmd, const char *text = nullptr, Script_SuspendCallbackProc *callback = nullptr)
+	static bool DoCommandEx(OldCommandValueWrapper tile, OldCommandValueWrapper p1, OldCommandValueWrapper p2, uint64_t p3, Commands cmd, const std::string &text, Script_SuspendCallbackProc *callback = nullptr)
 	{
-		return ScriptObject::DoCommandEx(tile, p1, p2, 0, cmd, text, nullptr, callback);
+		return ScriptObject::DoCommandEx(tile, p1, p2, p3, cmd, text.c_str(), callback);
 	}
 
-	static bool DoCommand(TileIndex tile, uint32_t p1, uint32_t p2, uint cmd, const std::string &text, Script_SuspendCallbackProc *callback = nullptr)
+	static bool DoCommandOld(OldCommandValueWrapper tile, OldCommandValueWrapper p1, OldCommandValueWrapper p2, Commands cmd, const char *text = nullptr, Script_SuspendCallbackProc *callback = nullptr)
 	{
-		return ScriptObject::DoCommandEx(tile, p1, p2, 0, cmd, text.c_str(), nullptr, callback);
+		return ScriptObject::DoCommandEx(tile, p1, p2, 0, cmd, text, callback);
 	}
+
+	static bool DoCommandOld(OldCommandValueWrapper tile, OldCommandValueWrapper p1, OldCommandValueWrapper p2, Commands cmd, const std::string &text, Script_SuspendCallbackProc *callback = nullptr)
+	{
+		return ScriptObject::DoCommandEx(tile, p1, p2, 0, cmd, text.c_str(), callback);
+	}
+
+	template <Commands cmd>
+	static bool DoCommand(TileIndex tile, typename CommandTraits<cmd>::PayloadType &&payload, Script_SuspendCallbackProc *callback = nullptr)
+	{
+		if constexpr (CommandTraits<cmd>::flags & CMD_CLIENT_ID) {
+			SetCommandPayloadClientID(payload, (ClientID)UINT32_MAX);
+		}
+		return ScriptObject::DoCommandImplementation(cmd, tile, std::move(payload), callback, DCIF_TYPE_CHECKED);
+	}
+
+	template <Commands TCmd, typename T> struct ScriptDoCommandHelper;
+	template <Commands TCmd, typename T> struct ScriptDoCommandHelperNoTile;
+
+	template <Commands Tcmd, typename... Targs>
+	struct ScriptDoCommandHelper<Tcmd, std::tuple<Targs...>> {
+		using PayloadType = CmdPayload<Tcmd>;
+
+		static bool Do(Script_SuspendCallbackProc *callback, TileIndex tile, Targs... args)
+		{
+			return ScriptObject::DoCommand<Tcmd>(tile, PayloadType::Make(std::forward<Targs>(args)...), callback);
+		}
+
+		static bool Do(TileIndex tile, Targs... args)
+		{
+			return ScriptObject::DoCommand<Tcmd>(tile, PayloadType::Make(std::forward<Targs>(args)...), nullptr);
+		}
+	};
+
+	template <Commands Tcmd, typename... Targs>
+	struct ScriptDoCommandHelperNoTile<Tcmd, std::tuple<Targs...>> {
+		using PayloadType = CmdPayload<Tcmd>;
+
+		static bool Do(Script_SuspendCallbackProc *callback, Targs... args)
+		{
+			return ScriptObject::DoCommand<Tcmd>(TileIndex{0}, PayloadType::Make(std::forward<Targs>(args)...), callback);
+		}
+
+		static bool Do(Targs... args)
+		{
+			return ScriptObject::DoCommand<Tcmd>(TileIndex{0}, PayloadType::Make(std::forward<Targs>(args)...), nullptr);
+		}
+	};
+
+	/* Note that output_no_tile is used here instead of input_no_tile, because a tile index used only for error messages is not useful */
+	template <Commands Tcmd>
+	struct Command : public std::conditional_t<::CommandTraits<Tcmd>::output_no_tile,
+			ScriptDoCommandHelperNoTile<Tcmd, typename ::CmdPayload<Tcmd>::Tuple>,
+			ScriptDoCommandHelper<Tcmd, typename ::CmdPayload<Tcmd>::Tuple>> {};
 
 	/**
 	 * Store the latest command executed by the script.
 	 */
-	static void SetLastCommand(TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint cmd);
+	static void SetLastCommand(Commands cmd, TileIndex tile, CallbackParameter cb_param);
 
 	/**
 	 * Check if it's the latest command executed by the script.
 	 */
-	static bool CheckLastCommand(TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint cmd);
+	static bool CheckLastCommand(Commands cmd, TileIndex tile, CallbackParameter cb_param);
 
 	/**
-	 * Sets the DoCommand costs counter to a value.
+	 * Sets the DoCommandOld costs counter to a value.
 	 */
 	static void SetDoCommandCosts(Money value);
 
 	/**
-	 * Increase the current value of the DoCommand costs counter.
+	 * Increase the current value of the DoCommandOld costs counter.
 	 */
 	static void IncreaseDoCommandCosts(Money value);
 
 	/**
-	 * Get the current DoCommand costs counter.
+	 * Get the current DoCommandOld costs counter.
 	 */
 	static Money GetDoCommandCosts();
 
 	/**
-	 * Set the DoCommand last error.
+	 * Set the DoCommandOld last error.
 	 */
 	static void SetLastError(ScriptErrorType last_error);
 
 	/**
-	 * Get the DoCommand last error.
+	 * Get the DoCommandOld last error.
 	 */
 	static ScriptErrorType GetLastError();
 
@@ -196,17 +282,17 @@ protected:
 	static ScriptObject *GetDoCommandAsyncModeInstance();
 
 	/**
-	 * Set the delay of the DoCommand.
+	 * Set the delay of the DoCommandOld.
 	 */
 	static void SetDoCommandDelay(uint ticks);
 
 	/**
-	 * Get the delay of the DoCommand.
+	 * Get the delay of the DoCommandOld.
 	 */
 	static uint GetDoCommandDelay();
 
 	/**
-	 * Get the latest result of a DoCommand.
+	 * Get the latest result of a DoCommandOld.
 	 */
 	static bool GetLastCommandRes();
 
@@ -216,29 +302,9 @@ protected:
 	static VehicleID GetNewVehicleID();
 
 	/**
-	 * Get the latest stored new_sign_id.
-	 */
-	static SignID GetNewSignID();
-
-	/**
 	 * Get the latest stored new_group_id.
 	 */
 	static GroupID GetNewGroupID();
-
-	/**
-	 * Get the latest stored new_goal_id.
-	 */
-	static GoalID GetNewGoalID();
-
-	/**
-	 * Get the latest stored new_story_page_id.
-	 */
-	static StoryPageID GetNewStoryPageID();
-
-	/**
-	 * Get the latest stored new_story_page_id.
-	 */
-	static StoryPageID GetNewStoryPageElementID();
 
 	/**
 	 * Store a allow_do_command per company.
@@ -249,25 +315,11 @@ protected:
 	/**
 	 * Get the internal value of allow_do_command. This can differ
 	 * from CanSuspend() if the reason we are not allowed
-	 * to execute a DoCommand is in squirrel and not the API.
+	 * to execute a DoCommandOld is in squirrel and not the API.
 	 * In that case use this function to restore the previous value.
 	 * @return True iff DoCommands are allowed in the current scope.
 	 */
 	static bool GetAllowDoCommand();
-
-	/**
-	 * Set if the script is running in calendar time or economy time mode.
-	 * Calendar time is used by OpenTTD for technology like vehicle introductions and expiration, and variable snowline. It can be sped up or slowed down by the player.
-	 * Economy time always runs at the same pace and handles things like cargo production, everything related to money, etc.
-	 * @param Calendar Should we use calendar time mode? (Set to false for economy time mode.)
-	 */
-	static void SetTimeMode(bool calendar);
-
-	/**
-	 * Check if the script is operating in calendar time mode, or in economy time mode. See SetTimeMode() for more information.
-	 * @return True if we are in calendar time mode, false if we are in economy time mode.
-	 */
-	static bool IsCalendarTimeMode();
 
 	/**
 	 * Set the current company to execute commands for or request
@@ -306,9 +358,19 @@ protected:
 	static void SetLastCommandResultData(uint32_t last_result);
 
 	/**
-	 * Get the result data of the last command.
+	 * Clear the result data of the last command.
 	 */
-	static uint32_t GetLastCommandResultData();
+	static void ClearLastCommandResultData();
+
+	/**
+	 * Get the result data of the last command, or a default value if there wasn't any.
+	 */
+	template <typename T>
+	static T GetLastCommandResultData(T default_value)
+	{
+		auto res = ScriptObject::GetLastCommandResultDataRaw();
+		return res.second ? static_cast<T>(res.first) : default_value;
+	}
 
 	/**
 	 * Set a variable that can be used by callback functions to pass information.
@@ -345,6 +407,8 @@ protected:
 	static void RegisterUniqueLogMessage(std::string &&msg);
 
 private:
+	static std::pair<uint32_t, bool> GetLastCommandResultDataRaw();
+
 	/**
 	 * Store a new_vehicle_id per company.
 	 * @param vehicle_id The new VehicleID.
@@ -352,34 +416,10 @@ private:
 	static void SetNewVehicleID(VehicleID vehicle_id);
 
 	/**
-	 * Store a new_sign_id per company.
-	 * @param sign_id The new SignID.
-	 */
-	static void SetNewSignID(SignID sign_id);
-
-	/**
 	 * Store a new_group_id per company.
 	 * @param group_id The new GroupID.
 	 */
 	static void SetNewGroupID(GroupID group_id);
-
-	/**
-	 * Store a new_goal_id per company.
-	 * @param goal_id The new GoalID.
-	 */
-	static void SetNewGoalID(GoalID goal_id);
-
-	/**
-	 * Store a new_story_page_id per company.
-	 * @param story_page_id The new StoryPageID.
-	 */
-	static void SetNewStoryPageID(StoryPageID story_page_id);
-
-	/**
-	 * Store a new_story_page_id per company.
-	 * @param story_page_id The new StoryPageID.
-	 */
-	static void SetNewStoryPageElementID(StoryPageElementID story_page_element_id);
 
 	static Randomizer random_states[OWNER_END]; ///< Random states for each of the scripts (game script uses OWNER_DEITY)
 };
@@ -399,7 +439,7 @@ public:
 	 */
 	ScriptObjectRef(T *data) : data(data)
 	{
-		this->data->AddRef();
+		if (this->data != nullptr) this->data->AddRef();
 	}
 
 	/* No copy constructor. */
@@ -443,6 +483,15 @@ public:
 	 * @return Pointer to the underlying object.
 	 */
 	T *operator->()
+	{
+		return this->data;
+	}
+
+	/**
+	 * The arrow operator on this reference returns the reference counted object.
+	 * @return Pointer to the underlying object.
+	 */
+	const T *operator->() const
 	{
 		return this->data;
 	}

@@ -14,6 +14,7 @@
 #include "vehiclelist_func.h"
 #include "group.h"
 #include "tracerestrict.h"
+#include "core/serialisation.hpp"
 
 #include "safeguards.h"
 
@@ -23,7 +24,7 @@
  */
 uint32_t VehicleListIdentifier::Pack() const
 {
-	byte c = this->company == OWNER_NONE ? 0xF : (byte)this->company;
+	uint8_t c = this->company == OWNER_NONE ? 0xF : (uint8_t)this->company;
 	assert(c             < (1 <<  4));
 	assert(this->vtype   < (1 <<  2));
 	assert(this->index   < (1 << 20));
@@ -40,7 +41,7 @@ uint32_t VehicleListIdentifier::Pack() const
  */
 bool VehicleListIdentifier::UnpackIfValid(uint32_t data)
 {
-	byte c        = GB(data, 28, 4);
+	uint8_t c     = GB(data, 28, 4);
 	this->company = c == 0xF ? OWNER_NONE : (CompanyID)c;
 	this->type    = (VehicleListType)GB(data, 23, 3);
 	this->vtype   = (VehicleType)GB(data, 26, 2);
@@ -59,6 +60,11 @@ bool VehicleListIdentifier::UnpackIfValid(uint32_t data)
 	[[maybe_unused]] bool ret = result.UnpackIfValid(data);
 	assert(ret);
 	return result;
+}
+
+void VehicleListIdentifier::fmt_format_value(format_target &output) const
+{
+	output.format("vli({}, {}, {}, {})", this->type, this->vtype, this->company, this->index);
 }
 
 /** Data for building a depot vehicle list. */
@@ -108,11 +114,6 @@ void BuildDepotVehicleList(VehicleType type, TileIndex tile, VehicleList *engine
 
 	BuildDepotVehicleListData bdvld{engines, wagons, individual_wagons};
 	FindVehicleOnPos(tile, type, &bdvld, BuildDepotVehicleListProc);
-
-	/* Ensure the lists are not wasting too much space. If the lists are fresh
-	 * (i.e. built within a command) then this will actually do nothing. */
-	engines->shrink_to_fit();
-	if (wagons != nullptr && wagons != engines) wagons->shrink_to_fit();
 }
 
 /** Cargo filter functions */
@@ -153,6 +154,7 @@ bool VehicleCargoFilter(const Vehicle *v, const CargoID cid)
  * Generate a list of vehicles based on window type.
  * @param list Pointer to list to add vehicles to
  * @param vli  The identifier of this vehicle list.
+ * @param cid Cargo filter (or CargoFilterCriteria::CF_ANY)
  * @return false if invalid list is requested
  */
 bool GenerateVehicleSortList(VehicleList *list, const VehicleListIdentifier &vli, const CargoID cid)
@@ -238,6 +240,5 @@ bool GenerateVehicleSortList(VehicleList *list, const VehicleListIdentifier &vli
 		default: return false;
 	}
 
-	list->shrink_to_fit();
 	return true;
 }

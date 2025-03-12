@@ -28,7 +28,6 @@
 
 #include "table/strings.h"
 
-#include <stdarg.h> /* va_list */
 #include <optional>
 
 #include "../safeguards.h"
@@ -281,7 +280,7 @@ struct NetworkChatWindow : public Window {
 	 * @param type The type of destination.
 	 * @param dest The actual destination index.
 	 */
-	NetworkChatWindow(WindowDesc *desc, DestType type, int dest) : Window(desc), message_editbox(NETWORK_CHAT_LENGTH)
+	NetworkChatWindow(WindowDesc &desc, DestType type, int dest) : Window(desc), message_editbox(NETWORK_CHAT_LENGTH)
 	{
 		this->dtype   = type;
 		this->dest    = dest;
@@ -298,7 +297,7 @@ struct NetworkChatWindow : public Window {
 		assert((uint)this->dtype < lengthof(chat_captions));
 
 		this->CreateNestedTree();
-		this->GetWidget<NWidgetCore>(WID_NC_DESTINATION)->widget_data = chat_captions[this->dtype];
+		this->GetWidget<NWidgetCore>(WID_NC_DESTINATION)->SetString(chat_captions[this->dtype]);
 		this->FinishInitNested(type);
 
 		this->SetFocusedWidget(WID_NC_TEXTBOX);
@@ -378,7 +377,7 @@ struct NetworkChatWindow : public Window {
 		bool second_scan = false;
 
 		/* Create views, so we do not need to copy the data for now. */
-		std::string_view pre_buf = _chat_tab_completion_active ? std::string_view(_chat_tab_completion_buf) : std::string_view(tb->buf);
+		std::string_view pre_buf = _chat_tab_completion_active ? std::string_view(_chat_tab_completion_buf) : std::string_view(tb->GetText());
 		std::string_view tb_buf = ChatTabCompletionFindText(pre_buf);
 
 		/*
@@ -400,11 +399,11 @@ struct NetworkChatWindow : public Window {
 
 					/* If we are completing at the begin of the line, skip the ': ' we added */
 					if (begin_of_line) {
-						view = std::string_view(tb->buf, (tb->bytes - 1) - 2);
+						view = std::string_view(tb->GetText(), (tb->bytes - 1) - 2);
 					} else {
 						/* Else, find the place we are completing at */
 						size_t offset = pre_buf.size() + 1;
-						view = std::string_view(tb->buf + offset, (tb->bytes - 1) - offset);
+						view = std::string_view(tb->GetText() + offset, (tb->bytes - 1) - offset);
 					}
 
 					/* Compare if we have a match */
@@ -418,7 +417,7 @@ struct NetworkChatWindow : public Window {
 
 			if (tb_buf.size() < cur_name.size() && cur_name.starts_with(tb_buf)) {
 				/* Save the data it was before completion */
-				if (!second_scan) _chat_tab_completion_buf = tb->buf;
+				if (!second_scan) _chat_tab_completion_buf = tb->GetText();
 				_chat_tab_completion_active = true;
 
 				/* Change to the found name. Add ': ' if we are at the start of the line (pretty) */
@@ -461,7 +460,7 @@ struct NetworkChatWindow : public Window {
 	{
 		switch (widget) {
 			case WID_NC_SENDBUTTON: /* Send */
-				SendChat(this->message_editbox.text.buf, this->dtype, this->dest);
+				SendChat(this->message_editbox.text.GetText(), this->dtype, this->dest);
 				[[fallthrough]];
 
 			case WID_NC_CLOSE: /* Cancel */
@@ -504,10 +503,10 @@ static constexpr NWidgetPart _nested_chat_window_widgets[] = {
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY, WID_NC_CLOSE),
 		NWidget(WWT_PANEL, COLOUR_GREY, WID_NC_BACKGROUND),
 			NWidget(NWID_HORIZONTAL),
-				NWidget(WWT_TEXT, COLOUR_GREY, WID_NC_DESTINATION), SetMinimalSize(62, 12), SetPadding(1, 0, 1, 0), SetAlignment(SA_VERT_CENTER | SA_RIGHT), SetDataTip(STR_NULL, STR_NULL),
-				NWidget(WWT_EDITBOX, COLOUR_GREY, WID_NC_TEXTBOX), SetMinimalSize(100, 12), SetPadding(1, 0, 1, 0), SetResize(1, 0),
-																	SetDataTip(STR_NETWORK_CHAT_OSKTITLE, STR_NULL),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_NC_SENDBUTTON), SetMinimalSize(62, 12), SetPadding(1, 0, 1, 0), SetDataTip(STR_NETWORK_CHAT_SEND, STR_NULL),
+				NWidget(WWT_TEXT, INVALID_COLOUR, WID_NC_DESTINATION), SetMinimalSize(62, 12), SetPadding(1, 0, 1, 0), SetAlignment(SA_VERT_CENTER | SA_RIGHT),
+				NWidget(WWT_EDITBOX, COLOUR_GREY, WID_NC_TEXTBOX), SetMinimalSize(100, 0), SetPadding(1, 0, 1, 0), SetResize(1, 0),
+																	SetStringTip(STR_NETWORK_CHAT_OSKTITLE),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_NC_SENDBUTTON), SetMinimalSize(62, 12), SetPadding(1, 0, 1, 0), SetStringTip(STR_NETWORK_CHAT_SEND),
 			EndContainer(),
 		EndContainer(),
 	EndContainer(),
@@ -518,7 +517,7 @@ static WindowDesc _chat_window_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0,
 	WC_SEND_NETWORK_MSG, WC_NONE,
 	WDF_NETWORK,
-	std::begin(_nested_chat_window_widgets), std::end(_nested_chat_window_widgets)
+	_nested_chat_window_widgets
 );
 
 
@@ -530,5 +529,5 @@ static WindowDesc _chat_window_desc(__FILE__, __LINE__,
 void ShowNetworkChatQueryWindow(DestType type, int dest)
 {
 	CloseWindowByClass(WC_SEND_NETWORK_MSG);
-	new NetworkChatWindow(&_chat_window_desc, type, dest);
+	new NetworkChatWindow(_chat_window_desc, type, dest);
 }

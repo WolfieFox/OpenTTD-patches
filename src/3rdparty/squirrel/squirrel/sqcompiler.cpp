@@ -3,6 +3,7 @@
  */
 
 #include "../../../stdafx.h"
+#include "../../../core/format.hpp"
 
 #include <squirrel.h>
 #include "sqpcheader.h"
@@ -14,6 +15,8 @@
 #include "sqlexer.h"
 #include "sqvm.h"
 #include "sqtable.h"
+
+#include "../../../core/bit_cast.hpp"
 
 #include "../../../string_func.h"
 
@@ -61,16 +64,6 @@ public:
 		_vm=v;
 		_sourcename = SQString::Create(_ss(v), sourcename);
 		_lineinfo = lineinfo;_raiseerror = raiseerror;
-	}
-
-	[[noreturn]] void Error(const SQChar *s, ...) WARN_FORMAT(2, 3)
-	{
-		static SQChar temp[256];
-		va_list vl;
-		va_start(vl, s);
-		vseprintf(temp, lastof(temp), s, vl);
-		va_end(vl);
-		throw CompileException(temp);
 	}
 
 	[[noreturn]] void Error(const std::string &msg)
@@ -121,9 +114,9 @@ public:
 					default:
 						etypename = _lex.Tok2Str(tok);
 					}
-					Error("expected '%s'", etypename);
+					Error(fmt::format("expected '{}'", etypename));
 				}
-				Error("expected '%c'", (char)tok);
+				Error(fmt::format("expected '{:c}'", tok));
 			}
 		}
 		SQObjectPtr ret;
@@ -648,7 +641,7 @@ public:
 							Expect('.'); constid = Expect(TK_IDENTIFIER);
 							if(!_table(constant)->Get(constid,constval)) {
 								constval.Null();
-								Error("invalid constant [%s.%s]", _stringval(id),_stringval(constid));
+								Error(fmt::format("invalid constant [{}.{}]", _stringval(id),_stringval(constid)));
 							}
 						}
 						else {
@@ -660,8 +653,7 @@ public:
 							_fs->AddInstruction(_OP_LOADINT, _exst._deref,_integer(constval));
 						}
 						else if(ctype == OT_FLOAT && sizeof(SQFloat) == sizeof(SQInt32)) {
-							SQFloat f = _float(constval);
-							_fs->AddInstruction(_OP_LOADFLOAT, _exst._deref,*((SQInt32 *)&f));
+							_fs->AddInstruction(_OP_LOADFLOAT, _exst._deref, std::bit_cast<SQInt32>(_float(constval)));
 						}
 						else {
 							_fs->AddInstruction(_OP_LOAD, _exst._deref, _fs->GetConstant(constval));
@@ -707,7 +699,7 @@ public:
 			break;
 		case TK_FLOAT:
 			if(sizeof(SQFloat) == sizeof(SQInt32)) {
-				_fs->AddInstruction(_OP_LOADFLOAT, _fs->PushTarget(),*((SQInt32 *)&_lex._fvalue));
+				_fs->AddInstruction(_OP_LOADFLOAT, _fs->PushTarget(), std::bit_cast<SQInt32>(_lex._fvalue));
 			}
 			else {
 				_fs->AddInstruction(_OP_LOAD, _fs->PushTarget(), _fs->GetNumericConstant(_lex._fvalue));

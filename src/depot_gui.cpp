@@ -31,6 +31,11 @@
 #include "error.h"
 #include "tbtr_template_vehicle.h"
 #include "core/geometry_func.hpp"
+#include "departures_gui.h"
+#include "vehicle_gui_base.h"
+#include "train_cmd.h"
+#include "vehicle_cmd.h"
+#include "tbtr_template_vehicle_cmd.h"
 
 #include "widgets/depot_widget.h"
 
@@ -48,11 +53,11 @@
 static constexpr NWidgetPart _nested_train_depot_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(NWID_SELECTION, INVALID_COLOUR, WID_D_SHOW_RENAME), // rename button
-			NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_RENAME), SetMinimalSize(12, 14), SetDataTip(SPR_RENAME, STR_DEPOT_RENAME_TOOLTIP),
+		NWidget(NWID_SELECTION, INVALID_COLOUR, WID_D_SHOW_RENAME), SetAspect(WidgetDimensions::ASPECT_RENAME), // rename button
+			NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_RENAME), SetAspect(WidgetDimensions::ASPECT_RENAME), SetSpriteTip(SPR_RENAME, STR_DEPOT_RENAME_TOOLTIP),
 		EndContainer(),
-		NWidget(WWT_CAPTION, COLOUR_GREY, WID_D_CAPTION), SetDataTip(STR_DEPOT_CAPTION, STR_NULL),
-		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_LOCATION), SetMinimalSize(12, 14), SetDataTip(SPR_GOTO_LOCATION, STR_NULL),
+		NWidget(WWT_CAPTION, COLOUR_GREY, WID_D_CAPTION), SetStringTip(STR_DEPOT_CAPTION),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_LOCATION), SetAspect(WidgetDimensions::ASPECT_LOCATION), SetSpriteTip(SPR_GOTO_LOCATION),
 		NWidget(WWT_SHADEBOX, COLOUR_GREY),
 		NWidget(WWT_DEFSIZEBOX, COLOUR_GREY),
 		NWidget(WWT_STICKYBOX, COLOUR_GREY),
@@ -65,21 +70,22 @@ static constexpr NWidgetPart _nested_train_depot_widgets[] = {
 			EndContainer(),
 		EndContainer(),
 		NWidget(NWID_VERTICAL),
-			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_D_SELL), SetDataTip(0x0, STR_NULL), SetResize(0, 1), SetFill(0, 1),
+			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_D_SELL), SetResize(0, 1), SetFill(0, 1),
 			NWidget(NWID_SELECTION, INVALID_COLOUR, WID_D_SHOW_SELL_CHAIN),
-				NWidget(WWT_IMGBTN, COLOUR_GREY, WID_D_SELL_CHAIN), SetDataTip(SPR_SELL_CHAIN_TRAIN, STR_DEPOT_DRAG_WHOLE_TRAIN_TO_SELL_TOOLTIP), SetResize(0, 1), SetFill(0, 1),
+				NWidget(WWT_IMGBTN, COLOUR_GREY, WID_D_SELL_CHAIN), SetSpriteTip(SPR_SELL_CHAIN_TRAIN, STR_DEPOT_DRAG_WHOLE_TRAIN_TO_SELL_TOOLTIP), SetResize(0, 1), SetFill(0, 1),
 			EndContainer(),
-			NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_SELL_ALL), SetDataTip(0x0, STR_NULL),
-			NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_AUTOREPLACE), SetDataTip(0x0, STR_NULL),
+			NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_SELL_ALL),
+			NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_AUTOREPLACE),
 		EndContainer(),
 		NWidget(NWID_VSCROLLBAR, COLOUR_GREY, WID_D_V_SCROLL),
 	EndContainer(),
 	NWidget(NWID_HORIZONTAL, NC_EQUALSIZE),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_D_BUILD), SetDataTip(0x0, STR_NULL), SetFill(1, 1), SetResize(1, 0),
-		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_D_CLONE), SetDataTip(0x0, STR_NULL), SetFill(1, 1), SetResize(1, 0),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_D_VEHICLE_LIST), SetDataTip(0x0, STR_NULL), SetFill(0, 1),
-		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_STOP_ALL), SetDataTip(SPR_FLAG_VEH_STOPPED, STR_NULL), SetFill(0, 1),
-		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_START_ALL), SetDataTip(SPR_FLAG_VEH_RUNNING, STR_NULL), SetFill(0, 1),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_D_BUILD), SetFill(1, 1), SetResize(1, 0),
+		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_D_CLONE), SetFill(1, 1), SetResize(1, 0),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_D_DEPARTURES), SetFill(0, 1), SetStringTip(STR_STATION_VIEW_DEPARTURES_BUTTON, STR_STATION_VIEW_DEPARTURES_TOOLTIP),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, WID_D_VEHICLE_LIST), SetAspect(WidgetDimensions::ASPECT_VEHICLE_ICON), SetFill(0, 1),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_STOP_ALL), SetSpriteTip(SPR_FLAG_VEH_STOPPED), SetAspect(WidgetDimensions::ASPECT_VEHICLE_FLAG), SetFill(0, 1),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_D_START_ALL), SetSpriteTip(SPR_FLAG_VEH_RUNNING), SetAspect(WidgetDimensions::ASPECT_VEHICLE_FLAG), SetFill(0, 1),
 		NWidget(WWT_RESIZEBOX, COLOUR_GREY),
 	EndContainer(),
 };
@@ -88,28 +94,28 @@ static WindowDesc _train_depot_desc(__FILE__, __LINE__,
 	WDP_AUTO, "depot_train", 362, 123,
 	WC_VEHICLE_DEPOT, WC_NONE,
 	0,
-	std::begin(_nested_train_depot_widgets), std::end(_nested_train_depot_widgets)
+	_nested_train_depot_widgets
 );
 
 static WindowDesc _road_depot_desc(__FILE__, __LINE__,
 	WDP_AUTO, "depot_roadveh", 316, 97,
 	WC_VEHICLE_DEPOT, WC_NONE,
 	0,
-	std::begin(_nested_train_depot_widgets), std::end(_nested_train_depot_widgets)
+	_nested_train_depot_widgets
 );
 
 static WindowDesc _ship_depot_desc(__FILE__, __LINE__,
 	WDP_AUTO, "depot_ship", 306, 99,
 	WC_VEHICLE_DEPOT, WC_NONE,
 	0,
-	std::begin(_nested_train_depot_widgets), std::end(_nested_train_depot_widgets)
+	_nested_train_depot_widgets
 );
 
 static WindowDesc _aircraft_depot_desc(__FILE__, __LINE__,
 	WDP_AUTO, "depot_aircraft", 332, 99,
 	WC_VEHICLE_DEPOT, WC_NONE,
 	0,
-	std::begin(_nested_train_depot_widgets), std::end(_nested_train_depot_widgets)
+	_nested_train_depot_widgets
 );
 
 extern void DepotSortList(VehicleList *list);
@@ -122,7 +128,7 @@ extern void DepotSortList(VehicleList *list);
  * @param p2 unused
  * @param cmd unused
  */
-void CcCloneVehicle(const CommandCost &result, TileIndex tile, uint32_t p1, uint32_t p2, uint64_t p3, uint32_t cmd)
+void CcCloneVehicle(const CommandCost &result)
 {
 	if (result.Failed()) return;
 
@@ -146,7 +152,7 @@ static void TrainDepotMoveVehicle(const Vehicle *wagon, VehicleID sel, const Veh
 
 	if (wagon == v) return;
 
-	DoCommandP(v->tile, v->index | (_ctrl_pressed ? 1 : 0) << 20, wagon == nullptr ? INVALID_VEHICLE : wagon->index, CMD_MOVE_RAIL_VEHICLE | CMD_MSG(STR_ERROR_CAN_T_MOVE_VEHICLE));
+	Command<CMD_MOVE_RAIL_VEHICLE>::Post(STR_ERROR_CAN_T_MOVE_VEHICLE, v->tile, v->index, wagon == nullptr ? INVALID_VEHICLE : wagon->index, _ctrl_pressed ? MoveRailVehicleFlags::MoveChain : MoveRailVehicleFlags::None);
 }
 
 static VehicleCellSize _base_block_sizes_depot[VEH_COMPANY_END];    ///< Cell size for vehicle images in the depot view.
@@ -260,6 +266,7 @@ struct DepotWindow : Window {
 	VehicleID vehicle_over; ///< Rail vehicle over which another one is dragged, \c INVALID_VEHICLE if none.
 	VehicleType type;
 	bool generate_list;
+	bool check_unitnumber_digits;
 	WidgetID hovered_widget; ///< Index of the widget being hovered during drag/drop. -1 if no drag is in progress.
 	VehicleList vehicle_list;
 	VehicleList wagon_list;
@@ -268,13 +275,14 @@ struct DepotWindow : Window {
 	Scrollbar *hscroll;     ///< Only for trains.
 	Scrollbar *vscroll;
 
-	DepotWindow(WindowDesc *desc, TileIndex tile, VehicleType type) : Window(desc)
+	DepotWindow(WindowDesc &desc, TileIndex tile, VehicleType type) : Window(desc)
 	{
 		assert(IsCompanyBuildableVehicleType(type)); // ensure that we make the call with a valid type
 
 		this->sel = INVALID_VEHICLE;
 		this->vehicle_over = INVALID_VEHICLE;
 		this->generate_list = true;
+		this->check_unitnumber_digits = true;
 		this->hovered_widget = -1;
 		this->type = type;
 		this->num_columns = 1; // for non-trains this gets set in FinishInitNested()
@@ -286,11 +294,11 @@ struct DepotWindow : Window {
 		/* Don't show 'rename button' of aircraft hangar */
 		this->GetWidget<NWidgetStacked>(WID_D_SHOW_RENAME)->SetDisplayedPlane(type == VEH_AIRCRAFT ? SZSP_NONE : 0);
 		/* Only train depots have a horizontal scrollbar and a 'sell chain' button */
-		if (type == VEH_TRAIN) this->GetWidget<NWidgetCore>(WID_D_MATRIX)->widget_data = 1 << MAT_COL_START;
+		if (type == VEH_TRAIN) this->GetWidget<NWidgetCore>(WID_D_MATRIX)->SetMatrixDimension(1, 0 /* auto-scale */);
 		this->GetWidget<NWidgetStacked>(WID_D_SHOW_H_SCROLL)->SetDisplayedPlane(type == VEH_TRAIN ? 0 : SZSP_HORIZONTAL);
 		this->GetWidget<NWidgetStacked>(WID_D_SHOW_SELL_CHAIN)->SetDisplayedPlane(type == VEH_TRAIN ? 0 : SZSP_NONE);
 		this->SetupWidgetData(type);
-		this->FinishInitNested(tile);
+		this->FinishInitNested(tile.base());
 
 		this->owner = GetTileOwner(tile);
 		OrderBackup::Reset();
@@ -300,7 +308,7 @@ struct DepotWindow : Window {
 	{
 		CloseWindowById(WC_BUILD_VEHICLE, this->window_number);
 		CloseWindowById(GetWindowClassForVehicleType(this->type), VehicleListIdentifier(VL_DEPOT_LIST, this->type, this->owner, this->GetDepotIndex()).Pack(), false);
-		OrderBackup::Reset(this->window_number);
+		OrderBackup::Reset(TileIndex(this->window_number));
 		this->Window::Close();
 	}
 
@@ -443,8 +451,10 @@ struct DepotWindow : Window {
 		MODE_START_STOP,
 	};
 
-	DepotGUIAction GetVehicleFromDepotWndPt(int x, int y, const Vehicle **veh, GetDepotVehiclePtData *d) const
+	DepotGUIAction GetVehicleFromDepotWndPt(int x, int y, const Vehicle **veh, GetDepotVehiclePtData *d)
 	{
+		this->RefreshVehicleList();
+
 		const NWidgetCore *matrix_widget = this->GetWidget<NWidgetCore>(WID_D_MATRIX);
 		/* Make X relative to widget. Y is left alone for GetScrolledRowFromWidget(). */
 		x -= matrix_widget->pos_x;
@@ -461,10 +471,10 @@ struct DepotWindow : Window {
 		}
 		ym = (y - matrix_widget->pos_y) % this->resize.step_height;
 
-		int row = this->vscroll->GetScrolledRowFromWidget(y, this, WID_D_MATRIX);
+		int32_t row = this->vscroll->GetScrolledRowFromWidget(y, this, WID_D_MATRIX);
 		uint pos = (row * this->num_columns) + xt;
 
-		if (row == INT_MAX || this->vehicle_list.size() + this->wagon_list.size() <= pos) {
+		if (row == INT32_MAX || this->vehicle_list.size() + this->wagon_list.size() <= pos) {
 			/* Clicking on 'line' / 'block' without a vehicle */
 			if (this->type == VEH_TRAIN) {
 				/* End the dragging */
@@ -590,56 +600,56 @@ struct DepotWindow : Window {
 	 */
 	void SetupWidgetData(VehicleType type)
 	{
-		this->GetWidget<NWidgetCore>(WID_D_STOP_ALL)->tool_tip     = STR_DEPOT_MASS_STOP_DEPOT_TRAIN_TOOLTIP + type;
-		this->GetWidget<NWidgetCore>(WID_D_START_ALL)->tool_tip    = STR_DEPOT_MASS_START_DEPOT_TRAIN_TOOLTIP + type;
-		this->GetWidget<NWidgetCore>(WID_D_SELL)->tool_tip         = STR_DEPOT_TRAIN_SELL_TOOLTIP + type;
-		this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->tool_tip     = STR_DEPOT_SELL_ALL_BUTTON_TRAIN_TOOLTIP + type;
+		this->GetWidget<NWidgetCore>(WID_D_STOP_ALL)->SetToolTip(STR_DEPOT_MASS_STOP_DEPOT_TRAIN_TOOLTIP + type);
+		this->GetWidget<NWidgetCore>(WID_D_START_ALL)->SetToolTip(STR_DEPOT_MASS_START_DEPOT_TRAIN_TOOLTIP + type);
+		this->GetWidget<NWidgetCore>(WID_D_SELL)->SetToolTip(STR_DEPOT_TRAIN_SELL_TOOLTIP + type);
+		this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->SetToolTip(STR_DEPOT_SELL_ALL_BUTTON_TRAIN_TOOLTIP + type);
 
-		this->GetWidget<NWidgetCore>(WID_D_BUILD)->SetDataTip(STR_DEPOT_TRAIN_NEW_VEHICLES_BUTTON + type, STR_DEPOT_TRAIN_NEW_VEHICLES_TOOLTIP + type);
-		this->GetWidget<NWidgetCore>(WID_D_CLONE)->SetDataTip(STR_DEPOT_CLONE_TRAIN + type, STR_DEPOT_CLONE_TRAIN_DEPOT_INFO + type);
+		this->GetWidget<NWidgetCore>(WID_D_BUILD)->SetStringTip(STR_DEPOT_TRAIN_NEW_VEHICLES_BUTTON + type, STR_DEPOT_TRAIN_NEW_VEHICLES_TOOLTIP + type);
+		this->GetWidget<NWidgetCore>(WID_D_CLONE)->SetStringTip(STR_DEPOT_CLONE_TRAIN + type, STR_DEPOT_CLONE_TRAIN_DEPOT_TOOLTIP + type);
 
-		this->GetWidget<NWidgetCore>(WID_D_LOCATION)->tool_tip     = STR_DEPOT_TRAIN_LOCATION_TOOLTIP + type;
-		this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->tool_tip = STR_DEPOT_VEHICLE_ORDER_LIST_TRAIN_TOOLTIP + type;
-		this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->tool_tip  = STR_DEPOT_AUTOREPLACE_TRAIN_TOOLTIP + type;
-		this->GetWidget<NWidgetCore>(WID_D_MATRIX)->tool_tip       = STR_DEPOT_TRAIN_LIST_TOOLTIP + this->type;
+		this->GetWidget<NWidgetCore>(WID_D_LOCATION)->SetToolTip(STR_DEPOT_TRAIN_LOCATION_TOOLTIP + type);
+		this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->SetToolTip(STR_DEPOT_VEHICLE_ORDER_LIST_TRAIN_TOOLTIP + type);
+		this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->SetToolTip(STR_DEPOT_AUTOREPLACE_TRAIN_TOOLTIP + type);
+		this->GetWidget<NWidgetCore>(WID_D_MATRIX)->SetToolTip(STR_DEPOT_TRAIN_LIST_TOOLTIP + this->type);
 
 		switch (type) {
 			default: NOT_REACHED();
 
 			case VEH_TRAIN:
-				this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->widget_data = STR_TRAIN;
+				this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->SetString(STR_TRAIN);
 
 				/* Sprites */
-				this->GetWidget<NWidgetCore>(WID_D_SELL)->widget_data        = SPR_SELL_TRAIN;
-				this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->widget_data    = SPR_SELL_ALL_TRAIN;
-				this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->widget_data = SPR_REPLACE_TRAIN;
+				this->GetWidget<NWidgetCore>(WID_D_SELL)->SetSprite(SPR_SELL_TRAIN);
+				this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->SetSprite(SPR_SELL_ALL_TRAIN);
+				this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->SetSprite(SPR_REPLACE_TRAIN);
 				break;
 
 			case VEH_ROAD:
-				this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->widget_data = STR_LORRY;
+				this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->SetString(STR_LORRY);
 
 				/* Sprites */
-				this->GetWidget<NWidgetCore>(WID_D_SELL)->widget_data        = SPR_SELL_ROADVEH;
-				this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->widget_data    = SPR_SELL_ALL_ROADVEH;
-				this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->widget_data = SPR_REPLACE_ROADVEH;
+				this->GetWidget<NWidgetCore>(WID_D_SELL)->SetSprite(SPR_SELL_ROADVEH);
+				this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->SetSprite(SPR_SELL_ALL_ROADVEH);
+				this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->SetSprite(SPR_REPLACE_ROADVEH);
 				break;
 
 			case VEH_SHIP:
-				this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->widget_data = STR_SHIP;
+				this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->SetString(STR_SHIP);
 
 				/* Sprites */
-				this->GetWidget<NWidgetCore>(WID_D_SELL)->widget_data        = SPR_SELL_SHIP;
-				this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->widget_data    = SPR_SELL_ALL_SHIP;
-				this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->widget_data = SPR_REPLACE_SHIP;
+				this->GetWidget<NWidgetCore>(WID_D_SELL)->SetSprite(SPR_SELL_SHIP);
+				this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->SetSprite(SPR_SELL_ALL_SHIP);
+				this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->SetSprite(SPR_REPLACE_SHIP);
 				break;
 
 			case VEH_AIRCRAFT:
-				this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->widget_data = STR_PLANE;
+				this->GetWidget<NWidgetCore>(WID_D_VEHICLE_LIST)->SetString(STR_PLANE);
 
 				/* Sprites */
-				this->GetWidget<NWidgetCore>(WID_D_SELL)->widget_data        = SPR_SELL_AIRCRAFT;
-				this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->widget_data    = SPR_SELL_ALL_AIRCRAFT;
-				this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->widget_data = SPR_REPLACE_AIRCRAFT;
+				this->GetWidget<NWidgetCore>(WID_D_SELL)->SetSprite(SPR_SELL_AIRCRAFT);
+				this->GetWidget<NWidgetCore>(WID_D_SELL_ALL)->SetSprite(SPR_SELL_ALL_AIRCRAFT);
+				this->GetWidget<NWidgetCore>(WID_D_AUTOREPLACE)->SetSprite(SPR_REPLACE_AIRCRAFT);
 				break;
 		}
 	}
@@ -655,7 +665,7 @@ struct DepotWindow : Window {
 		this->flag_size = maxdim(GetScaledSpriteSize(SPR_FLAG_VEH_STOPPED), GetScaledSpriteSize(SPR_FLAG_VEH_RUNNING));
 	}
 
-	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension &size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
 	{
 		switch (widget) {
 			case WID_D_MATRIX: {
@@ -681,18 +691,18 @@ struct DepotWindow : Window {
 				}
 				int base_width = this->count_width + this->header_width + padding.width;
 
-				resize->height = std::max<uint>(this->cell_size.height, min_height + padding.height);
+				resize.height = std::max<uint>(this->cell_size.height, min_height + padding.height);
 				if (this->type == VEH_TRAIN) {
-					resize->width = 1;
-					size->width = base_width + 2 * ScaleSpriteTrad(29); // about 2 parts
-					size->height = resize->height * 6;
+					resize.width = 1;
+					size.width = base_width + 2 * ScaleSpriteTrad(29); // about 2 parts
+					size.height = resize.height * 6;
 				} else {
-					resize->width = base_width + this->cell_size.extend_left + this->cell_size.extend_right;
-					size->width = resize->width * (this->type == VEH_ROAD ? 5 : 3);
-					size->height = resize->height * (this->type == VEH_ROAD ? 5 : 3);
+					resize.width = base_width + this->cell_size.extend_left + this->cell_size.extend_right;
+					size.width = resize.width * (this->type == VEH_ROAD ? 5 : 3);
+					size.height = resize.height * (this->type == VEH_ROAD ? 5 : 3);
 				}
-				fill->width = resize->width;
-				fill->height = resize->height;
+				fill.width = resize.width;
+				fill.height = resize.height;
 				break;
 			}
 		}
@@ -708,15 +718,25 @@ struct DepotWindow : Window {
 		this->generate_list = true;
 	}
 
-	void OnPaint() override
+	void RefreshVehicleList()
 	{
 		if (this->generate_list) {
 			/* Generate the vehicle list
 			 * It's ok to use the wagon pointers for non-trains as they will be ignored */
-			BuildDepotVehicleList(this->type, this->window_number, &this->vehicle_list, &this->wagon_list);
+			BuildDepotVehicleList(this->type, TileIndex(this->window_number), &this->vehicle_list, &this->wagon_list);
 			this->generate_list = false;
 			DepotSortList(&this->vehicle_list);
 
+			this->check_unitnumber_digits = true;
+		}
+	}
+
+	void OnPaint() override
+	{
+		this->RefreshVehicleList();
+
+		if (this->check_unitnumber_digits) {
+			this->check_unitnumber_digits = false;
 			uint new_unitnumber_digits = GetUnitNumberDigits(this->vehicle_list);
 			/* Only increase the size; do not decrease to prevent constant changes */
 			if (this->unitnumber_digits < new_unitnumber_digits) {
@@ -744,7 +764,7 @@ struct DepotWindow : Window {
 		}
 
 		/* Setup disabled buttons. */
-		TileIndex tile = this->window_number;
+		TileIndex tile(this->window_number);
 		this->SetWidgetsDisabledState(!Company::IsValidID(_local_company) || !IsInfraTileUsageAllowed(this->type, _local_company, tile),
 			WID_D_STOP_ALL,
 			WID_D_START_ALL,
@@ -768,7 +788,7 @@ struct DepotWindow : Window {
 
 			case WID_D_BUILD: // Build vehicle
 				ResetObjectToPlace();
-				ShowBuildVehicleWindow(this->window_number, this->type);
+				ShowBuildVehicleWindow(TileIndex(this->window_number), this->type);
 				break;
 
 			case WID_D_CLONE: // Clone button
@@ -789,9 +809,9 @@ struct DepotWindow : Window {
 
 			case WID_D_LOCATION:
 				if (_ctrl_pressed) {
-					ShowExtraViewportWindow(this->window_number);
+					ShowExtraViewportWindow(TileIndex(this->window_number));
 				} else {
-					ScrollMainWindowToTile(this->window_number);
+					ScrollMainWindowToTile(TileIndex(this->window_number));
 				}
 				break;
 
@@ -804,7 +824,7 @@ struct DepotWindow : Window {
 			case WID_D_STOP_ALL:
 			case WID_D_START_ALL: {
 				VehicleListIdentifier vli(VL_DEPOT_LIST, this->type, this->owner);
-				DoCommandP(this->window_number, (widget == WID_D_START_ALL ? (1 << 0) : 0), vli.Pack(), CMD_MASS_START_STOP);
+				Command<CMD_MASS_START_STOP>::Post(TileIndex(this->window_number), widget == WID_D_START_ALL, false, vli, INVALID_CARGO);
 				break;
 			}
 
@@ -823,22 +843,25 @@ struct DepotWindow : Window {
 				break;
 
 			case WID_D_VEHICLE_LIST:
-				ShowVehicleListWindow(GetTileOwner(this->window_number), this->type, (TileIndex)this->window_number);
+				ShowVehicleListWindow(GetTileOwner(TileIndex(this->window_number)), this->type, TileIndex(this->window_number));
 				break;
 
 			case WID_D_AUTOREPLACE:
-				DoCommandP(this->window_number, this->type, 0, CMD_DEPOT_MASS_AUTOREPLACE);
+				Command<CMD_DEPOT_MASS_AUTOREPLACE>::Post(TileIndex(this->window_number), this->type);
 				break;
 
+			case WID_D_DEPARTURES:
+				ShowDepotDeparturesWindow(TileIndex(this->window_number), this->type);
+				break;
 		}
 	}
 
-	void OnQueryTextFinished(char *str) override
+	void OnQueryTextFinished(std::optional<std::string> str) override
 	{
-		if (str == nullptr) return;
+		if (!str.has_value()) return;
 
 		/* Do depot renaming */
-		DoCommandP(0, this->GetDepotIndex(), 0, CMD_RENAME_DEPOT | CMD_MSG(STR_ERROR_CAN_T_RENAME_DEPOT), nullptr, str);
+		DoCommandPOld(0, this->GetDepotIndex(), 0, CMD_RENAME_DEPOT | CMD_MSG(STR_ERROR_CAN_T_RENAME_DEPOT), CommandCallback::None, str->c_str());
 	}
 
 	bool OnRightClick([[maybe_unused]] Point pt, WidgetID widget) override
@@ -883,7 +906,7 @@ struct DepotWindow : Window {
 			SetDParam(1, loaded[cargo_type]);   // {CARGO} #2
 			SetDParam(2, cargo_type);           // {SHORTCARGO} #1
 			SetDParam(3, capacity[cargo_type]); // {SHORTCARGO} #2
-			details += GetString(STR_DEPOT_VEHICLE_TOOLTIP_CARGO);
+			AppendStringInPlace(details, STR_DEPOT_VEHICLE_TOOLTIP_CARGO);
 		}
 
 		/* Show tooltip window */
@@ -903,11 +926,10 @@ struct DepotWindow : Window {
 	{
 		if (_ctrl_pressed) {
 			/* Share-clone, do not open new viewport, and keep tool active */
-			DoCommandP(this->window_number, v->index, 1, CMD_CLONE_VEHICLE | CMD_MSG(STR_ERROR_CAN_T_BUY_TRAIN + v->type),
-					_settings_client.gui.open_vehicle_gui_clone_share ? CcCloneVehicle : nullptr);
+			Command<CMD_CLONE_VEHICLE>::Post(STR_ERROR_CAN_T_BUY_TRAIN + v->type, _settings_client.gui.open_vehicle_gui_clone_share ? CommandCallback::CloneVehicle : CommandCallback::None, TileIndex(this->window_number), v->index, true);
 		} else {
 			/* Copy-clone, open viewport for new vehicle, and deselect the tool (assume player wants to changs things on new vehicle) */
-			if (DoCommandP(this->window_number, v->index, 0, CMD_CLONE_VEHICLE | CMD_MSG(STR_ERROR_CAN_T_BUY_TRAIN + v->type), CcCloneVehicle)) {
+			if (Command<CMD_CLONE_VEHICLE>::Post(STR_ERROR_CAN_T_BUY_TRAIN + v->type, CommandCallback::CloneVehicle, TileIndex(this->window_number), v->index, false)) {
 				ResetObjectToPlace();
 			}
 		}
@@ -920,10 +942,10 @@ struct DepotWindow : Window {
 	 * @param v the original vehicle to clone
 	 * @return Always true.
 	 */
-	bool OnTemplateVehicleSelect(const TemplateVehicle *v) override
+	bool OnTemplateVehicleSelect(const TemplateVehicle *tv) override
 	{
 		/* Copy-clone, open viewport for new vehicle, and deselect the tool (assume player wants to change things on new vehicle) */
-		if (DoCommandP(this->window_number, v->index, 0, CMD_CLONE_VEHICLE_FROM_TEMPLATE | CMD_MSG(STR_ERROR_CAN_T_BUY_TRAIN), CcCloneVehicle)) {
+		if (Command<CMD_CLONE_VEHICLE_FROM_TEMPLATE>::Post(STR_ERROR_CAN_T_BUY_TRAIN, CommandCallback::CloneVehicle, TileIndex(this->window_number), tv->index)) {
 			ResetObjectToPlace();
 		}
 
@@ -988,6 +1010,15 @@ struct DepotWindow : Window {
 			this->SetWidgetLoweredState(this->hovered_widget, false);
 			this->SetWidgetDirty(this->hovered_widget);
 			this->hovered_widget = -1;
+		}
+	}
+
+	bool last_overlay_state;
+	void OnMouseLoop() override
+	{
+		if (last_overlay_state != ShowCargoIconOverlay()) {
+			last_overlay_state = ShowCargoIconOverlay();
+			this->SetWidgetDirty(WID_D_MATRIX);
 		}
 	}
 
@@ -1057,8 +1088,7 @@ struct DepotWindow : Window {
 
 					if (this->GetVehicleFromDepotWndPt(pt.x, pt.y, &v, &gdvp) == MODE_DRAG_VEHICLE && sel != INVALID_VEHICLE) {
 						if (gdvp.wagon != nullptr && gdvp.wagon->index == sel && _ctrl_pressed) {
-							DoCommandP(Vehicle::Get(sel)->tile, Vehicle::Get(sel)->index, true,
-									CMD_REVERSE_TRAIN_DIRECTION | CMD_MSG(STR_ERROR_CAN_T_REVERSE_DIRECTION_RAIL_VEHICLE));
+							Command<CMD_REVERSE_TRAIN_DIRECTION>::Post(STR_ERROR_CAN_T_REVERSE_DIRECTION_RAIL_VEHICLE, Vehicle::Get(sel)->tile, Vehicle::Get(sel)->index, true);
 						} else if (gdvp.wagon == nullptr || gdvp.wagon->index != sel) {
 							this->vehicle_over = INVALID_VEHICLE;
 							TrainDepotMoveVehicle(gdvp.wagon, sel, gdvp.head);
@@ -1082,8 +1112,9 @@ struct DepotWindow : Window {
 				this->sel = INVALID_VEHICLE;
 				this->SetDirty();
 
-				int sell_cmd = (v->type == VEH_TRAIN && (widget == WID_D_SELL_CHAIN || _ctrl_pressed)) ? 1 : 0;
-				DoCommandP(v->tile, v->index | sell_cmd << 20 | MAKE_ORDER_BACKUP_FLAG, 0, GetCmdSellVeh(v->type));
+				SellVehicleFlags sell_flags = SellVehicleFlags::BackupOrder;
+				if (v->type == VEH_TRAIN && (widget == WID_D_SELL_CHAIN || _ctrl_pressed)) sell_flags |= SellVehicleFlags::SellChain;
+				Command<CMD_SELL_VEHICLE>::Post(GetCmdSellVehMsg(v->type), v->tile, v->index, sell_flags, INVALID_CLIENT_ID);
 				break;
 			}
 
@@ -1137,7 +1168,7 @@ struct DepotWindow : Window {
 	 */
 	inline uint16_t GetDepotIndex() const
 	{
-		return (this->type == VEH_AIRCRAFT) ? ::GetStationIndex(this->window_number) : ::GetDepotIndex(this->window_number);
+		return (this->type == VEH_AIRCRAFT) ? ::GetStationIndex(TileIndex(this->window_number)) : ::GetDepotIndex(TileIndex(this->window_number));
 	}
 };
 
@@ -1145,9 +1176,9 @@ static void DepotSellAllConfirmationCallback(Window *win, bool confirmed)
 {
 	if (confirmed) {
 		DepotWindow *w = (DepotWindow*)win;
-		TileIndex tile = w->window_number;
-		byte vehtype = w->type;
-		DoCommandP(tile, vehtype, 0, CMD_DEPOT_SELL_ALL_VEHICLES);
+		TileIndex tile(w->window_number);
+		VehicleType vehtype = w->type;
+		Command<CMD_DEPOT_SELL_ALL_VEHICLES>::Post(tile, vehtype);
 	}
 }
 
@@ -1158,18 +1189,15 @@ static void DepotSellAllConfirmationCallback(Window *win, bool confirmed)
  */
 void ShowDepotWindow(TileIndex tile, VehicleType type)
 {
-	if (BringWindowToFrontById(WC_VEHICLE_DEPOT, tile) != nullptr) return;
+	if (BringWindowToFrontById(WC_VEHICLE_DEPOT, tile.base()) != nullptr) return;
 
-	WindowDesc *desc;
 	switch (type) {
 		default: NOT_REACHED();
-		case VEH_TRAIN:    desc = &_train_depot_desc;    break;
-		case VEH_ROAD:     desc = &_road_depot_desc;     break;
-		case VEH_SHIP:     desc = &_ship_depot_desc;     break;
-		case VEH_AIRCRAFT: desc = &_aircraft_depot_desc; break;
+		case VEH_TRAIN:    new DepotWindow(_train_depot_desc, tile, type);    break;
+		case VEH_ROAD:     new DepotWindow(_road_depot_desc, tile, type);     break;
+		case VEH_SHIP:     new DepotWindow(_ship_depot_desc, tile, type);     break;
+		case VEH_AIRCRAFT: new DepotWindow(_aircraft_depot_desc, tile, type); break;
 	}
-
-	new DepotWindow(desc, tile, type);
 }
 
 /**
@@ -1185,7 +1213,7 @@ void DeleteDepotHighlightOfVehicle(const Vehicle *v)
 	 */
 	if (_special_mouse_mode != WSM_DRAGDROP) return;
 
-	w = dynamic_cast<DepotWindow*>(FindWindowById(WC_VEHICLE_DEPOT, v->tile));
+	w = dynamic_cast<DepotWindow*>(FindWindowById(WC_VEHICLE_DEPOT, v->tile.base()));
 	if (w != nullptr) {
 		if (w->sel == v->index) ResetObjectToPlace();
 	}

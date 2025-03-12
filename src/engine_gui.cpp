@@ -11,11 +11,13 @@
 #include "window_gui.h"
 #include "engine_base.h"
 #include "command_func.h"
+#include "strings_builder.h"
 #include "strings_func.h"
 #include "engine_gui.h"
 #include "articulated_vehicles.h"
 #include "vehicle_func.h"
 #include "company_func.h"
+#include "date_func.h"
 #include "rail.h"
 #include "road.h"
 #include "settings_type.h"
@@ -53,14 +55,14 @@ StringID GetEngineCategoryName(EngineID engine)
 static constexpr NWidgetPart _nested_engine_preview_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_LIGHT_BLUE),
-		NWidget(WWT_CAPTION, COLOUR_LIGHT_BLUE), SetDataTip(STR_ENGINE_PREVIEW_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_CAPTION, COLOUR_LIGHT_BLUE), SetStringTip(STR_ENGINE_PREVIEW_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
 	EndContainer(),
 	NWidget(WWT_PANEL, COLOUR_LIGHT_BLUE),
 		NWidget(NWID_VERTICAL), SetPIP(0, WidgetDimensions::unscaled.vsep_wide, 0), SetPadding(WidgetDimensions::unscaled.modalpopup),
 			NWidget(WWT_EMPTY, INVALID_COLOUR, WID_EP_QUESTION), SetMinimalSize(300, 0), SetFill(1, 0),
 			NWidget(NWID_HORIZONTAL, NC_EQUALSIZE), SetPIP(85, WidgetDimensions::unscaled.hsep_wide, 85),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_LIGHT_BLUE, WID_EP_NO), SetDataTip(STR_QUIT_NO, STR_NULL), SetFill(1, 0),
-				NWidget(WWT_PUSHTXTBTN, COLOUR_LIGHT_BLUE, WID_EP_YES), SetDataTip(STR_QUIT_YES, STR_NULL), SetFill(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_LIGHT_BLUE, WID_EP_NO), SetStringTip(STR_QUIT_NO), SetFill(1, 0),
+				NWidget(WWT_PUSHTXTBTN, COLOUR_LIGHT_BLUE, WID_EP_YES), SetStringTip(STR_QUIT_YES), SetFill(1, 0),
 			EndContainer(),
 		EndContainer(),
 	EndContainer(),
@@ -69,7 +71,7 @@ static constexpr NWidgetPart _nested_engine_preview_widgets[] = {
 struct EnginePreviewWindow : Window {
 	int vehicle_space; // The space to show the vehicle image
 
-	EnginePreviewWindow(WindowDesc *desc, WindowNumber window_number) : Window(desc)
+	EnginePreviewWindow(WindowDesc &desc, WindowNumber window_number) : Window(desc)
 	{
 		this->InitNested(window_number);
 
@@ -77,7 +79,7 @@ struct EnginePreviewWindow : Window {
 		this->flags |= WF_STICKY;
 	}
 
-	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension &size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
 	{
 		if (widget != WID_EP_QUESTION) return;
 
@@ -97,11 +99,11 @@ struct EnginePreviewWindow : Window {
 		}
 		this->vehicle_space = std::max<int>(ScaleSpriteTrad(40), y - y_offs);
 
-		size->width = std::max(size->width, x - x_offs);
+		size.width = std::max(size.width, x + std::abs(x_offs));
 		SetDParam(0, GetEngineCategoryName(engine));
-		size->height = GetStringHeight(STR_ENGINE_PREVIEW_MESSAGE, size->width) + WidgetDimensions::scaled.vsep_wide + GetCharacterHeight(FS_NORMAL) + this->vehicle_space;
+		size.height = GetStringHeight(STR_ENGINE_PREVIEW_MESSAGE, size.width) + WidgetDimensions::scaled.vsep_wide + GetCharacterHeight(FS_NORMAL) + this->vehicle_space;
 		SetDParam(0, engine);
-		size->height += GetStringHeight(GetEngineInfoString(engine), size->width);
+		size.height += GetStringHeight(GetEngineInfoString(engine), size.width);
 	}
 
 	void DrawWidget(const Rect &r, WidgetID widget) const override
@@ -126,7 +128,7 @@ struct EnginePreviewWindow : Window {
 	{
 		switch (widget) {
 			case WID_EP_YES:
-				DoCommandP(0, this->window_number, 0, CMD_WANT_ENGINE_PREVIEW);
+				DoCommandPOld(0, this->window_number, 0, CMD_WANT_ENGINE_PREVIEW);
 				[[fallthrough]];
 			case WID_EP_NO:
 				if (!_shift_pressed) this->Close();
@@ -147,23 +149,24 @@ static WindowDesc _engine_preview_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_ENGINE_PREVIEW, WC_NONE,
 	WDF_CONSTRUCTION,
-	std::begin(_nested_engine_preview_widgets), std::end(_nested_engine_preview_widgets)
+	_nested_engine_preview_widgets
 );
 
 
 void ShowEnginePreviewWindow(EngineID engine)
 {
-	AllocateWindowDescFront<EnginePreviewWindow>(&_engine_preview_desc, engine);
+	AllocateWindowDescFront<EnginePreviewWindow>(_engine_preview_desc, engine);
 }
 
 /**
  * Get the capacity of an engine with articulated parts.
  * @param engine The engine to get the capacity of.
+ * @param attempt_refit Attempt to get capacity when refitting to this cargo.
  * @return The capacity.
  */
-uint GetTotalCapacityOfArticulatedParts(EngineID engine)
+uint GetTotalCapacityOfArticulatedParts(EngineID engine, CargoID attempt_refit)
 {
-	CargoArray cap = GetCapacityOfArticulatedParts(engine);
+	CargoArray cap = GetCapacityOfArticulatedParts(engine, attempt_refit);
 	return cap.GetSum<uint>();
 }
 
@@ -175,19 +178,18 @@ static StringID GetEngineInfoCapacityStringParameter(EngineID engine)
 		auto tmp_params = MakeParameters(INVALID_CARGO, 0);
 		_temp_special_strings[1] = GetStringWithArgs(STR_JUST_CARGO, tmp_params);
 	} else {
-		std::string buffer;
+		format_buffer buffer;
 		for (uint i = 0; i < NUM_CARGO; i++) {
 			if (cap[i] == 0) continue;
 
 			if (!buffer.empty()) {
-				auto tmp_params = MakeParameters();
-				GetStringWithArgs(StringBuilder(buffer), STR_COMMA_SEPARATOR, tmp_params);
+				buffer.append(GetListSeparator());
 			}
 
 			auto tmp_params = MakeParameters(i, cap[i]);
 			GetStringWithArgs(StringBuilder(buffer), STR_JUST_CARGO, tmp_params);
 		}
-		_temp_special_strings[1] = std::move(buffer);
+		_temp_special_strings[1] = buffer.to_string();
 	}
 
 	return SPECSTR_TEMP_START + 1;
@@ -204,10 +206,10 @@ static StringID ProcessEngineCapacityString(StringID str)
 
 static StringID GetRunningCostString()
 {
-	if (EconTime::UsingWallclockUnits()) {
-		return STR_ENGINE_PREVIEW_RUNCOST_PERIOD;
-	} else if (DayLengthFactor() > 1 && !_settings_client.gui.show_running_costs_calendar_year) {
+	if (DayLengthFactor() > 1 && !_settings_client.gui.show_running_costs_calendar_year) {
 		return STR_ENGINE_PREVIEW_RUNCOST_ORIG_YEAR;
+	} else if (EconTime::UsingWallclockUnits()) {
+		return STR_ENGINE_PREVIEW_RUNCOST_PERIOD;
 	} else {
 		return STR_ENGINE_PREVIEW_RUNCOST_YEAR;
 	}
@@ -373,7 +375,9 @@ void DrawVehicleEngine(int left, int right, int preferred_x, int y, EngineID eng
 void EngList_Sort(GUIEngineList &el, EngList_SortTypeFunction compare)
 {
 	if (el.size() < 2) return;
-	std::sort(el.begin(), el.end(), compare);
+	std::sort(el.begin(), el.end(), [&](const GUIEngineListItem &a, const GUIEngineListItem &b) {
+		return compare(a, b, el.SortParameterData());
+	});
 }
 
 /**
@@ -388,6 +392,8 @@ void EngList_SortPartial(GUIEngineList &el, EngList_SortTypeFunction compare, si
 	if (num_items < 2) return;
 	assert(begin < el.size());
 	assert(begin + num_items <= el.size());
-	std::sort(el.begin() + begin, el.begin() + begin + num_items, compare);
+	std::sort(el.begin() + begin, el.begin() + begin + num_items, [&](const GUIEngineListItem &a, const GUIEngineListItem &b) {
+		return compare(a, b, el.SortParameterData());
+	});
 }
 

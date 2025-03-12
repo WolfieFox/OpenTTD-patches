@@ -11,6 +11,7 @@
 #define GENWORLD_H
 
 #include "company_type.h"
+#include <functional>
 #include <thread>
 
 /** Constants related to world generation */
@@ -49,7 +50,7 @@ static const uint CUSTOM_SEA_LEVEL_MIN_PERCENTAGE = 1;    ///< Minimum percentag
 static const uint CUSTOM_SEA_LEVEL_MAX_PERCENTAGE = 90;   ///< Maximum percentage a user can specify for custom sea level.
 
 static const uint MAP_HEIGHT_LIMIT_AUTO_MINIMUM = 30; ///< When map height limit is auto, make this the lowest possible map height limit.
-static const uint MAP_HEIGHT_LIMIT_AUTO_CEILING_ROOM = 15; ///< When map height limit is auto, the map height limit will be the higest peak plus this value.
+static const uint MAP_HEIGHT_LIMIT_AUTO_CEILING_ROOM = 15; ///< When map height limit is auto, the map height limit will be the highest peak plus this value.
 
 typedef void GWDoneProc();  ///< Procedure called when the genworld process finishes
 typedef void GWAbortProc(); ///< Called when genworld is aborted
@@ -90,12 +91,15 @@ void GenerateWorld(GenWorldMode mode, uint size_x, uint size_y, bool reset_setti
 void AbortGeneratingWorld();
 bool IsGeneratingWorldAborted();
 void HandleGeneratingWorldAbortion();
+void ExecuteWithGenerateWorld(std::function<void()> func);
+void ScheduleExecuteWithGenerateWorld(std::function<void()> func);
+void LoadTownData();
 
 /* genworld_gui.cpp */
-void SetNewLandscapeType(byte landscape);
+void SetNewLandscapeType(uint8_t landscape);
 void SetGeneratingWorldProgress(GenWorldProgress cls, uint total);
 void IncreaseGeneratingWorldProgress(GenWorldProgress cls);
-void PrepareGenerateWorldProgress();
+void PrepareGenerateWorldProgress(bool single_section_mode = false);
 void ShowGenerateWorldProgress();
 void StartNewGameWithoutGUI(uint32_t seed);
 void ShowCreateScenario();

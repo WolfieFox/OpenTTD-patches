@@ -80,7 +80,7 @@ extern uint8_t GetAirportNoiseLevelForDistance(const struct AirportSpec *as, uin
 
 	uint p2 = station_id == ScriptStation::STATION_JOIN_ADJACENT ? 0 : 1;
 	p2 |= (ScriptStation::IsValidStation(station_id) ? station_id : INVALID_STATION) << 16;
-	return ScriptObject::DoCommand(tile, type, p2, CMD_BUILD_AIRPORT);
+	return ScriptObject::DoCommandOld(tile, type, p2, CMD_BUILD_AIRPORT);
 }
 
 /* static */ bool ScriptAirport::RemoveAirport(TileIndex tile)
@@ -89,7 +89,7 @@ extern uint8_t GetAirportNoiseLevelForDistance(const struct AirportSpec *as, uin
 	EnforcePrecondition(false, ::IsValidTile(tile))
 	EnforcePrecondition(false, IsAirportTile(tile) || IsHangarTile(tile));
 
-	return ScriptObject::DoCommand(tile, 0, 0, CMD_LANDSCAPE_CLEAR);
+	return ScriptObject::DoCommandOld(tile, 0, 0, CMD_LANDSCAPE_CLEAR);
 }
 
 /* static */ SQInteger ScriptAirport::GetNumHangars(TileIndex tile)
@@ -141,7 +141,8 @@ extern uint8_t GetAirportNoiseLevelForDistance(const struct AirportSpec *as, uin
 
 	if (_settings_game.economy.station_noise_level) {
 		uint dist;
-		AirportGetNearestTown(as, as->rotation[0], tile, AirportTileTableIterator(as->table[0], tile), dist);
+		const auto &layout = as->layouts[0];
+		AirportGetNearestTown(as, layout.rotation, tile, AirportTileTableIterator(layout.tiles.data(), tile), dist);
 		return GetAirportNoiseLevelForDistance(as, dist);
 	}
 
@@ -157,7 +158,8 @@ extern uint8_t GetAirportNoiseLevelForDistance(const struct AirportSpec *as, uin
 	if (!as->IsWithinMapBounds(0, tile)) return INVALID_TOWN;
 
 	uint dist;
-	return AirportGetNearestTown(as, as->rotation[0], tile, AirportTileTableIterator(as->table[0], tile), dist)->index;
+	const auto &layout = as->layouts[0];
+	return AirportGetNearestTown(as, layout.rotation, tile, AirportTileTableIterator(layout.tiles.data(), tile), dist)->index;
 }
 
 /* static */ SQInteger ScriptAirport::GetMaintenanceCostFactor(AirportType type)

@@ -61,7 +61,7 @@ struct OrthogonalTileArea {
 	 */
 	TileIndex GetCenterTile() const
 	{
-		return TILE_ADDXY(this->tile, this->w / 2, this->h / 2);
+		return TileAddXY(this->tile, this->w / 2, this->h / 2);
 	}
 
 	inline bool operator==(const OrthogonalTileArea &other) const
@@ -123,10 +123,7 @@ protected:
 	}
 
 public:
-	/** Some compilers really like this. */
-	virtual ~TileIterator()
-	{
-	}
+	virtual ~TileIterator() = default;
 
 	/**
 	 * Get the tile we are currently at.
@@ -150,6 +147,9 @@ public:
 	 * Move ourselves to the next tile in the rectangle on the map.
 	 */
 	virtual TileIterator& operator ++() = 0;
+
+	bool operator==(const TileIterator&) const = default;
+	bool operator==(const TileIndex &other) const { return this->tile == other; }
 
 	/**
 	 * Allocate a new iterator that is a copy of this one.
@@ -196,7 +196,7 @@ public:
 			this->tile++;
 		} else if (--this->y > 0) {
 			this->x = this->w;
-			this->tile += TileDiffXY(1, 1) - this->w;
+			this->tile += TileDiffXY(1 - this->w, 1);
 		} else {
 			this->tile = INVALID_TILE;
 		}

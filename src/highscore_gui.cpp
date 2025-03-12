@@ -21,6 +21,7 @@
 #include "strings_func.h"
 #include "hotkeys.h"
 #include "zoom_func.h"
+#include "misc_cmd.h"
 
 #include "widgets/highscore_widget.h"
 
@@ -30,7 +31,7 @@ struct EndGameHighScoreBaseWindow : Window {
 	uint32_t background_img;
 	int8_t rank;
 
-	EndGameHighScoreBaseWindow(WindowDesc *desc) : Window(desc)
+	EndGameHighScoreBaseWindow(WindowDesc &desc) : Window(desc)
 	{
 		this->InitNested();
 		CLRBITS(this->flags, WF_WHITE_BORDER);
@@ -93,10 +94,10 @@ struct EndGameHighScoreBaseWindow : Window {
 
 /** End game window shown at the end of the game */
 struct EndGameWindow : EndGameHighScoreBaseWindow {
-	EndGameWindow(WindowDesc *desc) : EndGameHighScoreBaseWindow(desc)
+	EndGameWindow(WindowDesc &desc) : EndGameHighScoreBaseWindow(desc)
 	{
 		/* Pause in single-player to have a look at the highscore at your own leisure */
-		if (!_networking) DoCommandP(0, PM_PAUSED_NORMAL, 1, CMD_PAUSE);
+		if (!_networking) Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, true);
 
 		this->background_img = SPR_TYCOON_IMG1_BEGIN;
 
@@ -124,8 +125,8 @@ struct EndGameWindow : EndGameHighScoreBaseWindow {
 
 	void Close([[maybe_unused]] int data = 0) override
 	{
-		if (!_networking) DoCommandP(0, PM_PAUSED_NORMAL, 0, CMD_PAUSE); // unpause
-		if (_game_mode != GM_MENU) ShowHighscoreTable(this->window_number, this->rank);
+		if (!_networking) Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, false); // unpause
+		if (_game_mode != GM_MENU && !_exit_game) ShowHighscoreTable(this->window_number, this->rank);
 		this->EndGameHighScoreBaseWindow::Close();
 	}
 
@@ -155,11 +156,11 @@ struct EndGameWindow : EndGameHighScoreBaseWindow {
 struct HighScoreWindow : EndGameHighScoreBaseWindow {
 	bool game_paused_by_player; ///< True if the game was paused by the player when the highscore window was opened.
 
-	HighScoreWindow(WindowDesc *desc, int difficulty, int8_t ranking) : EndGameHighScoreBaseWindow(desc)
+	HighScoreWindow(WindowDesc &desc, int difficulty, int8_t ranking) : EndGameHighScoreBaseWindow(desc)
 	{
 		/* pause game to show the chart */
 		this->game_paused_by_player = _pause_mode == PM_PAUSED_NORMAL;
-		if (!_networking && !this->game_paused_by_player) DoCommandP(0, PM_PAUSED_NORMAL, 1, CMD_PAUSE);
+		if (!_networking && !this->game_paused_by_player) Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, true);
 
 		/* Close all always on-top windows to get a clean screen */
 		if (_game_mode != GM_MENU) HideVitalWindows();
@@ -172,9 +173,9 @@ struct HighScoreWindow : EndGameHighScoreBaseWindow {
 
 	void Close([[maybe_unused]] int data = 0) override
 	{
-		if (_game_mode != GM_MENU) ShowVitalWindows();
+		if (_game_mode != GM_MENU && !_exit_game) ShowVitalWindows();
 
-		if (!_networking && !this->game_paused_by_player) DoCommandP(0, PM_PAUSED_NORMAL, 0, CMD_PAUSE); // unpause
+		if (!_networking && !this->game_paused_by_player) Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, false); // unpause
 
 		this->EndGameHighScoreBaseWindow::Close();
 	}
@@ -215,14 +216,14 @@ static WindowDesc _highscore_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0,
 	WC_HIGHSCORE, WC_NONE,
 	0,
-	std::begin(_nested_highscore_widgets), std::end(_nested_highscore_widgets)
+	_nested_highscore_widgets
 );
 
 static WindowDesc _endgame_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0,
 	WC_ENDSCREEN, WC_NONE,
 	0,
-	std::begin(_nested_highscore_widgets), std::end(_nested_highscore_widgets)
+	_nested_highscore_widgets
 );
 
 /**
@@ -233,7 +234,7 @@ static WindowDesc _endgame_desc(__FILE__, __LINE__,
 void ShowHighscoreTable(int difficulty, int8_t ranking)
 {
 	CloseWindowByClass(WC_HIGHSCORE);
-	new HighScoreWindow(&_highscore_desc, difficulty, ranking);
+	new HighScoreWindow(_highscore_desc, difficulty, ranking);
 }
 
 /**
@@ -247,5 +248,5 @@ void ShowEndGameChart()
 
 	HideVitalWindows();
 	CloseWindowByClass(WC_ENDSCREEN);
-	new EndGameWindow(&_endgame_desc);
+	new EndGameWindow(_endgame_desc);
 }

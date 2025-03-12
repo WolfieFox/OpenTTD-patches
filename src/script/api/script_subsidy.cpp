@@ -39,29 +39,27 @@
 	EnforcePrecondition(false, (from_type == SPT_INDUSTRY && ScriptIndustry::IsValidIndustry(from_id)) || (from_type == SPT_TOWN && ScriptTown::IsValidTown(from_id)));
 	EnforcePrecondition(false, (to_type == SPT_INDUSTRY && ScriptIndustry::IsValidIndustry(to_id)) || (to_type == SPT_TOWN && ScriptTown::IsValidTown(to_id)));
 
-	return ScriptObject::DoCommand(0, from_type | (from_id << 8) | (cargo_type << 24), to_type | (to_id << 8), CMD_CREATE_SUBSIDY);
+	return ScriptObject::DoCommandOld(0, from_type | (from_id << 8) | (cargo_type << 24), to_type | (to_id << 8), CMD_CREATE_SUBSIDY);
 }
 
 /* static */ ScriptCompany::CompanyID ScriptSubsidy::GetAwardedTo(SubsidyID subsidy_id)
 {
 	if (!IsAwarded(subsidy_id)) return ScriptCompany::COMPANY_INVALID;
 
-	return (ScriptCompany::CompanyID)((byte)::Subsidy::Get(subsidy_id)->awarded);
+	return (ScriptCompany::CompanyID)((uint8_t)::Subsidy::Get(subsidy_id)->awarded);
 }
 
 /* static */ ScriptDate::Date ScriptSubsidy::GetExpireDate(SubsidyID subsidy_id)
 {
 	if (!IsValidSubsidy(subsidy_id)) return ScriptDate::DATE_INVALID;
 
-	int year = ScriptDate::GetYear(ScriptDate::GetCurrentDate());
-	int month = ScriptDate::GetMonth(ScriptDate::GetCurrentDate());
+	EconTime::YearMonthDay ymd = EconTime::CurYMD();
+	ymd.day = 1;
+	auto m = ymd.month + ::Subsidy::Get(subsidy_id)->remaining;
+	ymd.month = (m - 1) % 12 + 1;
+	ymd.year += EconTime::YearDelta{(m - 1) / 12};
 
-	month += ::Subsidy::Get(subsidy_id)->remaining;
-
-	year += (month - 1) / 12;
-	month = ((month - 1) % 12) + 1;
-
-	return ScriptDate::GetDate(year, month, 1);
+	return (ScriptDate::Date)EconTime::ConvertYMDToDate(ymd.year, ymd.month, ymd.day).base();
 }
 
 /* static */ CargoID ScriptSubsidy::GetCargoType(SubsidyID subsidy_id)

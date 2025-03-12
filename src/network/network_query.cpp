@@ -12,7 +12,7 @@
 #include "network_query.h"
 #include "network_gamelist.h"
 #include "../error.h"
-#include "../debug_fmt.h"
+#include "../debug.h"
 
 #include "table/strings.h"
 
@@ -82,7 +82,7 @@ void QueryNetworkGameSocketHandler::Send()
  */
 NetworkRecvStatus QueryNetworkGameSocketHandler::SendGameInfo()
 {
-	auto p = std::make_unique<Packet>(PACKET_CLIENT_GAME_INFO);
+	auto p = std::make_unique<Packet>(this, PACKET_CLIENT_GAME_INFO);
 	p->Send_uint32(FIND_SERVER_EXTENDED_TOKEN);
 	p->Send_uint8(PACKET_SERVER_GAME_INFO_EXTENDED);       // reply type
 	p->Send_uint16(0);                                     // flags
@@ -119,10 +119,10 @@ NetworkRecvStatus QueryNetworkGameSocketHandler::Receive_SERVER_GAME_INFO(Packet
 	NetworkGameList *item = NetworkGameListAddItem(this->connection_string);
 
 	/* Clear any existing GRFConfig chain. */
-	ClearGRFConfigList(&item->info.grfconfig);
+	ClearGRFConfigList(item->info.grfconfig);
 	/* Retrieve the NetworkGameInfo from the packet. */
 	DeserializeNetworkGameInfo(p, item->info);
-	/* Check for compatability with the client. */
+	/* Check for compatibility with the client. */
 	CheckGameCompatibility(item->info);
 	/* Ensure we consider the server online. */
 	item->status = NGLS_ONLINE;
@@ -138,10 +138,10 @@ NetworkRecvStatus QueryNetworkGameSocketHandler::Receive_SERVER_GAME_INFO_EXTEND
 	NetworkGameList *item = NetworkGameListAddItem(this->connection_string);
 
 	/* Clear any existing GRFConfig chain. */
-	ClearGRFConfigList(&item->info.grfconfig);
+	ClearGRFConfigList(item->info.grfconfig);
 	/* Retrieve the NetworkGameInfo from the packet. */
 	DeserializeNetworkGameInfoExtended(p, item->info);
-	/* Check for compatability with the client. */
+	/* Check for compatibility with the client. */
 	CheckGameCompatibility(item->info, true);
 	/* Ensure we consider the server online. */
 	item->status = NGLS_ONLINE;

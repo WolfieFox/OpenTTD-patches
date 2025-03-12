@@ -38,7 +38,7 @@
 	return ::GetStationIndex(tile);
 }
 
-template<bool Tfrom, bool Tvia>
+template <bool Tfrom, bool Tvia>
 /* static */ bool ScriptStation::IsCargoRequestValid(StationID station_id,
 		StationID from_station_id, StationID via_station_id, CargoID cargo_id)
 {
@@ -49,7 +49,7 @@ template<bool Tfrom, bool Tvia>
 	return true;
 }
 
-template<bool Tfrom, bool Tvia>
+template <bool Tfrom, bool Tvia>
 /* static */ SQInteger ScriptStation::CountCargoWaiting(StationID station_id,
 		StationID from_station_id, StationID via_station_id, CargoID cargo_id)
 {
@@ -100,7 +100,7 @@ template<bool Tfrom, bool Tvia>
 	return CountCargoWaiting<true, true>(station_id, from_station_id, via_station_id, cargo_id);
 }
 
-template<bool Tfrom, bool Tvia>
+template <bool Tfrom, bool Tvia>
 /* static */ SQInteger ScriptStation::CountCargoPlanned(StationID station_id,
 		StationID from_station_id, StationID via_station_id, CargoID cargo_id)
 {
@@ -218,10 +218,10 @@ template<bool Tfrom, bool Tvia>
 	if (!IsValidStation(station_id)) return false;
 	if (!ScriptRoad::IsRoadTypeAvailable(road_type)) return false;
 
-	for (const RoadStop *rs = ::Station::Get(station_id)->GetPrimaryRoadStop(ROADSTOP_BUS); rs != nullptr; rs = rs->next) {
+	for (const RoadStop *rs = ::Station::Get(station_id)->GetPrimaryRoadStop(RoadStopType::Bus); rs != nullptr; rs = rs->next) {
 		if (HasBit(::GetPresentRoadTypes(rs->xy), (::RoadType)road_type)) return true;
 	}
-	for (const RoadStop *rs = ::Station::Get(station_id)->GetPrimaryRoadStop(ROADSTOP_TRUCK); rs != nullptr; rs = rs->next) {
+	for (const RoadStop *rs = ::Station::Get(station_id)->GetPrimaryRoadStop(RoadStopType::Truck); rs != nullptr; rs = rs->next) {
 		if (HasBit(::GetPresentRoadTypes(rs->xy), (::RoadType)road_type)) return true;
 	}
 
@@ -249,5 +249,5 @@ template<bool Tfrom, bool Tvia>
 	EnforcePrecondition(false, IsValidStation(station_id));
 	EnforcePrecondition(false, HasStationType(station_id, STATION_AIRPORT));
 
-	return ScriptObject::DoCommand(0, station_id, 0, CMD_OPEN_CLOSE_AIRPORT);
+	return ScriptObject::DoCommandOld(0, station_id, 0, CMD_OPEN_CLOSE_AIRPORT);
 }

@@ -11,12 +11,9 @@
 #define STDAFX_H
 
 #if defined(_WIN32)
-	/* MinGW defaults to Windows 7 if none of these are set, and they must be set before any MinGW header is included */
-#	define NTDDI_VERSION NTDDI_WINXP // Windows XP
-#	define _WIN32_WINNT 0x501        // Windows XP
-#	define _WIN32_WINDOWS 0x501      // Windows XP
-#	define WINVER 0x0501             // Windows XP
-#	define _WIN32_IE_ 0x0600         // 6.0 (XP+)
+	/* Minimum supported version is Windows 7. */
+#	define NTDDI_VERSION NTDDI_WIN7
+#	define _WIN32_WINNT 0x0601 // _WIN32_WINNT_WIN7
 #endif
 
 #ifdef _MSC_VER
@@ -28,6 +25,12 @@
 
 #if defined(__APPLE__)
 #	include "os/macosx/osx_stdafx.h"
+#else
+/* It seems that we need to include stdint.h before anything else
+ * We need INT64_MAX, which for most systems comes from stdint.h.
+ * For OSX the inclusion is already done in osx_stdafx.h. */
+#	define __STDC_LIMIT_MACROS
+#	include <stdint.h>
 #endif /* __APPLE__ */
 
 #if defined(__HAIKU__)
@@ -35,16 +38,6 @@
 #	include <unistd.h>
 #	define _DEFAULT_SOURCE
 #	define _GNU_SOURCE
-#endif
-
-/* It seems that we need to include stdint.h before anything else
- * We need INT64_MAX, which for most systems comes from stdint.h. However, MSVC
- * does not have stdint.h.
- * For OSX the inclusion is already done in osx_stdafx.h. */
-#if !defined(__APPLE__) && (!defined(_MSC_VER) || _MSC_VER >= 1600)
-#	define __STDC_LIMIT_MACROS
-#	define __STDC_FORMAT_MACROS
-#	include <stdint.h>
 #endif
 
 #include <algorithm>
@@ -64,21 +57,9 @@
 #	include <sys/types.h>
 #endif
 
-#if defined(__CYGWIN__)
-#	include <alloca.h>
-#endif
-
 /* Stuff for GCC */
 #if defined(__GNUC__) || (defined(__clang__) && !defined(_MSC_VER))
 #	define CDECL
-#	define __int64 long long
-	/* Warn about functions using 'printf' format syntax. First argument determines which parameter
-	 * is the format string, second argument is start of values passed to printf. */
-#	if defined(__MINGW32__) && defined(__USE_MINGW_ANSI_STDIO)
-#		define WARN_FORMAT(string, args) __attribute__ ((format (__MINGW_PRINTF_FORMAT, string, args)))
-#	else
-#		define WARN_FORMAT(string, args) __attribute__ ((format (printf, string, args)))
-#	endif
 	#define WARN_TIME_FORMAT(string) __attribute__ ((format (strftime, string, 0)))
 #endif /* __GNUC__ || __clang__ */
 
@@ -86,10 +67,6 @@
 #      define NOACCESS(args) __attribute__ ((access (none, args)))
 #else
 #      define NOACCESS(args)
-#endif
-
-#if defined(__MINGW32__)
-#	include <malloc.h> // alloca()
 #endif
 
 #if defined(_WIN32)
@@ -121,30 +98,15 @@
 #	pragma warning(disable: 4200)  // nonstandard extension used : zero-sized array in struct/union
 #	pragma warning(disable: 4355)  // 'this' : used in base member initializer list
 
-#	if (_MSC_VER < 1400)                   // MSVC 2005 safety checks
-#		error "Only MSVC 2005 or higher are supported. MSVC 2003 and earlier are not! Upgrade your compiler."
-#	endif /* (_MSC_VER < 1400) */
 #	pragma warning(disable: 4291)   // no matching operator delete found; memory will not be freed if initialization throws an exception (reason: our overloaded functions never throw an exception)
 #	pragma warning(disable: 4996)   // 'function': was declared deprecated
 #	pragma warning(disable: 6308)   // code analyzer: 'realloc' might return null pointer: assigning null pointer to 't_ptr', which is passed as an argument to 'realloc', will cause the original memory block to be leaked
 #	pragma warning(disable: 6011)   // code analyzer: Dereferencing NULL pointer 'pfGetAddrInfo': Lines: 995, 996, 998, 999, 1001
 #	pragma warning(disable: 6326)   // code analyzer: potential comparison of a constant with another constant
 #	pragma warning(disable: 6031)   // code analyzer: Return value ignored: 'ReadFile'
-#	pragma warning(disable: 6255)   // code analyzer: _alloca indicates failure by raising a stack overflow exception. Consider using _malloca instead
 #	pragma warning(disable: 6246)   // code analyzer: Local declaration of 'statspec' hides declaration of the same name in outer scope. For additional information, see previous declaration at ...
 
-#	if (_MSC_VER == 1500)           // Addresses item #13 on http://blogs.msdn.com/b/vcblog/archive/2008/08/11/tr1-fixes-in-vc9-sp1.aspx, for Visual Studio 2008
-#		define _DO_NOT_DECLARE_INTERLOCKED_INTRINSICS_IN_MEMORY
-#		include <intrin.h>
-#	endif
-
-#	include <malloc.h> // alloca()
-#	if (_MSC_VER < 1900)
-#		define inline __forceinline
-#	endif
-
 #	define CDECL _cdecl
-#	define WARN_FORMAT(string, args)
 #	define WARN_TIME_FORMAT(string)
 
 #	if defined(_WIN32) && !defined(_WIN64)
@@ -193,19 +155,23 @@
 #		include <io.h>
 #		include <tchar.h>
 
-#		define fopen(file, mode) _wfopen(OTTD2FS(file).c_str(), _T(mode))
 #		define unlink(file) _wunlink(OTTD2FS(file).c_str())
 
-		std::string FS2OTTD(const std::wstring &name);
-		std::wstring OTTD2FS(const std::string &name);
+		std::string FS2OTTD(std::wstring_view name);
+		std::wstring OTTD2FS(std::string_view name);
+		using fs_string = std::wstring;
+		using fs_char = wchar_t;
 #	elif defined(WITH_ICONV)
-#		define fopen(file, mode) fopen(OTTD2FS(file).c_str(), mode)
-		std::string FS2OTTD(const std::string &name);
-		std::string OTTD2FS(const std::string &name);
+#		define unlink(file) unlink(OTTD2FS(file).c_str())
+		std::string FS2OTTD(std::string_view name);
+		std::string OTTD2FS(std::string_view name);
+		using fs_string = std::string;
+		using fs_char = char;
 #	else
-		// no override of fopen() since no transformation is required of the filename
 		template <typename T> std::string FS2OTTD(T name) { return name; }
 		template <typename T> std::string OTTD2FS(T name) { return name; }
+		using fs_string = std::string;
+		using fs_char = char;
 #	endif /* _WIN32 or WITH_ICONV */
 #endif /* STRGEN || SETTINGSGEN */
 
@@ -227,40 +193,9 @@
 #endif
 #define PACK(type_dec) PACK_N(type_dec, 1)
 
-/* MSVCRT of course has to have a different syntax for long long *sigh* */
-#if defined(_MSC_VER) || (defined(__MINGW32__) && !defined(__USE_MINGW_ANSI_STDIO))
-#   define OTTD_PRINTF64 "%I64d"
-#   define OTTD_PRINTF64U "%I64u"
-#   define OTTD_PRINTFHEX64_SUFFIX "I64X"
-#   define PRINTF_SIZE "%Iu"
-#   define PRINTF_SIZEX "%IX"
-#   define PRINTF_SIZEX_SUFFIX "IX"
-#else
-#if defined(PRId64)
-#   define OTTD_PRINTF64 "%" PRId64
-#else
-#   define OTTD_PRINTF64 "%lld"
-#endif
-#if defined(PRIu64)
-#   define OTTD_PRINTF64U "%" PRIu64
-#else
-#   define OTTD_PRINTF64U "%llu"
-#endif
-#if defined(PRIX64)
-#   define OTTD_PRINTFHEX64_SUFFIX PRIX64
-#else
-#   define OTTD_PRINTFHEX64_SUFFIX "llX"
-#endif
-#   define PRINTF_SIZE "%zu"
-#   define PRINTF_SIZEX "%zX"
-#   define PRINTF_SIZEX_SUFFIX "zX"
-#endif
-#define OTTD_PRINTFHEX64 "%" OTTD_PRINTFHEX64_SUFFIX
-#define OTTD_PRINTFHEX64PAD "%016" OTTD_PRINTFHEX64_SUFFIX
-
 /*
  * When making a (pure) debug build, the compiler will by default disable
- * inlining of functions. This has a detremental effect on the performance of
+ * inlining of functions. This has a detrimental effect on the performance of
  * debug builds, especially when more and more trivial (wrapper) functions get
  * added to the code base.
  * Take for example the savegame called "Wentbourne", when running this game
@@ -303,8 +238,6 @@
 #define debug_inline inline
 #endif
 
-typedef uint8_t byte;
-
 /* This is already defined in unix, but not in QNX Neutrino (6.x) or Cygwin. */
 #if (!defined(UNIX) && !defined(__HAIKU__)) || defined(__QNXNTO__) || defined(__CYGWIN__)
 	typedef unsigned int uint;
@@ -331,6 +264,9 @@ static_assert(SIZE_MAX >= UINT32_MAX);
 #define M_PI   3.14159265358979323846
 #endif /* M_PI_2 */
 
+template <typename T, size_t N>
+char (&ArraySizeHelper(T (&array)[N]))[N];
+
 /**
  * Return the length of an fixed size array.
  * Unlike sizeof this function returns the number of elements
@@ -339,7 +275,7 @@ static_assert(SIZE_MAX >= UINT32_MAX);
  * @param x The pointer to the first element of the array
  * @return The number of elements
  */
-#define lengthof(x) (sizeof(x) / sizeof(x[0]))
+#define lengthof(array) (sizeof(ArraySizeHelper(array)))
 
 /**
  * Get the end element of an fixed size array.
@@ -368,15 +304,7 @@ static_assert(SIZE_MAX >= UINT32_MAX);
  * @param variable The variable to get the size of.
  * @return the size of the variable
  */
-#define cpp_sizeof(base, variable) (sizeof(((base*)8)->variable))
-
-/**
- * Gets the length of an array variable within a class.
- * @param base     The class the variable is in.
- * @param variable The array variable to get the size of.
- * @return the length of the array
- */
-#define cpp_lengthof(base, variable) (cpp_sizeof(base, variable) / cpp_sizeof(base, variable[0]))
+#define cpp_sizeof(base, variable) (sizeof(std::declval<base>().variable))
 
 
 /* take care of some name clashes on MacOS */
@@ -407,45 +335,48 @@ typedef uint32_t unaligned_uint32;
 typedef uint64_t unaligned_uint64;
 #endif /* __GNUC__ || __clang__ */
 
-/* For the FMT library we only want to use the headers, not link to some library. */
-#define FMT_HEADER_ONLY
+/* Upstream: For the FMT library we only want to use the headers, not link to some library. */
+//#define FMT_HEADER_ONLY
 
-[[noreturn]] void CDECL usererror(const char *str, ...) WARN_FORMAT(1, 2);
-[[noreturn]] void CDECL error(const char *str, ...) WARN_FORMAT(1, 2);
-[[noreturn]] void CDECL assert_msg_error(int line, const char *file, const char *expr, const char *extra, const char *str, ...) WARN_FORMAT(5, 6);
+/* This is an inheritable tag, to enable looking for a fmt_format_value method, which takes a struct format_target & */
+struct fmt_formattable{};
+
+/* This is an inheritable tag, to enable formatting by calling base() */
+struct fmt_format_as_base{};
+
+/* JSON: Don't include IO stream headers/support */
+#define JSON_NO_IO
+
+/* cpp-btree: Don't include IO stream headers, dump support */
+#define BTREE_NO_IOSTREAM
+
+[[noreturn]] void assert_str_error(int line, const char *file, const char *expr, std::string_view str);
 [[noreturn]] void assert_str_error(int line, const char *file, const char *expr, const char *str);
-[[noreturn]] void assert_str_error(int line, const char *file, const char *expr, const std::string &str);
-const char *assert_tile_info(uint32_t tile);
-#define NOT_REACHED() error("NOT_REACHED triggered at line %i of %s", __LINE__, __FILE__)
+[[noreturn]] void assert_str_error(int line, const char *file, const char *expr);
+[[noreturn]] void not_reached_error(int line, const char *file);
+#define NOT_REACHED() not_reached_error(__LINE__, __FILE__);
 
 /* Asserts are enabled if NDEBUG isn't defined or WITH_ASSERT is defined. */
 #if !defined(NDEBUG) || defined(WITH_ASSERT)
 #	undef assert
-#	define assert(expression) do { if (unlikely(!(expression))) error("Assertion failed at line %i of %s: %s", __LINE__, __FILE__, #expression); } while (false)
-#	define assert_msg(expression, ...) do { if (unlikely(!(expression))) assert_msg_error(__LINE__, __FILE__, #expression, nullptr, __VA_ARGS__); } while (false)
-#	define assert_msg_tile(expression, tile, ...) do { if (unlikely(!(expression))) assert_msg_error(__LINE__, __FILE__, #expression, assert_tile_info(tile), __VA_ARGS__); } while (false)
-#	define assert_tile(expression, tile) do { if (unlikely(!(expression))) error("Assertion failed at line %i of %s: %s\n\t%s", __LINE__, __FILE__, #expression, assert_tile_info(tile)); } while (false)
+#	define assert(expression) do { if (unlikely(!(expression))) assert_str_error(__LINE__, __FILE__, #expression); } while (false)
+#	define assert_tile(expression, tile) do { if (unlikely(!(expression))) assert_tile_error(__LINE__, __FILE__, #expression, tile); } while (false)
 #	define assert_str(expression, str) do { if (unlikely(!(expression))) assert_str_error(__LINE__, __FILE__, #expression, str); } while (false)
 #else
 #	undef assert
 #	define assert(expression)
-#	define assert_msg(expression, ...)
-#	define assert_msg_tile(expression, tile, ...)
 #	define assert_tile(expression, tile)
 #	define assert_str(expression, str)
 #endif
-#if (!defined(NDEBUG) || defined(WITH_ASSERT)) && !defined(FEWER_ASSERTS)
+#if (!defined(NDEBUG) || defined(WITH_ASSERT)) && defined(DBG_ASSERTS)
 #	define WITH_FULL_ASSERTS
 #	define dbg_assert(expression) assert(expression)
-#	define dbg_assert_msg(expression, ...) assert_msg(expression, __VA_ARGS__)
-#	define dbg_assert_msg_tile(expression, tile, ...) assert_msg_tile(expression, tile, __VA_ARGS__)
 #	define dbg_assert_tile(expression, tile) assert_tile(expression, tile)
 #else
 #	define dbg_assert(expression)
-#	define dbg_assert_msg(expression, ...)
-#	define dbg_assert_msg_tile(expression, tile, ...)
 #	define dbg_assert_tile(expression, tile)
 #endif
+
 
 /* Define JSON_ASSERT, which is used by nlohmann-json. Otherwise the header-file
  * will re-include assert.h, and reset the assert macro. */
@@ -474,7 +405,7 @@ inline void free(const void *ptr)
  * The largest value that can be entered in a variable
  * @param type the type of the variable
  */
-#define MAX_UVALUE(type) ((type)~(type)0)
+#define MAX_UVALUE(type) (static_cast<type>(~static_cast<type>(0)))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #	define IGNORE_UNINITIALIZED_WARNING_START __pragma(warning(push)) __pragma(warning(disable:4700))
@@ -511,12 +442,6 @@ inline void free(const void *ptr)
 	#define INCLUDE_FOR_PREFETCH_NTA "stdafx.h"
 	#define PREFETCH_NTA(address)
 #endif
-
-#if !defined(DISABLE_SCOPE_INFO)
-#define USE_SCOPE_INFO
-#endif
-
-#define SINGLE_ARG(...) __VA_ARGS__
 
 #if defined(DEDICATED)
 inline constexpr bool IsHeadless() { return true; }

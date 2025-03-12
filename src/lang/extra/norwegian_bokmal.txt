@@ -2,6 +2,7 @@ STR_UNIT_NAME_VELOCITY_IMPERIAL                                 :mi/t
 STR_UNIT_NAME_VELOCITY_METRIC                                   :km/h
 STR_UNIT_NAME_VELOCITY_SI                                       :m/s
 STR_UNIT_NAME_VELOCITY_GAMEUNITS                                :ruter/dag
+STR_UNIT_NAME_VELOCITY_GAMEUNITS_WALLCLOCK                      :ruter/sek
 
 STR_BUTTON_RENAME                                               :{BLACK}Gi nytt navn
 
@@ -21,8 +22,6 @@ STR_TRANSPARENT_LOADING_TOOLTIP                                 :{BLACK}Gjennoms
 # Tracerestrict GUI
 
 # Programmable Pre-Signals
-
-#House construction window (for SE only)
 
 #Town select window (for SE only)
 
@@ -48,8 +47,8 @@ STR_VEHICLE_STATUS_CANNOT_REACH_DEPOT_SERVICE_VEL_END           :{LTBLUE}Kan ikk
 
 STR_ORDERS_GO_TO_TOOLTIP_EXTRA                                  :{BLACK}Sett inn en ny ordre før den merkede ordren, eller legg til i slutten av listen. Ctrl gir ordren 'full last, enhver varetype', kontrollpunktordre 'direkte' og verkstedsordre 'vedlikehold'. 'Del ordrer' eller Ctrl lar dette kjøretøyet dele ordrer med det valgte kjøretøyet. Klikk på et kjøretøy for å kopiere ordrene fra det. En verkstedsordre slår av automatisk vedlikehold av kjøretøyet
 
-STR_TIMETABLE_ARRIVAL_ABBREVIATION                              :Ank:
-STR_TIMETABLE_DEPARTURE_ABBREVIATION                            :Avg:
+STR_TIMETABLE_ARRIVAL_ABBREVIATION                              :Ank:{SPACE}{SPACE}
+STR_TIMETABLE_DEPARTURE_ABBREVIATION                            :Avg:{SPACE}{SPACE}
 
 # Cargo type orders Window
 
@@ -84,3 +83,21 @@ STR_COMPANY_VIEW_SELL_SHARE_TOOLTIP                             :{BLACK}Selg 25{
 STR_ERROR_CAN_T_BUY_25_SHARE_IN_THIS                            :{WHITE}Kan ikke kjøpe 25{NBSP}% av aksjene...
 STR_ERROR_CAN_T_SELL_25_SHARE_IN                                :{WHITE}Kan ikke selge 25{NBSP}% av aksjene...
 STR_ERROR_PROTECTED                                             :{WHITE}Dette firmaet selger ikke aksjer enda...
+
+STR_CONFIG_SETTING_CYCLE_SIGNAL_PBS                             :Kun avanserte signaler
+
+STR_WARNING_PASSWORD_SECURITY                                   :{YELLOW}Advarsel: Tjeneradministratorer kan lese all tekst som blir skrevet her.
+STR_NETWORK_NEED_COMPANY_PASSWORD_CAPTION                       :{WHITE}Selskapet er beskyttet. Skriv inn passord
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_UNLOCK                    :Låse opp passord
+STR_NETWORK_CLIENT_LIST_ASK_COMPANY_UNLOCK                      :{YELLOW}Er du sikker på at du vil tilbakestille passordet til selskapet '{COMPANY}'?
+
+# Network set password
+STR_COMPANY_PASSWORD_CANCEL                                     :{BLACK}Ikke lagre passordet
+STR_COMPANY_PASSWORD_OK                                         :{BLACK}Gi selskapet det nye passordet
+STR_COMPANY_PASSWORD_CAPTION                                    :{WHITE}Selskapspassord
+STR_COMPANY_PASSWORD_MAKE_DEFAULT                               :{BLACK}Standard selskapspassord
+STR_COMPANY_PASSWORD_MAKE_DEFAULT_TOOLTIP                       :{BLACK}Bruk dette passordet som standard for nye selskap
+
+STR_COMPANY_VIEW_PASSWORD                                       :{BLACK}Passord
+STR_COMPANY_VIEW_PASSWORD_TOOLTIP                               :{BLACK}Passordbeskytt selskapet ditt for å forhindre uautoriserte brukere fra å bli med
+STR_COMPANY_VIEW_SET_PASSWORD                                   :{BLACK}Velg selskapspassord

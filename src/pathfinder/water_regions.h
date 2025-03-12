@@ -58,8 +58,6 @@ struct WaterRegionDesc
 	bool operator!=(const WaterRegionDesc &other) const { return !(*this == other); }
 };
 
-TWaterRegionIndex GetWaterRegionIndex(const WaterRegionDesc &water_region);
-
 uint32_t CalculateWaterRegionPatchHash(const WaterRegionPatchDesc &water_region_patch);
 
 TileIndex GetWaterRegionCenterTile(const WaterRegionDesc &water_region);
@@ -72,7 +70,7 @@ void DebugInvalidateAllWaterRegions();
 void DebugInitAllWaterRegions();
 
 using TVisitWaterRegionPatchCallBack = std::function<void(const WaterRegionPatchDesc &)>;
-void VisitWaterRegionPatchNeighbors(const WaterRegionPatchDesc &water_region_patch, TVisitWaterRegionPatchCallBack &callback);
+void VisitWaterRegionPatchNeighbours(const WaterRegionPatchDesc &water_region_patch, TVisitWaterRegionPatchCallBack &callback);
 
 void InitializeWaterRegions();
 

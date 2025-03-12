@@ -21,19 +21,8 @@
 
 #include <vector>
 
-/** Bits of the #WWT_MATRIX widget data. */
-enum MatrixWidgetValues {
-	/* Number of column bits of the WWT_MATRIX widget data. */
-	MAT_COL_START = 0, ///< Lowest bit of the number of columns.
-	MAT_COL_BITS  = 8, ///< Number of bits for the number of columns in the matrix.
-
-	/* Number of row bits of the WWT_MATRIX widget data. */
-	MAT_ROW_START = 8, ///< Lowest bit of the number of rows.
-	MAT_ROW_BITS  = 8, ///< Number of bits for the number of rows in the matrix.
-};
-
 /** Values for an arrow widget */
-enum ArrowWidgetValues {
+enum ArrowWidgetValues : uint8_t {
 	AWV_DECREASE, ///< Arrow to the left or in case of RTL to the right
 	AWV_INCREASE, ///< Arrow to the right or in case of RTL to the left
 	AWV_LEFT,     ///< Force the arrow to the left
@@ -41,7 +30,7 @@ enum ArrowWidgetValues {
 };
 
 /** WidgetData values for a resize box widget. */
-enum ResizeWidgetValues {
+enum ResizeWidgetValues : uint8_t {
 	RWV_SHOW_BEVEL, ///< Bevel of resize box is shown.
 	RWV_HIDE_BEVEL, ///< Bevel of resize box is hidden.
 };
@@ -84,6 +73,7 @@ enum WidgetType : uint8_t {
 	NWID_MATRIX,          ///< Matrix container.
 	NWID_SPACER,          ///< Invisible widget that takes some space.
 	NWID_SELECTION,       ///< Stacked widgets, only one visible at a time (eg in a panel with tabs).
+	NWID_LAYER,           ///< Layered widgets, all visible together.
 	NWID_VIEWPORT,        ///< Nested widget containing a viewport.
 	NWID_BUTTON_DROPDOWN, ///< Button with a drop-down.
 	NWID_HSCROLLBAR,      ///< Horizontal scrollbar
@@ -91,6 +81,7 @@ enum WidgetType : uint8_t {
 	NWID_CUSTOM,          ///< General Custom widget.
 
 	/* Nested widget part types. */
+	WPT_ATTRIBUTE_BEGIN, ///< Begin marker for attribute NWidgetPart types.
 	WPT_RESIZE,       ///< Widget part for specifying resizing.
 	WPT_MINSIZE,      ///< Widget part for specifying minimal size.
 	WPT_MINTEXTLINES, ///< Widget part for specifying minimal number of lines of text.
@@ -101,9 +92,12 @@ enum WidgetType : uint8_t {
 	WPT_PIPRATIO,     ///< Widget part for specifying pre/inter/post ratio for containers.
 	WPT_TEXTSTYLE,    ///< Widget part for specifying text colour.
 	WPT_ALIGNMENT,    ///< Widget part for specifying text/image alignment.
-	WPT_ENDCONTAINER, ///< Widget part to denote end of a container.
-	WPT_FUNCTION,     ///< Widget part for calling a user function.
 	WPT_SCROLLBAR,    ///< Widget part for attaching a scrollbar.
+	WPT_ASPECT,       ///< Widget part for specifying aspect ratio.
+	WPT_ATTRIBUTE_END, ///< End marker for attribute NWidgetPart types.
+
+	WPT_FUNCTION, ///< Widget part for calling a user function.
+	WPT_ENDCONTAINER, ///< Widget part to denote end of a container.
 
 	/* Pushable window widget types. */
 	WWT_MASK = 0x7F,
@@ -131,6 +125,13 @@ enum SizingType {
 	ST_RESIZE,   ///< Resize the nested widget tree.
 };
 
+enum class AspectFlags : uint8_t {
+	ResizeX = 1U << 0,
+	ResizeY = 1U << 1,
+	ResizeXY = ResizeX | ResizeY,
+};
+DECLARE_ENUM_AS_BIT_SET(AspectFlags)
+
 /* Forward declarations. */
 class NWidgetCore;
 class Scrollbar;
@@ -148,6 +149,7 @@ class NWidgetBase : public ZeroedMemoryAllocator {
 public:
 	NWidgetBase(WidgetType tp);
 
+	void ApplyAspectRatio();
 	virtual void AdjustPaddingForZoom();
 	virtual void SetupSmallestSize(Window *w) = 0;
 	virtual void AssignSizePosition(SizingType sizing, int x, int y, uint given_width, uint given_height, bool rtl) = 0;
@@ -246,6 +248,8 @@ public:
 	/* Current widget size (that is, after resizing). */
 	uint current_x;       ///< Current horizontal size (after resizing).
 	uint current_y;       ///< Current vertical size (after resizing).
+	float aspect_ratio = 0; ///< Desired aspect ratio of widget.
+	AspectFlags aspect_flags = AspectFlags::ResizeX; ///< Which dimensions can be resized.
 
 	int pos_x;            ///< Horizontal position of top-left corner of the widget in the window.
 	int pos_y;            ///< Vertical position of top-left corner of the widget in the window.
@@ -319,6 +323,8 @@ public:
 	void SetMinimalTextLines(uint8_t min_lines, uint8_t spacing, FontSize size);
 	void SetFill(uint fill_x, uint fill_y);
 	void SetResize(uint resize_x, uint resize_y);
+	void SetAspect(float ratio, AspectFlags flags = AspectFlags::ResizeX);
+	void SetAspect(int x_ratio, int y_ratio, AspectFlags flags = AspectFlags::ResizeX);
 
 	bool UpdateMultilineWidgetSize(const std::string &str, int max_lines);
 	bool UpdateSize(uint min_x, uint min_y);
@@ -368,23 +374,45 @@ enum NWidgetDisplay {
 };
 DECLARE_ENUM_AS_BIT_SET(NWidgetDisplay)
 
+/** Container with the data associated to a single widget. */
+struct WidgetData {
+	StringID string{};
+	SpriteID sprite{};
+	ArrowWidgetValues arrow_widget_type{};
+	ResizeWidgetValues resize_widget_type{};
+	Dimension matrix{};
+};
+
 /**
  * Base class for a 'real' widget.
  * @ingroup NestedWidgets
  */
 class NWidgetCore : public NWidgetResizeBase {
 public:
-	NWidgetCore(WidgetType tp, Colours colour, WidgetID index, uint fill_x, uint fill_y, uint32_t widget_data, StringID tool_tip);
+	NWidgetCore(WidgetType tp, Colours colour, WidgetID index, uint fill_x, uint fill_y, const WidgetData &widget_data, StringID tool_tip);
 
-	void SetDataTip(uint32_t widget_data, StringID tool_tip);
-	void SetToolTip(StringID tool_tip);
-	void SetTextStyle(TextColour colour, FontSize size);
-	void SetAlignment(StringAlignment align);
+	inline void SetString(StringID string);
+	inline void SetStringTip(StringID string, StringID tool_tip);
+	inline void SetSprite(SpriteID sprite);
+	inline void SetSpriteTip(SpriteID sprite, StringID tool_tip);
+	inline void SetMatrixDimension(uint32_t columns, uint32_t rows);
+	inline void SetResizeWidgetType(ResizeWidgetValues type);
+	inline void SetToolTip(StringID tool_tip);
+	inline StringID GetToolTip() const;
+	inline void SetTextStyle(TextColour colour, FontSize size);
+	inline void SetAlignment(StringAlignment align);
+
+	inline StringID GetString() const;
+	inline SpriteID GetSprite() const;
+	inline WidgetID GetIndex() const;
+	inline WidgetID GetScrollbarIndex() const;
 
 	inline void SetLowered(bool lowered);
 	inline bool IsLowered() const;
 	inline void SetDisabled(bool disabled);
 	inline bool IsDisabled() const;
+
+	bool IsActiveInLayout() const;
 
 	void FillWidgetLookup(WidgetLookup &widget_lookup) override;
 	NWidgetCore *GetWidgetFromPos(int x, int y) override;
@@ -395,15 +423,152 @@ public:
 
 	NWidgetDisplay disp_flags; ///< Flags that affect display and interaction with the widget.
 	Colours colour;            ///< Colour of this widget.
+protected:
 	const WidgetID index;      ///< Index of the nested widget (\c -1 means 'not used').
-	uint32_t widget_data;      ///< Data of the widget. @see Widget::data
-	StringID tool_tip;         ///< Tooltip of the widget. @see Widget::tootips
+	WidgetData widget_data;    ///< Data of the widget. @see Widget::data
+	StringID tool_tip;         ///< Tooltip of the widget. @see Widget::tool_tips
 	WidgetID scrollbar_index;  ///< Index of an attached scrollbar.
 	TextColour highlight_colour; ///< Colour of highlight.
 	TextColour text_colour;    ///< Colour of text within widget.
 	FontSize text_size;        ///< Size of text within widget.
 	StringAlignment align;     ///< Alignment of text/image within widget.
+
+	/* This function constructs the widgets, so it should be able to write the variables. */
+	friend void ApplyNWidgetPartAttribute(const struct NWidgetPart &nwid, NWidgetBase *dest);
 };
+
+/**
+ * Set string of the nested widget.
+ * @param string The new string.
+ */
+inline void NWidgetCore::SetString(StringID string)
+{
+	this->widget_data.string = string;
+}
+
+/**
+ * Set string and tool tip of the nested widget.
+ * @param stringThe new string.
+ * @param tool_tip The new tool_tip.
+ */
+inline void NWidgetCore::SetStringTip(StringID string, StringID tool_tip)
+{
+	this->SetString(string);
+	this->SetToolTip(tool_tip);
+}
+
+/**
+ * Set sprite of the nested widget.
+ * @param sprite The new sprite.
+ */
+inline void NWidgetCore::SetSprite(SpriteID sprite)
+{
+	this->widget_data.sprite = sprite;
+}
+
+/**
+ * Set sprite and tool tip of the nested widget.
+ * @param sprite The new sprite.
+ * @param tool_tip The new tool_tip.
+ */
+inline void NWidgetCore::SetSpriteTip(SpriteID sprite, StringID tool_tip)
+{
+	this->SetSprite(sprite);
+	this->SetToolTip(tool_tip);
+}
+
+/**
+ * Set the matrix dimension.
+ * @param columns The number of columns in the matrix (0 for autoscaling).
+ * @param rows The number of rows in the matrix (0 for autoscaling).
+ */
+inline void NWidgetCore::SetMatrixDimension(uint32_t columns, uint32_t rows)
+{
+	this->widget_data.matrix = { columns, rows };
+}
+
+/**
+ * Set the resize widget type of the nested widget.
+ * @param type The new resize widget.
+ */
+inline void NWidgetCore::SetResizeWidgetType(ResizeWidgetValues type)
+{
+	this->widget_data.resize_widget_type = type;
+}
+
+/**
+ * Set the text style of the nested widget.
+ * @param colour TextColour to use.
+ * @param size Font size to use.
+ */
+inline void NWidgetCore::SetTextStyle(TextColour colour, FontSize size)
+{
+	this->text_colour = colour;
+	this->text_size = size;
+}
+
+/**
+ * Set the tool tip of the nested widget.
+ * @param tool_tip Tool tip string to use.
+ */
+inline void NWidgetCore::SetToolTip(StringID tool_tip)
+{
+	this->tool_tip = tool_tip;
+}
+
+/**
+ * Get the tool tip of the nested widget.
+ * @return The tool tip string.
+ */
+inline StringID NWidgetCore::GetToolTip() const
+{
+	return this->tool_tip;
+}
+
+/**
+ * Set the text/image alignment of the nested widget.
+ * @param align Alignment to use.
+ */
+inline void NWidgetCore::SetAlignment(StringAlignment align)
+{
+	this->align = align;
+}
+
+/**
+ * Get the string that has been set for this nested widget.
+ * @return The string.
+ */
+inline StringID NWidgetCore::GetString() const
+{
+	return this->widget_data.string;
+}
+
+/**
+ * Get the sprite that has been set for this nested widget.
+ * @return The sprite.
+ */
+inline SpriteID NWidgetCore::GetSprite() const
+{
+	return this->widget_data.sprite;
+}
+
+/**
+ * Get the \c WidgetID of this nested widget.
+ * @return The \c WidgetID.
+ */
+inline WidgetID NWidgetCore::GetIndex() const
+{
+	return this->index;
+}
+
+/**
+ * Get the \c WidgetID of this nested widget's scrollbar.
+ * @return The \c WidgetID.
+ */
+inline WidgetID NWidgetCore::GetScrollbarIndex() const
+{
+	return this->scrollbar_index;
+}
 
 /**
  * Highlight the widget or not.
@@ -480,7 +645,7 @@ public:
 	NWidgetBase *GetWidgetOfType(WidgetType tp) override;
 
 protected:
-	std::vector<std::unique_ptr<NWidgetBase>> children; ///< Child widgets in contaier.
+	std::vector<std::unique_ptr<NWidgetBase>> children; ///< Child widgets in container.
 };
 
 /** Display planes with zero size for #NWidgetStacked. */
@@ -494,7 +659,7 @@ enum StackedZeroSizePlanes {
 
 /**
  * Stacked widgets, widgets all occupying the same space in the window.
- * #NWID_SELECTION allows for selecting one of several panels (planes) to tbe displayed. All planes must have the same size.
+ * #NWID_SELECTION allows for selecting one of several panels (planes) to be displayed. All planes must have the same size.
  * Since all planes are also initialized, switching between different planes can be done while the window is displayed.
  *
  * There are also a number of special planes (defined in #StackedZeroSizePlanes) that have zero size in one direction (and are stretchable in
@@ -506,7 +671,6 @@ class NWidgetStacked : public NWidgetContainer {
 public:
 	NWidgetStacked(WidgetID index);
 
-	void AdjustPaddingForZoom() override;
 	void SetupSmallestSize(Window *w) override;
 	void AssignSizePosition(SizingType sizing, int x, int y, uint given_width, uint given_height, bool rtl) override;
 	void FillWidgetLookup(WidgetLookup &widget_lookup) override;
@@ -516,6 +680,8 @@ public:
 	void FillDirtyWidgets(std::vector<NWidgetBase *> &dirty_widgets) override;
 
 	bool SetDisplayedPlane(int plane);
+
+	bool IsChildSelected(const NWidgetBase *child) const;
 
 	int shown_plane; ///< Plane being displayed (for #NWID_SELECTION only).
 	const WidgetID index; ///< If non-negative, index in the #Window::widget_lookup.
@@ -707,12 +873,16 @@ public:
  * Scrollbar data structure
  */
 class Scrollbar {
+public:
+	using size_type = int32_t;
+	static constexpr size_type max_size_type = std::numeric_limits<size_type>::max();
+	static constexpr size_type npos = max_size_type;
 private:
 	const bool is_vertical; ///< Scrollbar has vertical orientation.
-	uint16_t count;         ///< Number of elements in the list.
-	uint16_t cap;           ///< Number of visible elements of the scroll bar.
-	uint16_t pos;           ///< Index of first visible item of the list.
-	uint16_t stepsize;      ///< Distance to scroll, when pressing the buttons or using the wheel.
+	size_type count;        ///< Number of elements in the list.
+	size_type cap;          ///< Number of visible elements of the scroll bar.
+	size_type pos;          ///< Index of first visible item of the list.
+	size_type stepsize;     ///< Distance to scroll, when pressing the buttons or using the wheel.
 
 public:
 	/** Stepping sizes when scrolling */
@@ -730,7 +900,7 @@ public:
 	 * Gets the number of elements in the list
 	 * @return the number of elements
 	 */
-	inline uint16_t GetCount() const
+	inline size_type GetCount() const
 	{
 		return this->count;
 	}
@@ -739,7 +909,7 @@ public:
 	 * Gets the number of visible elements of the scrollbar
 	 * @return the number of visible elements
 	 */
-	inline uint16_t GetCapacity() const
+	inline size_type GetCapacity() const
 	{
 		return this->cap;
 	}
@@ -748,7 +918,7 @@ public:
 	 * Gets the position of the first visible element in the list
 	 * @return the position of the element
 	 */
-	inline uint16_t GetPosition() const
+	inline size_type GetPosition() const
 	{
 		return this->pos;
 	}
@@ -758,7 +928,7 @@ public:
 	 * @param item to check
 	 * @return true iff the item is visible
 	 */
-	inline bool IsVisible(uint16_t item) const
+	inline bool IsVisible(size_type item) const
 	{
 		return IsInsideBS(item, this->GetPosition(), this->GetCapacity());
 	}
@@ -780,7 +950,7 @@ public:
 	{
 		assert(stepsize > 0);
 
-		this->stepsize = ClampTo<uint16_t>(stepsize);
+		this->stepsize = ClampTo<size_type>(stepsize);
 	}
 
 	/**
@@ -790,9 +960,9 @@ public:
 	 */
 	void SetCount(size_t num)
 	{
-		assert(num <= MAX_UVALUE(uint16_t));
+		assert(num < Scrollbar::max_size_type);
 
-		this->count = ClampTo<uint16_t>(num);
+		this->count = ClampTo<size_type>(num);
 		/* Ensure position is within bounds */
 		this->SetPosition(this->pos);
 	}
@@ -804,9 +974,9 @@ public:
 	 */
 	void SetCapacity(size_t capacity)
 	{
-		assert(capacity <= MAX_UVALUE(uint16_t));
+		assert(capacity < Scrollbar::max_size_type);
 
-		this->cap = ClampTo<uint16_t>(capacity);
+		this->cap = ClampTo<size_type>(capacity);
 		/* Ensure position is within bounds */
 		this->SetPosition(this->pos);
 	}
@@ -818,9 +988,9 @@ public:
 	 * @param position the position of the element
 	 * @return true iff the position has changed
 	 */
-	bool SetPosition(int position)
+	bool SetPosition(size_type position)
 	{
-		uint16_t old_pos = this->pos;
+		size_type old_pos = this->pos;
 		this->pos = Clamp(position, 0, std::max(this->count - this->cap, 0));
 		return this->pos != old_pos;
 	}
@@ -849,7 +1019,7 @@ public:
 	 * the window depending on where in the list it was.
 	 * @param position the position to scroll towards.
 	 */
-	void ScrollTowards(int position)
+	void ScrollTowards(size_type position)
 	{
 		if (position < this->GetPosition()) {
 			/* scroll up to the item */
@@ -860,7 +1030,7 @@ public:
 		}
 	}
 
-	int GetScrolledRowFromWidget(int clickpos, const Window * const w, WidgetID widget, int padding = 0, int line_height = -1) const;
+	size_type GetScrolledRowFromWidget(int clickpos, const Window * const w, WidgetID widget, int padding = 0, int line_height = -1) const;
 
 	/**
 	 * Get a pair of iterators for the range of visible elements in a container.
@@ -870,7 +1040,7 @@ public:
 	template <typename Tcontainer>
 	auto GetVisibleRangeIterators(Tcontainer &container) const
 	{
-		assert(this->GetCount() == container.size()); // Scrollbar and container size must match.
+		assert(static_cast<size_t>(this->GetCount()) == container.size()); // Scrollbar and container size must match.
 		auto first = std::next(std::begin(container), this->GetPosition());
 		auto last = std::next(first, std::min<size_t>(this->GetCapacity(), this->GetCount() - this->GetPosition()));
 		return std::make_pair(first, last);
@@ -884,18 +1054,16 @@ public:
 	 * @param widget      Widget number of the widget clicked in.
 	 * @param padding     Amount of empty space between the widget edge and the top of the first row. Default value is \c 0.
 	 * @param line_height Height of a single row. A negative value means using the vertical resize step of the widget.
-	 * @return Iterator to the element clicked at. If clicked at a wrong position, returns as interator to the end of the container.
+	 * @return Iterator to the element clicked at. If clicked at a wrong position, returns an iterator to the end of the container.
 	 */
 	template <typename Tcontainer>
-	typename Tcontainer::iterator GetScrolledItemFromWidget(Tcontainer &container, int clickpos, const Window * const w, WidgetID widget, int padding = 0, int line_height = -1) const
+	auto GetScrolledItemFromWidget(Tcontainer &container, int clickpos, const Window * const w, WidgetID widget, int padding = 0, int line_height = -1) const
 	{
-		assert(this->GetCount() == container.size()); // Scrollbar and container size must match.
-		int row = this->GetScrolledRowFromWidget(clickpos, w, widget, padding, line_height);
-		if (row == INT_MAX) return std::end(container);
+		assert(static_cast<size_t>(this->GetCount()) == container.size()); // Scrollbar and container size must match.
+		size_type row = this->GetScrolledRowFromWidget(clickpos, w, widget, padding, line_height);
+		if (row == Scrollbar::npos) return std::end(container);
 
-		typename Tcontainer::iterator it = std::begin(container);
-		std::advance(it, row);
-		return it;
+		return std::next(std::begin(container), row);
 	}
 
 	EventState UpdateListPositionOnKeyPress(int &list_position, uint16_t keycode) const;
@@ -928,7 +1096,7 @@ private:
  */
 class NWidgetLeaf : public NWidgetCore {
 public:
-	NWidgetLeaf(WidgetType tp, Colours colour, WidgetID index, uint32_t data, StringID tip);
+	NWidgetLeaf(WidgetType tp, Colours colour, WidgetID index, const WidgetData &data, StringID tip);
 
 	void SetupSmallestSize(Window *w) override;
 	void Draw(const Window *w) override;
@@ -1012,7 +1180,7 @@ inline uint ComputeMaxSize(uint base, uint max_space, uint step)
  *   - #SetPadding Define additional padding around the container.
  *   - #SetPIP Set additional pre/inter/post child widget space.
  *   .
- *   Underneath these properties, all child widgets of the container must be defined. To denote that they are childs, add an indent before the nested widget parts of
+ *   Underneath these properties, all child widgets of the container must be defined. To denote that they are children, add an indent before the nested widget parts of
  *   the child widgets (it has no meaning for the compiler but it makes the widget parts easier to read).
  *   Below the last child widget, use an #EndContainer part. This part should be aligned with the #NWidget part that started the container.
  *
@@ -1037,7 +1205,7 @@ inline uint ComputeMaxSize(uint base, uint max_space, uint step)
  * @ingroup NestedWidgetParts
  */
 struct NWidgetPartDataTip {
-	uint32_t data;    ///< Data value of the widget.
+	WidgetData data; ///< Data value of the widget.
 	StringID tooltip; ///< Tooltip of the widget.
 };
 
@@ -1092,6 +1260,11 @@ struct NWidgetPartAlignment {
 	StringAlignment align; ///< Alignment of text/image.
 };
 
+struct NWidgetPartAspect {
+	float ratio;
+	AspectFlags flags;
+};
+
 /**
  * Pointer to function returning a nested widget.
  * @return Nested widget (tree).
@@ -1115,6 +1288,7 @@ struct NWidgetPart {
 		NWidgetPartAlignment align;      ///< Part with internal alignment.
 		NWidgetFunctionType *func_ptr;   ///< Part with a function call.
 		NWidContainerFlags cont_flags;   ///< Part with container flags.
+		NWidgetPartAspect aspect; ///< Part to set aspect ratio.
 
 		/* Constructors for each NWidgetPartUnion data type. */
 		constexpr NWidgetPartUnion() : xy() {}
@@ -1128,6 +1302,7 @@ struct NWidgetPart {
 		constexpr NWidgetPartUnion(NWidgetPartAlignment align) : align(align) {}
 		constexpr NWidgetPartUnion(NWidgetFunctionType *func_ptr) : func_ptr(func_ptr) {}
 		constexpr NWidgetPartUnion(NWidContainerFlags cont_flags) : cont_flags(cont_flags) {}
+		constexpr NWidgetPartUnion(NWidgetPartAspect aspect) : aspect(aspect) {}
 	} u;
 
 	/* Constructors for each NWidgetPart data type. */
@@ -1142,6 +1317,7 @@ struct NWidgetPart {
 	constexpr NWidgetPart(WidgetType type, NWidgetPartAlignment align) : type(type), u(align) {}
 	constexpr NWidgetPart(WidgetType type, NWidgetFunctionType *func_ptr) : type(type), u(func_ptr) {}
 	constexpr NWidgetPart(WidgetType type, NWidContainerFlags cont_flags) : type(type), u(cont_flags) {}
+	constexpr NWidgetPart(WidgetType type, NWidgetPartAspect aspect) : type(type), u(aspect) {}
 };
 
 /**
@@ -1221,14 +1397,47 @@ constexpr NWidgetPart EndContainer()
 }
 
 /**
- * Widget part function for setting the data and tooltip.
- * @param data Data of the widget.
+ * Widget part function for setting the string and tooltip.
+ * @param string String of the widget.
  * @param tip  Tooltip of the widget.
  * @ingroup NestedWidgetParts
  */
-constexpr NWidgetPart SetDataTip(uint32_t data, StringID tip)
+constexpr NWidgetPart SetStringTip(StringID string, StringID tip = {})
 {
-	return NWidgetPart{WPT_DATATIP, NWidgetPartDataTip{data, tip}};
+	return NWidgetPart{WPT_DATATIP, NWidgetPartDataTip{{.string = string}, tip}};
+}
+
+/**
+ * Widget part function for setting the sprite and tooltip.
+ * @param data Sprite of the widget.
+ * @param tip  Tooltip of the widget.
+ * @ingroup NestedWidgetParts
+ */
+constexpr NWidgetPart SetSpriteTip(SpriteID sprite, StringID tip = {})
+{
+	return NWidgetPart{WPT_DATATIP, NWidgetPartDataTip{{.sprite = sprite}, tip}};
+}
+
+/**
+ * Widget part function for setting the arrow widget type and tooltip.
+ * @param widget_type Type of the widget to draw.
+ * @param tip  Tooltip of the widget.
+ * @ingroup NestedWidgetParts
+ */
+constexpr NWidgetPart SetArrowWidgetTypeTip(ArrowWidgetValues widget_type, StringID tip = {})
+{
+	return NWidgetPart{WPT_DATATIP, NWidgetPartDataTip{{.arrow_widget_type = widget_type}, tip}};
+}
+
+/**
+ * Widget part function for setting the resize widget type and tooltip.
+ * @param widget_type Type of the widget to draw.
+ * @param tip  Tooltip of the widget.
+ * @ingroup NestedWidgetParts
+ */
+constexpr NWidgetPart SetResizeWidgetTypeTip(ResizeWidgetValues widget_type, StringID tip)
+{
+	return NWidgetPart{WPT_DATATIP, NWidgetPartDataTip{{.resize_widget_type = widget_type}, tip}};
 }
 
 /**
@@ -1238,9 +1447,19 @@ constexpr NWidgetPart SetDataTip(uint32_t data, StringID tip)
  * @param tip  Tooltip of the widget.
  * @ingroup NestedWidgetParts
  */
-constexpr NWidgetPart SetMatrixDataTip(uint8_t cols, uint8_t rows, StringID tip)
+constexpr NWidgetPart SetMatrixDataTip(uint32_t cols, uint32_t rows, StringID tip = {})
 {
-	return SetDataTip((rows << MAT_ROW_START) | (cols << MAT_COL_START), tip);
+	return NWidgetPart{WPT_DATATIP, NWidgetPartDataTip{{.matrix{ cols, rows }}, tip}};
+}
+
+/**
+ * Widget part function for setting tooltip and clearing the widget data.
+ * @param tip  Tooltip of the widget.
+ * @ingroup NestedWidgetParts
+ */
+constexpr NWidgetPart SetToolTip(StringID tip)
+{
+	return NWidgetPart{WPT_DATATIP, NWidgetPartDataTip{{}, tip}};
 }
 
 /**
@@ -1255,6 +1474,17 @@ constexpr NWidgetPart SetMatrixDataTip(uint8_t cols, uint8_t rows, StringID tip)
 constexpr NWidgetPart SetPadding(uint8_t top, uint8_t right, uint8_t bottom, uint8_t left)
 {
 	return NWidgetPart{WPT_PADDING, NWidgetPartPaddings{left, top, right, bottom}};
+}
+
+/**
+ * Widget part function for setting additional space around a widget.
+ * @param horizontal The padding on either side of the widget.
+ * @param vertical The padding above and below the widget.
+ * @ingroup NestedWidgetParts
+ */
+constexpr NWidgetPart SetPadding(uint8_t horizontal, uint8_t vertical)
+{
+	return NWidgetPart{WPT_PADDING, NWidgetPartPaddings{horizontal, vertical, horizontal, vertical}};
 }
 
 /**
@@ -1314,6 +1544,17 @@ constexpr NWidgetPart SetScrollbar(WidgetID index)
 }
 
 /**
+ * Widget part function for setting the aspect ratio.
+ * @param ratio Desired aspect ratio, or 0 for none.
+ * @param flags Dimensions which should be resized.
+ * @ingroup NestedWidgetParts
+ */
+constexpr NWidgetPart SetAspect(float ratio, AspectFlags flags = AspectFlags::ResizeX)
+{
+	return NWidgetPart{WPT_ASPECT, NWidgetPartAspect{ratio, flags}};
+}
+
+/**
  * Widget part function for starting a new 'real' widget.
  * @param tp  Type of the new nested widget.
  * @param col Colour of the new widget.
@@ -1349,8 +1590,8 @@ constexpr NWidgetPart NWidgetFunction(NWidgetFunctionType *func_ptr)
 }
 
 bool IsContainerWidgetType(WidgetType tp);
-std::unique_ptr<NWidgetBase> MakeNWidgets(const NWidgetPart *nwid_begin, const NWidgetPart *nwid_end, std::unique_ptr<NWidgetBase> container);
-std::unique_ptr<NWidgetBase> MakeWindowNWidgetTree(const NWidgetPart *nwid_begin, const NWidgetPart *nwid_end, NWidgetStacked **shade_select);
+std::unique_ptr<NWidgetBase> MakeNWidgets(std::span<const NWidgetPart> nwid_parts, std::unique_ptr<NWidgetBase> container);
+std::unique_ptr<NWidgetBase> MakeWindowNWidgetTree(std::span<const NWidgetPart> nwid_parts, NWidgetStacked **shade_select);
 
 std::unique_ptr<NWidgetBase> MakeCompanyButtonRows(WidgetID widget_first, WidgetID widget_last, Colours button_colour, int max_length, StringID button_tooltip, bool resizable = true);
 

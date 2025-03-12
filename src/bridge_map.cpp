@@ -9,6 +9,7 @@
 
 #include "stdafx.h"
 #include "landscape.h"
+#include "tunnelbridge.h"
 #include "tunnelbridge_map.h"
 #include "bridge_signal_map.h"
 #include "debug.h"
@@ -72,15 +73,14 @@ TileIndex GetOtherBridgeEnd(TileIndex tile)
  */
 int GetBridgeHeight(TileIndex t)
 {
-	int h;
-	Slope tileh = GetTileSlope(t, &h);
+	auto [tileh, h] = GetTileSlopeZ(t);
 	Foundation f = GetBridgeFoundation(tileh, DiagDirToAxis(GetTunnelBridgeDirection(t)));
 
 	/* one height level extra for the ramp */
-	return h + 1 + ApplyFoundationToSlope(f, &tileh);
+	return h + 1 + ApplyFoundationToSlope(f, tileh);
 }
 
-std::unordered_map<TileIndex, LongBridgeSignalStorage> _long_bridge_signal_sim_map;
+robin_hood::unordered_flat_map<TileIndex, LongBridgeSignalStorage> _long_bridge_signal_sim_map;
 
 SignalState GetBridgeEntranceSimulatedSignalStateExtended(TileIndex t, uint16_t signal)
 {
@@ -104,7 +104,7 @@ void SetBridgeEntranceSimulatedSignalStateExtended(TileIndex t, uint16_t signal,
 	uint16_t slot = offset >> 6;
 	uint16_t bit = offset & 0x3F;
 	if (slot >= lbss.signal_red_bits.size()) lbss.signal_red_bits.resize(slot + 1);
-	SB(lbss.signal_red_bits[slot], bit, 1, (uint64_t) ((state == SIGNAL_STATE_RED) ? 1 : 0));
+	AssignBit(lbss.signal_red_bits[slot], bit, state == SIGNAL_STATE_RED);
 	_m[t].m2 |= BRIDGE_M2_SIGNAL_STATE_EXT_FLAG;
 }
 
@@ -124,6 +124,21 @@ bool SetAllBridgeEntranceSimulatedSignalsGreenExtended(TileIndex t)
 		_m[t].m2 |= BRIDGE_M2_SIGNAL_STATE_EXT_FLAG;
 	}
 	return changed;
+}
+
+void SetAllBridgeEntranceSimulatedSignalsRed(TileIndex t, TileIndex other_end)
+{
+	_m[t].m2 |= GetBitMaskSC<uint16_t>(BRIDGE_M2_SIGNAL_STATE_OFFSET, BRIDGE_M2_SIGNAL_STATE_COUNT);
+
+	const uint simulated_wormhole_signals = GetTunnelBridgeSignalSimulationSpacing(t);
+	const uint bridge_length = GetTunnelBridgeLength(t, other_end);
+	const uint signal_count = bridge_length / simulated_wormhole_signals;
+
+	if (signal_count <= BRIDGE_M2_SIGNAL_STATE_COUNT) return;
+
+	_m[t].m2 |= BRIDGE_M2_SIGNAL_STATE_EXT_FLAG;
+	LongBridgeSignalStorage &lbss = _long_bridge_signal_sim_map[t];
+	lbss.signal_red_bits.assign(CeilDiv(signal_count - BRIDGE_M2_SIGNAL_STATE_COUNT, 64), UINT64_MAX);
 }
 
 void ClearBridgeEntranceSimulatedSignalsExtended(TileIndex t)
@@ -181,20 +196,20 @@ void SetBridgeSignalStyle(TileIndex t, uint8_t style)
 		/* No style allocated before */
 		if (!HasBit(_m[t].m3, 7)) return;
 
-		auto iter = _bridge_signal_style_map.lower_bound(t << 4);
+		auto iter = _bridge_signal_style_map.lower_bound(t.base() << 4);
 		if (iter != _bridge_signal_style_map.end() && *iter >> 4 == t) _bridge_signal_style_map.erase(iter);
 		ClrBit(_m[t].m3, 7);
 	} else {
-		auto iter = _bridge_signal_style_map.lower_bound(t << 4);
+		auto iter = _bridge_signal_style_map.lower_bound(t.base() << 4);
 		if (iter != _bridge_signal_style_map.end() && *iter >> 4 == t) iter = _bridge_signal_style_map.erase(iter);
-		_bridge_signal_style_map.insert(iter, (t << 4) | style);
+		_bridge_signal_style_map.insert(iter, (t.base() << 4) | style);
 		SetBit(_m[t].m3, 7);
 	}
 }
 
 uint8_t GetBridgeSignalStyleExtended(TileIndex t)
 {
-	auto iter = _bridge_signal_style_map.lower_bound(t << 4);
+	auto iter = _bridge_signal_style_map.lower_bound(t.base() << 4);
 	if (iter != _bridge_signal_style_map.end() && *iter >> 4 == t) return (*iter) & 0xF;
 	return 0;
 }

@@ -9,10 +9,11 @@
 
 #ifndef PROGRAMMABLE_SIGNALS_H
 #define PROGRAMMABLE_SIGNALS_H
+
 #include "rail_map.h"
 #include "tracerestrict.h"
 #include "core/container_func.hpp"
-#include <map>
+#include "3rdparty/cpp-btree/btree_map.h"
 #include <vector>
 
 /** @defgroup progsigs Programmable Pre-Signals */
@@ -27,11 +28,6 @@ struct SignalVM;
 class SignalInstruction;
 class SignalSpecial;
 typedef std::vector<SignalInstruction*> InstructionList;
-
-enum SignalProgramMgmtCode {
-	SPMC_REMOVE,      ///< Remove program
-	SPMC_CLONE,       ///< Clone program
-};
 
 /** The actual programmable pre-signal information */
 struct SignalProgram {
@@ -64,7 +60,7 @@ enum SignalOpcode {
 	PSO_END,
 	PSO_INVALID   = 0xFF
 };
-template <> struct EnumPropsT<SignalOpcode> : MakeEnumPropsT<SignalOpcode, byte, PSO_FIRST, PSO_END, PSO_INVALID, 8> {};
+template <> struct EnumPropsT<SignalOpcode> : MakeEnumPropsT<SignalOpcode, uint8_t, PSO_FIRST, PSO_END, PSO_INVALID, 8> {};
 
 /** Signal instruction base class. All instructions must derive from this. */
 class SignalInstruction {
@@ -77,9 +73,7 @@ public:
 	inline SignalInstruction *Previous() const { return this->previous; }
 
 	/// Get the Id of this instruction
-	inline int Id() const
-	// Const cast is safe (perculiarity of SmallVector)
-	{ return find_index(program->instructions, const_cast<SignalInstruction*>(this)); }
+	inline int Id() const { return find_index(program->instructions, const_cast<SignalInstruction *>(this)); }
 
 	/// Insert this instruction, placing it before @p before_insn
 	virtual void Insert(SignalInstruction *before_insn);
@@ -97,13 +91,12 @@ public:
 
 	/// Gets a reference to the previous member. This is only intended for use by
 	/// the saveload code.
-	inline SignalInstruction *&GetPrevHandle()
-	{ return previous; }
+	inline SignalInstruction *&GetPrevHandle() { return previous; }
 
 	/// Sets the previous instruction of this instruction. This is only intended
 	/// to be used by instructions to update links during insertion and removal.
-	inline void SetPrevious(SignalInstruction *prev)
-	{ previous = prev; }
+	inline void SetPrevious(SignalInstruction *prev) { previous = prev; }
+
 	/// Set the next instruction. This is only intended to be used by instructions
 	/// to update links during insertion and removal
 	virtual void SetNext(SignalInstruction *next_insn) = 0;
@@ -112,7 +105,7 @@ protected:
 	/// Constructs an instruction
 	/// @param prog the program to add this instruction to
 	/// @param op the opcode of the instruction
-	SignalInstruction(SignalProgram *prog, SignalOpcode op) ;
+	SignalInstruction(SignalProgram *prog, SignalOpcode op);
 	virtual ~SignalInstruction();
 
 	const SignalOpcode opcode;
@@ -144,7 +137,7 @@ public:
 	inline SignalConditionCode ConditionCode() const { return this->cond_code; }
 
 	/// Evaluate the condition
-	virtual bool Evaluate(SignalVM& vm) = 0;
+	virtual bool Evaluate(SignalVM &vm) = 0;
 
 	/// Destroy the condition. Any children should also be destroyed
 	virtual ~SignalCondition();
@@ -162,7 +155,7 @@ protected:
 class SignalSimpleCondition: public SignalCondition {
 public:
 	SignalSimpleCondition(SignalConditionCode code);
-	bool Evaluate(SignalVM& vm) override;
+	bool Evaluate(SignalVM &vm) override;
 };
 
 /** Comparator to use for variable conditions. */
@@ -179,13 +172,6 @@ enum SignalComparator {
 	SGC_LAST = SGC_IS_FALSE
 };
 
-/** Which field to modify in a condition. A parameter to CMD_MODIFY_SIGNAL_INSTRUCTION */
-enum SignalConditionField {
-	SCF_COMPARATOR = 0,       ///< the comparator (value from SignalComparator enum)
-	SCF_VALUE = 1,            ///< the value (integer value)
-	SCF_SLOT_COUNTER = 2,     ///< the slot or counter
-};
-
 class SignalConditionComparable: public SignalCondition {
 protected:
 	bool EvaluateComparable(uint32_t var_val);
@@ -196,15 +182,15 @@ public:
 	uint32_t value;
 };
 
-/** A conditon based upon comparing a variable and a value. This condition can be
- *  considered similar to the conditonal jumps in vehicle orders.
+/** A condition based upon comparing a variable and a value. This condition can be
+ *  considered similar to the conditional jumps in vehicle orders.
  *
- * The variable is specified by the conditon code, the comparison by @p comparator, and
+ * The variable is specified by the condition code, the comparison by @p comparator, and
  * the value to compare against by @p value. The condition returns the result of that value.
  */
 class SignalVariableCondition: public SignalConditionComparable {
 public:
-	/// Constructs a condition refering to the value @p code refers to. Sets the
+	/// Constructs a condition referring to the value @p code refers to. Sets the
 	/// comparator and value to sane defaults.
 	SignalVariableCondition(SignalConditionCode code);
 
@@ -222,7 +208,7 @@ class SignalStateCondition: public SignalCondition {
 		bool CheckSignalValid();
 		void Invalidate();
 
-		bool Evaluate(SignalVM& vm) override;
+		bool Evaluate(SignalVM &vm) override;
 		virtual ~SignalStateCondition();
 
 		SignalReference this_sig;
@@ -240,7 +226,7 @@ class SignalSlotCondition: public SignalConditionComparable {
 		bool CheckSlotValid();
 		void Invalidate();
 
-		bool Evaluate(SignalVM& vm) override;
+		bool Evaluate(SignalVM &vm) override;
 		virtual ~SignalSlotCondition();
 
 		SignalReference this_sig;
@@ -257,7 +243,7 @@ class SignalCounterCondition: public SignalConditionComparable {
 		bool CheckCounterValid();
 		void Invalidate();
 
-		bool Evaluate(SignalVM& vm) override;
+		bool Evaluate(SignalVM &vm) override;
 		virtual ~SignalCounterCondition();
 
 		SignalReference this_sig;
@@ -380,7 +366,7 @@ public:
 	/** Removes the If and all of its children */
 	void Remove() override;
 
-	SignalCondition *condition;    ///< The if conditon
+	SignalCondition *condition;    ///< The if condition
 	SignalInstruction *if_true;    ///< The branch to take if true
 	SignalInstruction *if_false;   ///< The branch to take if false
 	SignalInstruction *after;      ///< The branch to take after the If
@@ -407,7 +393,7 @@ public:
 };
 
 /// The map type used for looking up signal programs
-typedef std::map<SignalReference, SignalProgram*> ProgramList;
+typedef btree::btree_map<SignalReference, SignalProgram *> ProgramList;
 
 /// The global signal program list
 extern ProgramList _signal_programs;
@@ -416,7 +402,7 @@ extern ProgramList _signal_programs;
 inline bool HasProgrammableSignals(SignalReference ref)
 {
 	return IsTileType(ref.tile, MP_RAILWAY) && GetRailTileType(ref.tile) == RAIL_TILE_SIGNALS
-	    && IsPresignalProgrammable(ref.tile, ref.track);
+			&& IsPresignalProgrammable(ref.tile, ref.track);
 }
 
 /// Shows the programming window for the signal identified by @p tile and

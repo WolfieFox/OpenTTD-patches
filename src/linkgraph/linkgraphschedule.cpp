@@ -15,6 +15,7 @@
 #include "flowmapper.h"
 #include "../framerate_type.h"
 #include "../command_func.h"
+#include "../misc_cmd.h"
 #include "../network/network.h"
 #include <algorithm>
 
@@ -30,16 +31,16 @@
 /**
  * Start the next job(s) in the schedule.
  *
- * The cost estimate of a link graph job is C ~ N^2 log N, where
+ * The cost estimate of a link graph job is C ~ N^2, where
  * N is the number of nodes in the job link graph.
  *
  * The cost estimate is summed for all running and scheduled jobs to form the total cost estimate T = sum C.
- * The clamped total cost estimate is calculated as U = min(1 << 25, T). This is to prevent excessively high cost budgets.
+ * The clamped total cost estimate is calculated as U = min(1 << 24, T). This is to prevent excessively high cost budgets.
  * The nominal cycle time (in recalc intervals) required to schedule all jobs is calculated as S = 1 + max(0, log_2 U - 13).
  * The cost budget for an individual call to this method is given by U / S.
  * The last scheduled job may exceed the cost budget.
  *
- * The nominal duration of an individual job is D = N / 75
+ * The nominal duration of an individual job is D = N / 500
  *
  * The purpose of this algorithm is so that overall responsiveness is not hindered by large numbers of small/cheap
  * jobs which would previously need to be cycled through individually, but equally large/slow jobs have an extended
@@ -49,23 +50,23 @@ void LinkGraphSchedule::SpawnNext()
 {
 	if (this->schedule.empty()) return;
 
-	GraphList schedule_to_back;
+	std::vector<LinkGraph *> schedule_to_back;
 	uint64_t total_cost = 0;
 	for (auto iter = this->schedule.begin(); iter != this->schedule.end();) {
-		auto current = iter;
-		++iter;
-		const LinkGraph *lg = *current;
+		const LinkGraph *lg = *iter;
 
 		if (lg->Size() < 2) {
-			schedule_to_back.splice(schedule_to_back.end(), this->schedule, current);
+			schedule_to_back.push_back(*iter);
+			iter = this->schedule.erase(iter);
 		} else {
 			total_cost += lg->CalculateCostEstimate();
+			++iter;
 		}
 	}
 	for (auto &it : this->running) {
 		total_cost += it->Graph().CalculateCostEstimate();
 	}
-	uint64_t clamped_total_cost = std::min<uint64_t>(total_cost, 1 << 25);
+	uint64_t clamped_total_cost = std::min<uint64_t>(total_cost, 1 << 24);
 	uint log2_clamped_total_cost = FindLastBit(clamped_total_cost);
 	uint scaling = log2_clamped_total_cost > 13 ? log2_clamped_total_cost - 12 : 1;
 	uint64_t cost_budget = clamped_total_cost / scaling;
@@ -78,20 +79,20 @@ void LinkGraphSchedule::SpawnNext()
 		uint64_t cost = lg->CalculateCostEstimate();
 		used_budget += cost;
 		if (LinkGraphJob::CanAllocateItem()) {
-			uint duration_multiplier = CeilDivT<uint64_t>(lg->Size(), 75);
+			uint duration_multiplier = CeilDivT<uint64_t>(lg->Size(), 500);
 			std::unique_ptr<LinkGraphJob> job(new LinkGraphJob(*lg, duration_multiplier));
 			jobs_to_execute.emplace_back(job.get(), cost);
 			if (this->running.empty() || job->JoinTick() >= this->running.back()->JoinTick()) {
 				this->running.push_back(std::move(job));
-				DEBUG(linkgraph, 3, "LinkGraphSchedule::SpawnNext(): Running job: id: %u, nodes: %u, cost: " OTTD_PRINTF64U ", duration_multiplier: %u",
+				Debug(linkgraph, 3, "LinkGraphSchedule::SpawnNext(): Running job: id: {}, nodes: {}, cost: {}, duration_multiplier: {}",
 						lg->index, lg->Size(), cost, duration_multiplier);
 			} else {
-				// find right place to insert
+				/* Find right place to insert */
 				auto iter = std::upper_bound(this->running.begin(), this->running.end(), job->JoinTick(), [](ScaledTickCounter a, const std::unique_ptr<LinkGraphJob> &b) {
 					return a < b->JoinTick();
 				});
 				this->running.insert(iter, std::move(job));
-				DEBUG(linkgraph, 3, "LinkGraphSchedule::SpawnNext(): Running job (re-ordering): id: %u, nodes: %u, cost: " OTTD_PRINTF64U ", duration_multiplier: %u",
+				Debug(linkgraph, 3, "LinkGraphSchedule::SpawnNext(): Running job (re-ordering): id: {}, nodes: {}, cost: {}, duration_multiplier: {}",
 						lg->index, lg->Size(), cost, duration_multiplier);
 			}
 		} else {
@@ -99,11 +100,11 @@ void LinkGraphSchedule::SpawnNext()
 		}
 	}
 
-	this->schedule.splice(this->schedule.end(), schedule_to_back);
+	this->schedule.insert(this->schedule.end(), schedule_to_back.begin(), schedule_to_back.end());
 
 	LinkGraphJobGroup::ExecuteJobSet(std::move(jobs_to_execute));
 
-	DEBUG(linkgraph, 2, "LinkGraphSchedule::SpawnNext(): Linkgraph job totals: cost: " OTTD_PRINTF64U ", budget: " OTTD_PRINTF64U ", scaling: %u, scheduled: " PRINTF_SIZE ", running: " PRINTF_SIZE,
+	Debug(linkgraph, 2, "LinkGraphSchedule::SpawnNext(): Linkgraph job totals: cost: {}, budget: {}, scaling: {}, scheduled: {}, running: {}",
 			total_cost, cost_budget, scaling, this->schedule.size(), this->running.size());
 }
 
@@ -152,9 +153,9 @@ void LinkGraphSchedule::JoinNext()
  */
 /* static */ void LinkGraphSchedule::Run(LinkGraphJob *job)
 {
-	for (uint i = 0; i < lengthof(instance.handlers); ++i) {
+	for (const auto &handler : instance.handlers) {
 		if (job->IsJobAborted()) return;
-		instance.handlers[i]->Run(*job);
+		handler->Run(*job);
 	}
 
 	/*
@@ -200,7 +201,7 @@ void LinkGraphSchedule::SpawnAll()
  * graph jobs by the number of days given.
  * @param interval Number of days to be added or subtracted.
  */
-void LinkGraphSchedule::ShiftDates(DateDelta interval)
+void LinkGraphSchedule::ShiftDates(EconTime::DateDelta interval)
 {
 	for (LinkGraph *lg : LinkGraph::Iterate()) lg->ShiftDates(interval);
 }
@@ -210,12 +211,12 @@ void LinkGraphSchedule::ShiftDates(DateDelta interval)
  */
 LinkGraphSchedule::LinkGraphSchedule()
 {
-	this->handlers[0].reset(new InitHandler);
-	this->handlers[1].reset(new DemandHandler);
-	this->handlers[2].reset(new MCFHandler<MCF1stPass>);
-	this->handlers[3].reset(new FlowMapper(false));
-	this->handlers[4].reset(new MCFHandler<MCF2ndPass>);
-	this->handlers[5].reset(new FlowMapper(true));
+	this->handlers[0] = std::make_unique<InitHandler>();
+	this->handlers[1] = std::make_unique<DemandHandler>();
+	this->handlers[2] = std::make_unique<MCFHandler<MCF1stPass>>();
+	this->handlers[3] = std::make_unique<FlowMapper>(false);
+	this->handlers[4] = std::make_unique<MCFHandler<MCF2ndPass>>();
+	this->handlers[5] = std::make_unique<FlowMapper>(true);
 }
 
 /**
@@ -241,7 +242,7 @@ void LinkGraphJobGroup::SpawnThread()
 		}
 	} else {
 		/* Of course this will hang a bit.
-		 * On the other hand, if you want to play games which make this hang noticably
+		 * On the other hand, if you want to play games which make this hang noticeably
 		 * on a platform without threads then you'll probably get other problems first.
 		 * OK:
 		 * If someone comes and tells me that this hangs for them, I'll implement a
@@ -283,7 +284,7 @@ void LinkGraphJobGroup::JoinThread()
 	ScaledTickCounter bucket_join_tick = 0;
 	auto flush_bucket = [&]() {
 		if (!bucket_cost) return;
-		DEBUG(linkgraph, 2, "LinkGraphJobGroup::ExecuteJobSet: Creating Job Group: jobs: " PRINTF_SIZE ", cost: %u, join after: " OTTD_PRINTF64,
+		Debug(linkgraph, 2, "LinkGraphJobGroup::ExecuteJobSet: Creating Job Group: jobs: {}, cost: {}, join after: {}",
 				bucket.size(), bucket_cost, bucket_join_tick - _scaled_tick_counter);
 		auto group = std::make_shared<LinkGraphJobGroup>(constructor_token(), std::move(bucket));
 		group->SpawnThread();
@@ -315,7 +316,7 @@ void StateGameLoop_LinkGraphPauseControl()
 	if (_pause_mode & PM_PAUSED_LINK_GRAPH) {
 		/* We are paused waiting on a job, check the job every tick */
 		if (!LinkGraphSchedule::instance.IsJoinWithUnfinishedJobDue()) {
-			DoCommandP(0, PM_PAUSED_LINK_GRAPH, 0, CMD_PAUSE);
+			Command<CMD_PAUSE>::Post(PM_PAUSED_LINK_GRAPH, false);
 		}
 	} else if (_pause_mode == PM_UNPAUSED) {
 		int interval = _settings_game.linkgraph.recalc_interval * DAY_TICKS / SECONDS_PER_DAY;
@@ -323,7 +324,7 @@ void StateGameLoop_LinkGraphPauseControl()
 		if (offset == (interval / 2) - 2) {
 			/* perform check 2 ticks before we would join */
 			if (LinkGraphSchedule::instance.IsJoinWithUnfinishedJobDue()) {
-				DoCommandP(0, PM_PAUSED_LINK_GRAPH, 1, CMD_PAUSE);
+				Command<CMD_PAUSE>::Post(PM_PAUSED_LINK_GRAPH, true);
 			}
 		}
 	}

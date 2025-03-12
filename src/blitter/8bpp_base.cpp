@@ -16,7 +16,7 @@
 
 void Blitter_8bppBase::DrawColourMappingRect(void *dst, int width, int height, PaletteID pal)
 {
-	const uint8_t *ctab = GetNonSprite(pal, SpriteType::Recolour) + 1;
+	const uint8_t *ctab = GetNonSprite(pal, SpriteType::Recolour);
 	const int screen_pitch = this->GetScreenPitch();
 
 	do {
@@ -197,5 +197,5 @@ void Blitter_8bppBase::PaletteAnimate(const Palette &)
 
 Blitter::PaletteAnimation Blitter_8bppBase::UsePaletteAnimation()
 {
-	return Blitter::PALETTE_ANIMATION_VIDEO_BACKEND;
+	return Blitter::PaletteAnimation::VideoBackend;
 }

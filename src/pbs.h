@@ -45,7 +45,7 @@ struct PBSTileInfo {
 	PBSTileInfo(TileIndex _t, Trackdir _td, bool _okay) : tile(_t), trackdir(_td), okay(_okay) {}
 };
 
-enum TrainReservationLookAheadItemType : byte {
+enum TrainReservationLookAheadItemType : uint8_t {
 	TRLIT_STATION                = 0,     ///< Station/waypoint
 	TRLIT_REVERSE                = 1,     ///< Reverse behind signal
 	TRLIT_TRACK_SPEED            = 2,     ///< Track or bridge speed limit
@@ -83,6 +83,7 @@ enum TrainReservationLookAheadFlags {
 	TRLF_DEPOT_END         = 1,           ///< Reservation ends at a depot
 	TRLF_APPLY_ADVISORY    = 2,           ///< Apply advisory speed limit on next iteration
 	TRLF_CHUNNEL           = 3,           ///< Reservation ends at a signalled chunnel entrance
+	TRLF_TB_CMB_DEFER      = 4,           ///< Deferred combined normal/shunt tunnel/bridge exit
 };
 
 struct TrainReservationLookAhead {
@@ -146,7 +147,7 @@ struct TrainReservationLookAhead {
 	void AddSpeedAdaptation(TileIndex signal_tile, uint16_t signal_track, int offset, int16_t z_pos)
 	{
 		int end = this->RealEndPosition();
-		this->items.push_back({ end + offset, end + offset, z_pos, signal_tile, signal_track, TRLIT_SPEED_ADAPTATION });
+		this->items.push_back({ end + offset, end + offset, z_pos, signal_tile.base(), signal_track, TRLIT_SPEED_ADAPTATION });
 	}
 
 	void SetNextExtendPosition();

@@ -45,9 +45,7 @@ void MarkWholeNonMapViewportsDirty();
 void MarkAllViewportOverlayStationLinksDirty(const Station *st);
 void MarkViewportLineDirty(Viewport * const vp, const Point from_pt, const Point to_pt, const int block_radius, ViewportMarkDirtyFlags flags);
 void MarkTileLineDirty(const TileIndex from_tile, const TileIndex to_tile, ViewportMarkDirtyFlags flags);
-void MarkDirtyFocusedRoutePaths(const Vehicle *veh);
-void CheckMarkDirtyViewportRoutePaths(const Vehicle *veh);
-void CheckMarkDirtyViewportRoutePaths();
+void HandleViewportRoutePathFocusChange(const Window *old, const Window *focused);
 void AddFixedViewportRoutePath(VehicleID veh);
 void RemoveFixedViewportRoutePath(VehicleID veh);
 void ChangeFixedViewportRoutePath(VehicleID from, VehicleID to);
@@ -85,7 +83,7 @@ void DrawGroundSprite(SpriteID image, PaletteID pal, const SubSprite *sub = null
 void DrawGroundSpriteAt(SpriteID image, PaletteID pal, int32_t x, int32_t y, int z, const SubSprite *sub = nullptr, int extra_offs_x = 0, int extra_offs_y = 0);
 void AddSortableSpriteToDraw(SpriteID image, PaletteID pal, int x, int y, int w, int h, int dz, int z, bool transparent = false, int bb_offset_x = 0, int bb_offset_y = 0, int bb_offset_z = 0, const SubSprite *sub = nullptr, ViewportSortableSpriteSpecialFlags special_flags = VSSF_NONE);
 void AddChildSpriteScreen(SpriteID image, PaletteID pal, int x, int y, bool transparent = false, const SubSprite *sub = nullptr, bool scale = true, ChildScreenSpritePositionMode position_mode = ChildScreenSpritePositionMode::Relative);
-void ViewportAddString(ViewportDrawerDynamic *vdd, const DrawPixelInfo *dpi, ZoomLevel small_from, const ViewportSign *sign, StringID string_normal, StringID string_small, StringID string_small_shadow, uint64_t params_1, uint64_t params_2 = 0, Colours colour = INVALID_COLOUR);
+void ViewportAddString(ViewportDrawerDynamic *vdd, const DrawPixelInfo *dpi, const ViewportSign *sign, ViewportStringFlags flags, StringID string, uint64_t params_1, uint64_t params_2 = 0, Colours colour = INVALID_COLOUR);
 
 
 void StartSpriteCombine();
@@ -159,24 +157,24 @@ void SetViewportCatchmentWaypoint(const Waypoint *wp, bool sel);
 void SetViewportCatchmentTown(const Town *t, bool sel);
 void SetViewportCatchmentTraceRestrictProgram(const TraceRestrictProgram *prog, bool sel);
 
-template<class T>
+template <class T>
 void SetViewportCatchmentSpecializedStation(const T *st, bool sel);
 
-template<>
+template <>
 inline void SetViewportCatchmentSpecializedStation(const Station *st, bool sel)
 {
 	SetViewportCatchmentStation(st, sel);
 }
 
-template<>
+template <>
 inline void SetViewportCatchmentSpecializedStation(const Waypoint *st, bool sel)
 {
 	SetViewportCatchmentWaypoint(st, sel);
 }
 
 void MarkBridgeDirty(TileIndex begin, TileIndex end, DiagDirection direction, uint bridge_height, ViewportMarkDirtyFlags flags = VMDF_NONE);
-void MarkBridgeDirty(TileIndex tile, ViewportMarkDirtyFlags flags = VMDF_NONE);
-void MarkBridgeOrTunnelDirty(TileIndex tile, ViewportMarkDirtyFlags flags = VMDF_NONE);
+void MarkBridgeDirty(TileIndex tile, TileIndex end, ViewportMarkDirtyFlags flags = VMDF_NONE);
+void MarkBridgeOrTunnelDirty(TileIndex tile, TileIndex end, ViewportMarkDirtyFlags flags = VMDF_NONE);
 void MarkBridgeOrTunnelDirtyOnReservationChange(TileIndex tile, ViewportMarkDirtyFlags flags = VMDF_NONE);
 
 bool IsViewportMouseHoverActive();

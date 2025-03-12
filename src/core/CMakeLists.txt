@@ -3,6 +3,7 @@ add_files(
     alloc_func.hpp
     alloc_type.hpp
     backup_type.hpp
+    bit_cast.hpp
     bitmath_func.hpp
     checksum_func.hpp
     container_func.hpp
@@ -11,6 +12,7 @@ add_files(
     endian_type.hpp
     enum_type.hpp
     hash_func.hpp
+    format.cpp
     format.hpp
     geometry_func.cpp
     geometry_func.hpp
