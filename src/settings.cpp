@@ -1847,6 +1847,9 @@ static void DifficultyNoiseChange(int32_t new_value)
 		if (_settings_game.economy.station_noise_level) {
 			InvalidateWindowClassesData(WC_TOWN_VIEW, 0);
 		}
+
+		// If we've gone to permissive - we might need to update the town labels to remove colour.
+		UpdateAllTownVirtCoords();
 	}
 }
 
