@@ -248,7 +248,11 @@ void Town::UpdateLabel()
 uint64_t Town::LabelParam2() const
 {
 	uint64_t value = this->cache.population;
-	if (!(_game_mode == GM_EDITOR) && (_local_company < MAX_COMPANIES)) {
+
+	// In scenario editor, when spectating and when the council rating doesn't matter, show the label in white.
+	if ((_game_mode != GM_EDITOR)
+		&& (_local_company < MAX_COMPANIES)
+		&& (_settings_game.difficulty.town_council_tolerance != TOWN_COUNCIL_PERMISSIVE)) {
 		SB(value, 32, 8, this->town_label_rating);
 	} else {
 		SB(value, 32, 8, TC_WHITE);
