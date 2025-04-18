@@ -48,7 +48,7 @@ static const uint DEF_DESERT_COVERAGE = 50;                    ///< Default dese
  *
  * @note A railway with a crossing street is marked as MP_ROAD.
  */
-enum TileType {
+enum TileType : uint8_t {
 	MP_CLEAR,               ///< A tile without any structures, i.e. grass, rocks, farm fields etc.
 	MP_RAILWAY,             ///< A railway
 	MP_ROAD,                ///< A tile with road (or tram tracks)
@@ -77,7 +77,7 @@ enum TileType {
  *  TROPICZONE_DESERT: Placed manually.
  *  TROPICZONE_RAINFOREST: Placed if you plant certain rainforest-trees.
  */
-enum TropicZone {
+enum TropicZone : uint8_t {
 	TROPICZONE_NORMAL     = 0,      ///< Normal tropiczone
 	TROPICZONE_DESERT     = 1,      ///< Tile is desert
 	TROPICZONE_RAINFOREST = 2,      ///< Rainforest tile
@@ -95,6 +95,9 @@ enum TropicZone {
  */
 typedef int32_t TileIndexDiff;
 
+/** Tag type to enable custom format behaviour */
+struct fmt_tile_index_tag {};
+
 /**
  * Instead of using StrongType::Integer, implement delta behaviour with TileIndexDiff.
  * As TileIndexDiff is not a strong type, StrongType::IntegerDelta can't be used.
@@ -102,7 +105,7 @@ typedef int32_t TileIndexDiff;
  */
 struct TileIndexIntegerMixin {
 	template <typename TType, typename TBaseType>
-	struct mixin {
+	struct mixin : public fmt_tile_index_tag {
 		friend constexpr TType &operator ++(TType &lhs) { lhs.edit_base()++; return lhs; }
 		friend constexpr TType &operator --(TType &lhs) { lhs.edit_base()--; return lhs; }
 		friend constexpr TType operator ++(TType &lhs, int) { TType res = lhs; lhs.edit_base()++; return res; }
@@ -203,7 +206,7 @@ struct TileIndexIntegerMixin {
  * TileIndex + int/int32_t/uint/etc --> TileIndex
  * TileIndex - int/int32_t/uint/etc --> TileIndex
  */
-struct TileIndexTag : public StrongType::TypedefTraits<uint32_t, TileIndexIntegerMixin> {};
+struct TileIndexTag : public StrongType::TypedefTraits<uint32_t, TileIndexIntegerMixin, StrongType::NoDefaultFormat> {};
 using TileIndex = StrongType::Typedef<TileIndexTag>;
 
 /* Make sure the size is as expected. */

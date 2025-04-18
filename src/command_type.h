@@ -94,12 +94,12 @@ public:
 	CommandCost(const CommandCost &other);
 	CommandCost &operator=(const CommandCost &other);
 
-	CommandCost(CommandCost &&other)
+	CommandCost(CommandCost &&other) noexcept
 	{
 		*this = std::move(other);
 	}
 
-	CommandCost &operator=(CommandCost &&other)
+	CommandCost &operator=(CommandCost &&other) noexcept
 	{
 		this->cost = other.cost;
 		this->expense_type = other.expense_type;
@@ -358,7 +358,7 @@ static const CommandCost CMD_ERROR = CommandCost(INVALID_STRING_ID);
  *
  * @see _command_proc_table
  */
-enum Commands : uint16_t {
+enum Commands : uint8_t {
 	CMD_BUILD_RAILROAD_TRACK,         ///< build a rail track
 	CMD_REMOVE_RAILROAD_TRACK,        ///< remove a rail track
 	CMD_BUILD_SINGLE_RAIL,            ///< build a single rail track
@@ -367,8 +367,8 @@ enum Commands : uint16_t {
 	CMD_BUILD_BRIDGE,                 ///< build a bridge
 	CMD_BUILD_RAIL_STATION,           ///< build a rail station
 	CMD_BUILD_TRAIN_DEPOT,            ///< build a train depot
-	CMD_BUILD_SIGNALS,                ///< build a signal
-	CMD_REMOVE_SIGNALS,               ///< remove a signal
+	CMD_BUILD_SINGLE_SIGNAL,          ///< build a signal
+	CMD_REMOVE_SINGLE_SIGNAL,         ///< remove a signal
 	CMD_TERRAFORM_LAND,               ///< terraform a tile
 	CMD_BUILD_OBJECT,                 ///< build an object
 	CMD_PURCHASE_LAND_AREA,           ///< purchase an area of landscape
@@ -380,10 +380,14 @@ enum Commands : uint16_t {
 	CMD_CONVERT_RAIL_TRACK,           ///< convert a rail type (track)
 
 	CMD_BUILD_RAIL_WAYPOINT,          ///< build a waypoint
-	CMD_BUILD_ROAD_WAYPOINT,          ///< build a road waypoint
 	CMD_RENAME_WAYPOINT,              ///< rename a waypoint
-	CMD_SET_WAYPOINT_LABEL_HIDDEN,    ///< set whether waypoint label is hidden
 	CMD_REMOVE_FROM_RAIL_WAYPOINT,    ///< remove a (rectangle of) tiles from a rail waypoint
+
+	CMD_BUILD_ROAD_WAYPOINT,          ///< build a road waypoint
+	CMD_REMOVE_FROM_ROAD_WAYPOINT,    ///< remove a (rectangle of) tiles from a road waypoint
+
+	CMD_SET_WAYPOINT_LABEL_HIDDEN,    ///< set whether waypoint label is hidden
+	CMD_EXCHANGE_WAYPOINT_NAMES,      ///< exchange waypoint names
 
 	CMD_BUILD_ROAD_STOP,              ///< build a road stop
 	CMD_REMOVE_ROAD_STOP,             ///< remove a road stop
@@ -721,7 +725,7 @@ template <Commands Tcmd> struct CommandHandlerTraits;
  *
  * This enums defines some flags which can be used for the commands.
  */
-enum DoCommandFlag {
+enum DoCommandFlag : uint16_t {
 	DC_NONE                  = 0x000, ///< no flag is set
 	DC_EXEC                  = 0x001, ///< execute the given command
 	DC_AUTO                  = 0x002, ///< don't allow building on structures
@@ -778,7 +782,6 @@ enum CommandFlags : uint16_t {
 	CMD_NO_EST    =  0x400, ///< the command is never estimated.
 	CMD_SERVER_NS = 0x1000, ///< the command can only be initiated by the server (this is not executed in spectator mode)
 	CMD_LOG_AUX   = 0x2000, ///< the command should be logged in the auxiliary log instead of the main log
-	CMD_ERR_TILE  = 0x4000, ///< use payload error message tile for money text and error tile
 };
 DECLARE_ENUM_AS_BIT_SET(CommandFlags)
 
@@ -813,7 +816,6 @@ enum CommandPauseLevel : uint8_t {
  * - Have a deserialisation function of the form below, which returns true on success:
  *   bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation);
  * - Have a FormatDebugSummary implementation where even remotely useful.
- * - Have a `TileIndex GetErrorMessageTile() const` function if used by commands with CMD_ERR_TILE.
  * - Have a `ClientID &GetClientIDField()` function if used by commands with CMD_CLIENT_ID.
  */
 struct CommandPayloadBase : public fmt_formattable {
@@ -827,8 +829,6 @@ struct CommandPayloadBase : public fmt_formattable {
 
 	/* FormatDebugSummary may be called when populating the crash log so should not allocate */
 	virtual void FormatDebugSummary(struct format_target &) const {}
-
-	std::string GetDebugSummaryString() const;
 
 	/* To enable use as a format argument, see fmt_formattable */
 	inline void fmt_format_value(struct format_target &output) const
@@ -855,32 +855,12 @@ struct CommandPayloadSerialised final {
 	void Serialise(BufferSerialisationRef buffer) const { buffer.Send_binary(this->serialised_data.data(), this->serialised_data.size()); }
 };
 
-struct P123CmdData final : public CommandPayloadSerialisable<P123CmdData> {
-	uint32_t p1;
-	uint32_t p2;
-	uint64_t p3;
-	std::string text;
-
-	P123CmdData() : p1(0), p2(0), p3(0) {}
-	P123CmdData(uint32_t p1, uint32_t p2, uint64_t p3) : p1(p1), p2(p2), p3(p3) {}
-	P123CmdData(uint32_t p1, uint32_t p2, uint64_t p3, std::string text) : p1(p1), p2(p2), p3(p3), text(std::move(text)) {}
-
-	void Serialise(BufferSerialisationRef buffer) const override;
-	void SanitiseStrings(StringValidationSettings settings) override;
-	bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation);
-	TileIndex GetErrorMessageTile() const;
-	void FormatDebugSummary(struct format_target &) const override;
-};
-
 void SetPreCheckedCommandPayloadClientID(Commands cmd, CommandPayloadBase &payload, ClientID client_id);
 
 template <typename T>
 void SetCommandPayloadClientID(T &payload, ClientID client_id)
 {
-	if constexpr (std::is_same_v<T, P123CmdData>) {
-		// This case will disappear when P123CmdData is removed
-		if (payload.p2 == 0) payload.p2 = (uint32_t)client_id;
-	} else if constexpr (requires { payload.GetClientIDField(); }) {
+	if constexpr (requires { payload.GetClientIDField(); }) {
 		if (payload.GetClientIDField() == (ClientID)0) payload.GetClientIDField() = client_id;
 	} else {
 		constexpr size_t idx = GetTupleIndexIgnoreCvRef<ClientID, decltype(payload.GetValues())>();
@@ -902,7 +882,7 @@ namespace TupleCmdDataDetail {
 	 * For internal use by TupleCmdData, AutoFmtTupleCmdData.
 	 */
 	template <typename... T>
-	struct BaseTupleCmdData : public CommandPayloadBase, public BaseTupleCmdDataTag {
+	struct EMPTY_BASES BaseTupleCmdData : public CommandPayloadBase, public BaseTupleCmdDataTag {
 		using CommandProc = CommandCost(DoCommandFlag, TileIndex, typename CommandProcTupleAdapter::replace_string_t<T>...);
 		using CommandProcNoTile = CommandCost(DoCommandFlag, typename CommandProcTupleAdapter::replace_string_t<T>...);
 		using Tuple = std::tuple<T...>;
@@ -959,7 +939,7 @@ struct AutoFmtTupleCmdData : public TupleCmdData<Parent, T...> {
 };
 
 template <typename Parent, typename T>
-struct TupleRefCmdData : public CommandPayloadSerialisable<Parent>, public T, public BaseTupleCmdDataTag {
+struct EMPTY_BASES TupleRefCmdData : public CommandPayloadSerialisable<Parent>, public T, public BaseTupleCmdDataTag {
 private:
 	template <typename H> struct TupleHelper;
 
@@ -1005,19 +985,19 @@ public:
 
 /** Wrapper for commands to handle the most common case where no custom/special behaviour is required. */
 template <typename... T>
-struct CmdDataT final : public AutoFmtTupleCmdData<CmdDataT<T...>, TCDF_NONE, T...> {};
+struct EMPTY_BASES CmdDataT final : public AutoFmtTupleCmdData<CmdDataT<T...>, TCDF_NONE, T...> {};
 
 /** Specialisation for string which doesn't bother implementing FormatDebugSummary at all. */
 template <>
-struct CmdDataT<std::string> final : public TupleCmdData<CmdDataT<std::string>, std::string> {};
+struct EMPTY_BASES CmdDataT<std::string> final : public TupleCmdData<CmdDataT<std::string>, std::string> {};
 template <>
-struct CmdDataT<std::string, std::string> final : public TupleCmdData<CmdDataT<std::string, std::string>, std::string, std::string> {};
+struct EMPTY_BASES CmdDataT<std::string, std::string> final : public TupleCmdData<CmdDataT<std::string, std::string>, std::string, std::string> {};
 template <>
-struct CmdDataT<std::string, std::string, std::string> final : public TupleCmdData<CmdDataT<std::string, std::string, std::string>, std::string, std::string, std::string> {};
+struct EMPTY_BASES CmdDataT<std::string, std::string, std::string> final : public TupleCmdData<CmdDataT<std::string, std::string, std::string>, std::string, std::string, std::string> {};
 
 template <>
-struct CmdDataT<> final : public CommandPayloadSerialisable<CmdDataT<>>, public BaseTupleCmdDataTag {
-	using CommandProc = CommandCost(TileIndex, DoCommandFlag);
+struct EMPTY_BASES CmdDataT<> final : public CommandPayloadSerialisable<CmdDataT<>>, public BaseTupleCmdDataTag {
+	using CommandProc = CommandCost(DoCommandFlag, TileIndex);
 	using CommandProcNoTile = CommandCost(DoCommandFlag);
 	using Tuple = std::tuple<>;
 
@@ -1028,21 +1008,34 @@ struct CmdDataT<> final : public CommandPayloadSerialisable<CmdDataT<>>, public 
 };
 using EmptyCmdData = CmdDataT<>;
 
-template <typename T>
+template <Commands Tcmd>
 struct BaseCommandContainer {
+	static inline constexpr Commands cmd = Tcmd;
+	StringID error_msg{};                                ///< error message
+	TileIndex tile{};                                    ///< tile command being executed on.
+	typename CommandTraits<Tcmd>::PayloadType payload{}; ///< payload
+
+	BaseCommandContainer() = default;
+	BaseCommandContainer(StringID error_msg, TileIndex tile, typename CommandTraits<Tcmd>::PayloadType payload)
+			: error_msg(error_msg), tile(tile), payload(std::move(payload)) {}
+};
+
+template <Commands Tcmd>
+struct CommandContainer : public BaseCommandContainer<Tcmd> {
+	CommandCallback callback = CommandCallback::None;    ///< any callback function executed upon successful completion of the command.
+	CallbackParameter callback_param{};                  ///< callback function parameter.
+
+	CommandContainer() = default;
+	CommandContainer(StringID error_msg, TileIndex tile, typename CommandTraits<Tcmd>::PayloadType payload, CommandCallback callback = CommandCallback::None, CallbackParameter callback_param = 0)
+			: BaseCommandContainer<Tcmd>(error_msg, tile, std::move(payload)), callback(callback), callback_param(callback_param) {}
+};
+
+struct SerialisedBaseCommandContainer {
 	Commands cmd{};                              ///< command being executed.
 	StringID error_msg{};                        ///< error message
 	TileIndex tile{};                            ///< tile command being executed on.
-	T payload{};                                 ///< payload
-};
+	CommandPayloadSerialised payload{};          ///< serialised payload
 
-template <typename T>
-struct CommandContainer : public BaseCommandContainer<T> {
-	CommandCallback callback = CommandCallback::None; ///< any callback function executed upon successful completion of the command.
-	CallbackParameter callback_param{};
-};
-
-struct SerialisedBaseCommandContainer : public BaseCommandContainer<CommandPayloadSerialised> {
 	void Serialise(BufferSerialisationRef buffer) const;
 };
 
@@ -1053,11 +1046,11 @@ struct DynBaseCommandContainer {
 	std::unique_ptr<CommandPayloadBase> payload; ///< payload
 
 	DynBaseCommandContainer() = default;
-	DynBaseCommandContainer(Commands cmd, TileIndex tile, std::unique_ptr<CommandPayloadBase> payload, StringID error_msg)
+	DynBaseCommandContainer(Commands cmd, StringID error_msg, TileIndex tile, std::unique_ptr<CommandPayloadBase> payload)
 			: cmd(cmd), error_msg(error_msg), tile(tile), payload(std::move(payload)) {}
 
-	template <typename T>
-	DynBaseCommandContainer(const BaseCommandContainer<T> &src) : cmd(src.cmd), error_msg(src.error_msg), tile(src.tile), payload(src.payload.Clone()) {}
+	template <Commands Tcmd>
+	DynBaseCommandContainer(const BaseCommandContainer<Tcmd> &src) : cmd(Tcmd), error_msg(src.error_msg), tile(src.tile), payload(src.payload.Clone()) {}
 
 	DynBaseCommandContainer(DynBaseCommandContainer &&) = default;
 	DynBaseCommandContainer(const DynBaseCommandContainer &src) { *this = src; }
@@ -1082,22 +1075,12 @@ struct DynCommandContainer {
 	CallbackParameter callback_param{};
 
 	DynCommandContainer() = default;
-	DynCommandContainer(Commands cmd, TileIndex tile, std::unique_ptr<CommandPayloadBase> payload, StringID error_msg, CommandCallback callback, CallbackParameter callback_param)
-			: command(cmd, tile, std::move(payload), error_msg), callback(callback), callback_param(callback_param) {}
+	DynCommandContainer(Commands cmd, StringID error_msg, TileIndex tile, std::unique_ptr<CommandPayloadBase> payload, CommandCallback callback, CallbackParameter callback_param)
+			: command(cmd, error_msg, tile, std::move(payload)), callback(callback), callback_param(callback_param) {}
 
-	template <typename T>
-	DynCommandContainer(const CommandContainer<T> &src) : command(src), callback(src.callback), callback_param(src.callback_param) {}
+	template <Commands Tcmd>
+	DynCommandContainer(const CommandContainer<Tcmd> &src) : command(src), callback(src.callback), callback_param(src.callback_param) {}
 };
-
-inline BaseCommandContainer<P123CmdData> NewBaseCommandContainerBasic(TileIndex tile, uint32_t p1, uint32_t p2, uint32_t cmd)
-{
-	return { static_cast<Commands>(cmd & 0xFFFF), static_cast<StringID>(cmd >> 16), tile, P123CmdData(p1, p2, 0) };
-}
-
-inline CommandContainer<P123CmdData> NewCommandContainerBasic(TileIndex tile, uint32_t p1, uint32_t p2, uint32_t cmd, CommandCallback callback = CommandCallback::None)
-{
-	return { NewBaseCommandContainerBasic(tile, p1, p2, cmd), callback, 0 };
-}
 
 struct CommandExecData {
 	TileIndex tile;
@@ -1106,9 +1089,6 @@ struct CommandExecData {
 };
 
 using CommandPayloadDeserialiser = std::unique_ptr<CommandPayloadBase>(DeserialisationBuffer &, StringValidationSettings default_string_validation);
-
-using CommandProc = CommandCost(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text);
-using CommandProcEx = CommandCost(TileIndex tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, uint64_t p3, const char *text);
 
 template <typename T>
 using CommandProcDirect = CommandCost(DoCommandFlag flags, TileIndex tile, const T &data);
@@ -1136,9 +1116,6 @@ template <> struct CommandTraits<cmd_> { \
 	static constexpr bool input_no_tile = input_no_tile_; \
 	static constexpr bool output_no_tile = output_no_tile_; \
 };
-
-#define DEF_CMD_PROC(cmd_, proc_, flags_, type_) DEF_CMD_PROC_GENERAL(cmd_, CommandProc, proc_, P123CmdData, flags_, type_, false, false)
-#define DEF_CMD_PROCEX(cmd_, proc_, flags_, type_) DEF_CMD_PROC_GENERAL(cmd_, CommandProcEx, proc_, P123CmdData, flags_, type_, false, false)
 
 /*
  * Command macro variants:
@@ -1170,107 +1147,6 @@ DEF_CMD_PROC_GENERAL(cmd_, cmd_detail::payload_ ## cmd_ ::CommandProcNoTile, pro
 #define DEF_CMD_TUPLE_NT(cmd_, proc_, flags_, type_, ...) \
 namespace cmd_detail { using payload_ ## cmd_ = __VA_ARGS__ ; }; \
 DEF_CMD_PROC_GENERAL(cmd_, cmd_detail::payload_ ## cmd_ ::CommandProcNoTile, proc_, cmd_detail::payload_ ## cmd_, flags_, type_, true, true)
-
-DEF_CMD_PROC  (CMD_BUILD_RAILROAD_TRACK, CmdBuildRailroadTrack,       CMD_NO_WATER | CMD_AUTO | CMD_ERR_TILE, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_REMOVE_RAILROAD_TRACK, CmdRemoveRailroadTrack,                     CMD_AUTO | CMD_ERR_TILE, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_SINGLE_RAIL, CmdBuildSingleRail,          CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_REMOVE_SINGLE_RAIL, CmdRemoveSingleRail,                        CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_LANDSCAPE_CLEAR, CmdLandscapeClear,                         CMD_DEITY, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_BRIDGE, CmdBuildBridge,  CMD_DEITY | CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROCEX(CMD_BUILD_RAIL_STATION, CmdBuildRailStation,         CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_TRAIN_DEPOT, CmdBuildTrainDepot,          CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_SIGNALS, CmdBuildSingleSignal,                       CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_REMOVE_SIGNALS, CmdRemoveSingleSignal,                      CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_TERRAFORM_LAND, CmdTerraformLand,           CMD_ALL_TILES | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_OBJECT, CmdBuildObject,  CMD_DEITY | CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_PURCHASE_LAND_AREA, CmdPurchaseLandArea, CMD_NO_WATER | CMD_AUTO | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_OBJECT_AREA, CmdBuildObjectArea,  CMD_NO_WATER | CMD_AUTO | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_TUNNEL, CmdBuildTunnel,                 CMD_DEITY | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_REMOVE_FROM_RAIL_STATION, CmdRemoveFromRailStation,                          {}, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_CONVERT_RAIL, CmdConvertRail,                                    {}, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_CONVERT_RAIL_TRACK, CmdConvertRailTrack,                               {}, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROCEX(CMD_BUILD_RAIL_WAYPOINT, CmdBuildRailWaypoint,                              {}, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROCEX(CMD_BUILD_ROAD_WAYPOINT, CmdBuildRoadWaypoint,                              {}, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_RENAME_WAYPOINT, CmdRenameWaypoint,                                 {}, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_SET_WAYPOINT_LABEL_HIDDEN, CmdSetWaypointLabelHidden,                         {}, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_REMOVE_FROM_RAIL_WAYPOINT, CmdRemoveFromRailWaypoint,                         {}, CMDT_LANDSCAPE_CONSTRUCTION)
-
-DEF_CMD_PROCEX(CMD_BUILD_ROAD_STOP, CmdBuildRoadStop,            CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_REMOVE_ROAD_STOP, CmdRemoveRoadStop,                                 {}, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_LONG_ROAD, CmdBuildLongRoad,CMD_DEITY | CMD_NO_WATER | CMD_AUTO | CMD_ERR_TILE, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_REMOVE_LONG_ROAD, CmdRemoveLongRoad,            CMD_NO_TEST | CMD_AUTO | CMD_ERR_TILE, CMDT_LANDSCAPE_CONSTRUCTION) // towns may disallow removing road bits (as they are connected) in test, but in exec they're removed and thus removing is allowed.
-DEF_CMD_PROC  (CMD_BUILD_ROAD, CmdBuildRoad,    CMD_DEITY | CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_ROAD_DEPOT, CmdBuildRoadDepot,           CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_CONVERT_ROAD, CmdConvertRoad,                                    {}, CMDT_LANDSCAPE_CONSTRUCTION)
-
-DEF_CMD_PROC  (CMD_BUILD_AIRPORT, CmdBuildAirport,             CMD_NO_WATER | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_DOCK, CmdBuildDock,                               CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_SHIP_DEPOT, CmdBuildShipDepot,                          CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_BUILD_BUOY, CmdBuildBuoy,                               CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_PLANT_TREE, CmdPlantTree,                               CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-
-DEF_CMD_PROC  (CMD_SET_VEHICLE_VISIBILITY, CmdSetVehicleVisibility,                           {}, CMDT_COMPANY_SETTING       )
-
-DEF_CMD_PROC  (CMD_BUILD_INDUSTRY, CmdBuildIndustry,                          CMD_DEITY, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_INDUSTRY_SET_FLAGS, CmdIndustrySetFlags,        CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_INDUSTRY_SET_EXCLUSIVITY, CmdIndustrySetExclusivity,  CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_INDUSTRY_SET_TEXT, CmdIndustrySetText,         CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_INDUSTRY_SET_PRODUCTION, CmdIndustrySetProduction,                  CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-
-DEF_CMD_PROC  (CMD_WANT_ENGINE_PREVIEW, CmdWantEnginePreview,                              {}, CMDT_VEHICLE_MANAGEMENT    )
-DEF_CMD_PROC  (CMD_ENGINE_CTRL, CmdEngineCtrl,                             CMD_DEITY, CMDT_VEHICLE_MANAGEMENT    )
-
-DEF_CMD_PROC  (CMD_RENAME_ENGINE, CmdRenameEngine,                          CMD_SERVER, CMDT_OTHER_MANAGEMENT      )
-
-DEF_CMD_PROC  (CMD_RENAME_STATION, CmdRenameStation,                                  {}, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_RENAME_DEPOT, CmdRenameDepot,                                    {}, CMDT_OTHER_MANAGEMENT      )
-
-DEF_CMD_PROC  (CMD_EXCHANGE_STATION_NAMES, CmdExchangeStationNames,                           {}, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_SET_STATION_CARGO_ALLOWED_SUPPLY, CmdSetStationCargoAllowedSupply,                   {}, CMDT_OTHER_MANAGEMENT      )
-
-DEF_CMD_PROC  (CMD_PLACE_SIGN, CmdPlaceSign,                CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_RENAME_SIGN, CmdRenameSign,               CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-
-DEF_CMD_PROC  (CMD_FOUND_TOWN, CmdFoundTown,                CMD_DEITY | CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION) // founding random town can fail only in exec run
-DEF_CMD_PROC  (CMD_RENAME_TOWN, CmdRenameTown,                CMD_DEITY | CMD_SERVER, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_RENAME_TOWN_NON_ADMIN, CmdRenameTownNonAdmin,                             {}, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_DO_TOWN_ACTION, CmdDoTownAction,                                   {}, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_TOWN_SETTING_OVERRIDE, CmdOverrideTownSetting,       CMD_DEITY | CMD_SERVER, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_TOWN_SETTING_OVERRIDE_NON_ADMIN, CmdOverrideTownSettingNonAdmin,                    {}, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_TOWN_CARGO_GOAL, CmdTownCargoGoal,            CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_TOWN_GROWTH_RATE, CmdTownGrowthRate,           CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_TOWN_RATING, CmdTownRating,               CMD_LOG_AUX | CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_TOWN_SET_TEXT, CmdTownSetText,    CMD_LOG_AUX | CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT )
-DEF_CMD_PROC  (CMD_EXPAND_TOWN, CmdExpandTown,                             CMD_DEITY, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_DELETE_TOWN, CmdDeleteTown,                           CMD_OFFLINE, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_PLACE_HOUSE, CmdPlaceHouse,                             CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-
-DEF_CMD_PROC  (CMD_CLEAR_AREA, CmdClearArea,                            CMD_NO_TEST, CMDT_LANDSCAPE_CONSTRUCTION) // destroying multi-tile houses makes town rating differ between test and execution
-
-DEF_CMD_PROC  (CMD_BUILD_CANAL, CmdBuildCanal,                  CMD_DEITY | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROC  (CMD_CREATE_SUBSIDY, CmdCreateSubsidy,                          CMD_DEITY, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_CUSTOM_NEWS_ITEM, CmdCustomNewsItem,          CMD_STR_CTRL | CMD_DEITY | CMD_LOG_AUX, CMDT_OTHER_MANAGEMENT      )
-
-DEF_CMD_PROC  (CMD_LEVEL_LAND, CmdLevelLand, CMD_ALL_TILES | CMD_NO_TEST | CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION) // test run might clear tiles multiple times, in execution that only happens once
-
-DEF_CMD_PROC  (CMD_BUILD_LOCK, CmdBuildLock,                               CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-
-DEF_CMD_PROCEX(CMD_BUILD_SIGNAL_TRACK, CmdBuildSignalTrack,                        CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-DEF_CMD_PROCEX(CMD_REMOVE_SIGNAL_TRACK, CmdRemoveSignalTrack,                       CMD_AUTO, CMDT_LANDSCAPE_CONSTRUCTION)
-
-DEF_CMD_PROC  (CMD_SET_AUTOREPLACE, CmdSetAutoReplace,                                 {}, CMDT_VEHICLE_MANAGEMENT    )
-
-DEF_CMD_PROC  (CMD_AUTOREPLACE_VEHICLE, CmdAutoreplaceVehicle,                             {}, CMDT_VEHICLE_MANAGEMENT    )
-DEF_CMD_PROC  (CMD_CREATE_GROUP, CmdCreateGroup,                                    {}, CMDT_ROUTE_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_DELETE_GROUP, CmdDeleteGroup,                                    {}, CMDT_ROUTE_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_ALTER_GROUP, CmdAlterGroup,                                     {}, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_CREATE_GROUP_FROM_LIST, CmdCreateGroupFromList,                            {}, CMDT_OTHER_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_ADD_VEHICLE_GROUP, CmdAddVehicleGroup,                                {}, CMDT_ROUTE_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_ADD_SHARED_VEHICLE_GROUP, CmdAddSharedVehicleGroup,                          {}, CMDT_ROUTE_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_REMOVE_ALL_VEHICLES_GROUP, CmdRemoveAllVehiclesGroup,                         {}, CMDT_ROUTE_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_SET_GROUP_FLAG, CmdSetGroupFlag,                                   {}, CMDT_ROUTE_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_SET_GROUP_LIVERY, CmdSetGroupLivery,                                 {}, CMDT_ROUTE_MANAGEMENT      )
-DEF_CMD_PROC  (CMD_OPEN_CLOSE_AIRPORT, CmdOpenCloseAirport,                               {}, CMDT_ROUTE_MANAGEMENT      )
 
 template <Commands Tcmd>
 using CmdPayload = typename CommandTraits<Tcmd>::PayloadType;

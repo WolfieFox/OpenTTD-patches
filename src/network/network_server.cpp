@@ -45,7 +45,7 @@
 
 /* This file handles all the server-commands */
 
-DECLARE_POSTFIX_INCREMENT(ClientID)
+DECLARE_INCREMENT_DECREMENT_OPERATORS(ClientID)
 /** The identifier counter for new clients (is never decreased) */
 static ClientID _network_client_id = CLIENT_ID_FIRST;
 
@@ -197,7 +197,6 @@ struct PacketWriter : SaveFilter {
  */
 ServerNetworkGameSocketHandler::ServerNetworkGameSocketHandler(SOCKET s) : NetworkGameSocketHandler(s)
 {
-	this->status = STATUS_INACTIVE;
 	this->client_id = _network_client_id++;
 	this->receive_limit = _settings_client.network.bytes_per_frame_burst;
 
@@ -2362,11 +2361,18 @@ void NetworkServerDoMove(ClientID client_id, CompanyID company_id)
 		cs->SendMove(client_id, company_id);
 	}
 
-	/* announce the client's move */
+	/* Announce the client's move. */
 	NetworkUpdateClientInfo(client_id);
 
-	NetworkAction action = (company_id == COMPANY_SPECTATOR) ? NETWORK_ACTION_COMPANY_SPECTATOR : NETWORK_ACTION_COMPANY_JOIN;
-	NetworkServerSendChat(action, DESTTYPE_BROADCAST, 0, "", client_id, company_id + 1);
+	if (company_id == COMPANY_SPECTATOR) {
+		/* The client has joined spectators. */
+		NetworkServerSendChat(NETWORK_ACTION_COMPANY_SPECTATOR, DESTTYPE_BROADCAST, 0, "", client_id);
+	} else {
+		/* The client has joined another company. */
+		SetDParam(0, company_id);
+		std::string company_name = GetString(STR_COMPANY_NAME);
+		NetworkServerSendChat(NETWORK_ACTION_COMPANY_JOIN, DESTTYPE_BROADCAST, 0, company_name, client_id);
+	}
 
 	InvalidateWindowData(WC_CLIENT_LIST, 0);
 

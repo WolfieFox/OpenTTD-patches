@@ -79,7 +79,7 @@ static constexpr NWidgetPart _nested_textfile_widgets[] = {
 static WindowDesc _textfile_desc(__FILE__, __LINE__,
 	WDP_CENTER, "textfile", 630, 460,
 	WC_TEXTFILE, WC_NONE,
-	0,
+	{},
 	_nested_textfile_widgets
 );
 
@@ -168,7 +168,7 @@ void TextfileWindow::SetupScrollbars(bool force_reflow)
 static const std::regex _markdown_link_regex{"\\[(.+?)\\]\\((.+?)\\)", std::regex_constants::ECMAScript | std::regex_constants::optimize};
 
 /** Types of link we support in markdown files. */
-enum class HyperlinkType {
+enum class HyperlinkType : uint8_t {
 	Internal, ///< Internal link, or "anchor" in HTML language.
 	Web,      ///< Link to an external website.
 	File,     ///< Link to a local file.

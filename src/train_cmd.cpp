@@ -176,7 +176,7 @@ bool IsValidImageIndex<VEH_TRAIN>(uint8_t image_index)
  * @param cargo Cargo type to get multiplier for
  * @return Cargo weight multiplier
  */
-uint8_t FreightWagonMult(CargoID cargo)
+uint8_t FreightWagonMult(CargoType cargo)
 {
 	if (!CargoSpec::Get(cargo)->is_freight) return 1;
 	return _settings_game.vehicle.freight_trains;
@@ -1517,7 +1517,7 @@ static CommandCost CmdBuildRailWagon(TileIndex tile, DoCommandFlag flags, const 
 		InvalidateWindowData(WC_VEHICLE_DEPOT, v->tile.base());
 
 		v->cargo_type = e->GetDefaultCargoType();
-		assert(IsValidCargoID(v->cargo_type));
+		assert(IsValidCargoType(v->cargo_type));
 		v->cargo_cap = rvi->capacity;
 		v->refit_cap = 0;
 
@@ -1533,8 +1533,6 @@ static CommandCost CmdBuildRailWagon(TileIndex tile, DoCommandFlag flags, const 
 
 		if (TestVehicleBuildProbability(v, v->engine_type, BuildProbabilityType::Reversed)) SetBit(v->flags, VRF_REVERSE_DIRECTION);
 		AddArticulatedParts(v);
-
-		_new_vehicle_id = v->index;
 
 		v->UpdatePosition();
 		v->First()->ConsistChanged(CCF_ARRANGE);
@@ -1665,7 +1663,7 @@ CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlag flags, const Engin
 		v->vehstatus = VS_HIDDEN | VS_STOPPED | VS_DEFPAL;
 		v->spritenum = rvi->image_index;
 		v->cargo_type = e->GetDefaultCargoType();
-		assert(IsValidCargoID(v->cargo_type));
+		assert(IsValidCargoType(v->cargo_type));
 		v->cargo_cap = rvi->capacity;
 		v->refit_cap = 0;
 		v->last_station_visited = INVALID_STATION;
@@ -1682,7 +1680,6 @@ CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlag flags, const Engin
 		v->max_age = e->GetLifeLengthInDays();
 
 		v->railtype = rvi->railtype;
-		_new_vehicle_id = v->index;
 
 		v->SetServiceInterval(Company::Get(_current_company)->settings.vehicle.servint_trains);
 		v->date_of_last_service = EconTime::CurDate();
@@ -2774,19 +2771,19 @@ void UpdateLevelCrossing(TileIndex tile, bool sound, bool force_close)
 
 	const bool adjacent_crossings = _settings_game.vehicle.adjacent_crossings;
 	if (adjacent_crossings) {
-		for (TileIndex t = tile; !forced_state && t < MapSize() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == axis; t = TileAddByDiagDir(t, dir)) {
+		for (TileIndex t = tile; !forced_state && t < Map::Size() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == axis; t = TileAddByDiagDir(t, dir)) {
 			forced_state |= CheckLevelCrossing(t);
 		}
-		for (TileIndex t = TileAddByDiagDir(tile, reverse_dir); !forced_state && t < MapSize() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == axis; t = TileAddByDiagDir(t, reverse_dir)) {
+		for (TileIndex t = TileAddByDiagDir(tile, reverse_dir); !forced_state && t < Map::Size() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == axis; t = TileAddByDiagDir(t, reverse_dir)) {
 			forced_state |= CheckLevelCrossing(t);
 		}
 	}
 
 	UpdateLevelCrossingTile(tile, sound, adjacent_crossings || force_close, forced_state);
-	for (TileIndex t = TileAddByDiagDir(tile, dir); t < MapSize() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == axis; t = TileAddByDiagDir(t, dir)) {
+	for (TileIndex t = TileAddByDiagDir(tile, dir); t < Map::Size() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == axis; t = TileAddByDiagDir(t, dir)) {
 		UpdateLevelCrossingTile(t, sound, adjacent_crossings, forced_state);
 	}
-	for (TileIndex t = TileAddByDiagDir(tile, reverse_dir); t < MapSize() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == axis; t = TileAddByDiagDir(t, reverse_dir)) {
+	for (TileIndex t = TileAddByDiagDir(tile, reverse_dir); t < Map::Size() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == axis; t = TileAddByDiagDir(t, reverse_dir)) {
 		UpdateLevelCrossingTile(t, sound, adjacent_crossings, forced_state);
 	}
 }
@@ -2799,7 +2796,7 @@ void MarkDirtyAdjacentLevelCrossingTilesOnAdd(TileIndex tile, Axis road_axis)
 	const DiagDirection dir2 = ReverseDiagDir(dir1);
 	for (DiagDirection dir : { dir1, dir2 }) {
 		const TileIndex t = TileAddByDiagDir(tile, dir);
-		if (t < MapSize() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == road_axis) {
+		if (t < Map::Size() && IsLevelCrossingTile(t) && GetCrossingRoadAxis(t) == road_axis) {
 			MarkTileDirtyByTile(t, VMDF_NOT_MAP_MODE);
 		}
 	}
@@ -4541,7 +4538,7 @@ static ChooseTrainTrackResult ChooseTrainTrack(Train *v, TileIndex tile, DiagDir
 		 * the destination but instead to the next one if service isn't needed. */
 		CheckIfTrainNeedsService(v);
 		if (v->current_order.IsType(OT_DUMMY) || v->current_order.IsType(OT_CONDITIONAL) || v->current_order.IsType(OT_GOTO_DEPOT) ||
-				v->current_order.IsType(OT_SLOT) || v->current_order.IsType(OT_COUNTER) || v->current_order.IsType(OT_LABEL)) {
+				v->current_order.IsSlotCounterOrder() || v->current_order.IsType(OT_LABEL)) {
 			ProcessOrders(v);
 		}
 	}
@@ -5848,7 +5845,7 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 				Direction chosen_dir = (Direction)b[2];
 
 				/* Call the landscape function and tell it that the vehicle entered the tile */
-				uint32_t r = (v->track & TRACK_BIT_WORMHOLE) ? 0 : VehicleEnterTile(v, gp.new_tile, gp.x, gp.y);
+				uint32_t r = (v->track & TRACK_BIT_WORMHOLE) ? 0 : (uint32_t)VehicleEnterTile(v, gp.new_tile, gp.x, gp.y);
 				if (HasBit(r, VETS_CANNOT_ENTER)) {
 					goto invalid_rail;
 				}
@@ -6691,7 +6688,7 @@ static bool TrainLocoHandler(Train *v, bool mode)
 	/* exit if train is stopped */
 	if ((v->vehstatus & VS_STOPPED) && v->cur_speed == 0) return true;
 
-	bool valid_order = !v->current_order.IsType(OT_NOTHING) && v->current_order.GetType() != OT_CONDITIONAL && !v->current_order.IsType(OT_SLOT) && !v->current_order.IsType(OT_COUNTER) && !v->current_order.IsType(OT_LABEL);
+	bool valid_order = !v->current_order.IsType(OT_NOTHING) && v->current_order.GetType() != OT_CONDITIONAL && !v->current_order.IsSlotCounterOrder() && !v->current_order.IsType(OT_LABEL);
 	if (ProcessOrders(v) && CheckReverseTrain(v)) {
 		v->wait_counter = 0;
 		v->cur_speed = 0;
@@ -7139,8 +7136,6 @@ static Train *CmdBuildVirtualRailWagon(const Engine *e, ClientID user, bool no_c
 		train_part->SetVirtual();
 	}
 
-	_new_vehicle_id = v->index;
-
 	if (no_consist_change) return v;
 
 	v->First()->ConsistChanged(CCF_ARRANGE);
@@ -7204,7 +7199,6 @@ Train *BuildVirtualRailVehicle(EngineID eid, StringID &error, ClientID user, boo
 	AssignBit(v->vehicle_flags, VF_TIMETABLE_SEPARATION, Company::Get(_current_company)->settings.vehicle.auto_separation_by_default);
 
 	v->railtype = rvi->railtype;
-	_new_vehicle_id = v->index;
 
 	v->build_year = CalTime::CurYear();
 	v->sprite_seq.Set(SPR_IMG_QUERY);
@@ -7247,7 +7241,7 @@ Train *BuildVirtualRailVehicle(EngineID eid, StringID &error, ClientID user, boo
  * @param move_target Where to move the virtual train vehicle after construction
  * @return the cost of this operation or an error
  */
-CommandCost CmdBuildVirtualRailVehicle(DoCommandFlag flags, EngineID eid, CargoID cargo, ClientID client, VehicleID move_target)
+CommandCost CmdBuildVirtualRailVehicle(DoCommandFlag flags, EngineID eid, CargoType cargo, ClientID client, VehicleID move_target)
 {
 	if (!IsEngineBuildable(eid, VEH_TRAIN, _current_company)) {
 		return CommandCost(STR_ERROR_RAIL_VEHICLE_NOT_AVAILABLE + VEH_TRAIN);
@@ -7255,6 +7249,8 @@ CommandCost CmdBuildVirtualRailVehicle(DoCommandFlag flags, EngineID eid, CargoI
 
 	/* Validate the cargo type. */
 	if (cargo >= NUM_CARGO && cargo != INVALID_CARGO) return CMD_ERROR;
+
+	CommandCost cost;
 
 	if (flags & DC_EXEC) {
 		StringID err = INVALID_STRING_ID;
@@ -7264,8 +7260,10 @@ CommandCost CmdBuildVirtualRailVehicle(DoCommandFlag flags, EngineID eid, CargoI
 			return CommandCost(err);
 		}
 
+		cost.SetResultData(train->index);
+
 		if (cargo != INVALID_CARGO) {
-			CargoID default_cargo = Engine::Get(eid)->GetDefaultCargoType();
+			CargoType default_cargo = Engine::Get(eid)->GetDefaultCargoType();
 			if (default_cargo != cargo) {
 				CommandCost refit_res = CmdRefitVehicle(flags, train->index, cargo, 0, false, false, 0);
 				if (!refit_res.Succeeded()) {
@@ -7290,7 +7288,7 @@ CommandCost CmdBuildVirtualRailVehicle(DoCommandFlag flags, EngineID eid, CargoI
 		}
 	}
 
-	return CommandCost();
+	return cost;
 }
 
 void ClearVehicleWindows(const Train *v)
@@ -7321,17 +7319,12 @@ static inline CommandCost CmdStartStopVehicle(const Vehicle *v, bool evaluate_ca
 /**
 * Replace a vehicle based on a template replacement order.
 * @param flags type of operation
-* @param veh_id the ID of the vehicle to replace.
+* @param incoming the incoming train to replace.
+* @param outgoing the replaced train, or incoming.
 * @return the cost of this operation or an error
 */
-CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
+static CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, Train *incoming, Train *&outgoing)
 {
-	Train *incoming = Train::GetIfValid(veh_id);
-
-	if (incoming == nullptr || !incoming->IsPrimaryVehicle() || !incoming->IsChainInDepot()) {
-		return CMD_ERROR;
-	}
-
 	CommandCost buy(EXPENSES_NEW_VEHICLES);
 
 	const bool was_stopped = (incoming->vehstatus & VS_STOPPED) != 0;
@@ -7340,7 +7333,7 @@ CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
 		if (cost.Failed()) return cost;
 	}
 	auto guard = scope_guard([&]() {
-		_new_vehicle_id = incoming->index;
+		outgoing = incoming;
 		if (!was_stopped) buy.AddCost(CmdStartStopVehicle(incoming, false));
 	});
 
@@ -7367,7 +7360,7 @@ CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
 	const bool refit_to_template = tv->refit_as_template;
 	const TileIndex tile = incoming->tile;
 
-	CargoID store_refit_ct = INVALID_CARGO;
+	CargoType store_refit_ct = INVALID_CARGO;
 	uint16_t store_refit_csubt = 0;
 	// if a train shall keep its old refit, store the refit setting of its first vehicle
 	if (!refit_to_template) {
@@ -7392,7 +7385,7 @@ CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
 	TemplateDepotVehicles depot_vehicles;
 	if (tv->IsSetReuseDepotVehicles()) depot_vehicles.Init(tile);
 
-	auto refit_unit = [&](const Train *unit, CargoID cid, uint16_t csubt) {
+	auto refit_unit = [&](const Train *unit, CargoType cid, uint16_t csubt) {
 		CommandCost refit_cost = Command<CMD_REFIT_VEHICLE>::Do(flags, unit->index, cid, csubt, false, false, 1);
 		if (refit_cost.Succeeded()) buy.AddCost(refit_cost);
 	};
@@ -7432,9 +7425,8 @@ CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
 					}
 				}
 
-				CargoID refit_cargo = refit_to_template ? cur_tmpl->cargo_type : store_refit_ct;
-				uint32_t refit_cmd = (refit_cargo != INVALID_CARGO) ? (refit_cargo << 24) : 0;
-				buy.AddCost(DoCommandOld(tile, cur_tmpl->engine_type | (1 << 16) | refit_cmd, 0, flags, CMD_BUILD_VEHICLE));
+				CargoType refit_cargo = refit_to_template ? cur_tmpl->cargo_type : store_refit_ct;
+				buy.AddCost(Command<CMD_BUILD_VEHICLE>::Do(flags, tile, cur_tmpl->engine_type, false, refit_cargo, INVALID_CLIENT_ID));
 			};
 			for (const TemplateVehicle *cur_tmpl = tv; cur_tmpl != nullptr; cur_tmpl = cur_tmpl->GetNextUnit()) {
 				process_unit(cur_tmpl);
@@ -7505,13 +7497,13 @@ CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
 			}
 
 			/* Case 4 */
-			CommandCost buy_cost = DoCommandOld(tile, eid | (1 << 16), 0, flags, CMD_BUILD_VEHICLE);
+			CommandCost buy_cost = Command<CMD_BUILD_VEHICLE>::Do(flags, tile, eid, false, INVALID_CARGO, INVALID_CLIENT_ID);
 			/* break up in case buying the vehicle didn't succeed */
-			if (buy_cost.Failed()) {
+			if (buy_cost.Failed() || !buy_cost.HasResultData()) {
 				return buy_cost;
 			}
 			buy.AddCost(buy_cost);
-			new_chain = Train::Get(_new_vehicle_id);
+			new_chain = Train::Get(buy_cost.GetResultData());
 			/* prepare the remainder chain */
 			remainder_chain = incoming;
 			return CommandCost();
@@ -7567,12 +7559,12 @@ CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
 				}
 
 				/* Case 3: must buy new engine */
-				CommandCost buy_cost = DoCommandOld(tile, cur_tmpl->engine_type | (1 << 16), 0, flags, CMD_BUILD_VEHICLE);
-				if (buy_cost.Failed()) {
+				CommandCost buy_cost = Command<CMD_BUILD_VEHICLE>::Do(flags, tile, cur_tmpl->engine_type, false, INVALID_CARGO, INVALID_CLIENT_ID);
+				if (buy_cost.Failed() || !buy_cost.HasResultData()) {
 					new_part = nullptr;
 					return;
 				}
-				new_part = Train::Get(_new_vehicle_id);
+				new_part = Train::Get(buy_cost.GetResultData());
 				CommandCost move_cost = CmdMoveRailVehicle(flags, new_part->index, last_veh->index, MoveRailVehicleFlags::None);
 				if (move_cost.Succeeded()) {
 					buy.AddCost(buy_cost);
@@ -7626,6 +7618,26 @@ CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
 	SetWindowClassesDirty(WC_TEMPLATEGUI_MAIN);
 
 	return buy;
+}
+
+/**
+* Replace a vehicle based on a template replacement order.
+* @param flags type of operation
+* @param veh_id the ID of the vehicle to replace.
+* @return the cost of this operation or an error
+*/
+CommandCost CmdTemplateReplaceVehicle(DoCommandFlag flags, VehicleID veh_id)
+{
+	Train *incoming = Train::GetIfValid(veh_id);
+
+	if (incoming == nullptr || !incoming->IsPrimaryVehicle() || !incoming->IsChainInDepot()) {
+		return CMD_ERROR;
+	}
+
+	Train *outgoing = incoming;
+	CommandCost cost = CmdTemplateReplaceVehicle(flags, incoming, outgoing);
+	cost.SetResultData(outgoing->index);
+	return cost;
 }
 
 void TrainRoadVehicleCrashBreakdown(Vehicle *v)

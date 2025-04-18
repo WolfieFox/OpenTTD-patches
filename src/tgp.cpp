@@ -158,15 +158,15 @@ static const int HEIGHT_DECIMAL_BITS = 4;
 using Amplitude = int;
 static const int AMPLITUDE_DECIMAL_BITS = 10;
 
-/** Height map - allocated array of heights (MapSizeX() + 1) x (MapSizeY() + 1) */
+/** Height map - allocated array of heights (Map::SizeX() + 1) x (Map::SizeY() + 1) */
 struct HeightMap
 {
 	std::vector<Height> h; //< array of heights
 	/* Even though the sizes are always positive, there are many cases where
 	 * X and Y need to be signed integers due to subtractions. */
-	int      dim_x;      //< height map size_x MapSizeX() + 1
-	int      size_x;     //< MapSizeX()
-	int      size_y;     //< MapSizeY()
+	int      dim_x;      //< height map size_x Map::SizeX() + 1
+	int      size_x;     //< Map::SizeX()
+	int      size_y;     //< Map::SizeY()
 
 	/**
 	 * Height map accessor
@@ -227,7 +227,7 @@ static Height TGPGetMaxHeight()
 	/**
 	 * Desired maximum height - indexed by:
 	 *  - _settings_game.difficulty.terrain_type
-	 *  - min(MapLogX(), MapLogY()) - MIN_MAP_SIZE_BITS, up to a maximum of 4096
+	 *  - min(Map::LogX(), Map::LogY()) - MIN_MAP_SIZE_BITS, up to a maximum of 4096
 	 *
 	 * It is indexed by map size as well as terrain type since the map size limits the height of
 	 * a usable mountain. For example, on a 64x64 map a 24 high single peak mountain (as if you
@@ -244,7 +244,7 @@ static Height TGPGetMaxHeight()
 		{  12,  19,  25,  31,  67,  75,  87 }, ///< Alpinist
 	};
 
-	int map_size_bucket = std::min<int>(std::min(MapLogX(), MapLogY()) - MIN_MAP_SIZE_BITS, max_height_array_size - 1);
+	int map_size_bucket = std::min<int>(std::min(Map::LogX(), Map::LogY()) - MIN_MAP_SIZE_BITS, max_height_array_size - 1);
 	int max_height_from_table = max_height[_settings_game.difficulty.terrain_type][map_size_bucket];
 
 	/* If there is a manual map height limit, clamp to it. */
@@ -323,15 +323,15 @@ static inline bool IsValidXY(int x, int y)
 
 
 /**
- * Allocate array of (MapSizeX()+1)*(MapSizeY()+1) heights and init the _height_map structure members
+ * Allocate array of (Map::SizeX()+1)*(Map::SizeY()+1) heights and init the _height_map structure members
  * @return true on success
  */
 static inline bool AllocHeightMap()
 {
 	assert(_height_map.h.empty());
 
-	_height_map.size_x = MapSizeX();
-	_height_map.size_y = MapSizeY();
+	_height_map.size_x = Map::SizeX();
+	_height_map.size_y = Map::SizeY();
 
 	/* Allocate memory block for height map row pointers */
 	size_t total_size = static_cast<size_t>(_height_map.size_x + 1) * (_height_map.size_y + 1);
@@ -370,7 +370,7 @@ static void HeightMapGenerate()
 	/* Trying to apply noise to uninitialized height map */
 	assert(!_height_map.h.empty());
 
-	int start = std::max(MAX_TGP_FREQUENCIES - (int)std::min(MapLogX(), MapLogY()), 0);
+	int start = std::max(MAX_TGP_FREQUENCIES - (int)std::min(Map::LogX(), Map::LogY()), 0);
 	bool first = true;
 
 	for (int frequency = start; frequency < MAX_TGP_FREQUENCIES; frequency++) {
@@ -729,7 +729,7 @@ static double perlin_coast_noise_2D(const double x, const double y, const double
  * Please note that all the small numbers; 53, 101, 167, etc. are small primes
  * to help give the perlin noise a bit more of a random feel.
  */
-static void HeightMapCoastLines(Borders water_borders)
+static void HeightMapCoastLines(BorderFlags water_borders)
 {
 	int smallest_size = std::min(_settings_game.game_creation.map_x, _settings_game.game_creation.map_y);
 	const int margin = 4;
@@ -739,7 +739,7 @@ static void HeightMapCoastLines(Borders water_borders)
 
 	/* Lower to sea level */
 	for (y = 0; y <= _height_map.size_y; y++) {
-		if (HasFlag(water_borders, Borders::NorthEast)) {
+		if (water_borders.Test(BorderFlag::NorthEast)) {
 			/* Top right */
 			max_x = abs((perlin_coast_noise_2D(_height_map.size_y - y, y, 0.9, 53) + 0.25) * 5 + (perlin_coast_noise_2D(y, y, 0.35, 179) + 1) * 12);
 			max_x = std::max((smallest_size * smallest_size / 64) + max_x, (smallest_size * smallest_size / 64) + margin - max_x);
@@ -749,7 +749,7 @@ static void HeightMapCoastLines(Borders water_borders)
 			}
 		}
 
-		if (HasFlag(water_borders, Borders::SouthWest)) {
+		if (water_borders.Test(BorderFlag::SouthWest)) {
 			/* Bottom left */
 			max_x = abs((perlin_coast_noise_2D(_height_map.size_y - y, y, 0.85, 101) + 0.3) * 6 + (perlin_coast_noise_2D(y, y, 0.45,  67) + 0.75) * 8);
 			max_x = std::max((smallest_size * smallest_size / 64) + max_x, (smallest_size * smallest_size / 64) + margin - max_x);
@@ -762,7 +762,7 @@ static void HeightMapCoastLines(Borders water_borders)
 
 	/* Lower to sea level */
 	for (x = 0; x <= _height_map.size_x; x++) {
-		if (HasFlag(water_borders, Borders::NorthWest)) {
+		if (water_borders.Test(BorderFlag::NorthWest)) {
 			/* Top left */
 			max_y = abs((perlin_coast_noise_2D(x, _height_map.size_y / 2, 0.9, 167) + 0.4) * 5 + (perlin_coast_noise_2D(x, _height_map.size_y / 3, 0.4, 211) + 0.7) * 9);
 			max_y = std::max((smallest_size * smallest_size / 64) + max_y, (smallest_size * smallest_size / 64) + margin - max_y);
@@ -772,7 +772,7 @@ static void HeightMapCoastLines(Borders water_borders)
 			}
 		}
 
-		if (HasFlag(water_borders, Borders::SouthEast)) {
+		if (water_borders.Test(BorderFlag::SouthEast)) {
 			/* Bottom right */
 			max_y = abs((perlin_coast_noise_2D(x, _height_map.size_y / 3, 0.85, 71) + 0.25) * 6 + (perlin_coast_noise_2D(x, _height_map.size_y / 3, 0.35, 193) + 0.75) * 12);
 			max_y = std::max((smallest_size * smallest_size / 64) + max_y, (smallest_size * smallest_size / 64) + margin - max_y);
@@ -822,18 +822,18 @@ static void HeightMapSmoothCoastInDirection(int org_x, int org_y, int dir_x, int
 }
 
 /** Smooth coasts by modulating height of tiles close to map edges with cosine of distance from edge */
-static void HeightMapSmoothCoasts(Borders water_borders)
+static void HeightMapSmoothCoasts(BorderFlags water_borders)
 {
 	int x, y;
 	/* First Smooth NW and SE coasts (y close to 0 and y close to size_y) */
 	for (x = 0; x < _height_map.size_x; x++) {
-		if (HasFlag(water_borders, Borders::NorthWest)) HeightMapSmoothCoastInDirection(x, 0, 0, 1);
-		if (HasFlag(water_borders, Borders::SouthEast)) HeightMapSmoothCoastInDirection(x, _height_map.size_y - 1, 0, -1);
+		if (water_borders.Test(BorderFlag::NorthWest)) HeightMapSmoothCoastInDirection(x, 0, 0, 1);
+		if (water_borders.Test(BorderFlag::SouthEast)) HeightMapSmoothCoastInDirection(x, _height_map.size_y - 1, 0, -1);
 	}
 	/* First Smooth NE and SW coasts (x close to 0 and x close to size_x) */
 	for (y = 0; y < _height_map.size_y; y++) {
-		if (HasFlag(water_borders, Borders::NorthEast)) HeightMapSmoothCoastInDirection(0, y, 1, 0);
-		if (HasFlag(water_borders, Borders::SouthWest)) HeightMapSmoothCoastInDirection(_height_map.size_x - 1, y, -1, 0);
+		if (water_borders.Test(BorderFlag::NorthEast)) HeightMapSmoothCoastInDirection(0, y, 1, 0);
+		if (water_borders.Test(BorderFlag::SouthWest)) HeightMapSmoothCoastInDirection(_height_map.size_x - 1, y, -1, 0);
 	}
 }
 
@@ -875,8 +875,8 @@ static void HeightMapNormalize()
 
 	HeightMapAdjustWaterLevel(water_percent, h_max_new);
 
-	Borders water_borders = _settings_game.construction.freeform_edges ? _settings_game.game_creation.water_borders : Borders::All;
-	if (water_borders == Borders::RandomBorders) water_borders = static_cast<Borders>(GB(Random(), 0, 4));
+	BorderFlags water_borders = _settings_game.construction.freeform_edges ? _settings_game.game_creation.water_borders : BORDERFLAGS_ALL;
+	if (water_borders == BorderFlag::RandomBorders) water_borders = static_cast<BorderFlags>(GB(Random(), 0, 4));
 
 	HeightMapCoastLines(water_borders);
 	HeightMapSmoothSlopes(roughness);
@@ -889,8 +889,6 @@ static void HeightMapNormalize()
 	if (_settings_game.game_creation.variety > 0) {
 		HeightMapCurves(_settings_game.game_creation.variety);
 	}
-
-	HeightMapSmoothSlopes(I2H(1));
 }
 
 /**
@@ -998,8 +996,8 @@ void GenerateTerrainPerlin()
 
 	/* First make sure the tiles at the north border are void tiles if needed. */
 	if (_settings_game.construction.freeform_edges) {
-		for (uint x = 0; x < MapSizeX(); x++) MakeVoid(TileXY(x, 0));
-		for (uint y = 0; y < MapSizeY(); y++) MakeVoid(TileXY(0, y));
+		for (uint x = 0; x < Map::SizeX(); x++) MakeVoid(TileXY(x, 0));
+		for (uint y = 0; y < Map::SizeY(); y++) MakeVoid(TileXY(0, y));
 	}
 
 	int max_height = H2I(TGPGetMaxHeight());
@@ -1010,8 +1008,6 @@ void GenerateTerrainPerlin()
 			TgenSetTileHeight(TileXY(x, y), Clamp(H2I(_height_map.height(x, y)), 0, max_height));
 		}
 	}
-
-	IncreaseGeneratingWorldProgress(GWP_LANDSCAPE);
 
 	FreeHeightMap();
 	GenerateWorldSetAbortCallback(nullptr);

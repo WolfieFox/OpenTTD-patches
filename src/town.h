@@ -60,7 +60,7 @@ struct TownCache {
 };
 
 /** Town setting override flags */
-enum TownSettingOverrideFlags {
+enum TownSettingOverrideFlags : uint8_t {
 	TSOF_OVERRIDE_BEGIN                     = 0, // Begin marker
 	TSOF_OVERRIDE_BUILD_ROADS               = 0,
 	TSOF_OVERRIDE_BUILD_LEVEL_CROSSINGS     = 1,
@@ -112,10 +112,10 @@ struct Town : TownPool::PoolItem<&_town_pool> {
 
 	std::string text; ///< General text with additional information.
 
-	inline uint8_t GetPercentTransported(CargoID cid) const
+	inline uint8_t GetPercentTransported(CargoType cargo_type) const
 	{
-		if (!IsValidCargoID(cid)) return 0;
-		return this->supplied[cid].old_act * 256 / (this->supplied[cid].old_max + 1);
+		if (!IsValidCargoType(cargo_type)) return 0;
+		return this->supplied[cargo_type].old_act * 256 / (this->supplied[cargo_type].old_max + 1);
 	}
 
 	StationList stations_near;       ///< NOSAVE: List of nearby stations.

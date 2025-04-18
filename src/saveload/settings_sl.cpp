@@ -10,7 +10,7 @@
 #include "../stdafx.h"
 
 #include "saveload.h"
-#include "debug.h"
+#include "../debug.h"
 #include "compat/settings_sl_compat.h"
 
 #include "../settings_type.h"
@@ -103,9 +103,6 @@ static std::vector<SaveLoad> GetSettingsDesc(bool is_loading)
 				break;
 			case ::SLE_VAR_NULL:
 				new_type |= SLE_VAR_NULL;
-				break;
-			case ::SLE_VAR_STRB:
-				new_type |= SLE_VAR_STRB;
 				break;
 			case ::SLE_VAR_STR:
 				new_type |= SLE_VAR_STR;

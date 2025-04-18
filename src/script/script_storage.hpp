@@ -10,10 +10,9 @@
 #ifndef SCRIPT_STORAGE_HPP
 #define SCRIPT_STORAGE_HPP
 
-#include "../signs_func.h"
-#include "../vehicle_func.h"
+#include "../command_type.h"
+#include "../rail_type.h"
 #include "../road_type.h"
-#include "../group.h"
 #include "../3rdparty/robin_hood/robin_hood.h"
 
 #include "script_types.hpp"
@@ -59,10 +58,6 @@ private:
 	TileIndex last_tile;             ///< The last tile passed to a command.
 	CallbackParameter last_cb_param; ///< The last callback parameter passed to a command.
 
-	VehicleID new_vehicle_id;        ///< The ID of the new Vehicle.
-	SignID new_sign_id;              ///< The ID of the new Sign.
-	GroupID new_group_id;            ///< The ID of the new Group.
-
 	std::vector<int> callback_value; ///< The values which need to survive a callback.
 
 	RoadType road_type;              ///< The current roadtype we build.
@@ -91,9 +86,6 @@ public:
 		last_cmd          (CMD_END),
 		last_tile         (INVALID_TILE),
 		last_cb_param     (0),
-		new_vehicle_id    (0),
-		new_sign_id       (0),
-		new_group_id      (0),
 		/* calback_value (can't be set) */
 		road_type         (INVALID_ROADTYPE),
 		rail_type         (INVALID_RAILTYPE),

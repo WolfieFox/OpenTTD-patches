@@ -27,7 +27,7 @@
 std::string _keyboard_opt[2];
 static char32_t _keyboard[2][OSK_KEYBOARD_ENTRIES];
 
-enum KeyStateBits {
+enum KeyStateBits : uint8_t {
 	KEYS_NONE,
 	KEYS_SHIFT,
 	KEYS_CAPS
@@ -338,7 +338,7 @@ static constexpr NWidgetPart _nested_osk_widgets[] = {
 static WindowDesc _osk_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_OSK, WC_NONE,
-	0,
+	{},
 	_nested_osk_widgets
 );
 

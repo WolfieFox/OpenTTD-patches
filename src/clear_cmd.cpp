@@ -11,6 +11,7 @@
 #include "clear_map.h"
 #include "command_func.h"
 #include "landscape.h"
+#include "landscape_cmd.h"
 #include "genworld.h"
 #include "viewport_func.h"
 #include "core/random_func.hpp"
@@ -245,7 +246,7 @@ static void TileLoopClearAlps(TileIndex tile)
 		/* Below the snow line, do nothing if no snow. */
 		/* At or above the snow line, make snow tile if needed. */
 		if (k >= 0) {
-			MakeSnow(tile);
+			MakeSnow(tile, IsClearGround(tile, CLEAR_ROCKS) ? GetClearDensity(tile) : 0);
 			MarkTileDirtyByTile(tile);
 		}
 		return;
@@ -369,8 +370,8 @@ void GenerateClearTile()
 	TileIndex tile;
 
 	/* add rough tiles */
-	i = ScaleByMapSize(GB(Random(), 0, 10) + 0x400);
-	gi = ScaleByMapSize(GB(Random(), 0, 7) + 0x80);
+	i = Map::ScaleBySize(GB(Random(), 0, 10) + 0x400);
+	gi = Map::ScaleBySize(GB(Random(), 0, 7) + 0x80);
 
 	SetGeneratingWorldProgress(GWP_ROUGH_ROCKY, gi + i);
 	do {
@@ -438,7 +439,7 @@ static void ChangeTileOwner_Clear(TileIndex, Owner, Owner)
 
 static CommandCost TerraformTile_Clear(TileIndex tile, DoCommandFlag flags, int, Slope)
 {
-	return DoCommandOld(tile, 0, 0, flags, CMD_LANDSCAPE_CLEAR);
+	return Command<CMD_LANDSCAPE_CLEAR>::Do(flags, tile);
 }
 
 extern const TileTypeProcs _tile_type_clear_procs = {

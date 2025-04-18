@@ -189,7 +189,7 @@ typedef std::pair<Point, Point> LineSegment;
  * @param offset Offset vector subtracted from all coordinates in the shape.
  * @return Vector of undirected line segments.
  */
-static std::vector<LineSegment> MakePolygonSegments(const std::vector<Point> &shape, Point offset)
+static std::vector<LineSegment> MakePolygonSegments(std::span<const Point> shape, Point offset)
 {
 	std::vector<LineSegment> segments;
 	if (shape.size() < 3) return segments; // fewer than 3 will always result in an empty polygon
@@ -229,7 +229,7 @@ static std::vector<LineSegment> MakePolygonSegments(const std::vector<Point> &sh
  *         FILLRECT_RECOLOUR: Apply a recolour sprite to every pixel in the polygon.
  *         FILLRECT_FUNCTOR:  Apply a functor to a line of pixels.
  */
-void GfxFillPolygon(const std::vector<Point> &shape, int colour, FillRectMode mode, GfxFillRectModeFunctor *fill_functor)
+void GfxFillPolygon(std::span<const Point> shape, int colour, FillRectMode mode, GfxFillRectModeFunctor *fill_functor)
 {
 	Blitter *blitter = BlitterFactory::GetCurrentBlitter();
 	const DrawPixelInfo *dpi = _cur_dpi;
@@ -1593,7 +1593,9 @@ void DrawDirtyBlocks()
 	if (_whole_screen_dirty) {
 		RedrawScreenRect(0, 0, _screen.width, _screen.height);
 		for (Window *w : Window::Iterate()) {
-			w->flags &= ~(WF_DIRTY | WF_WIDGETS_DIRTY | WF_DRAG_DIRTIED);
+			w->flags.Reset(WindowFlag::Dirty);
+			w->flags.Reset(WindowFlag::WidgetsDirty);
+			w->flags.Reset(WindowFlag::DragDirtied);
 		}
 		_whole_screen_dirty = false;
 	} else {
@@ -1609,20 +1611,21 @@ void DrawDirtyBlocks()
 		Backup dpi_backup(_cur_dpi, &bk, FILE_LINE);
 
 		for (Window *w : Window::IterateFromBack()) {
-			w->flags &= ~WF_DRAG_DIRTIED;
+			w->flags.Reset(WindowFlag::DragDirtied);
 			if (!MayBeShown(w)) continue;
 
 			if (w->viewport != nullptr) w->viewport->is_drawn = false;
 
-			if (w->flags & WF_DIRTY) {
+			if (w->flags.Test(WindowFlag::Dirty)) {
 				clear_overlays();
 				DrawOverlappedWindowFlags flags = DOWF_MARK_DIRTY;
 				if (unlikely(HasBit(_gfx_debug_flags, GDF_SHOW_WINDOW_DIRTY))) {
 					flags |= DOWF_SHOW_DEBUG;
 				}
 				DrawOverlappedWindowWithClipping(w, w->left, w->top, w->left + w->width, w->top + w->height, flags);
-				w->flags &= ~(WF_DIRTY | WF_WIDGETS_DIRTY);
-			} else if (w->flags & WF_WIDGETS_DIRTY) {
+				w->flags.Reset(WindowFlag::Dirty);
+				w->flags.Reset(WindowFlag::WidgetsDirty);
+			} else if (w->flags.Test(WindowFlag::WidgetsDirty)) {
 				if (w->nested_root != nullptr) {
 					clear_overlays();
 					w->nested_root->FillDirtyWidgets(dirty_widgets);
@@ -1635,7 +1638,7 @@ void DrawDirtyBlocks()
 					}
 					dirty_widgets.clear();
 				}
-				w->flags &= ~WF_WIDGETS_DIRTY;
+				w->flags.Reset(WindowFlag::WidgetsDirty);
 			}
 
 			if (w->viewport != nullptr && !w->IsShaded()) {

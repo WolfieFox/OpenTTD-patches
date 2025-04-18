@@ -28,10 +28,12 @@
 CommandCost CmdAddPlan(DoCommandFlag flags)
 {
 	if (!Plan::CanAllocateItem()) return CommandCost(STR_ERROR_TOO_MANY_PLANS);
+	CommandCost cost;
 	if (flags & DC_EXEC) {
-		_new_plan = new Plan(_current_company);
+		Plan *plan = new Plan(_current_company);
+		cost.SetResultData(plan->index);
 	}
-	return CommandCost();
+	return cost;
 }
 
 bool AddPlanLine(PlanID plan, std::vector<TileIndex> tiles)
@@ -204,7 +206,7 @@ CommandCost CmdRenamePlan(DoCommandFlag flags, PlanID plan, const std::string &t
 /**
 * Acquire an unowned plan
 * @param flags type of operation
-* @param p1 ID of plan
+* @param plan ID of plan
 * @return the cost of this operation or an error
 */
 CommandCost CmdAcquireUnownedPlan(DoCommandFlag flags, PlanID plan)
@@ -250,5 +252,5 @@ bool PlanLineCmdData::Deserialise(DeserialisationBuffer &buffer, StringValidatio
 
 void PlanLineCmdData::FormatDebugSummary(format_target &output) const
 {
-	output.format("Plan {:X}, {} tiles", this->plan, this->tiles.size());
+	output.format("Plan {}, {} tiles", this->plan, this->tiles.size());
 }

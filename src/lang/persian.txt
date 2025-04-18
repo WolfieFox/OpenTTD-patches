@@ -831,6 +831,7 @@ STR_NEWS_NEW_VEHICLE_NOW_AVAILABLE_WITH_TYPE                    :{BLACK} {STRING
 STR_NEWS_OFFER_OF_SUBSIDY_EXPIRED                               :{BIG_FONT}{BLACK}پیشنهاد یارانه باطل شد:{}{}{STRING} از {STRING} به {STRING} دیگر یارانه ای به همراه نخواهد داشت
 STR_NEWS_SUBSIDY_WITHDRAWN_SERVICE                              :{BIG_FONT}{BLACK}یارانه بازپس گرفته شد:{}{}{STRING} خدمات از {STRING} به {STRING} دیگر شامل یارانه نمی باشند
 ###length 4
+STR_NEWS_SERVICE_SUBSIDY_AWARDED_DOUBLE                         :{BIG_FONT}{BLACK}یارانه خدمات هدیه داده شد به {STRING}!{}{}{STRING} از {STRING} به {STRING} دو برابر پرداخت میکند برای {UNITS_YEARS_OR_MINUTES}!
 
 STR_NEWS_EXCLUSIVE_RIGHTS_TITLE                                 :{BIG_FONT}{BLACK}حمل و نقل انحصاری!
 
@@ -859,7 +860,7 @@ STR_GAME_OPTIONS_CURRENCY_UNITS_FRAME                           :{BLACK}واحد
 STR_GAME_OPTIONS_CURRENCY_UNITS_DROPDOWN_TOOLTIP                :{BLACK}انتخب واحد پول
 
 
-###length 44
+###length 45
 STR_GAME_OPTIONS_CURRENCY_GBP                                   :پوند
 STR_GAME_OPTIONS_CURRENCY_USD                                   :دلار
 STR_GAME_OPTIONS_CURRENCY_EUR                                   :یورو
@@ -1201,7 +1202,10 @@ STR_CONFIG_SETTING_DYNAMIC_ENGINES_EXISTING_VEHICLES            :{WHITE}تغیی
 
 STR_CONFIG_SETTING_INFRASTRUCTURE_MAINTENANCE                   :تعمیر و نگهداری زیرساخت ها: {STRING}
 
+STR_CONFIG_SETTING_COMPANY_STARTING_COLOUR                      :{STRING} رنگ آغازین شرکت:
+STR_CONFIG_SETTING_COMPANY_STARTING_COLOUR_HELPTEXT             :رنگ آغازین شرکت را انتخاب کنید
 
+STR_CONFIG_SETTING_COMPANY_STARTING_COLOUR_SECONDARY            :{STRING} رنگ ثانویه شرکت:
 
 STR_CONFIG_SETTING_NEVER_EXPIRE_AIRPORTS                        :فرودگاه‌ها هیچ‌گاه از کار نیافتند: {STRING}
 
@@ -1261,6 +1265,7 @@ STR_CONFIG_SETTING_SNOWLINE_HEIGHT                              :ارتفاع خ
 STR_CONFIG_SETTING_SNOWLINE_HEIGHT_HELPTEXT                     :ارتفاع خط برف را در مناطق نیمه قطبی کنترل کنید. وجود برف بر ایجاد صنایع و اقلام ضروری رشد شهر تاثیر میگذارد.
 
 
+STR_CONFIG_SETTING_DESERT_COVERAGE                              :{STRING} پوشش صحرایی؛
 
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN                         :پستی و بلندی های زمین: {STRING}
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_HELPTEXT                :(فقط ترا جنسیس) چگونگی تکرار تپه ها را انتخاب کنید: چشم انداز آرام تعداد کمتری تپه با پراکندگی بیشتر دارد. چشم انداز خشن تپه های فراوانی دارد که ممکن است تکرار شده باشند.
@@ -1386,7 +1391,11 @@ STR_CONFIG_SETTING_SHOW_TRACK_RESERVATION                       :نمایش ری
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS                     :فعال ماندن ابزار ساخت و ساز پس از استفاده: {STRING}
 
 
+STR_CONFIG_SETTING_FAST_FORWARD_SPEED_LIMIT                     :{STRING} محدودیت سرعت تسریع زمان:
+STR_CONFIG_SETTING_FAST_FORWARD_SPEED_LIMIT_HELPTEXT            :محدود کردن سرعت بازی هنگام فعال شدن تسریع زمان. 0 = بدون محدودیت (به همان اندازه که رایانه شما اجازه می دهد). مقادیر زیر 100 ٪ بازی را آهسته می کند. محدودیت حداکثر به مشخصات رایانه شما بستگی دارد و بسته به بازی می تواند متفاوت باشد
+STR_CONFIG_SETTING_FAST_FORWARD_SPEED_LIMIT_VAL                 :{NUM}% سرعت عادی بازی
 ###setting-zero-is-special
+STR_CONFIG_SETTING_FAST_FORWARD_SPEED_LIMIT_ZERO                :بدون محدودیت (به همان اندازه که رایانه شما اجازه دهد)
 
 
 
@@ -1506,6 +1515,8 @@ STR_CONFIG_SETTING_TOWN_FOUNDING                                :ساخت شهر
 STR_CONFIG_SETTING_TOWN_FOUNDING_FORBIDDEN                      :ممنوع
 STR_CONFIG_SETTING_TOWN_FOUNDING_ALLOWED                        :مجاز
 STR_CONFIG_SETTING_TOWN_FOUNDING_ALLOWED_CUSTOM_LAYOUT          :آزاد و با نمایه دلخواه
+
+###length 3
 
 ###length 2
 
@@ -1910,6 +1921,7 @@ STR_NETWORK_ERROR_TIMEOUT_PASSWORD                              :{WHITE}شما �
 STR_NETWORK_ERROR_TIMEOUT_COMPUTER                              :{WHITE}رایانه شما بیش از حد برای پیوستن به بازی زمان صرف کرده
 STR_NETWORK_ERROR_TIMEOUT_MAP                                   :{WHITE}شما بیش از حد زمان برای بارگیری نقشه گذراندید
 STR_NETWORK_ERROR_TIMEOUT_JOIN                                  :{WHITE}شما بیش از حد زمان برای پیوستن به سرویس دهنده گذراندید
+STR_NETWORK_ERROR_INVALID_CLIENT_NAME                           :{WHITE}نام بازیکن شما صحیح نمی باشد
 
 STR_NETWORK_ERROR_CLIENT_GUI_LOST_CONNECTION_CAPTION            :{WHITE}اتصال مورد استفاده قطع شد
 STR_NETWORK_ERROR_CLIENT_GUI_LOST_CONNECTION                    :{WHITE}در {NUM} ثانیه گذشته هیچ داده ای از سرویس دهنده دریافت نگردیده
@@ -1954,7 +1966,6 @@ STR_NETWORK_SERVER_MESSAGE_GAME_REASON_GAME_SCRIPT              :کد بازی
 STR_NETWORK_MESSAGE_CLIENT_LEAVING                              :می رود
 STR_NETWORK_MESSAGE_CLIENT_JOINED                               :*** {STRING} به بازی پیوست
 STR_NETWORK_MESSAGE_CLIENT_JOINED_ID                            :*** {STRING} به بازی پیوست (سرویس گیرنده #{2:NUM})
-STR_NETWORK_MESSAGE_CLIENT_COMPANY_JOIN                         :*** {STRING} به شرکت پیوست #{2:NUM}
 STR_NETWORK_MESSAGE_CLIENT_COMPANY_SPECTATE                     :*** {STRING} به تماشاچیان پیوست
 STR_NETWORK_MESSAGE_CLIENT_COMPANY_NEW                          :*** {STRING} یک شرکت جدید آغاز کرد (#{2:NUM})
 STR_NETWORK_MESSAGE_CLIENT_LEFT                                 :*** {STRING} از بازی بیرون رفت ({2:STRING})
@@ -2117,6 +2128,7 @@ STR_STATION_BUILD_PLATFORM_LENGTH                               :{BLACK}طول �
 STR_STATION_BUILD_PLATFORM_LENGTH_TOOLTIP                       :{BLACK}انتخاب طول ایستگاه راه آهن
 STR_STATION_BUILD_DRAG_DROP                                     :{BLACK}بکشید و بیاندازید
 STR_STATION_BUILD_DRAG_DROP_TOOLTIP                             :{BLACK}ساخت ایستگاه با استفاده از کشیدن و انداختن
+
 
 
 
@@ -2945,10 +2957,14 @@ STR_FINANCES_SECTION_SHIP_RUNNING_COSTS                         :{GOLD}هزین�
 
 STR_FINANCES_NEGATIVE_INCOME                                    :{BLACK}-{CURRENCY_LONG}
 STR_FINANCES_POSITIVE_INCOME                                    :{BLACK}+{CURRENCY_LONG}
+STR_FINANCES_BANK_BALANCE_TITLE                                 :{WHITE}تراز بانکی
+STR_FINANCES_BANK_BALANCE                                       :{WHITE}{CURRENCY_LONG}
 STR_FINANCES_INFRASTRUCTURE_BUTTON                              :{BLACK}زیرساخت
 
 # Company view
+STR_COMPANY_VIEW_CAPTION                                        :{WHITE}{COMPANY} {BLACK}{COMPANY_NUM}
 
+STR_COMPANY_VIEW_COLOUR_SCHEME_TITLE                            :{GOLD}پالت رنگی:
 STR_COMPANY_VIEW_AIRCRAFT                                       :{WHITE}{COMMA} هواپیما
 STR_COMPANY_VIEW_COMPANY_VALUE                                  :{GOLD}ارزش شرکت: {WHITE}{CURRENCY_LONG}
 STR_COMPANY_VIEW_INFRASTRUCTURE                                 :{GOLD}زیرساخت:
@@ -2960,11 +2976,13 @@ STR_COMPANY_VIEW_INFRASTRUCTURE_AIRPORT                         :{WHITE}{COMMA} 
 STR_COMPANY_VIEW_INFRASTRUCTURE_NONE                            :{WHITE}هیچکدام
 
 STR_COMPANY_VIEW_BUILD_HQ_BUTTON                                :{BLACK}ساخت ساختمان مرکزی
+STR_COMPANY_VIEW_BUILD_HQ_TOOLTIP                               :{BLACK}ساخت پایگاه شرکت
 STR_COMPANY_VIEW_VIEW_HQ_BUTTON                                 :{BLACK}دیدن ساختمان مرکزی
 STR_COMPANY_VIEW_INFRASTRUCTURE_BUTTON                          :{BLACK}جزییات
 STR_COMPANY_VIEW_INFRASTRUCTURE_TOOLTIP                         :{BLACK}مشاهده جزییات تعداد زیرساخت ها
 
 STR_COMPANY_VIEW_COLOUR_SCHEME_BUTTON                           :{BLACK}پالت رنگی
+STR_COMPANY_VIEW_COLOUR_SCHEME_TOOLTIP                          :{BLACK}تغییر رنگ سازمانی خودرو های شرکت
 
 STR_COMPANY_VIEW_PRESIDENT_S_NAME_QUERY_CAPTION                 :مدیر عامل
 
@@ -2982,6 +3000,7 @@ STR_COMPANY_INFRASTRUCTURE_VIEW_STATIONS                        :{WHITE}قطعه
 STR_COMPANY_INFRASTRUCTURE_VIEW_AIRPORTS                        :{WHITE}فرودگاه ها
 
 # Industry directory
+STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}کارخانجات ({COMMA} of {COMMA})
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- هیچ -
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
@@ -3162,6 +3181,7 @@ STR_DEPOT_AIRCRAFT_LOCATION_TOOLTIP                             :{BLACK}نمای
 ###length VEHICLE_TYPES
 
 ###length VEHICLE_TYPES
+STR_DEPOT_MASS_START_DEPOT_ROAD_VEHICLE_TOOLTIP                 :{BLACK}کلیک کنید تا تمامی خودرو های جاده ای داخل انبار استارت شوند
 
 STR_DEPOT_SELL_CONFIRMATION_TEXT                                :{YELLOW} آیا از فروش تمامی وسایل انبار اطمینان دارید؟
 
@@ -3195,7 +3215,10 @@ STR_REPLACE_VEHICLE_AIRCRAFT                                    :هواپیما
 
 STR_REPLACE_STOP_BUTTON_TOOLTIP                                 :{BLACK}برای توقف جایگزین کردن برای نوع انتخاب شده در سمت چپ کلیک کنید
 
+STR_REPLACE_ENGINE_WAGON_SELECT_TOOLTIP                         :{BLACK}جابجایی بین پنجره های جایگزینی موتور و واگن
 STR_REPLACE_ENGINES                                             :موتور ها
+STR_REPLACE_ALL_RAILTYPE                                        :تمامی وسایل نقلیه ریلی
+STR_REPLACE_ALL_ROADTYPE                                        :تمامی وسایل نقلیه جاده ای
 
 ###length 2
 ###next-name-looks-similar
@@ -3314,12 +3337,15 @@ STR_ORDERS_LIST_TOOLTIP                                         :{BLACK}لیست
 STR_ORDER_INDEX                                                 :{COMMA}:{NBSP}
 
 STR_ORDERS_END_OF_ORDERS                                        :- - پایان دستورها - -
+STR_ORDERS_END_OF_SHARED_ORDERS                                 :- - پایان دستورات مشترک - -
 
 # Order bottom buttons
 
 
 STR_ORDER_DROP_UNLOAD_IF_ACCEPTED                               :درصورت پذیرش تخلیه کن
 
+STR_ORDER_REFIT                                                 :{BLACK}تعمیر
+STR_ORDER_REFIT_AUTO                                            :{BLACK}تعمیر در ایستگاه
 
 
 # Depot action tooltips, one per vehicle type
@@ -3405,6 +3431,9 @@ STR_AI_DEBUG_SETTINGS                                           :{BLACK}تنظی
 STR_AI_DEBUG_RELOAD                                             :{BLACK}بازگشایی مجدد هوش مصنوعی
 STR_AI_DEBUG_RELOAD_TOOLTIP                                     :{BLACK}از بین بردن هوش مصنوعی. بازگشایی اسکریپت. و شروع مجدد هوش مصنوعی
 STR_AI_DEBUG_BREAK_STR_ON_OFF_TOOLTIP                           :{BLACK}فعالسازی/غیر فعال سازی توقف هنگامی که هوش مصنوعی گزارشی با متن توقف تولید می کند
+STR_AI_DEBUG_BREAK_ON_LABEL                                     :{BLACK}توقف روشن:
+STR_AI_DEBUG_BREAK_STR_OSKTITLE                                 :{BLACK}توقف روشن
+STR_AI_DEBUG_BREAK_STR_TOOLTIP                                  :{BLACK}هنگامی که گزارش یک هوش مصنوعی با این کد تطابق کند، بازی متوقف میگردد
 STR_AI_DEBUG_CONTINUE                                           :{BLACK}ادامه
 STR_AI_GAME_SCRIPT                                              :{BLACK}کدبازی
 STR_AI_GAME_SCRIPT_TOOLTIP                                      :{BLACK}دیدن گزارش های کد بازی
@@ -3476,7 +3505,9 @@ STR_MESSAGE_ESTIMATED_INCOME                                    :{WHITE}در آ�
 
 # Saveload messages
 STR_ERROR_UNABLE_TO_READ_DRIVE                                  :{BLACK}درایو خوانده می شود
+STR_ERROR_GAME_SAVE_FAILED                                      :{WHITE}بازی ذخیره نشد
 STR_ERROR_UNABLE_TO_DELETE_FILE                                 :{WHITE}فایل حذف نمی شود
+STR_ERROR_GAME_LOAD_FAILED                                      :{WHITE}بازی بارگزاری نشد
 
 # Map generation messages
 
@@ -3522,6 +3553,7 @@ STR_ERROR_TOO_HIGH                                              :{WHITE}بیش �
 
 # Company related errors
 
+STR_ERROR_CAN_T_BORROW_ANY_MORE_MONEY                           :{WHITE}نمیشود پول بیشتری قرض گرفت...
 STR_ERROR_CAN_T_BUILD_COMPANY_HEADQUARTERS                      :{WHITE}ساختمان مرکزی را نمی شود اینجا ساخت ...
 
 # Town related errors
@@ -3615,6 +3647,8 @@ STR_ERROR_CAN_T_BUILD_ROAD_HERE                                 :{WHITE}اینج
 STR_ERROR_CAN_T_REMOVE_ROAD_FROM                                :{WHITE}جاده را نمی شود از اینجا حذف کرد
 STR_ERROR_THERE_IS_NO_ROAD                                      :{WHITE}... اینجا جاده ای نیست
 STR_ERROR_THERE_IS_NO_TRAMWAY                                   :{WHITE}... اینجا تراموایی نیست
+STR_ERROR_CAN_T_CONVERT_ROAD                                    :{WHITE}نمیتوان نوع جاده اینجا را عوض کرد...
+STR_ERROR_CAN_T_CONVERT_TRAMWAY                                 :{WHITE}نمیتوان نوع تراموا اینجا را عوض کرد...
 
 # Waterway construction errors
 STR_ERROR_CAN_T_BUILD_CANALS                                    :{WHITE}نمی توان در اینجا کانالی ساخت...
@@ -3720,6 +3754,10 @@ STR_ERROR_CAN_T_SELL_TRAIN                                      :{WHITE}نمی �
 STR_ERROR_CAN_T_SELL_ROAD_VEHICLE                               :{WHITE}نمیشود ماشین را فروخت...
 STR_ERROR_CAN_T_SELL_SHIP                                       :{WHITE}کشتی فروخته نمی شود...
 STR_ERROR_CAN_T_SELL_AIRCRAFT                                   :{WHITE}نمیتوان هواپیما را فروخت
+
+###length VEHICLE_TYPES
+
+###length VEHICLE_TYPES
 
 STR_ERROR_TOO_MANY_VEHICLES_IN_GAME                             :{WHITE}ماشین‌های زیادی در بازی هستند
 STR_ERROR_CAN_T_CHANGE_SERVICING                                :{WHITE}امکان تغییر فواصل زمانی سرویس وجود ندارد...

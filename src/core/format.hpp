@@ -58,6 +58,61 @@ struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of<fmt_format_as_ba
 	}
 };
 
+extern fmt::format_context::iterator FmtTileIndexValueIntl(fmt::format_context &ctx, uint32_t value);
+
+template <typename T, typename Char>
+struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of<struct fmt_tile_index_tag, T>::value>> : fmt::formatter<uint32_t> {
+	bool use_base_fmt{};
+
+	using underlying_type = uint32_t;
+	using parent = typename fmt::formatter<underlying_type>;
+
+	constexpr fmt::format_parse_context::iterator parse(fmt::format_parse_context &ctx)
+	{
+		auto it = ctx.begin();
+		if (it == ctx.end() || *it == '}') {
+			return ctx.begin();
+		}
+		this->use_base_fmt = true;
+		return parent::parse(ctx);
+	}
+
+	fmt::format_context::iterator format(const T &t, format_context &ctx) const
+	{
+		if (this->use_base_fmt) {
+			return parent::format(t.base(), ctx);
+		}
+		return FmtTileIndexValueIntl(ctx, t.base());
+	}
+};
+
+template <typename T, typename Char>
+struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of<struct BaseBitSetBase, T>::value>> : fmt::formatter<typename T::BaseType> {
+	bool use_base_fmt{};
+
+	using underlying_type = typename T::BaseType;
+	using parent = typename fmt::formatter<underlying_type>;
+
+	constexpr fmt::format_parse_context::iterator parse(fmt::format_parse_context &ctx)
+	{
+		auto it = ctx.begin();
+		if (it == ctx.end() || *it == '}') {
+			return ctx.begin();
+		}
+		this->use_base_fmt = true;
+		return parent::parse(ctx);
+	}
+
+	fmt::format_context::iterator format(const T &t, format_context &ctx) const
+	{
+		if (this->use_base_fmt) {
+			return parent::format(t.base(), ctx);
+		} else {
+			return fmt::format_to(ctx.out(), "0x{:X}", t.base());
+		}
+	}
+};
+
 /**
  * Base fmt format target class. Users should take by reference.
  * Not directly instantiable, use format_to_buffer, format_buffer, format_buffer_sized, format_to_fixed or format_to_fixed_z.

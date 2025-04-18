@@ -10,8 +10,8 @@
 #ifndef SL_SAVELOAD_BUFFER_H
 #define SL_SAVELOAD_BUFFER_H
 
+#include "../core/alignment.hpp"
 #include "../core/alloc_func.hpp"
-#include "../core/endian_type.hpp"
 #include "../core/endian_func.hpp"
 #include "../core/math_func.hpp"
 
@@ -296,7 +296,7 @@ struct MemoryDumper {
 		~BufferInfo() { free(this->data); }
 
 		BufferInfo(const BufferInfo &) = delete;
-		BufferInfo(BufferInfo &&other) : data(other.data), size(other.size) { other.data = nullptr; };
+		BufferInfo(BufferInfo &&other) noexcept : data(other.data), size(other.size) { other.data = nullptr; };
 	};
 
 	std::vector<BufferInfo> blocks;         ///< Buffer with blocks of allocated memory.

@@ -11,6 +11,7 @@
 #define SCRIPT_CONTROLLER_HPP
 
 #include "script_types.hpp"
+#include "../../company_type.h"
 #include "../../string_func.h"
 #include <map>
 
@@ -53,7 +54,7 @@ public:
 	 * Initializer of the ScriptController.
 	 * @param company The company this Script is normally serving.
 	 */
-	ScriptController(CompanyID company);
+	ScriptController(::CompanyID company);
 
 #else
 	/**

@@ -104,6 +104,14 @@ struct TraceRestrictProgramSignalData final : public TupleRefCmdData<TraceRestri
 	void FormatDebugSummary(struct format_target &) const override;
 };
 
+/* Flag values for TraceRestrictProgramSignalData::data for TRDCT_MOVE_ITEM operations */
+enum class TraceRestrictProgramSignalMoveFlags : uint32_t {
+	None                  = 0,         ///< No flag set.
+	Up                    = (1U << 0), ///< Move up if flag set, otherwise down.
+	Shallow               = (1U << 1), ///< Shallow mode.
+};
+DECLARE_ENUM_AS_BIT_SET(TraceRestrictProgramSignalMoveFlags)
+
 struct TraceRestrictManageSignalInnerData {
 	Track track;
 	TraceRestrictMgmtDoCommandType type;
@@ -117,19 +125,7 @@ struct TraceRestrictManageSignalData final : public TupleRefCmdData<TraceRestric
 	void FormatDebugSummary(struct format_target &) const override;
 };
 
-BaseCommandContainer<TraceRestrictProgramSignalData> GetTraceRestrictCommandContainer(TileIndex tile, Track track, TraceRestrictDoCommandType type, uint32_t offset, uint32_t value);
-void TraceRestrictDoCommandP(TileIndex tile, Track track, TraceRestrictDoCommandType type, uint32_t offset, uint32_t value, StringID error_msg, std::string text = {});
-
-void TraceRestrictProgMgmtWithSourceDoCommandP(TileIndex tile, Track track, TraceRestrictMgmtDoCommandType type,
-		TileIndex source_tile, Track source_track, StringID error_msg);
-
-/**
- * Short-hand to call TraceRestrictProgMgmtWithSourceDoCommandP with 0 for source tile/track
- */
-inline void TraceRestrictProgMgmtDoCommandP(TileIndex tile, Track track, TraceRestrictMgmtDoCommandType type, StringID error_msg)
-{
-	TraceRestrictProgMgmtWithSourceDoCommandP(tile, track, type, static_cast<TileIndex>(0), static_cast<Track>(0), error_msg);
-}
+BaseCommandContainer<CMD_PROGRAM_TRACERESTRICT_SIGNAL> GetTraceRestrictCommandContainer(TileIndex tile, Track track, TraceRestrictDoCommandType type, uint32_t offset, uint32_t value);
 
 DEF_CMD_TUPLE    (CMD_PROGRAM_TRACERESTRICT_SIGNAL,      CmdProgramSignalTraceRestrict,     {}, CMDT_OTHER_MANAGEMENT, TraceRestrictProgramSignalData)
 DEF_CMD_TUPLE    (CMD_MANAGE_TRACERESTRICT_SIGNAL,       CmdProgramSignalTraceRestrictMgmt, {}, CMDT_OTHER_MANAGEMENT, TraceRestrictManageSignalData)

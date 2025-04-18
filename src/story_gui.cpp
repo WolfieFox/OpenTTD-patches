@@ -50,7 +50,7 @@ protected:
 	};
 	typedef std::vector<LayoutCacheElement> LayoutCache;
 
-	enum class ElementFloat {
+	enum class ElementFloat : uint8_t {
 		None,
 		Left,
 		Right,
@@ -738,7 +738,7 @@ public:
 				case SPET_BUTTON_TILE:
 				case SPET_BUTTON_VEHICLE: {
 					const int tmargin = WidgetDimensions::scaled.bevel.top + WidgetDimensions::scaled.frametext.top;
-					const FrameFlags frame = this->active_button_id == ce.pe->index ? FR_LOWERED : FR_NONE;
+					const FrameFlags frame = this->active_button_id == ce.pe->index ? FrameFlag::Lowered : FrameFlags{};
 					const Colours bgcolour = StoryPageButtonData{ ce.pe->referenced_id }.GetColour();
 
 					DrawFrameRect(ce.bounds.left, ce.bounds.top - scrollpos, ce.bounds.right, ce.bounds.bottom - scrollpos - 1, bgcolour, frame);
@@ -973,14 +973,14 @@ static constexpr NWidgetPart _nested_story_book_widgets[] = {
 static WindowDesc _story_book_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_story", 400, 300,
 	WC_STORY_BOOK, WC_NONE,
-	0,
+	{},
 	_nested_story_book_widgets
 );
 
 static WindowDesc _story_book_gs_desc(__FILE__, __LINE__,
 	WDP_CENTER, "view_story_gs", 400, 300,
 	WC_STORY_BOOK, WC_NONE,
-	0,
+	{},
 	_nested_story_book_widgets
 );
 
@@ -1056,6 +1056,6 @@ void ShowStoryBook(CompanyID company, StoryPageID page_id, bool centered)
 {
 	if (!Company::IsValidID(company)) company = (CompanyID)INVALID_COMPANY;
 
-	StoryBookWindow *w = AllocateWindowDescFront<StoryBookWindow>(centered ? _story_book_gs_desc : _story_book_desc, company, true);
+	StoryBookWindow *w = AllocateWindowDescFront<StoryBookWindow, true>(centered ? _story_book_gs_desc : _story_book_desc, company);
 	if (page_id != INVALID_STORY_PAGE) w->SetSelectedPage(page_id);
 }

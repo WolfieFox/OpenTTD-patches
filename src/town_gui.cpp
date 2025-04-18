@@ -45,6 +45,7 @@
 #include "town_kdtree.h"
 #include "zoom_func.h"
 #include "hotkeys.h"
+#include "town_cmd.h"
 
 #include "widgets/town_widget.h"
 #include "table/strings.h"
@@ -457,7 +458,7 @@ public:
 			}
 
 			case WID_TA_EXECUTE:
-				DoCommandPOld(this->town->xy, this->window_number, this->sel_index, CMD_DO_TOWN_ACTION | CMD_MSG(STR_ERROR_CAN_T_DO_THIS));
+				Command<CMD_DO_TOWN_ACTION>::Post(STR_ERROR_CAN_T_DO_THIS, this->town->xy, this->window_number, this->sel_index);
 				break;
 
 			case WID_TA_SETTING: {
@@ -518,13 +519,12 @@ public:
 		switch (widget) {
 			case WID_TA_SETTING: {
 				if (index < 0) break;
-				uint32_t p2 = this->sel_index - 0x100;
-				if (index > 0) {
-					SetBit(p2, 16);
-					p2 |= (index - 1) << 8;
+				auto payload = CmdPayload<CMD_TOWN_SETTING_OVERRIDE>::Make(this->window_number, static_cast<TownSettingOverrideFlags>(this->sel_index - 0x100), index > 0, (index > 0) ? index - 1 : 0);
+				if (IsNonAdminNetworkClient()) {
+					DoCommandP<CMD_TOWN_SETTING_OVERRIDE_NON_ADMIN>(payload, STR_ERROR_CAN_T_DO_THIS);
+				} else {
+					DoCommandP<CMD_TOWN_SETTING_OVERRIDE>(payload, STR_ERROR_CAN_T_DO_THIS);
 				}
-				Commands cmd = IsNonAdminNetworkClient() ? CMD_TOWN_SETTING_OVERRIDE_NON_ADMIN : CMD_TOWN_SETTING_OVERRIDE;
-				DoCommandPOld(this->town->xy, this->window_number, p2, cmd | CMD_MSG(STR_ERROR_CAN_T_DO_THIS));
 				break;
 			}
 
@@ -543,7 +543,7 @@ public:
 static WindowDesc _town_authority_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_town_authority", 317, 222,
 	WC_TOWN_AUTHORITY, WC_NONE,
-	0,
+	{},
 	_nested_town_authority_widgets
 );
 
@@ -570,7 +570,7 @@ public:
 
 		this->FinishInitNested(window_number);
 
-		this->flags |= WF_DISABLE_VP_SCROLL;
+		this->flags.Set(WindowFlag::DisableVpScroll);
 		NWidgetViewport *nvp = this->GetWidget<NWidgetViewport>(WID_TV_VIEWPORT);
 		nvp->InitializeViewport(this, this->town->xy.base(), ScaleZoomGUI(ZOOM_LVL_TOWN));
 	}
@@ -615,7 +615,7 @@ public:
 		}
 
 		for (auto tpe : {TPE_PASSENGERS, TPE_MAIL}) {
-			for (CargoID cid : CargoSpec::town_production_cargoes[tpe]) {
+			for (CargoType cid : CargoSpec::town_production_cargoes[tpe]) {
 				SetDParam(0, 1ULL << cid);
 				SetDParam(1, this->town->supplied[cid].old_act);
 				SetDParam(2, this->town->supplied[cid].old_max);
@@ -723,12 +723,12 @@ public:
 				break;
 
 			case WID_TV_EXPAND: { // expand town - only available on Scenario editor
-				DoCommandPOld(0, this->window_number, 0, CMD_EXPAND_TOWN | CMD_MSG(STR_ERROR_CAN_T_EXPAND_TOWN));
+				Command<CMD_EXPAND_TOWN>::Post(STR_ERROR_CAN_T_EXPAND_TOWN, this->window_number, 0);
 				break;
 			}
 
 			case WID_TV_DELETE: // delete town - only available on Scenario editor
-				DoCommandPOld(0, this->window_number, 0, CMD_DELETE_TOWN | CMD_MSG(STR_ERROR_TOWN_CAN_T_DELETE));
+				Command<CMD_DELETE_TOWN>::Post(STR_ERROR_TOWN_CAN_T_DELETE, this->window_number);
 				break;
 		}
 	}
@@ -817,7 +817,11 @@ public:
 	{
 		if (!str.has_value()) return;
 
-		DoCommandPOld(0, this->window_number, 0, (IsNonAdminNetworkClient() ? CMD_RENAME_TOWN_NON_ADMIN : CMD_RENAME_TOWN) | CMD_MSG(STR_ERROR_CAN_T_RENAME_TOWN), CommandCallback::None, str->c_str());
+		if (IsNonAdminNetworkClient()) {
+			Command<CMD_RENAME_TOWN_NON_ADMIN>::Post(STR_ERROR_CAN_T_RENAME_TOWN, this->window_number, *str);
+		} else {
+			Command<CMD_RENAME_TOWN>::Post(STR_ERROR_CAN_T_RENAME_TOWN, this->window_number, *str);
+		}
 	}
 
 	bool IsNewGRFInspectable() const override
@@ -858,7 +862,7 @@ static constexpr NWidgetPart _nested_town_game_view_widgets[] = {
 static WindowDesc _town_game_view_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_town", 260, TownViewWindow::WID_TV_HEIGHT_NORMAL,
 	WC_TOWN_VIEW, WC_NONE,
-	0,
+	{},
 	_nested_town_game_view_widgets
 );
 
@@ -890,7 +894,7 @@ static constexpr NWidgetPart _nested_town_editor_view_widgets[] = {
 static WindowDesc _town_editor_view_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_town_scen", 260, TownViewWindow::WID_TV_HEIGHT_NORMAL,
 	WC_TOWN_VIEW, WC_NONE,
-	0,
+	{},
 	_nested_town_editor_view_widgets
 );
 
@@ -932,7 +936,7 @@ static constexpr NWidgetPart _nested_town_directory_widgets[] = {
 };
 
 /** Enum referring to the Hotkeys in the town directory window */
-enum TownDirectoryHotkeys {
+enum TownDirectoryHotkeys : int32_t {
 	TDHK_FOCUS_FILTER_BOX, ///< Focus the filter box
 };
 
@@ -1287,7 +1291,7 @@ const std::initializer_list<GUITownList::SortFunction * const> TownDirectoryWind
 static WindowDesc _town_directory_desc(__FILE__, __LINE__,
 	WDP_AUTO, "list_towns", 208, 202,
 	WC_TOWN_DIRECTORY, WC_NONE,
-	0,
+	{},
 	_nested_town_directory_widgets,
 	&TownDirectoryWindow::hotkeys
 );
@@ -1447,7 +1451,7 @@ public:
 
 	void ExecuteFoundTownCommand(TileIndex tile, bool random, StringID errstr, CommandCallback cc)
 	{
-		const char *name = nullptr;
+		std::string name;
 
 		if (!this->townnamevalid) {
 			name = this->townname_editbox.text.GetText();
@@ -1457,8 +1461,8 @@ public:
 			if (original_name != this->townname_editbox.text.GetText()) name = this->townname_editbox.text.GetText();
 		}
 
-		bool success = DoCommandPOld(tile, this->town_size | this->city << 2 | this->town_layout << 3 | random << 6,
-				townnameparts, CMD_FOUND_TOWN | CMD_MSG(errstr), cc, name);
+		bool success = Command<CMD_FOUND_TOWN>::Post(errstr, cc,
+				tile, this->town_size, this->city, this->town_layout, random, townnameparts, std::move(name));
 
 		/* Rerandomise name, if success and no cost-estimation. */
 		if (success && !_shift_pressed) this->RandomTownName();
@@ -1497,7 +1501,7 @@ public:
 
 			case WID_TF_EXPAND_ALL_TOWNS:
 				for (Town *t : Town::Iterate()) {
-					DoCommandOld(0, t->index, 0, DC_EXEC, CMD_EXPAND_TOWN);
+					Command<CMD_EXPAND_TOWN>::Do(DC_EXEC, t->index, 0);
 				}
 				break;
 
@@ -1551,7 +1555,7 @@ public:
 static WindowDesc _found_town_desc(__FILE__, __LINE__,
 	WDP_AUTO, "build_town", 160, 162,
 	WC_FOUND_TOWN, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_found_town_widgets
 );
 
@@ -1566,10 +1570,10 @@ void ShowFoundTownWindow()
  */
 struct SelectTownWindow : Window {
 	TownList towns;       ///< list of towns
-	CommandContainer<P123CmdData> cmd; ///< command to build the house (CMD_PLACE_HOUSE)
+	CommandContainer<CMD_PLACE_HOUSE> cmd; ///< command to build the house
 	Scrollbar *vscroll;   ///< scrollbar for the town list
 
-	SelectTownWindow(WindowDesc &desc, const CommandContainer<P123CmdData> &cmd) : Window(desc), cmd(cmd)
+	SelectTownWindow(WindowDesc &desc, const CommandContainer<CMD_PLACE_HOUSE> &cmd) : Window(desc), cmd(cmd)
 	{
 		std::vector<std::pair<uint, TownID>> town_set;
 		constexpr uint MAX_TOWN_COUNT = 16;
@@ -1641,7 +1645,8 @@ struct SelectTownWindow : Window {
 		if (pos >= this->towns.size()) return;
 
 		/* Place a house */
-		this->cmd.payload.p2 = this->towns[pos];
+		TownID &town_id = std::get<2>(this->cmd.payload.GetValues());
+		town_id = this->towns[pos];
 		DoCommandPContainer(this->cmd);
 
 		/* Close the window */
@@ -1672,11 +1677,11 @@ static const NWidgetPart _nested_select_town_widgets[] = {
 static WindowDesc _select_town_desc(__FILE__, __LINE__,
 	WDP_AUTO, "select_town", 100, 0,
 	WC_SELECT_TOWN, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_select_town_widgets
 );
 
-static void ShowSelectTownWindow(const CommandContainer<P123CmdData> &cmd)
+static void ShowSelectTownWindow(const CommandContainer<CMD_PLACE_HOUSE> &cmd)
 {
 	CloseWindowByClass(WC_SELECT_TOWN);
 	new SelectTownWindow(_select_town_desc, cmd);
@@ -1741,7 +1746,7 @@ void DrawHouseInGUI(int x, int y, HouseID house_id, int view)
 			 * spritegroup associated with them, then the sprite for the substitute
 			 * house id is drawn instead. */
 			const HouseSpec *spec = HouseSpec::Get(house_id);
-			if (spec->grf_prop.spritegroup[0] != nullptr) {
+			if (spec->grf_prop.GetSpriteGroup() != nullptr) {
 				DrawNewHouseTileInGUI(x, y, spec, house_id, view);
 				return;
 			} else {
@@ -1756,14 +1761,14 @@ void DrawHouseInGUI(int x, int y, HouseID house_id, int view)
 		/* Add a house on top of the ground? */
 		if (dcts.building.sprite != 0) {
 			Point pt = RemapCoords(dcts.subtile_x, dcts.subtile_y, 0);
-			DrawSprite(dcts.building.sprite, dcts.building.pal, x + UnScaleGUI(pt.x), y + UnScaleGUI(pt.y));
+			DrawSprite(dcts.building.sprite, dcts.building.pal, x + ScaleSpriteTrad(pt.x), y + ScaleSpriteTrad(pt.y));
 		}
 	};
 
 	/* Houses can have 1x1, 1x2, 2x1 and 2x2 layouts which are individual HouseIDs. For the GUI we need
 	 * draw all of the tiles with appropriate positions. */
-	int x_delta = ScaleGUITrad(TILE_PIXELS);
-	int y_delta = ScaleGUITrad(TILE_PIXELS / 2);
+	int x_delta = ScaleSpriteTrad(TILE_PIXELS);
+	int y_delta = ScaleSpriteTrad(TILE_PIXELS / 2);
 
 	const HouseSpec *hs = HouseSpec::Get(house_id);
 	if (hs->building_flags & TILE_SIZE_2x2) {
@@ -1855,6 +1860,8 @@ public:
 		STR_HOUSE_PICKER_CLASS_ZONE5,
 	};
 
+	GrfSpecFeature GetFeature() const override { return GSF_HOUSES; }
+
 	StringID GetClassTooltip() const override { return STR_PICKER_HOUSE_CLASS_TOOLTIP; }
 	StringID GetTypeTooltip() const override { return STR_PICKER_HOUSE_TYPE_TOOLTIP; }
 	bool IsActive() const override { return true; }
@@ -1903,6 +1910,21 @@ public:
 		}
 
 		return GetHouseName(spec);
+	}
+
+	std::span<const BadgeID> GetTypeBadges(int cls_id, int id) const override
+	{
+		const auto *spec = HouseSpec::Get(id);
+		if (spec == nullptr) return {};
+		if (!spec->enabled) return {};
+		if ((spec->building_availability & climate_mask) == 0) return {};
+		if (!HasBit(spec->building_availability, cls_id)) return {};
+		for (int i = 0; i < cls_id; i++) {
+			/* Don't include if it's already included in an earlier zone. */
+			if (HasBit(spec->building_availability, i)) return {};
+		}
+
+		return spec->badges;
 	}
 
 	bool IsTypeAvailable(int, int id) const override
@@ -1957,10 +1979,44 @@ public:
 };
 /* static */ HousePickerCallbacks HousePickerCallbacks::instance;
 
+/**
+ * Get the cargo types produced by a house.
+ * @param hs HouseSpec of the house.
+ * @returns CargoArray of cargo types produced by the house.
+ */
+static CargoArray GetProducedCargoOfHouse(const HouseSpec *hs)
+{
+	/* We don't care how much cargo is produced, but BuildCargoAcceptanceString shows fractions when less then 8. */
+	static const uint MIN_CARGO = 8;
+
+	CargoArray production{};
+	if (HasBit(hs->callback_mask, CBM_HOUSE_PRODUCE_CARGO)) {
+		for (uint i = 0; i < 256; i++) {
+			uint16_t callback = GetHouseCallback(CBID_HOUSE_PRODUCE_CARGO, i, 0, hs->Index(), nullptr, INVALID_TILE, true);
+
+			if (callback == CALLBACK_FAILED || callback == CALLBACK_HOUSEPRODCARGO_END) break;
+
+			CargoType cargo = GetCargoTranslation(GB(callback, 8, 7), hs->grf_prop.grffile);
+			if (!IsValidCargoType(cargo)) continue;
+
+			uint amt = GB(callback, 0, 8);
+			if (amt == 0) continue;
+
+			production[cargo] = MIN_CARGO;
+		}
+	} else {
+		/* Cargo is not controlled by NewGRF, town production effect is used instead. */
+		for (CargoType cid : CargoSpec::town_production_cargoes[TPE_PASSENGERS]) production[cid] = MIN_CARGO;
+		for (CargoType cid : CargoSpec::town_production_cargoes[TPE_MAIL]) production[cid] = MIN_CARGO;
+	}
+	return production;
+}
+
 struct BuildHouseWindow : public PickerWindow {
 	std::string house_info;
+	bool house_protected;
 
-	BuildHouseWindow(WindowDesc &desc, Window *parent) : PickerWindow(desc, parent, 0, HousePickerCallbacks::instance)
+	BuildHouseWindow(WindowDesc &desc, WindowNumber wno, Window *parent) : PickerWindow(desc, parent, wno, HousePickerCallbacks::instance)
 	{
 		HousePickerCallbacks::instance.SetClimateMask();
 		this->ConstructWindow();
@@ -2016,7 +2072,7 @@ struct BuildHouseWindow : public PickerWindow {
 
 	/**
 	 * Get information string for a house.
-	 * @param hs HosueSpec to get information string for.
+	 * @param hs HouseSpec to get information string for.
 	 * @return Formatted string with information for house.
 	 */
 	static std::string GetHouseInformation(const HouseSpec *hs)
@@ -2042,12 +2098,28 @@ struct BuildHouseWindow : public PickerWindow {
 		SetDParam(0, GB(size, 0, 4));
 		SetDParam(1, GB(size, 4, 4));
 		AppendStringInPlace(line, STR_HOUSE_PICKER_SIZE);
-		line.push_back('\n');
 
 		auto cargo_string = BuildCargoAcceptanceString(GetAcceptedCargoOfHouse(hs), STR_HOUSE_PICKER_CARGO_ACCEPTED);
-		if (cargo_string.has_value()) line.append(*cargo_string);
+		if (cargo_string.has_value()) {
+			line.push_back('\n');
+			line.append(*cargo_string);
+		}
+
+		cargo_string = BuildCargoAcceptanceString(GetProducedCargoOfHouse(hs), STR_HOUSE_PICKER_CARGO_PRODUCED);
+		if (cargo_string.has_value()) {
+			line.push_back('\n');
+			line.append(*cargo_string);
+		}
 
 		return line.to_string();
+	}
+
+	void OnInit() override
+	{
+		this->SetWidgetLoweredState(WID_BH_PROTECT_OFF, !this->house_protected);
+		this->SetWidgetLoweredState(WID_BH_PROTECT_ON, this->house_protected);
+
+		this->PickerWindow::OnInit();
 	}
 
 	void DrawWidget(const Rect &r, WidgetID widget) const override
@@ -2059,32 +2131,57 @@ struct BuildHouseWindow : public PickerWindow {
 		}
 	}
 
+	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
+	{
+		switch (widget) {
+			case WID_BH_PROTECT_OFF:
+			case WID_BH_PROTECT_ON:
+				this->house_protected = (widget == WID_BH_PROTECT_ON);
+				this->SetWidgetLoweredState(WID_BH_PROTECT_OFF, !this->house_protected);
+				this->SetWidgetLoweredState(WID_BH_PROTECT_ON, this->house_protected);
+
+				if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+				this->SetDirty();
+				break;
+
+			default:
+				this->PickerWindow::OnClick(pt, widget, click_count);
+				break;
+		}
+	}
+
 	void OnInvalidateData(int data = 0, bool gui_scope = true) override
 	{
 		this->PickerWindow::OnInvalidateData(data, gui_scope);
 		if (!gui_scope) return;
 
+		const HouseSpec *spec = HouseSpec::Get(HousePickerCallbacks::sel_type);
+
 		if ((data & PickerWindow::PFI_POSITION) != 0) {
-			const HouseSpec *spec = HouseSpec::Get(HousePickerCallbacks::sel_type);
 			UpdateSelectSize(spec);
 			this->house_info = GetHouseInformation(spec);
 		}
+
+		/* If house spec already has the protected flag, handle it automatically and disable the buttons. */
+		bool hasflag = HasFlag(spec->extra_flags, BUILDING_IS_PROTECTED);
+		if (hasflag) this->house_protected = true;
+
+		this->SetWidgetLoweredState(WID_BH_PROTECT_OFF, !this->house_protected);
+		this->SetWidgetLoweredState(WID_BH_PROTECT_ON, this->house_protected);
+
+		this->SetWidgetDisabledState(WID_BH_PROTECT_OFF, hasflag);
+		this->SetWidgetDisabledState(WID_BH_PROTECT_ON, hasflag);
 	}
 
 	void OnPlaceObject([[maybe_unused]] Point pt, TileIndex tile) override
 	{
 		const HouseSpec *spec = HouseSpec::Get(HousePickerCallbacks::sel_type);
-		CommandContainer<P123CmdData> cmd = NewCommandContainerBasic(
-			tile,
-			spec->Index(),
-			INVALID_TOWN,
-			CMD_PLACE_HOUSE | CMD_MSG(STR_ERROR_CAN_T_BUILD_HOUSE),
-			CommandCallback::PlaySound_CONSTRUCTION_OTHER
-		);
+		CommandContainer<CMD_PLACE_HOUSE> cmd_container(STR_ERROR_CAN_T_BUILD_HOUSE, tile,
+				CmdPayload<CMD_PLACE_HOUSE>::Make(spec->Index(), this->house_protected, INVALID_TOWN), CommandCallback::PlaySound_CONSTRUCTION_OTHER);
 		if (_ctrl_pressed) {
-			ShowSelectTownWindow(cmd);
+			ShowSelectTownWindow(cmd_container);
 		} else {
-			DoCommandPContainer(cmd);
+			DoCommandPContainer(cmd_container);
 		}
 	}
 
@@ -2115,8 +2212,14 @@ static constexpr NWidgetPart _nested_build_house_widgets[] = {
 			NWidget(WWT_PANEL, COLOUR_DARK_GREEN),
 				NWidget(NWID_VERTICAL), SetPIP(0, WidgetDimensions::unscaled.vsep_picker, 0), SetPadding(WidgetDimensions::unscaled.picker),
 					NWidget(WWT_EMPTY, INVALID_COLOUR, WID_BH_INFO), SetFill(1, 1), SetMinimalTextLines(10, 0),
+					NWidget(WWT_LABEL, INVALID_COLOUR), SetStringTip(STR_HOUSE_PICKER_PROTECT_TITLE, STR_NULL), SetFill(1, 0),
+					NWidget(NWID_HORIZONTAL), SetPIPRatio(1, 0, 1),
+						NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_BH_PROTECT_OFF), SetMinimalSize(60, 12), SetStringTip(STR_HOUSE_PICKER_PROTECT_OFF, STR_HOUSE_PICKER_PROTECT_TOOLTIP),
+						NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_BH_PROTECT_ON), SetMinimalSize(60, 12), SetStringTip(STR_HOUSE_PICKER_PROTECT_ON, STR_HOUSE_PICKER_PROTECT_TOOLTIP),
+					EndContainer(),
 				EndContainer(),
 			EndContainer(),
+
 		EndContainer(),
 		NWidgetFunction(MakePickerTypeWidgets),
 	EndContainer(),
@@ -2125,7 +2228,7 @@ static constexpr NWidgetPart _nested_build_house_widgets[] = {
 static WindowDesc _build_house_desc(__FILE__, __LINE__,
 	WDP_AUTO, "build_house", 0, 0,
 	WC_BUILD_HOUSE, WC_BUILD_TOOLBAR,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_build_house_widgets,
 	&BuildHouseWindow::hotkeys
 );
@@ -2133,5 +2236,21 @@ static WindowDesc _build_house_desc(__FILE__, __LINE__,
 void ShowBuildHousePicker(Window *parent)
 {
 	if (BringWindowToFrontById(WC_BUILD_HOUSE, 0)) return;
-	new BuildHouseWindow(_build_house_desc, parent);
+	new BuildHouseWindow(_build_house_desc, 0, parent);
+}
+
+void ShowBuildHousePickerAndSelect(TileIndex tile)
+{
+	assert_tile(IsTileType(tile, MP_HOUSE), tile);
+
+	HouseID house = GetHouseType(tile);
+	GetHouseNorthPart(house);
+
+	const HouseSpec *hs = HouseSpec::Get(house);
+	if (hs == nullptr || !hs->enabled || !HousePickerCallbacks::instance.IsActive()) return;
+
+	BuildHouseWindow *w = AllocateWindowDescFront<BuildHouseWindow, true>(_build_house_desc, 0, nullptr);
+	if (w != nullptr) {
+		w->PickItem(FindFirstBit(hs->building_availability & HZ_ZONALL), house);
+	}
 }

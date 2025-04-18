@@ -22,6 +22,7 @@
 #include "train_cmd.h"
 #include "aircraft.h"
 #include "depot_map.h"
+#include "group_cmd.h"
 #include "group_gui.h"
 #include "strings_func.h"
 #include "strings_internal.h"
@@ -235,7 +236,7 @@ const StringID BaseVehicleListWindow::vehicle_depot_sell_name[] = {
 	STR_VEHICLE_LIST_SEND_AIRCRAFT_TO_HANGAR_SELL
 };
 
-BaseVehicleListWindow::BaseVehicleListWindow(WindowDesc &desc, WindowNumber wno) : Window(desc), vli(VehicleListIdentifier::UnPack(wno))
+BaseVehicleListWindow::BaseVehicleListWindow(WindowDesc &desc, const VehicleListIdentifier &vli) : Window(desc), vli(vli)
 {
 	this->grouping = _grouping[vli.type][vli.vtype];
 	this->vehicle_sel = INVALID_VEHICLE;
@@ -341,7 +342,7 @@ void BaseVehicleListWindow::BuildVehicleList()
 	this->vscroll->SetCount(this->vehgroups.size());
 }
 
-static bool GroupCargoFilter(const GUIVehicleGroup* group, const CargoID cid)
+static bool GroupCargoFilter(const GUIVehicleGroup* group, const CargoType cid)
 {
 	if (cid == CargoFilterCriteria::CF_ANY) return true;
 	for (VehicleList::const_iterator v = group->vehicles_begin; v != group->vehicles_end; ++v) {
@@ -387,14 +388,14 @@ void AddCargoIconOverlay(std::vector<CargoIconOverlay> &overlays, int x, int wid
  * Draw a cargo icon overlaying an existing sprite, with a black contrast outline.
  * @param x Horizontal position from left.
  * @param y Vertical position from top.
- * @param cid Cargo ID to draw icon for.
+ * @param cargo_type Cargo type to draw icon for.
  */
-void DrawCargoIconOverlay(int x, int y, CargoID cid)
+void DrawCargoIconOverlay(int x, int y, CargoType cargo_type)
 {
 	if (!ShowCargoIconOverlay()) return;
-	if (!IsValidCargoID(cid)) return;
+	if (!IsValidCargoType(cargo_type)) return;
 
-	const CargoSpec *cs = CargoSpec::Get(cid);
+	const CargoSpec *cs = CargoSpec::Get(cargo_type);
 
 	SpriteID spr = cs->GetCargoIcon();
 	if (spr == 0) return;
@@ -432,12 +433,12 @@ static GUIVehicleGroupList::FilterFunction * const _vehicle_group_filter_funcs[]
 
 /**
  * Set cargo filter for the vehicle group list.
- * @param cid The cargo to be set.
+ * @param cargo_type The cargo to be set.
  */
-void BaseVehicleListWindow::SetCargoFilter(CargoID cid)
+void BaseVehicleListWindow::SetCargoFilter(CargoType cargo_type)
 {
-	if (this->cargo_filter_criteria != cid) {
-		this->cargo_filter_criteria = cid;
+	if (this->cargo_filter_criteria != cargo_type) {
+		this->cargo_filter_criteria = cargo_type;
 		/* Deactivate filter if criteria is 'Show All', activate it otherwise. */
 		this->vehgroups.SetFilterState(this->cargo_filter_criteria != CargoFilterCriteria::CF_ANY);
 		this->vehgroups.SetFilterType(0);
@@ -502,13 +503,13 @@ void BaseVehicleListWindow::OnInit()
 	this->SetCargoFilterArray();
 }
 
-StringID BaseVehicleListWindow::GetCargoFilterLabel(CargoID cid) const
+StringID BaseVehicleListWindow::GetCargoFilterLabel(CargoType cargo_type) const
 {
-	switch (cid) {
+	switch (cargo_type) {
 		case CargoFilterCriteria::CF_ANY: return STR_CARGO_TYPE_FILTER_ALL;
 		case CargoFilterCriteria::CF_FREIGHT: return STR_CARGO_TYPE_FILTER_FREIGHT;
 		case CargoFilterCriteria::CF_NONE: return STR_CARGO_TYPE_FILTER_NONE;
-		default: return CargoSpec::Get(cid)->name;
+		default: return CargoSpec::Get(cargo_type)->name;
 	}
 }
 
@@ -647,7 +648,7 @@ static const uint MAX_REFIT_CYCLE = 256;
  * @param dest_cargo_type Destination cargo type.
  * @return the best sub type
  */
-uint8_t GetBestFittingSubType(const Vehicle *v_from, Vehicle *v_for, CargoID dest_cargo_type)
+uint8_t GetBestFittingSubType(const Vehicle *v_from, Vehicle *v_for, CargoType dest_cargo_type)
 {
 	v_from = v_from->GetFirstEnginePart();
 	v_for = v_for->GetFirstEnginePart();
@@ -670,7 +671,7 @@ uint8_t GetBestFittingSubType(const Vehicle *v_from, Vehicle *v_for, CargoID des
 			if (!e->CanCarryCargo() || !HasBit(e->info.callback_mask, CBM_VEHICLE_CARGO_SUFFIX)) continue;
 			if (!HasBit(e->info.refit_mask, dest_cargo_type) && v->cargo_type != dest_cargo_type) continue;
 
-			CargoID old_cargo_type = v->cargo_type;
+			CargoType old_cargo_type = v->cargo_type;
 			uint8_t old_cargo_subtype = v->cargo_subtype;
 
 			/* Set the 'destination' cargo */
@@ -737,9 +738,9 @@ const Vehicle *GetMostSeverelyBrokenEngine(const Train *v)
 
 /** Option to refit a vehicle chain */
 struct RefitOption {
-	CargoID cargo;    ///< Cargo to refit to
-	uint8_t subtype;     ///< Subcargo to use
-	StringID string;  ///< GRF-local String to display for the cargo
+	CargoType cargo;    ///< Cargo to refit to
+	uint8_t subtype;    ///< Subcargo to use
+	StringID string;    ///< GRF-local String to display for the cargo
 
 	/**
 	 * Inequality operator for #RefitOption.
@@ -762,7 +763,7 @@ struct RefitOption {
 	}
 };
 
-using RefitOptions = std::map<CargoID, std::vector<RefitOption>, CargoIDComparator>; ///< Available refit options (subtype and string) associated with each cargo type.
+using RefitOptions = std::map<CargoType, std::vector<RefitOption>, CargoTypeComparator>; ///< Available refit options (subtype and string) associated with each cargo type.
 
 /**
  * Draw the list of available refit options for a consist and highlight the selected refit option (if any).
@@ -878,15 +879,15 @@ struct RefitWindow : public Window {
 
 			/* Loop through all cargoes in the refit mask */
 			for (const auto &cs : _sorted_cargo_specs) {
-				CargoID cid = cs->Index();
+				CargoType cargo_type = cs->Index();
 				/* Skip cargo type if it's not listed */
-				if (!HasBit(cmask, cid)) continue;
+				if (!HasBit(cmask, cargo_type)) continue;
 
-				auto &list = this->refit_list[cid];
+				auto &list = this->refit_list[cargo_type];
 				bool first_vehicle = list.empty();
 				if (first_vehicle) {
 					/* Keeping the current subtype is always an option. It also serves as the option in case of no subtypes */
-					list.push_back({cid, UINT8_MAX, STR_EMPTY});
+					list.push_back({cargo_type, UINT8_MAX, STR_EMPTY});
 				}
 
 				/* Check the vehicle's callback mask for cargo suffixes.
@@ -896,10 +897,10 @@ struct RefitWindow : public Window {
 				if (this->order == INVALID_VEH_ORDER_ID && HasBit(callback_mask, CBM_VEHICLE_CARGO_SUFFIX)) {
 					/* Make a note of the original cargo type. It has to be
 					 * changed to test the cargo & subtype... */
-					CargoID temp_cargo = v->cargo_type;
+					CargoType temp_cargo = v->cargo_type;
 					uint8_t temp_subtype  = v->cargo_subtype;
 
-					v->cargo_type = cid;
+					v->cargo_type = cargo_type;
 
 					for (uint refit_cyc = 0; refit_cyc < MAX_REFIT_CYCLE; refit_cyc++) {
 						v->cargo_subtype = refit_cyc;
@@ -915,7 +916,7 @@ struct RefitWindow : public Window {
 							if (subtype == STR_EMPTY) break;
 
 							RefitOption option;
-							option.cargo   = cid;
+							option.cargo   = cargo_type;
 							option.subtype = refit_cyc;
 							option.string  = subtype;
 							include(list, option);
@@ -977,7 +978,7 @@ struct RefitWindow : public Window {
 	{
 		size_t scroll_row = 0;
 		size_t rows = 0;
-		CargoID cargo = this->selected_refit == nullptr ? INVALID_CARGO : this->selected_refit->cargo;
+		CargoType cargo = this->selected_refit == nullptr ? INVALID_CARGO : this->selected_refit->cargo;
 
 		for (const auto &pair : this->refit_list) {
 			if (pair.first == cargo) {
@@ -1155,7 +1156,7 @@ struct RefitWindow : public Window {
 
 		Money money = cost.GetCost();
 		if (_returned_mail_refit_capacity > 0) {
-			SetDParam(2, GetCargoIDByLabel(CT_MAIL));
+			SetDParam(2, GetCargoTypeByLabel(CT_MAIL));
 			SetDParam(3, _returned_mail_refit_capacity);
 			if (this->order != INVALID_VEH_ORDER_ID) {
 				/* No predictable cost */
@@ -1232,7 +1233,7 @@ struct RefitWindow : public Window {
 
 								if (left != right) {
 									Rect hr = {left, highlight_top, right, highlight_bottom};
-									DrawFrameRect(hr.Expand(WidgetDimensions::scaled.bevel), COLOUR_WHITE, FR_BORDERONLY);
+									DrawFrameRect(hr.Expand(WidgetDimensions::scaled.bevel), COLOUR_WHITE, FrameFlag::BorderOnly);
 								}
 
 								left = INT32_MIN;
@@ -1529,7 +1530,7 @@ static constexpr NWidgetPart _nested_vehicle_refit_widgets[] = {
 static WindowDesc _vehicle_refit_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_vehicle_refit", 240, 174,
 	WC_VEHICLE_REFIT, WC_VEHICLE_VIEW,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_vehicle_refit_widgets
 );
 
@@ -2349,17 +2350,12 @@ uint BaseVehicleListWindow::GetSorterDisableMask(VehicleType type) const
 
 /**
  * Window for the (old) vehicle listing.
- *
- * bitmask for w->window_number
- * 0-7 CompanyID (owner)
- * 8-10 window type (use flags in vehicle_gui.h)
- * 11-15 vehicle type (using VEH_, but can be compressed to fewer bytes if needed)
- * 16-31 StationID or OrderID depending on window type (bit 8-10)
+ * See #VehicleListIdentifier::Pack for the contents of the window number.
  */
 struct VehicleListWindow : public BaseVehicleListWindow {
 private:
 	/** Enumeration of planes of the button row at the bottom. */
-	enum ButtonPlanes {
+	enum ButtonPlanes : uint8_t {
 		BP_SHOW_BUTTONS, ///< Show the buttons.
 		BP_HIDE_BUTTONS, ///< Show the empty panel.
 	};
@@ -2376,13 +2372,13 @@ private:
 	}
 
 	/** Enumeration of planes of the title row at the top. */
-	enum CaptionPlanes {
+	enum CaptionPlanes : uint8_t {
 		BP_NORMAL,        ///< Show shared orders caption and buttons.
 		BP_SHARED_ORDERS, ///< Show the normal caption.
 	};
 
 public:
-	VehicleListWindow(WindowDesc &desc, WindowNumber window_number) : BaseVehicleListWindow(desc, window_number)
+	VehicleListWindow(WindowDesc &desc, WindowNumber window_number, const VehicleListIdentifier &vli) : BaseVehicleListWindow(desc, vli)
 	{
 		this->CreateNestedTree();
 
@@ -2691,16 +2687,16 @@ public:
 						}
 						break;
 					case ADI_SERVICE: // Send for servicing
-						Command<CMD_MASS_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(this->vli.vtype), DepotCommand::Service, this->vli, this->GetCargoFilter());
+						Command<CMD_MASS_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(this->vli.vtype), DepotCommandFlag::Service, this->vli, this->GetCargoFilter());
 						break;
 					case ADI_DEPOT: // Send to Depots
-						Command<CMD_MASS_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(this->vli.vtype), DepotCommand::None, this->vli, this->GetCargoFilter());
+						Command<CMD_MASS_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(this->vli.vtype), DepotCommandFlags{}, this->vli, this->GetCargoFilter());
 						break;
 					case ADI_DEPOT_SELL:
-						Command<CMD_MASS_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(this->vli.vtype), DepotCommand::Sell, this->vli, this->GetCargoFilter());
+						Command<CMD_MASS_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(this->vli.vtype), DepotCommandFlag::Sell, this->vli, this->GetCargoFilter());
 						break;
 					case ADI_CANCEL_DEPOT:
-						Command<CMD_MASS_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(this->vli.vtype), DepotCommand::Cancel, this->vli, this->GetCargoFilter());
+						Command<CMD_MASS_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(this->vli.vtype), DepotCommandFlag::Cancel, this->vli, this->GetCargoFilter());
 						break;
 
 					case ADI_CHANGE_ORDER:
@@ -2734,7 +2730,7 @@ public:
 
 	void OnQueryTextFinished(std::optional<std::string> str) override
 	{
-		DoCommandPOld(0, this->window_number, this->GetCargoFilter(), CMD_CREATE_GROUP_FROM_LIST | CMD_MSG(STR_ERROR_GROUP_CAN_T_CREATE), CommandCallback::None, str.has_value() ? str->c_str() : nullptr);
+		Command<CMD_CREATE_GROUP_FROM_LIST>::Post(STR_ERROR_GROUP_CAN_T_CREATE, this->vli, this->GetCargoFilter(), str.has_value() ? *str : std::string{});
 	}
 
 	virtual void OnPlaceObject(Point pt, TileIndex tile) override
@@ -2830,28 +2826,28 @@ static WindowDesc _vehicle_list_desc[] = {
 		__FILE__, __LINE__,
 		WDP_AUTO, "list_vehicles_train", 325, 246,
 		WC_TRAINS_LIST, WC_NONE,
-		0,
+		{},
 		_nested_vehicle_list
 	},
 	{
 		__FILE__, __LINE__,
 		WDP_AUTO, "list_vehicles_roadveh", 260, 246,
 		WC_ROADVEH_LIST, WC_NONE,
-		0,
+		{},
 		_nested_vehicle_list
 	},
 	{
 		__FILE__, __LINE__,
 		WDP_AUTO, "list_vehicles_ship", 260, 246,
 		WC_SHIPS_LIST, WC_NONE,
-		0,
+		{},
 		_nested_vehicle_list
 	},
 	{
 		__FILE__, __LINE__,
 		WDP_AUTO, "list_vehicles_aircraft", 260, 246,
 		WC_AIRCRAFT_LIST, WC_NONE,
-		0,
+		{},
 		_nested_vehicle_list
 	}
 };
@@ -2861,8 +2857,8 @@ static void ShowVehicleListWindowLocal(CompanyID company, VehicleListType vlt, V
 	if (!Company::IsValidID(company) && company != OWNER_NONE) return;
 
 	assert(vehicle_type < std::size(_vehicle_list_desc));
-	WindowNumber num = VehicleListIdentifier(vlt, vehicle_type, company, unique_number).Pack();
-	AllocateWindowDescFront<VehicleListWindow>(_vehicle_list_desc[vehicle_type], num);
+	VehicleListIdentifier vli(vlt, vehicle_type, company, unique_number);
+	AllocateWindowDescFront<VehicleListWindow>(_vehicle_list_desc[vehicle_type], vli.Pack(), vli);
 }
 
 void ShowVehicleListWindow(CompanyID company, VehicleType vehicle_type)
@@ -3465,7 +3461,7 @@ struct VehicleDetailsWindow : Window {
 
 				bool should_show_speed_adaptation = this->ShouldShowSpeedAdaptationLine(v);
 				if (should_show_speed_adaptation) {
-					if (HasBit(this->flags, VRF_SPEED_ADAPTATION_EXEMPT)) {
+					if (HasBit(Train::From(v)->flags, VRF_SPEED_ADAPTATION_EXEMPT)) {
 						DrawString(tr, STR_VEHICLE_INFO_SPEED_ADAPTATION_EXEMPT);
 					} else if (Train::From(v)->signal_speed_restriction != 0) {
 						SetDParam(0, Train::From(v)->signal_speed_restriction);
@@ -3712,7 +3708,7 @@ struct VehicleDetailsWindow : Window {
 static WindowDesc _train_vehicle_details_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_vehicle_details_train", 405, 178,
 	WC_VEHICLE_DETAILS, WC_VEHICLE_VIEW,
-	0,
+	{},
 	_nested_train_vehicle_details_widgets
 );
 
@@ -3720,7 +3716,7 @@ static WindowDesc _train_vehicle_details_desc(__FILE__, __LINE__,
 static WindowDesc _nontrain_vehicle_details_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_vehicle_details", 405, 113,
 	WC_VEHICLE_DETAILS, WC_VEHICLE_VIEW,
-	0,
+	{},
 	_nested_nontrain_vehicle_details_widgets
 );
 
@@ -3799,7 +3795,7 @@ static const int VV_INITIAL_VIEWPORT_HEIGHT = 84;
 static const int VV_INITIAL_VIEWPORT_HEIGHT_TRAIN = 102;
 
 /** Command indices for the _vehicle_command_translation_table. */
-enum VehicleCommandTranslation {
+enum VehicleCommandTranslation : uint8_t {
 	VCT_CMD_START_STOP = 0,
 	VCT_CMD_CLONE_VEH,
 	VCT_CMD_TURN_AROUND,
@@ -3830,9 +3826,8 @@ static const StringID _vehicle_msg_translation_table[][4] = {
 /**
  * This is the Callback method after attempting to start/stop a vehicle
  * @param result the result of the start/stop command
- * @param tile unused
- * @param p1 vehicle ID
- * @param p2 unused
+ * @param veh_id vehicle ID
+ * @param evaluate_startstop_cb unused
  */
 void CcStartStopVehicle(const CommandCost &result, VehicleID veh_id, bool evaluate_startstop_cb)
 {
@@ -3913,7 +3908,7 @@ private:
 	bool fixed_route_overlay_active = false;
 
 	/** Display planes available in the vehicle view window. */
-	enum PlaneSelections {
+	enum PlaneSelections : uint8_t {
 		SEL_DC_GOTO_DEPOT,  ///< Display 'goto depot' button in #WID_VV_SELECT_DEPOT_CLONE stacked widget.
 		SEL_DC_CLONE,       ///< Display 'clone vehicle' button in #WID_VV_SELECT_DEPOT_CLONE stacked widget.
 
@@ -3950,7 +3945,7 @@ private:
 public:
 	VehicleViewWindow(WindowDesc &desc, WindowNumber window_number) : Window(desc)
 	{
-		this->flags |= WF_DISABLE_VP_SCROLL;
+		this->flags.Set(WindowFlag::DisableVpScroll);
 		this->CreateNestedTree();
 
 		/* Sprites for the 'send to depot' button indexed by vehicle type. */
@@ -4324,14 +4319,14 @@ public:
 				} else if (_ctrl_pressed && _settings_client.gui.show_depot_sell_gui && v->current_order.IsType(OT_GOTO_DEPOT)) {
 					OrderDepotActionFlags flags = v->current_order.GetDepotActionType() & (ODATFB_HALT | ODATFB_SELL);
 					DropDownList list;
-					list.push_back(MakeDropDownListStringItem(STR_VEHICLE_LIST_SEND_FOR_SERVICING, (int)(DepotCommand::Service | DepotCommand::DontCancel), !flags));
-					list.push_back(MakeDropDownListStringItem(BaseVehicleListWindow::vehicle_depot_name[v->type], (int)DepotCommand::DontCancel, flags == ODATFB_HALT));
-					list.push_back(MakeDropDownListStringItem(BaseVehicleListWindow::vehicle_depot_sell_name[v->type], (int)(DepotCommand::Sell | DepotCommand::DontCancel), flags == (ODATFB_HALT | ODATFB_SELL)));
-					list.push_back(MakeDropDownListStringItem(STR_VEHICLE_LIST_CANCEL_DEPOT_SERVICE, (int)DepotCommand::DontCancel, false));
+					list.push_back(MakeDropDownListStringItem(STR_VEHICLE_LIST_SEND_FOR_SERVICING, DepotCommandFlags{DepotCommandFlag::Service, DepotCommandFlag::DontCancel}.base(), !flags));
+					list.push_back(MakeDropDownListStringItem(BaseVehicleListWindow::vehicle_depot_name[v->type], DepotCommandFlags{DepotCommandFlag::DontCancel}.base(), flags == ODATFB_HALT));
+					list.push_back(MakeDropDownListStringItem(BaseVehicleListWindow::vehicle_depot_sell_name[v->type], DepotCommandFlags{DepotCommandFlag::Sell, DepotCommandFlag::DontCancel}.base(), flags == (ODATFB_HALT | ODATFB_SELL)));
+					list.push_back(MakeDropDownListStringItem(STR_VEHICLE_LIST_CANCEL_DEPOT_SERVICE, DepotCommandFlags{DepotCommandFlag::DontCancel}.base(), false));
 					ShowDropDownList(this, std::move(list), -1, widget);
 				} else {
 					this->HandleButtonClick(WID_VV_GOTO_DEPOT);
-					Command<CMD_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(v), v->index, _ctrl_pressed ? DepotCommand::Service : DepotCommand::None, {});
+					Command<CMD_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(v), v->index, _ctrl_pressed ? DepotCommandFlag::Service : DepotCommandFlags{}, {});
 				}
 				break;
 			case WID_VV_REFIT: // refit
@@ -4403,7 +4398,7 @@ public:
 		switch (widget) {
 			case WID_VV_GOTO_DEPOT: {
 				const Vehicle *v = Vehicle::Get(this->window_number);
-				Command<CMD_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(v), v->index, (DepotCommand)index, {});
+				Command<CMD_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(v), v->index, DepotCommandFlags{static_cast<DepotCommandFlags::BaseType>(index)}, {});
 				break;
 			}
 		}
@@ -4427,7 +4422,7 @@ public:
 		if (IsDepotTile(tile) && GetDepotVehicleType(tile) == v->type && IsInfraTileUsageAllowed(v->type, v->owner, tile)) {
 			if (v->type == VEH_ROAD && (GetPresentRoadTypes(tile) & RoadVehicle::From(v)->compatible_roadtypes) == 0) return;
 			if (v->type == VEH_TRAIN && !HasBit(Train::From(v)->compatible_railtypes, GetRailType(tile))) return;
-			Command<CMD_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(v), v->index, DepotCommand::Specific | (this->depot_select_ctrl_pressed ? DepotCommand::Service : DepotCommand::None), tile);
+			Command<CMD_SEND_VEHICLE_TO_DEPOT>::Post(GetCmdSendToDepotMsg(v), v->index, this->depot_select_ctrl_pressed ? DepotCommandFlags{DepotCommandFlag::Specific, DepotCommandFlag::Service} : DepotCommandFlags{DepotCommandFlag::Specific}, tile);
 			ResetObjectToPlace();
 			this->RaiseButtons();
 		}
@@ -4573,7 +4568,7 @@ HotkeyList VehicleViewWindow::hotkeys("vehicleview", vehicleview_hotkeys);
 static WindowDesc _vehicle_view_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_vehicle", 250, 116,
 	WC_VEHICLE_VIEW, WC_NONE,
-	0,
+	{},
 	_nested_vehicle_view_widgets,
 	&VehicleViewWindow::hotkeys
 );
@@ -4585,7 +4580,7 @@ static WindowDesc _vehicle_view_desc(__FILE__, __LINE__,
 static WindowDesc _train_view_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_vehicle_train", 250, 134,
 	WC_VEHICLE_VIEW, WC_NONE,
-	0,
+	{},
 	_nested_vehicle_view_widgets,
 	&VehicleViewWindow::hotkeys
 );
@@ -4655,9 +4650,9 @@ void StopGlobalFollowVehicle(const Vehicle *v)
  */
 void CcBuildPrimaryVehicle(const CommandCost &result)
 {
-	if (result.Failed()) return;
+	if (result.Failed() || !result.HasResultData()) return;
 
-	const Vehicle *v = Vehicle::Get(_new_vehicle_id);
+	const Vehicle *v = Vehicle::Get(result.GetResultData());
 	ShowVehicleViewWindow(v);
 }
 

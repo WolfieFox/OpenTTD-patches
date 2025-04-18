@@ -19,6 +19,7 @@
 #include "debug.h"
 #include "depot_base.h"
 #include "gfx_func.h"
+#include "group_cmd.h"
 #include "order_cmd.h"
 #include "newgrf.h"
 #include "spritecache.h"
@@ -270,9 +271,9 @@ Train *TemplateDepotVehicles::ContainsEngine(EngineID eid, Train *not_in)
 
 void NeutralizeStatus(Train *t)
 {
-	DoCommandOld(t->tile, DEFAULT_GROUP, t->index, DC_EXEC, CMD_ADD_VEHICLE_GROUP);
+	Command<CMD_ADD_VEHICLE_GROUP>::Do(DC_EXEC, DEFAULT_GROUP, t->index, false);
 	Command<CMD_CLONE_ORDER>::Do(DC_EXEC, CO_SHARE, t->index, INVALID_VEHICLE);
-	DoCommandOld(0, t->index, 0, DC_EXEC, CMD_RENAME_VEHICLE, nullptr);
+	Command<CMD_RENAME_VEHICLE>::Do(DC_EXEC, t->index, {});
 }
 
 TBTRDiffFlags TrainTemplateDifference(const Train *t, const TemplateVehicle *tv)
@@ -366,7 +367,7 @@ CommandCost TestBuyAllTemplateVehiclesInChain(const TemplateVehicle *tv, TileInd
 	CommandCost cost(EXPENSES_NEW_VEHICLES);
 
 	for (; tv != nullptr; tv = tv->GetNextUnit()) {
-		cost.AddCost(DoCommandOld(tile, tv->engine_type, 0, DC_NONE, CMD_BUILD_VEHICLE));
+		cost.AddCost(Command<CMD_BUILD_VEHICLE>::Do(DC_NONE, tile, tv->engine_type, false, INVALID_CARGO, INVALID_CLIENT_ID));
 	}
 
 	return cost;
@@ -384,7 +385,7 @@ void TransferCargoForTrain(Train *old_veh, Train *new_head)
 {
 	assert(new_head->IsPrimaryVehicle() || new_head->IsFreeWagon());
 
-	const CargoID cargo_type = old_veh->cargo_type;
+	const CargoType cargo_type = old_veh->cargo_type;
 	const uint8_t cargo_subtype = old_veh->cargo_subtype;
 
 	/* How much cargo has to be moved (if possible) */

@@ -149,7 +149,7 @@ static constexpr NWidgetPart _nested_graph_legend_widgets[] = {
 static WindowDesc _graph_legend_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_legend", 0, 0,
 	WC_GRAPH_LEGEND, WC_NONE,
-	0,
+	{},
 	_nested_graph_legend_widgets
 );
 
@@ -634,7 +634,7 @@ public:
 					bool lowered = !HasBit(this->excluded_range, index);
 
 					/* Redraw frame if lowered */
-					if (lowered) DrawFrameRect(line, COLOUR_BROWN, FR_LOWERED);
+					if (lowered) DrawFrameRect(line, COLOUR_BROWN, FrameFlag::Lowered);
 
 					const Rect text = line.Shrink(WidgetDimensions::scaled.framerect);
 					DrawString(text, str, TC_BLACK, SA_CENTER, false, FS_SMALL);
@@ -798,7 +798,7 @@ static constexpr NWidgetPart _nested_operating_profit_widgets[] = {
 static WindowDesc _operating_profit_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_operating_profit", 0, 0,
 	WC_OPERATING_PROFIT, WC_NONE,
-	0,
+	{},
 	_nested_operating_profit_widgets
 );
 
@@ -857,7 +857,7 @@ static constexpr NWidgetPart _nested_income_graph_widgets[] = {
 static WindowDesc _income_graph_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_income", 0, 0,
 	WC_INCOME_GRAPH, WC_NONE,
-	0,
+	{},
 	_nested_income_graph_widgets
 );
 
@@ -928,7 +928,7 @@ struct ExcludingCargoBaseGraphWindow : BaseGraphWindow {
 			bool lowered = !HasBit(_legend_excluded_cargo_production_history, cs->Index());
 
 			/* Redraw frame if lowered */
-			if (lowered) DrawFrameRect(line, COLOUR_BROWN, FR_LOWERED);
+			if (lowered) DrawFrameRect(line, COLOUR_BROWN, FrameFlag::Lowered);
 
 			const Rect text = line.Shrink(WidgetDimensions::scaled.framerect);
 
@@ -1185,7 +1185,7 @@ static constexpr NWidgetPart _nested_delivered_cargo_graph_widgets[] = {
 static WindowDesc _delivered_cargo_graph_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_delivered_cargo", 0, 0,
 	WC_DELIVERED_CARGO, WC_NONE,
-	0,
+	{},
 	_nested_delivered_cargo_graph_widgets
 );
 
@@ -1249,7 +1249,7 @@ static constexpr NWidgetPart _nested_performance_history_widgets[] = {
 static WindowDesc _performance_history_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_performance", 0, 0,
 	WC_PERFORMANCE_HISTORY, WC_NONE,
-	0,
+	{},
 	_nested_performance_history_widgets
 );
 
@@ -1306,7 +1306,7 @@ static constexpr NWidgetPart _nested_company_value_graph_widgets[] = {
 static WindowDesc _company_value_graph_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_company_value", 0, 0,
 	WC_COMPANY_VALUE, WC_NONE,
-	0,
+	{},
 	_nested_company_value_graph_widgets
 );
 
@@ -1473,7 +1473,7 @@ struct PaymentRatesGraphWindow : BaseGraphWindow {
 			bool lowered = !HasBit(_legend_excluded_cargo_payment_rates, cs->Index());
 
 			/* Redraw frame if lowered */
-			if (lowered) DrawFrameRect(line, COLOUR_BROWN, FR_LOWERED);
+			if (lowered) DrawFrameRect(line, COLOUR_BROWN, FrameFlag::Lowered);
 
 			const Rect text = line.Shrink(WidgetDimensions::scaled.framerect);
 
@@ -1653,7 +1653,7 @@ static constexpr NWidgetPart _nested_cargo_payment_rates_widgets[] = {
 static WindowDesc _cargo_payment_rates_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_cargo_payment_rates", 0, 0,
 	WC_PAYMENT_RATES, WC_NONE,
-	0,
+	{},
 	_nested_cargo_payment_rates_widgets
 );
 
@@ -1925,7 +1925,7 @@ struct IndustryProductionGraphWindow : BaseGraphWindow {
 		int count = 0;
 		const Industry *i = Industry::Get(window_number);
 		for (const auto &p : i->Produced()) {
-			if (!IsValidCargoID(p.cargo)) continue;
+			if (!IsValidCargoType(p.cargo)) continue;
 			count++;
 		}
 		this->vscroll->SetCount(count);
@@ -1960,7 +1960,7 @@ struct IndustryProductionGraphWindow : BaseGraphWindow {
 		const Industry *i = Industry::Get(this->window_number);
 		const CargoSpec *cs;
 		for (const auto &p : i->Produced()) {
-			if (!IsValidCargoID(p.cargo)) continue;
+			if (!IsValidCargoType(p.cargo)) continue;
 
 			cs = CargoSpec::Get(p.cargo);
 			SetDParam(0, cs->name);
@@ -1994,7 +1994,7 @@ struct IndustryProductionGraphWindow : BaseGraphWindow {
 		const CargoSpec *cs;
 
 		for (const auto &p : i->Produced()) {
-			if (!IsValidCargoID(p.cargo)) continue;
+			if (!IsValidCargoType(p.cargo)) continue;
 
 			if (pos-- > 0) continue;
 			if (--max < 0) break;
@@ -2004,7 +2004,7 @@ struct IndustryProductionGraphWindow : BaseGraphWindow {
 			bool lowered = !HasBit(_legend_excluded_cargo_production_history, p.cargo);
 
 			/* Redraw frame if lowered */
-			if (lowered) DrawFrameRect(line, COLOUR_BROWN, FR_LOWERED);
+			if (lowered) DrawFrameRect(line, COLOUR_BROWN, FrameFlag::Lowered);
 
 			const Rect text = line.Shrink(WidgetDimensions::scaled.framerect);
 
@@ -2035,7 +2035,7 @@ struct IndustryProductionGraphWindow : BaseGraphWindow {
 				/* Add all cargoes to the excluded lists. */
 				const Industry *i = Industry::Get(this->window_number);
 				for (const auto &p : i->Produced()) {
-					if (!IsValidCargoID(p.cargo)) continue;
+					if (!IsValidCargoType(p.cargo)) continue;
 
 					SetBit(_legend_excluded_cargo_production_history, p.cargo);
 					SetBit(this->excluded_data, p.cargo);
@@ -2050,7 +2050,7 @@ struct IndustryProductionGraphWindow : BaseGraphWindow {
 
 				const Industry *i = Industry::Get(this->window_number);
 				for (const auto &p : i->Produced()) {
-					if (!IsValidCargoID(p.cargo)) continue;
+					if (!IsValidCargoType(p.cargo)) continue;
 					if (row-- > 0) continue;
 
 					ToggleBit(_legend_excluded_cargo_production_history, p.cargo);
@@ -2101,7 +2101,7 @@ struct IndustryProductionGraphWindow : BaseGraphWindow {
 
 		this->data.clear();
 		for (const auto &p : i->Produced()) {
-			if (!IsValidCargoID(p.cargo)) continue;
+			if (!IsValidCargoType(p.cargo)) continue;
 			const CargoSpec *cs = CargoSpec::Get(p.cargo);
 
 			DataSet &produced = this->data.emplace_back();
@@ -2168,7 +2168,7 @@ static constexpr NWidgetPart _nested_industry_production_widgets[] = {
 static WindowDesc _industry_production_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_industry_production", 0, 0,
 	WC_INDUSTRY_PRODUCTION, WC_INDUSTRY_VIEW,
-	0,
+	{},
 	_nested_industry_production_widgets
 );
 
@@ -2230,7 +2230,7 @@ static constexpr NWidgetPart _nested_performance_rating_detail_widgets[] = {
 static WindowDesc _performance_rating_detail_desc(__FILE__, __LINE__,
 	WDP_AUTO, "league_details", 0, 0,
 	WC_PERFORMANCE_DETAIL, WC_NONE,
-	0,
+	{},
 	_nested_performance_rating_detail_widgets
 );
 
@@ -2351,7 +2351,7 @@ struct StationCargoGraphWindow final : BaseGraphWindow {
 			const bool lowered = !HasBit(legend_excluded_cargo, cs->Index());
 
 			/* Redraw box if lowered */
-			if (lowered) DrawFrameRect(r.left, y, r.right, y + this->line_height - 1, COLOUR_BROWN, lowered ? FR_LOWERED : FR_NONE);
+			if (lowered) DrawFrameRect(r.left, y, r.right, y + this->line_height - 1, COLOUR_BROWN, lowered ? FrameFlag::Lowered : FrameFlags{});
 
 			const uint8_t clk_dif = lowered ? 1 : 0;
 			const int rect_x = clk_dif + (rtl ? ir.right - this->legend_width : ir.left);
@@ -2498,7 +2498,7 @@ static constexpr NWidgetPart _nested_station_cargo_widgets[] = {
 static WindowDesc _station_cargo_desc(__FILE__, __LINE__,
 	WDP_AUTO, "graph_station_cargo", 0, 0,
 	WC_STATION_CARGO, WC_NONE,
-	0,
+	{},
 	_nested_station_cargo_widgets
 );
 

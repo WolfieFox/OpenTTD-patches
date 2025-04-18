@@ -29,6 +29,7 @@
 #include "company_base.h"
 #include "company_cmd.h"
 #include "core/geometry_func.hpp"
+#include "object_cmd.h"
 #include "object_type.h"
 #include "rail.h"
 #include "road.h"
@@ -39,6 +40,7 @@
 #include "station_func.h"
 #include "zoom_func.h"
 #include "sortlist_type.h"
+#include "group_cmd.h"
 #include "group_gui.h"
 #include "misc_cmd.h"
 #include "core/backup_type.hpp"
@@ -600,7 +602,7 @@ struct CompanyFinancesWindow : Window {
 static WindowDesc _company_finances_desc(__FILE__, __LINE__,
 	WDP_AUTO, "company_finances", 0, 0,
 	WC_FINANCES, WC_NONE,
-	0,
+	{},
 	_nested_company_finances_widgets
 );
 
@@ -1062,7 +1064,7 @@ public:
 			}
 		} else {
 			/* Setting group livery */
-			DoCommandPOld(0, this->sel, (widget == WID_SCL_PRI_COL_DROPDOWN ? 0 : 256) | (index << 16), CMD_SET_GROUP_LIVERY);
+			Command<CMD_SET_GROUP_LIVERY>::Post(this->sel, widget == WID_SCL_PRI_COL_DROPDOWN, colour);
 		}
 	}
 
@@ -1148,7 +1150,7 @@ static constexpr NWidgetPart _nested_select_company_livery_widgets[] = {
 static WindowDesc _select_company_livery_desc(__FILE__, __LINE__,
 	WDP_AUTO, "company_color_scheme", 0, 0,
 	WC_COMPANY_COLOUR, WC_NONE,
-	0,
+	{},
 	_nested_select_company_livery_widgets
 );
 
@@ -1773,7 +1775,7 @@ public:
 static WindowDesc _select_company_manager_face_desc(__FILE__, __LINE__,
 	WDP_AUTO, nullptr, 0, 0,
 	WC_COMPANY_MANAGER_FACE, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_select_company_manager_face_widgets
 );
 
@@ -2177,7 +2179,7 @@ struct CompanyInfrastructureWindow : Window
 static WindowDesc _company_infrastructure_desc(__FILE__, __LINE__,
 	WDP_AUTO, "company_infrastructure", 0, 0,
 	WC_COMPANY_INFRASTRUCTURE, WC_NONE,
-	0,
+	{},
 	_nested_company_infrastructure_widgets
 );
 
@@ -2303,7 +2305,7 @@ struct CompanyWindow : Window
 	CompanyWidgets query_widget;
 
 	/** Display planes in the company window. */
-	enum CompanyWindowPlanes {
+	enum CompanyWindowPlanes : uint8_t {
 		/* Display planes of the #WID_C_SELECT_MULTIPLAYER selection widget. */
 		CWP_MP_C_PWD = 0, ///< Display the company password button.
 		CWP_MP_C_JOIN,    ///< Display the join company button.
@@ -2712,7 +2714,7 @@ struct CompanyWindow : Window
 
 	void OnPlaceObject([[maybe_unused]] Point pt, TileIndex tile) override
 	{
-		if (DoCommandPOld(tile, OBJECT_HQ, 0, CMD_BUILD_OBJECT | CMD_MSG(STR_ERROR_CAN_T_BUILD_COMPANY_HEADQUARTERS)) && !_shift_pressed) {
+		if (Command<CMD_BUILD_OBJECT>::Post(STR_ERROR_CAN_T_BUILD_COMPANY_HEADQUARTERS, tile, OBJECT_HQ, 0) && !_shift_pressed) {
 			ResetObjectToPlace();
 			this->RaiseButtons();
 		}
@@ -2788,7 +2790,7 @@ struct CompanyWindow : Window
 static WindowDesc _company_desc(__FILE__, __LINE__,
 	WDP_AUTO, "company", 0, 0,
 	WC_COMPANY, WC_NONE,
-	0,
+	{},
 	_nested_company_widgets
 );
 
@@ -2941,7 +2943,7 @@ static constexpr NWidgetPart _nested_buy_company_widgets[] = {
 static WindowDesc _buy_company_desc(__FILE__, __LINE__,
 	WDP_AUTO, nullptr, 0, 0,
 	WC_BUY_COMPANY, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_buy_company_widgets
 );
 

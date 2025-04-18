@@ -11,6 +11,7 @@
 #include "debug.h"
 #include "station_base.h"
 #include "roadstop_base.h"
+#include "newgrf_badge.h"
 #include "newgrf_roadstop.h"
 #include "newgrf_class_func.h"
 #include "newgrf_cargo.h"
@@ -256,6 +257,8 @@ uint32_t RoadStopScopeResolver::GetVariable(uint16_t variable, uint32_t paramete
 			return (tram_offset << 16) | (road_offset << 8) | (tram << 4) | (road);
 		}
 
+		case 0x7A: return GetBadgeVariableResult(*this->ro.grffile, this->roadstopspec->badges, parameter);
+
 		case 0xF0: return this->st == nullptr ? 0 : this->st->facilities; // facilities
 
 		case 0xFA: return ClampTo<uint16_t>((this->st == nullptr ? CalTime::CurDate() : this->st->build_date) - CalTime::DAYS_TILL_ORIGINAL_BASE_YEAR); // build date
@@ -278,30 +281,36 @@ RoadStopResolverObject::RoadStopResolverObject(const RoadStopSpec *roadstopspec,
 		CallbackID callback, uint32_t param1, uint32_t param2)
 	: ResolverObject(roadstopspec->grf_prop.grffile, callback, param1, param2), roadstop_scope(*this, st, roadstopspec, tile, roadtype, type, view)
 {
-	CargoID ctype = SpriteGroupCargo::SG_DEFAULT_NA;
+	CargoType ctype = SpriteGroupCargo::SG_DEFAULT_NA;
 
 	if (st == nullptr) {
 		/* No station, so we are in a purchase list */
 		ctype = SpriteGroupCargo::SG_PURCHASE;
+		this->root_spritegroup = roadstopspec->grf_prop.GetSpriteGroup(ctype);
 	} else if (Station::IsExpected(st)) {
 		const Station *station = Station::From(st);
 		/* Pick the first cargo that we have waiting */
-		for (const CargoSpec *cs : CargoSpec::Iterate()) {
-			if (roadstopspec->grf_prop.spritegroup[cs->Index()] != nullptr &&
-					station->goods[cs->Index()].CargoTotalCount() > 0) {
-				ctype = cs->Index();
+		for (const auto &[cargo, spritegroup] : roadstopspec->grf_prop) {
+			if (cargo < NUM_CARGO && station->goods[cargo].CargoTotalCount() > 0) {
+				ctype = cargo;
+				this->root_spritegroup = spritegroup;
 				break;
 			}
 		}
+
+		if (this->root_spritegroup == nullptr) {
+			ctype = SpriteGroupCargo::SG_DEFAULT_NA;
+			this->root_spritegroup = roadstopspec->grf_prop.GetSpriteGroup(ctype);
+		}
 	}
 
-	if (roadstopspec->grf_prop.spritegroup[ctype] == nullptr) {
+	if (this->root_spritegroup == nullptr) {
 		ctype = SpriteGroupCargo::SG_DEFAULT;
+		this->root_spritegroup = roadstopspec->grf_prop.GetSpriteGroup(ctype);
 	}
 
 	/* Remember the cargo type we've picked */
 	this->roadstop_scope.cargo_type = ctype;
-	this->root_spritegroup = roadstopspec->grf_prop.spritegroup[ctype];
 }
 
 TownScopeResolver *RoadStopResolverObject::GetTown()
@@ -429,7 +438,7 @@ uint8_t GetRoadStopTileAnimationSpeed(TileIndex tile)
 	return RoadStopAnimationBase::GetAnimationSpeed(ss);
 }
 
-void TriggerRoadStopAnimation(BaseStation *st, TileIndex trigger_tile, StationAnimationTrigger trigger, CargoID cargo_type)
+void TriggerRoadStopAnimation(BaseStation *st, TileIndex trigger_tile, StationAnimationTrigger trigger, CargoType cargo_type)
 {
 	/* Get Station if it wasn't supplied */
 	if (st == nullptr) st = BaseStation::GetByTile(trigger_tile);
@@ -442,7 +451,7 @@ void TriggerRoadStopAnimation(BaseStation *st, TileIndex trigger_tile, StationAn
 	auto process_tile = [&](TileIndex cur_tile) {
 		const RoadStopSpec *ss = GetRoadStopSpec(cur_tile);
 		if (ss != nullptr && HasBit(ss->animation.triggers, trigger)) {
-			CargoID cargo;
+			CargoType cargo;
 			if (cargo_type == INVALID_CARGO) {
 				cargo = INVALID_CARGO;
 			} else {
@@ -469,7 +478,7 @@ void TriggerRoadStopAnimation(BaseStation *st, TileIndex trigger_tile, StationAn
  * @param trigger trigger type
  * @param cargo_type cargo type causing the trigger
  */
-void TriggerRoadStopRandomisation(Station *st, TileIndex tile, RoadStopRandomTrigger trigger, CargoID cargo_type)
+void TriggerRoadStopRandomisation(Station *st, TileIndex tile, RoadStopRandomTrigger trigger, CargoType cargo_type)
 {
 	if (st == nullptr) st = Station::GetByTile(tile);
 
@@ -702,28 +711,26 @@ void DumpRoadStopSpriteGroup(const BaseStation *st, const RoadStopSpec *spec, Sp
 {
 	bool written_group = false;
 
-	for (uint i = 0; i < NUM_CARGO + 3; i++) {
-		if (spec->grf_prop.spritegroup[i] != nullptr) {
-			if (written_group) {
-				dumper.Print("");
-			} else {
-				written_group = true;
-			}
-			switch (i) {
-				case SpriteGroupCargo::SG_DEFAULT:
-					dumper.Print("SG_DEFAULT");
-					break;
-				case SpriteGroupCargo::SG_PURCHASE:
-					dumper.Print("SG_PURCHASE");
-					break;
-				case SpriteGroupCargo::SG_DEFAULT_NA:
-					dumper.Print("SG_DEFAULT_NA");
-					break;
-				default:
-					dumper.Print(fmt::format("Cargo: {}", i));
-					break;
-			}
-			dumper.DumpSpriteGroup(spec->grf_prop.spritegroup[i], 0);
+	for (const auto &[cargo, spritegroup] : spec->grf_prop) {
+		if (written_group) {
+			dumper.Print("");
+		} else {
+			written_group = true;
 		}
+		switch (cargo) {
+			case SpriteGroupCargo::SG_DEFAULT:
+				dumper.Print("SG_DEFAULT");
+				break;
+			case SpriteGroupCargo::SG_PURCHASE:
+				dumper.Print("SG_PURCHASE");
+				break;
+			case SpriteGroupCargo::SG_DEFAULT_NA:
+				dumper.Print("SG_DEFAULT_NA");
+				break;
+			default:
+				dumper.Print(fmt::format("Cargo: {}", cargo));
+				break;
+		}
+		dumper.DumpSpriteGroup(spritegroup, 0);
 	}
 }

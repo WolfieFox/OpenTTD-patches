@@ -38,7 +38,7 @@ ClientNetworkContentSocketHandler _network_content_client;
 /** Wrapper function for the HasProc */
 static bool HasGRFConfig(const ContentInfo *ci, bool md5sum)
 {
-	return FindGRFConfig(BSWAP32(ci->unique_id), md5sum ? FGCM_EXACT : FGCM_ANY, md5sum ? &ci->md5sum : nullptr) != nullptr;
+	return FindGRFConfig(std::byteswap(ci->unique_id), md5sum ? FGCM_EXACT : FGCM_ANY, md5sum ? &ci->md5sum : nullptr) != nullptr;
 }
 
 /**
@@ -173,7 +173,7 @@ bool ClientNetworkContentSocketHandler::Receive_SERVER_INFO(Packet &p)
 	ConstContentVector parents;
 	this->ReverseLookupTreeDependency(parents, ci);
 	for (const ContentInfo *ici : parents) {
-		this->CheckDependencyState(const_cast<ContentInfo *>(ici));
+		this->CheckDependencyState(ici);
 	}
 
 	this->OnReceiveContentInfo(ci);
@@ -979,7 +979,7 @@ void ClientNetworkContentSocketHandler::ReverseLookupTreeDependency(ConstContent
  * Check the dependencies (recursively) of this content info
  * @param ci the content info to check the dependencies of
  */
-void ClientNetworkContentSocketHandler::CheckDependencyState(ContentInfo *ci)
+void ClientNetworkContentSocketHandler::CheckDependencyState(const ContentInfo *ci)
 {
 	if (ci->IsSelected() || ci->state == ContentInfo::ALREADY_HERE) {
 		/* Selection is easy; just walk all children and set the

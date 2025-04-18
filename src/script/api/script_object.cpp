@@ -212,45 +212,11 @@ ScriptObject::ActiveInstance::~ActiveInstance()
 /* static */ void ScriptObject::SetLastCommandRes(bool res)
 {
 	GetStorage()->last_command_res = res;
-	/* Also store the results of various global variables */
-	SetNewVehicleID(_new_vehicle_id);
-	SetNewSignID(_new_sign_id);
-	SetNewGroupID(_new_group_id);
 }
 
 /* static */ bool ScriptObject::GetLastCommandRes()
 {
 	return GetStorage()->last_command_res;
-}
-
-/* static */ void ScriptObject::SetNewVehicleID(VehicleID vehicle_id)
-{
-	GetStorage()->new_vehicle_id = vehicle_id;
-}
-
-/* static */ VehicleID ScriptObject::GetNewVehicleID()
-{
-	return GetStorage()->new_vehicle_id;
-}
-
-/* static */ void ScriptObject::SetNewSignID(SignID sign_id)
-{
-	GetStorage()->new_sign_id = sign_id;
-}
-
-/* static */ SignID ScriptObject::GetNewSignID()
-{
-	return GetStorage()->new_sign_id;
-}
-
-/* static */ void ScriptObject::SetNewGroupID(GroupID group_id)
-{
-	GetStorage()->new_group_id = group_id;
-}
-
-/* static */ GroupID ScriptObject::GetNewGroupID()
-{
-	return GetStorage()->new_group_id;
 }
 
 /* static */ void ScriptObject::SetAllowDoCommand(bool allow)
@@ -263,7 +229,7 @@ ScriptObject::ActiveInstance::~ActiveInstance()
 	return GetStorage()->allow_do_command;
 }
 
-/* static */ void ScriptObject::SetCompany(CompanyID company)
+/* static */ void ScriptObject::SetCompany(::CompanyID company)
 {
 	if (GetStorage()->root_company == INVALID_OWNER) GetStorage()->root_company = company;
 	GetStorage()->company = company;
@@ -271,12 +237,12 @@ ScriptObject::ActiveInstance::~ActiveInstance()
 	_current_company = company;
 }
 
-/* static */ CompanyID ScriptObject::GetCompany()
+/* static */ ::CompanyID ScriptObject::GetCompany()
 {
 	return GetStorage()->company;
 }
 
-/* static */ CompanyID ScriptObject::GetRootCompany()
+/* static */ ::CompanyID ScriptObject::GetRootCompany()
 {
 	return GetStorage()->root_company;
 }
@@ -341,8 +307,8 @@ ScriptObject::ActiveInstance::~ActiveInstance()
 
 #if !defined(DISABLE_SCOPE_INFO)
 	FunctorScopeStackRecord scope_print([=, &payload](format_target &output) {
-		output.format("ScriptObject::DoCommand: tile: {:X} ({} x {}), intl_flags: 0x{:X}, company: {}, cmd: 0x{:X} {}, estimate_only: {}, payload: ",
-				tile, TileX(tile), TileY(tile), intl_flags, CompanyInfoDumper(_current_company), cmd, GetCommandName(cmd), estimate_only);
+		output.format("ScriptObject::DoCommand: tile: {}, intl_flags: 0x{:X}, company: {}, cmd: 0x{:X} {}, estimate_only: {}, payload: ",
+				tile, intl_flags, CompanyInfoDumper(_current_company), cmd, GetCommandName(cmd), estimate_only);
 		payload.FormatDebugSummary(output);
 	});
 #endif

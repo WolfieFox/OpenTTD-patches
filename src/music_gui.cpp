@@ -48,7 +48,7 @@ struct MusicSystem {
 	};
 	typedef std::vector<PlaylistEntry> Playlist;
 
-	enum PlaylistChoices {
+	enum PlaylistChoices : uint8_t {
 		PLCH_ALLMUSIC,
 		PLCH_OLDSTYLE,
 		PLCH_NEWSTYLE,
@@ -678,7 +678,7 @@ static constexpr NWidgetPart _nested_music_track_selection_widgets[] = {
 static WindowDesc _music_track_selection_desc(__FILE__, __LINE__,
 	WDP_AUTO, nullptr, 0, 0,
 	WC_MUSIC_TRACK_SELECTION, WC_NONE,
-	0,
+	{},
 	_nested_music_track_selection_widgets
 );
 
@@ -937,7 +937,7 @@ static constexpr NWidgetPart _nested_music_window_widgets[] = {
 static WindowDesc _music_window_desc(__FILE__, __LINE__,
 	WDP_AUTO, "music", 0, 0,
 	WC_MUSIC_WINDOW, WC_NONE,
-	0,
+	{},
 	_nested_music_window_widgets
 );
 

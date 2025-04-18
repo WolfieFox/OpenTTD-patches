@@ -17,6 +17,7 @@
 #include "date_type.h"
 #include "core/enum_type.hpp"
 #include "newgrf.h"
+#include "newgrf_badge_type.h"
 #include "economy_func.h"
 
 #include <array>
@@ -84,7 +85,7 @@ enum RoadTypeCollisionMode : uint8_t {
 struct SpriteGroup;
 
 /** Sprite groups for a roadtype. */
-enum RoadTypeSpriteGroup {
+enum RoadTypeSpriteGroup : uint8_t {
 	ROTSG_CURSORS,        ///< Optional: Cursor and toolbar icon images
 	ROTSG_OVERLAY,        ///< Optional: Images for overlaying track
 	ROTSG_GROUND,         ///< Required: Main group of ground images
@@ -228,6 +229,8 @@ public:
 	 * Sprite groups for resolving sprites
 	 */
 	const SpriteGroup *group[ROTSG_END];
+
+	std::vector<BadgeID> badges;
 
 	inline bool UsesOverlay() const
 	{

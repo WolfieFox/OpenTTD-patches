@@ -14,7 +14,6 @@
 #include "company_gui.h"
 #include "town.h"
 #include "news_func.h"
-#include "cmd_helper.h"
 #include "command_func.h"
 #include "command_serialisation.h"
 #include "network/network.h"
@@ -873,7 +872,7 @@ void CompaniesYearlyLoop()
 	for (Company *c : Company::Iterate()) {
 		/* Move expenses to previous years. */
 		std::rotate(std::rbegin(c->yearly_expenses), std::rbegin(c->yearly_expenses) + 1, std::rend(c->yearly_expenses));
-		c->yearly_expenses[0] = {};
+		c->yearly_expenses[0].fill(0);
 		c->age_years++;
 		InvalidateWindowData(WC_FINANCES, c->index);
 	}
@@ -1092,7 +1091,7 @@ CommandCost CmdCompanyCtrl(DoCommandFlag flags, CompanyCtrlAction cca, CompanyID
 
 			Debug(desync, 1, "merge_companies: {}, company_id: {}, merged_company_id: {}", debug_date_dumper().HexDate(), company_id, to_merge_id);
 
-			auto cni = std::make_unique<CompanyNewsInformation>(c);
+			auto cni = std::make_unique<CompanyNewsInformation>(to_merge, c);
 
 			SetDParam(0, STR_NEWS_COMPANY_MERGER_TITLE);
 			SetDParam(1, STR_NEWS_MERGER_TAKEOVER_TITLE);

@@ -10,6 +10,7 @@
 #include "stdafx.h"
 #include "clear_map.h"
 #include "landscape.h"
+#include "landscape_cmd.h"
 #include "tree_map.h"
 #include "viewport_func.h"
 #include "command_func.h"
@@ -20,9 +21,11 @@
 #include "sound_func.h"
 #include "water.h"
 #include "company_base.h"
+#include "core/geometry_type.hpp"
 #include "core/random_func.hpp"
 #include "newgrf_generic.h"
 #include "date_func.h"
+#include "tree_cmd.h"
 
 #include "table/strings.h"
 #include "table/tree_land.h"
@@ -35,7 +38,7 @@
  *
  * This enumeration defines all possible tree placer algorithm in the game.
  */
-enum TreePlacer {
+enum TreePlacer : uint8_t {
 	TP_NONE,     ///< No tree placer algorithm
 	TP_ORIGINAL, ///< The original algorithm
 	TP_IMPROVED, ///< A 'improved' algorithm
@@ -43,7 +46,7 @@ enum TreePlacer {
 };
 
 /** Where to place trees while in-game? */
-enum ExtraTreePlacement {
+enum ExtraTreePlacement : uint8_t {
 	ETP_NO_SPREAD,           ///< Grow trees on tiles that have them but don't spread to new ones
 	ETP_SPREAD_RAINFOREST,   ///< Grow trees on tiles that have them, only spread to new ones in rainforests
 	ETP_SPREAD_ALL,          ///< Grow trees and spread them without restrictions
@@ -251,6 +254,110 @@ static void PlaceTree(TileIndex tile, uint32_t r)
 	}
 }
 
+struct BlobHarmonic {
+	int amplitude;
+	float phase;
+	int frequency;
+};
+
+/**
+ * Creates a star-shaped polygon originating from (0, 0) as defined by the given harmonics.
+ * The shape is placed into a pre-allocated span so the caller controls allocation.
+ * @param radius The maximum radius of the polygon. May be smaller, but will not be larger.
+ * @param harmonics Harmonics data for the polygon.
+ * @param[out] shape Shape to fill with points.
+ */
+static void CreateStarShapedPolygon(int radius, std::span<const BlobHarmonic> harmonics, std::span<Point> shape)
+{
+	float theta = 0;
+	float step = (M_PI * 2) / std::size(shape);
+
+	/* Divide a circle into a number of equally spaced divisions. */
+	for (Point &vertex : shape) {
+
+		/* Add up the values of each harmonic at this segment.*/
+		float deviation = std::accumulate(std::begin(harmonics), std::end(harmonics), 0.f, [theta](float d, const BlobHarmonic &harmonic) -> float {
+			return d + sinf((theta + harmonic.phase) * harmonic.frequency) * harmonic.amplitude;
+		});
+
+		/* Smooth out changes. */
+		float adjusted_radius = (radius / 2.f) + (deviation / 2);
+
+		/* Add to the final polygon. */
+		vertex.x = cosf(theta) * adjusted_radius;
+		vertex.y = sinf(theta) * adjusted_radius;
+
+		/* Proceed to the next segment. */
+		theta += step;
+	}
+}
+
+/**
+ * Creates a random star-shaped polygon originating from (0, 0).
+ * The shape is placed into a pre-allocated span so the caller controls allocation.
+ * @param radius The maximum radius of the blob. May be smaller, but will not be larger.
+ * @param[out] shape Shape to fill with polygon points.
+ */
+static void CreateRandomStarShapedPolygon(int radius, std::span<Point> shape)
+{
+	/* Valid values for the phase of blob harmonics are between 0 and Tau. we can get a value in the correct range
+	 * from Random() by dividing the maximum possible value by the desired maximum, and then dividing the random
+	 * value by the result. */
+	static constexpr float PHASE_DIVISOR = static_cast<float>(INT32_MAX / M_PI * 2);
+
+	/* These values are ones found in testing that result in suitable-looking polygons that did not self-intersect
+	 * and fit within a square of radius * radius dimensions. */
+	std::initializer_list<BlobHarmonic> harmonics = {
+		{radius / 2, Random() / PHASE_DIVISOR, 1},
+		{radius / 4, Random() / PHASE_DIVISOR, 2},
+		{radius / 8, Random() / PHASE_DIVISOR, 3},
+		{radius / 16, Random() / PHASE_DIVISOR, 4},
+	};
+
+	CreateStarShapedPolygon(radius, harmonics, shape);
+}
+
+/**
+ * Returns true if the given coordinates lie within a triangle.
+ * @param x X coordinate relative to centre of shape.
+ * @param y Y coordinate relative to centre of shape.
+ * @param v1 First vertex of triangle.
+ * @param v2 Second vertex of triangle.
+ * @param v3 Third vertex of triangle.
+ * @returns true if the given coordinates lie within a triangle.
+ */
+static bool IsPointInTriangle(int x, int y, const Point &v1, const Point &v2, const Point &v3)
+{
+	const int s = ((v1.x - v3.x) * (y - v3.y)) - ((v1.y - v3.y) * (x - v3.x));
+	const int t = ((v2.x - v1.x) * (y - v1.y)) - ((v2.y - v1.y) * (x - v1.x));
+
+	if ((s < 0) != (t < 0) && s != 0 && t != 0) return false;
+
+	const int d = (v3.x - v2.x) * (y - v2.y) - (v3.y - v2.y) * (x - v2.x);
+	return (d < 0) == (s + t <= 0);
+}
+
+/**
+ * Returns true if the given coordinates lie within a star shaped polygon.
+ * Breaks the polygon into a series of triangles around the centre point (0, 0) and then tests the coordinates against each triangle until a match is found (or not).
+ * @param x X coordinate relative to centre of shape.
+ * @param y Y coordinate relative to centre of shape.
+ * @param shape The shape to check against.
+ * @returns true if the given coordinates lie within the star shaped polygon.
+ */
+static bool IsPointInStarShapedPolygon(int x, int y, std::span<Point> shape)
+{
+	for (auto it = std::begin(shape); it != std::end(shape); /* nothing */) {
+		const Point &v1 = *it;
+		++it;
+		const Point &v2 = (it == std::end(shape)) ? shape.front() : *it;
+
+		if (IsPointInTriangle(x, y, v1, v2, {0, 0})) return true;
+	}
+
+	return false;
+}
+
 /**
  * Creates a number of tree groups.
  * The number of trees in each group depends on how many trees are actually placed around the given tile.
@@ -259,21 +366,30 @@ static void PlaceTree(TileIndex tile, uint32_t r)
  */
 static void PlaceTreeGroups(uint num_groups)
 {
+	static constexpr uint GROVE_SEGMENTS = 16; ///< How many segments make up the tree group.
+	static constexpr uint GROVE_RADIUS = 16; ///< Maximum radius of tree groups.
+
+	/* Shape in which trees may be contained. Array is here to reduce allocations. */
+	std::array<Point, GROVE_SEGMENTS> grove;
+
 	do {
 		TileIndex center_tile = RandomTile();
 
-		for (uint i = 0; i < DEFAULT_TREE_STEPS; i++) {
-			uint32_t r = Random();
-			int x = GB(r, 0, 5) - 16;
-			int y = GB(r, 8, 5) - 16;
-			uint dist = abs(x) + abs(y);
-			TileIndex cur_tile = TileAddWrap(center_tile, x, y);
+		CreateRandomStarShapedPolygon(GROVE_RADIUS, grove);
 
+		for (uint i = 0; i < DEFAULT_TREE_STEPS; i++) {
 			IncreaseGeneratingWorldProgress(GWP_TREE);
 
-			if (cur_tile != INVALID_TILE && dist <= 13 && CanPlantTreesOnTile(cur_tile, true)) {
-				PlaceTree(cur_tile, r);
-			}
+			uint32_t r = Random();
+			int x = GB(r, 0, 5) - GROVE_RADIUS;
+			int y = GB(r, 8, 5) - GROVE_RADIUS;
+			TileIndex cur_tile = TileAddWrap(center_tile, x, y);
+
+			if (cur_tile == INVALID_TILE) continue;
+			if (!CanPlantTreesOnTile(cur_tile, true)) continue;
+			if (!IsPointInStarShapedPolygon(x, y, grove)) continue;
+
+			PlaceTree(cur_tile, r);
 		}
 
 	} while (--num_groups);
@@ -378,8 +494,9 @@ int MaxTreeCount(const TileIndex tile)
 void PlaceTreesRandomly()
 {
 	int i, j, ht;
+	uint8_t max_height = _settings_game.construction.map_height_limit;
 
-	i = ScaleByMapSize(DEFAULT_TREE_STEPS);
+	i = Map::ScaleBySize(DEFAULT_TREE_STEPS);
 	if (_game_mode == GM_EDITOR) i /= EDITOR_TREE_DIV;
 	do {
 		uint32_t r = Random();
@@ -400,6 +517,8 @@ void PlaceTreesRandomly()
 			j = ht * 2;
 			/* Above snowline more trees! */
 			if (_settings_game.game_creation.landscape == LT_ARCTIC && ht > GetSnowLine()) j *= 3;
+			/* Scale generation by maximum map height. */
+			if (max_height > MAP_HEIGHT_LIMIT_ORIGINAL) j = j * MAP_HEIGHT_LIMIT_ORIGINAL / max_height;
 			while (j--) {
 				PlaceTreeAtSameHeight(tile, ht);
 			}
@@ -408,7 +527,7 @@ void PlaceTreesRandomly()
 
 	/* place extra trees at rainforest area */
 	if (_settings_game.game_creation.landscape == LT_TROPIC) {
-		i = ScaleByMapSize(DEFAULT_RAINFOREST_TREE_STEPS);
+		i = Map::ScaleBySize(DEFAULT_RAINFOREST_TREE_STEPS);
 		if (_game_mode == GM_EDITOR) i /= EDITOR_TREE_DIV;
 
 		do {
@@ -433,9 +552,9 @@ void RemoveAllTrees()
 {
 	if (_game_mode != GM_EDITOR) return;
 
-	for (TileIndex tile(0); tile < MapSize(); ++tile) {
+	for (TileIndex tile(0); tile < Map::Size(); ++tile) {
 		if (GetTileType(tile) == MP_TREES) {
-			DoCommandPOld(tile, 0, 0, CMD_LANDSCAPE_CLEAR | CMD_MSG(STR_ERROR_CAN_T_CLEAR_THIS_AREA), CommandCallback::PlaySound_EXPLOSION);
+			Command<CMD_LANDSCAPE_CLEAR>::Post(STR_ERROR_CAN_T_CLEAR_THIS_AREA, CommandCallback::PlaySound_EXPLOSION, tile);
 		}
 	}
 }
@@ -512,10 +631,10 @@ void GenerateTrees()
 		default: NOT_REACHED();
 	}
 
-	total = ScaleByMapSize(DEFAULT_TREE_STEPS);
-	if (_settings_game.game_creation.landscape == LT_TROPIC) total += ScaleByMapSize(DEFAULT_RAINFOREST_TREE_STEPS);
+	total = Map::ScaleBySize(DEFAULT_TREE_STEPS);
+	if (_settings_game.game_creation.landscape == LT_TROPIC) total += Map::ScaleBySize(DEFAULT_RAINFOREST_TREE_STEPS);
 	total *= i;
-	uint num_groups = (_settings_game.game_creation.landscape != LT_TOYLAND) ? ScaleByMapSize(GB(Random(), 0, 5) + 25) : 0;
+	uint num_groups = (_settings_game.game_creation.landscape != LT_TOYLAND) ? Map::ScaleBySize(GB(Random(), 0, 5) + 25) : 0;
 
 	if (_settings_game.game_creation.tree_placer != TP_PERFECT) {
 		total += num_groups * DEFAULT_TREE_STEPS;
@@ -534,29 +653,26 @@ void GenerateTrees()
 
 /**
  * Plant a tree.
- * @param end_tile end tile of area-drag
  * @param flags type of operation
- * @param p1 various bitstuffed data.
- * - p1 = (bit 0 -  7) - tree type, TREE_INVALID means random.
- * - p1 = (bit      8) - whether to use the Orthogonal (0) or Diagonal (1) iterator.
- * @param p2 start tile of area-drag of tree plantation
- * @param text unused
+ * @param end_tile end tile of area-drag
+ * @param start_tile start tile of area-drag of tree plantation
+ * @param tree_to_plant tree type, TREE_INVALID means random.
+ * @param diagonal Whether to use the Orthogonal (false) or Diagonal (true) iterator.
  * @return the cost of this operation or an error
  */
-CommandCost CmdPlantTree(TileIndex end_tile, DoCommandFlag flags, uint32_t p1, uint32_t p2, const char *text)
+CommandCost CmdPlantTree(DoCommandFlag flags, TileIndex end_tile, TileIndex start_tile, uint8_t tree_to_plant, bool diagonal)
 {
 	StringID msg = INVALID_STRING_ID;
 	CommandCost cost(EXPENSES_OTHER);
-	const uint8_t tree_to_plant = GB(p1, 0, 8); // We cannot use Extract as min and max are climate specific.
 
-	if (p2 >= MapSize()) return CMD_ERROR;
+	if (start_tile >= Map::Size()) return CMD_ERROR;
 	/* Check the tree type within the current climate */
 	if (tree_to_plant != TREE_INVALID && !IsInsideBS(tree_to_plant, _tree_base_by_landscape[_settings_game.game_creation.landscape], _tree_count_by_landscape[_settings_game.game_creation.landscape])) return CMD_ERROR;
 
 	Company *c = (_game_mode != GM_EDITOR) ? Company::GetIfValid(_current_company) : nullptr;
 	int limit = (c == nullptr ? INT32_MAX : GB(c->tree_limit, 16, 16));
 
-	OrthogonalOrDiagonalTileIterator iter(end_tile, TileIndex{p2}, HasBit(p1, 8));
+	OrthogonalOrDiagonalTileIterator iter(end_tile, start_tile, diagonal);
 	for (; *iter != INVALID_TILE; ++iter) {
 		TileIndex tile = *iter;
 		switch (GetTileType(tile)) {
@@ -601,9 +717,9 @@ CommandCost CmdPlantTree(TileIndex end_tile, DoCommandFlag flags, uint32_t p1, u
 				if (_settings_game.game_creation.landscape == LT_TROPIC && treetype != TREE_INVALID && (
 						/* No cacti outside the desert */
 						(treetype == TREE_CACTUS && GetTropicZone(tile) != TROPICZONE_DESERT) ||
-						/* No rain forest trees outside the rain forest, except in the editor mode where it makes those tiles rain forest tile */
+						/* No rain forest trees outside the rainforest, except in the editor mode where it makes those tiles rainforest tile */
 						(IsInsideMM(treetype, TREE_RAINFOREST, TREE_CACTUS) && GetTropicZone(tile) != TROPICZONE_RAINFOREST && _game_mode != GM_EDITOR) ||
-						/* And no subtropical trees in the desert/rain forest */
+						/* And no subtropical trees in the desert/rainforest */
 						(IsInsideMM(treetype, TREE_SUB_TROPICAL, TREE_TOYLAND) && GetTropicZone(tile) != TROPICZONE_NORMAL))) {
 					msg = STR_ERROR_TREE_WRONG_TERRAIN_FOR_TREE_TYPE;
 					continue;
@@ -620,7 +736,7 @@ CommandCost CmdPlantTree(TileIndex end_tile, DoCommandFlag flags, uint32_t p1, u
 					switch (GetRawClearGround(tile)) {
 						case CLEAR_FIELDS:
 						case CLEAR_ROCKS: {
-							CommandCost ret = DoCommandOld(tile, 0, 0, flags, CMD_LANDSCAPE_CLEAR);
+							CommandCost ret = Command<CMD_LANDSCAPE_CLEAR>::Do(flags, tile);
 							if (ret.Failed()) return ret;
 							cost.AddCost(ret);
 							break;
@@ -1050,7 +1166,7 @@ static void TileLoop_Trees(TileIndex tile)
  */
 uint DecrementTreeCounter()
 {
-	uint scaled_map_size = ScaleByMapSize(1);
+	uint scaled_map_size = Map::ScaleBySize(1);
 	if (scaled_map_size >= 256) return scaled_map_size >> 8;
 
 	/* byte underflow */
@@ -1085,12 +1201,12 @@ void OnTick_Trees()
 	/* Skip some tree ticks for map sizes below 256 * 256. 64 * 64 is 16 times smaller, so
 	 * this is the maximum number of ticks that are skipped. Number of ticks to skip is
 	 * inversely proportional to map size, so that is handled to create a mask. */
-	int skip = ScaleByMapSize(16);
+	int skip = Map::ScaleBySize(16);
 	if (skip < 16 && (_tick_counter & (16 / skip - 1)) != 0) return;
 
 	/* place a tree at a random rainforest spot */
 	if (_settings_game.game_creation.landscape == LT_TROPIC) {
-		for (uint c = ScaleByMapSize(1); c > 0; c--) {
+		for (uint c = Map::ScaleBySize(1); c > 0; c--) {
 			PlantRandomTree(true);
 		}
 	}
@@ -1120,7 +1236,7 @@ void InitializeTrees()
 
 static CommandCost TerraformTile_Trees(TileIndex tile, DoCommandFlag flags, int, Slope)
 {
-	return DoCommandOld(tile, 0, 0, flags, CMD_LANDSCAPE_CLEAR);
+	return Command<CMD_LANDSCAPE_CLEAR>::Do(flags, tile);
 }
 
 

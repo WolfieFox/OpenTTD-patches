@@ -39,6 +39,7 @@
 #include "newgrf_act5.h"
 #include "newgrf_airport.h"
 #include "newgrf_airporttiles.h"
+#include "newgrf_badge.h"
 #include "newgrf_debug.h"
 #include "newgrf_dump.h"
 #include "newgrf_object.h"
@@ -95,7 +96,7 @@ struct InspectTargetId {
  * The type of a property to show. This is used to
  * provide an appropriate representation in the GUI.
  */
-enum NIType {
+enum NIType : uint8_t {
 	NIT_INT,   ///< The property is a simple integer
 	NIT_CARGO, ///< The property is a cargo
 };
@@ -248,6 +249,13 @@ public:
 	 * @return GRFID of the item. 0 means that the item is not inspectable.
 	 */
 	virtual uint32_t GetGRFID(uint index) const = 0;
+
+	/**
+	 * Get the list of badges of this item.
+	 * @param index index to check.
+	 * @return List of badges of the item.
+	 */
+	virtual std::span<const BadgeID> GetBadges(uint index) const = 0;
 
 	/**
 	 * Resolve (action2) variable for a given index.
@@ -586,9 +594,9 @@ struct NewGRFInspectWindow final : Window {
 
 				/* Highlight the articulated part (this is different to the whole-vehicle highlighting of DrawVehicleImage */
 				if (_current_text_dir == TD_RTL) {
-					DrawFrameRect(r.right - sel_end   + skip, y, r.right - sel_start + skip, y + h, COLOUR_WHITE, FR_BORDERONLY);
+					DrawFrameRect(r.right - sel_end   + skip, y, r.right - sel_start + skip, y + h, COLOUR_WHITE, FrameFlag::BorderOnly);
 				} else {
-					DrawFrameRect(r.left  + sel_start - skip, y, r.left  + sel_end   - skip, y + h, COLOUR_WHITE, FR_BORDERONLY);
+					DrawFrameRect(r.left  + sel_start - skip, y, r.left  + sel_end   - skip, y + h, COLOUR_WHITE, FrameFlag::BorderOnly);
 				}
 				break;
 			}
@@ -603,7 +611,6 @@ struct NewGRFInspectWindow final : Window {
 			std::string buf = GetString(STR_NEWGRF_INSPECT_CAPTION);
 			if (!buf.empty()) Debug(misc, 0, "*** {} ***", strip_leading_colours(buf));
 		}
-
 		uint index = this->GetFeatureIndex();
 		const NIFeature *nif  = this->GetFeature();
 		const NIHelper *nih   = nif->helper;
@@ -738,7 +745,7 @@ struct NewGRFInspectWindow final : Window {
 		uint32_t grfid = nih->GetGRFID(index);
 		if (grfid) {
 			this->DrawString(r, i++, "GRF:");
-			this->DrawString(r, i++, "  ID: {:08X}", BSWAP32(grfid));
+			this->DrawString(r, i++, "  ID: {:08X}", std::byteswap(grfid));
 			GRFConfig *grfconfig = GetGRFConfig(grfid);
 			if (grfconfig) {
 				this->DrawString(r, i++, "  Name: {}", grfconfig->GetName());
@@ -822,7 +829,7 @@ struct NewGRFInspectWindow final : Window {
 			auto psa = nih->GetPSA(index, grfid);
 			if (!psa.empty()) {
 				if (nih->PSAWithParameter()) {
-					this->DrawString(r, i++, "Persistent storage [{:08X}]:", BSWAP32(grfid));
+					this->DrawString(r, i++, "Persistent storage [{:08X}]:", std::byteswap(grfid));
 				} else {
 					this->DrawString(r, i++, "Persistent storage:");
 				}
@@ -838,6 +845,15 @@ struct NewGRFInspectWindow final : Window {
 				if (last_non_blank != (uint)psa.size()) {
 					this->DrawString(r, i++, "  {} to {} are all 0", psa_limit, (psa.size() - 1));
 				}
+			}
+		}
+
+		auto badges = nih->GetBadges(index);
+		if (!badges.empty()) {
+			this->DrawString(r, i++, "Badges:");
+			for (const BadgeID &badge_index : badges) {
+				const Badge *badge = GetBadge(badge_index);
+				this->DrawString(r, i++, "  {}: {}", StrMakeValid(badge->label), GetString(badge->name));
 			}
 		}
 
@@ -1282,14 +1298,14 @@ static constexpr NWidgetPart _nested_newgrf_inspect_widgets[] = {
 static WindowDesc _newgrf_inspect_chain_desc(__FILE__, __LINE__,
 	WDP_AUTO, "newgrf_inspect_chain", 400, 300,
 	WC_NEWGRF_INSPECT, WC_NONE,
-	0,
+	{},
 	_nested_newgrf_inspect_chain_widgets
 );
 
 static WindowDesc _newgrf_inspect_desc(__FILE__, __LINE__,
 	WDP_AUTO, "newgrf_inspect", 400, 300,
 	WC_NEWGRF_INSPECT, WC_NONE,
-	0,
+	{},
 	_nested_newgrf_inspect_widgets
 );
 
@@ -1872,7 +1888,7 @@ static constexpr NWidgetPart _nested_sprite_aligner_widgets[] = {
 static WindowDesc _sprite_aligner_desc(__FILE__, __LINE__,
 	WDP_AUTO, "sprite_aligner", 400, 300,
 	WC_SPRITE_ALIGNER, WC_NONE,
-	0,
+	{},
 	_nested_sprite_aligner_widgets
 );
 

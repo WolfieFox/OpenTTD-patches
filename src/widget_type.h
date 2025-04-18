@@ -114,23 +114,22 @@ enum WidgetType : uint8_t {
 /**
  * Base widget flags.
  */
-enum WidgetBaseFlags : uint8_t {
-	WBF_DIRTY            = 1 <<  0, ///< Widget is dirty.
+enum WidgetBaseFlag : uint8_t {
+	Dirty,            ///< Widget is dirty.
 };
-DECLARE_ENUM_AS_BIT_SET(WidgetBaseFlags)
+using WidgetBaseFlags = EnumBitSet<WidgetBaseFlag, uint8_t>;
 
 /** Different forms of sizing nested widgets, using NWidgetBase::AssignSizePosition() */
-enum SizingType {
+enum SizingType : uint8_t {
 	ST_SMALLEST, ///< Initialize nested widget tree to smallest size. Also updates \e current_x and \e current_y.
 	ST_RESIZE,   ///< Resize the nested widget tree.
 };
 
-enum class AspectFlags : uint8_t {
-	ResizeX = 1U << 0,
-	ResizeY = 1U << 1,
-	ResizeXY = ResizeX | ResizeY,
+enum class AspectFlag : uint8_t {
+	ResizeX,
+	ResizeY,
 };
-DECLARE_ENUM_AS_BIT_SET(AspectFlags)
+using AspectFlags = EnumBitSet<AspectFlag, uint8_t>;
 
 /* Forward declarations. */
 class NWidgetCore;
@@ -249,7 +248,7 @@ public:
 	uint current_x;       ///< Current horizontal size (after resizing).
 	uint current_y;       ///< Current vertical size (after resizing).
 	float aspect_ratio = 0; ///< Desired aspect ratio of widget.
-	AspectFlags aspect_flags = AspectFlags::ResizeX; ///< Which dimensions can be resized.
+	AspectFlags aspect_flags = AspectFlag::ResizeX; ///< Which dimensions can be resized.
 
 	int pos_x;            ///< Horizontal position of top-left corner of the widget in the window.
 	int pos_y;            ///< Vertical position of top-left corner of the widget in the window.
@@ -323,8 +322,8 @@ public:
 	void SetMinimalTextLines(uint8_t min_lines, uint8_t spacing, FontSize size);
 	void SetFill(uint fill_x, uint fill_y);
 	void SetResize(uint resize_x, uint resize_y);
-	void SetAspect(float ratio, AspectFlags flags = AspectFlags::ResizeX);
-	void SetAspect(int x_ratio, int y_ratio, AspectFlags flags = AspectFlags::ResizeX);
+	void SetAspect(float ratio, AspectFlags flags = AspectFlag::ResizeX);
+	void SetAspect(int x_ratio, int y_ratio, AspectFlags flags = AspectFlag::ResizeX);
 
 	bool UpdateMultilineWidgetSize(const std::string &str, int max_lines);
 	bool UpdateSize(uint min_x, uint min_y);
@@ -345,7 +344,7 @@ public:
 };
 
 /** Nested widget flags that affect display and interaction with 'real' widgets. */
-enum NWidgetDisplay {
+enum NWidgetDisplay : uint16_t {
 	/* Generic. */
 	NDB_LOWERED         = 0, ///< Widget is lowered (pressed down) bit.
 	NDB_DISABLED        = 1, ///< Widget is disabled (greyed out) bit.
@@ -649,7 +648,7 @@ protected:
 };
 
 /** Display planes with zero size for #NWidgetStacked. */
-enum StackedZeroSizePlanes {
+enum StackedZeroSizePlanes : int {
 	SZSP_VERTICAL = INT_MAX / 2, ///< Display plane with zero size horizontally, and filling and resizing vertically.
 	SZSP_HORIZONTAL,             ///< Display plane with zero size vertically, and filling and resizing horizontally.
 	SZSP_NONE,                   ///< Display plane with zero size in both directions (none filling and resizing).
@@ -692,7 +691,7 @@ private:
 };
 
 /** Nested widget container flags, */
-enum NWidContainerFlags {
+enum NWidContainerFlags : uint8_t {
 	NCB_EQUALSIZE = 0, ///< Containers should keep all their (resizing) children equally large.
 	NCB_BIGFIRST  = 1, ///< Allocate space to biggest resize first.
 
@@ -886,7 +885,7 @@ private:
 
 public:
 	/** Stepping sizes when scrolling */
-	enum ScrollbarStepping {
+	enum ScrollbarStepping : uint8_t {
 		SS_RAW,             ///< Step in single units.
 		SS_SMALL,           ///< Step in #stepsize units.
 		SS_BIG,             ///< Step in #cap units.
@@ -1549,7 +1548,7 @@ constexpr NWidgetPart SetScrollbar(WidgetID index)
  * @param flags Dimensions which should be resized.
  * @ingroup NestedWidgetParts
  */
-constexpr NWidgetPart SetAspect(float ratio, AspectFlags flags = AspectFlags::ResizeX)
+constexpr NWidgetPart SetAspect(float ratio, AspectFlags flags = AspectFlag::ResizeX)
 {
 	return NWidgetPart{WPT_ASPECT, NWidgetPartAspect{ratio, flags}};
 }

@@ -658,7 +658,7 @@ struct GameOptionsWindow : Window {
 		y = GetStringHeight(STR_GAME_OPTIONS_VIDEO_DRIVER_INFO, wid->current_x);
 		changed |= wid->UpdateVerticalSize(y);
 
-		if (changed) this->ReInit(0, 0, this->flags & WF_CENTERED);
+		if (changed) this->ReInit(0, 0, this->flags.Test(WindowFlag::Centred));
 	}
 
 	void UpdateWidgetSize(WidgetID widget, Dimension &size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
@@ -847,7 +847,7 @@ struct GameOptionsWindow : Window {
 				if (used_set == nullptr || !used_set->IsConfigurable()) break;
 				GRFConfig &extra_cfg = used_set->GetOrCreateExtraConfig();
 				if (extra_cfg.param.empty()) extra_cfg.SetParameterDefaults();
-				OpenGRFParameterWindow(true, &extra_cfg, _game_mode == GM_MENU);
+				OpenGRFParameterWindow(true, extra_cfg, _game_mode == GM_MENU);
 				if (_game_mode == GM_MENU) this->reload = true;
 				break;
 			}
@@ -1261,7 +1261,7 @@ static constexpr NWidgetPart _nested_game_options_widgets[] = {
 static WindowDesc _game_options_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_GAME_OPTIONS, WC_NONE,
-	0,
+	{},
 	_nested_game_options_widgets
 );
 
@@ -1278,7 +1278,7 @@ static int SETTING_HEIGHT = 11;    ///< Height of a single setting in the tree v
  * Flags for #SettingEntry
  * @note The #SEF_BUTTONS_MASK matches expectations of the formal parameter 'state' of #DrawArrowButtons
  */
-enum SettingEntryFlags {
+enum SettingEntryFlags : uint8_t {
 	SEF_LEFT_DEPRESSED  = 0x01, ///< Of a numeric setting entry, the left button is depressed
 	SEF_RIGHT_DEPRESSED = 0x02, ///< Of a numeric setting entry, the right button is depressed
 	SEF_BUTTONS_MASK = (SEF_LEFT_DEPRESSED | SEF_RIGHT_DEPRESSED), ///< Bit-mask for button flags
@@ -1288,7 +1288,7 @@ enum SettingEntryFlags {
 };
 
 /** How the list of advanced settings is filtered. */
-enum RestrictionMode {
+enum RestrictionMode : uint8_t {
 	RM_BASIC,                            ///< Display settings associated to the "basic" list.
 	RM_ADVANCED,                         ///< Display settings associated to the "advanced" list.
 	RM_ALL,                              ///< List all settings regardless of the default/newgame/... values.
@@ -1297,7 +1297,7 @@ enum RestrictionMode {
 	RM_PATCH,                            ///< Show only "patch" settings which are not in vanilla.
 	RM_END,                              ///< End for iteration.
 };
-DECLARE_POSTFIX_INCREMENT(RestrictionMode)
+DECLARE_INCREMENT_DECREMENT_OPERATORS(RestrictionMode)
 
 /** Filter for settings list. */
 struct SettingFilter {
@@ -1374,9 +1374,9 @@ private:
 
 /** Cargodist per-cargo setting */
 struct CargoDestPerCargoSettingEntry : SettingEntry {
-	CargoID cargo;
+	CargoType cargo;
 
-	CargoDestPerCargoSettingEntry(CargoID cargo, const IntSettingDesc *setting);
+	CargoDestPerCargoSettingEntry(CargoType cargo, const IntSettingDesc *setting);
 	void Init(uint8_t level = 0) override;
 	bool UpdateFilterState(SettingFilter &filter, bool force_visible) override;
 
@@ -1784,7 +1784,7 @@ void SettingEntry::DrawSettingString(uint left, uint right, int y, bool highligh
 
 /* == CargoDestPerCargoSettingEntry methods == */
 
-CargoDestPerCargoSettingEntry::CargoDestPerCargoSettingEntry(CargoID cargo, const IntSettingDesc *setting)
+CargoDestPerCargoSettingEntry::CargoDestPerCargoSettingEntry(CargoType cargo, const IntSettingDesc *setting)
 	: SettingEntry(setting), cargo(cargo) {}
 
 void CargoDestPerCargoSettingEntry::Init(uint8_t level)
@@ -2649,6 +2649,7 @@ static SettingsContainer &GetSettingsTree()
 				towns->Add(new SettingEntry("economy.town_build_tunnels"));
 				towns->Add(new SettingEntry("economy.town_max_road_slope"));
 				towns->Add(new SettingEntry("economy.found_town"));
+				towns->Add(new SettingEntry("economy.place_houses"));
 				towns->Add(new SettingEntry("economy.town_layout"));
 				towns->Add(new SettingEntry("economy.larger_towns"));
 				towns->Add(new SettingEntry("economy.initial_city_size"));
@@ -2689,7 +2690,7 @@ static SettingsContainer &GetSettingsTree()
 					const SettingTable &linkgraph_table = GetLinkGraphSettingTable();
 					uint base_index = GetSettingIndexByFullName(linkgraph_table, "linkgraph.distribution_per_cargo[0]");
 					assert(base_index != UINT32_MAX);
-					for (CargoID c = 0; c < NUM_CARGO; c++) {
+					for (CargoType c = 0; c < NUM_CARGO; c++) {
 						cdist_override->Add(new CargoDestPerCargoSettingEntry(c, GetSettingDescription(linkgraph_table, base_index + c)->AsIntSetting()));
 					}
 				}
@@ -2773,7 +2774,7 @@ static const StringID _game_settings_restrict_dropdown[] = {
 static_assert(lengthof(_game_settings_restrict_dropdown) == RM_END);
 
 /** Warnings about hidden search results. */
-enum WarnHiddenResult {
+enum WarnHiddenResult : uint8_t {
 	WHR_NONE,          ///< Nothing was filtering matches away.
 	WHR_CATEGORY,      ///< Category setting filtered matches away.
 	WHR_TYPE,          ///< Type setting filtered matches away.
@@ -3181,7 +3182,7 @@ struct GameSettingsWindow : Window {
 				if (step == 0) step = 1;
 
 				/* don't allow too fast scrolling */
-				if ((this->flags & WF_TIMEOUT) && this->timeout_timer > 1) {
+				if (this->flags.Test(WindowFlag::Timeout) && this->timeout_timer > 1) {
 					_left_button_clicked = false;
 					return;
 				}
@@ -3436,7 +3437,7 @@ static constexpr NWidgetPart _nested_settings_selection_widgets[] = {
 static WindowDesc _settings_selection_desc(__FILE__, __LINE__,
 	WDP_CENTER, "settings", 510, 450,
 	WC_GAME_OPTIONS, WC_NONE,
-	0,
+	{},
 	_nested_settings_selection_widgets
 );
 
@@ -3465,8 +3466,8 @@ void DrawArrowButtons(int x, int y, Colours button_colour, uint8_t state, bool c
 	Rect lr = {x,                  y, x + (int)dim.width     - 1, y + (int)dim.height - 1};
 	Rect rr = {x + (int)dim.width, y, x + (int)dim.width * 2 - 1, y + (int)dim.height - 1};
 
-	DrawFrameRect(lr, button_colour, (state == 1) ? FR_LOWERED : FR_NONE);
-	DrawFrameRect(rr, button_colour, (state == 2) ? FR_LOWERED : FR_NONE);
+	DrawFrameRect(lr, button_colour, (state == 1) ? FrameFlag::Lowered : FrameFlags{});
+	DrawFrameRect(rr, button_colour, (state == 2) ? FrameFlag::Lowered : FrameFlags{});
 	DrawSpriteIgnorePadding(SPR_ARROW_LEFT,  PAL_NONE, lr, SA_CENTER);
 	DrawSpriteIgnorePadding(SPR_ARROW_RIGHT, PAL_NONE, rr, SA_CENTER);
 
@@ -3494,7 +3495,7 @@ void DrawDropDownButton(int x, int y, Colours button_colour, bool state, bool cl
 
 	Rect r = {x, y, x + SETTING_BUTTON_WIDTH - 1, y + SETTING_BUTTON_HEIGHT - 1};
 
-	DrawFrameRect(r, button_colour, state ? FR_LOWERED : FR_NONE);
+	DrawFrameRect(r, button_colour, state ? FrameFlag::Lowered : FrameFlags{});
 	DrawSpriteIgnorePadding(SPR_ARROW_DOWN, PAL_NONE, r, SA_CENTER);
 
 	if (!clickable) {
@@ -3514,7 +3515,7 @@ void DrawBoolButton(int x, int y, bool state, bool clickable)
 	static const Colours _bool_ctabs[2][2] = {{COLOUR_CREAM, COLOUR_RED}, {COLOUR_DARK_GREEN, COLOUR_GREEN}};
 
 	Rect r = {x, y, x + SETTING_BUTTON_WIDTH - 1, y + SETTING_BUTTON_HEIGHT - 1};
-	DrawFrameRect(r, _bool_ctabs[state][clickable], state ? FR_LOWERED : FR_NONE);
+	DrawFrameRect(r, _bool_ctabs[state][clickable], state ? FrameFlag::Lowered : FrameFlags{});
 }
 
 struct CustomCurrencyWindow : Window {
@@ -3744,7 +3745,7 @@ static constexpr NWidgetPart _nested_cust_currency_widgets[] = {
 static WindowDesc _cust_currency_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_CUSTOM_CURRENCY, WC_NONE,
-	0,
+	{},
 	_nested_cust_currency_widgets
 );
 

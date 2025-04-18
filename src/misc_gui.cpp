@@ -10,6 +10,7 @@
 #include "stdafx.h"
 #include "debug.h"
 #include "landscape.h"
+#include "landscape_cmd.h"
 #include "error.h"
 #include "gui.h"
 #include "gfx_layout.h"
@@ -40,7 +41,7 @@
 #include "safeguards.h"
 
 /** Method to open the OSK. */
-enum OskActivation {
+enum OskActivation : uint8_t {
 	OSKA_DISABLED,           ///< The OSK shall not be activated at all.
 	OSKA_DOUBLE_CLICK,       ///< Double click on the edit box opens OSK.
 	OSKA_SINGLE_CLICK,       ///< Single click after focus click opens OSK.
@@ -61,7 +62,7 @@ static constexpr NWidgetPart _nested_land_info_widgets[] = {
 static WindowDesc _land_info_desc(__FILE__, __LINE__,
 	WDP_AUTO, nullptr, 0, 0,
 	WC_LAND_INFO, WC_NONE,
-	0,
+	{},
 	_nested_land_info_widgets
 );
 
@@ -185,6 +186,7 @@ public:
 		td.road_speed = 0;
 		td.tramtype = STR_NULL;
 		td.tram_speed = 0;
+		td.town_can_upgrade = std::nullopt;
 
 		td.grf = nullptr;
 
@@ -215,7 +217,7 @@ public:
 		Company *c = Company::GetIfValid(_local_company);
 		if (c != nullptr) {
 			assert(_current_company == _local_company);
-			CommandCost costclear = DoCommandOld(tile, 0, 0, DC_QUERY_COST, CMD_LANDSCAPE_CLEAR);
+			CommandCost costclear = Command<CMD_LANDSCAPE_CLEAR>::Do(DC_QUERY_COST, tile);
 			if (costclear.Succeeded()) {
 				Money cost = costclear.GetCost();
 				if (cost < 0) {
@@ -332,6 +334,11 @@ public:
 			this->landinfo_data.push_back(GetString(STR_LANG_AREA_INFORMATION_TRAM_SPEED_LIMIT));
 		}
 
+		/* Tile protection status */
+		if (td.town_can_upgrade.has_value()) {
+			this->landinfo_data.push_back(GetString(td.town_can_upgrade.value() ? STR_LAND_AREA_INFORMATION_TOWN_CAN_UPGRADE : STR_LAND_AREA_INFORMATION_TOWN_CANNOT_UPGRADE));
+		}
+
 		/* NewGRF name */
 		if (td.grf != nullptr) {
 			SetDParamStr(0, td.grf);
@@ -415,7 +422,7 @@ static constexpr NWidgetPart _nested_about_widgets[] = {
 static WindowDesc _about_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_GAME_OPTIONS, WC_NONE,
-	0,
+	{},
 	_nested_about_widgets
 );
 
@@ -680,7 +687,7 @@ static constexpr NWidgetPart _nested_tooltips_widgets[] = {
 static WindowDesc _tool_tips_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0, // Coordinates and sizes are not used,
 	WC_TOOLTIPS, WC_NONE,
-	WDF_NO_FOCUS | WDF_NO_CLOSE,
+	{WindowDefaultFlag::NoFocus, WindowDefaultFlag::NoClose},
 	_nested_tooltips_widgets
 );
 
@@ -710,7 +717,7 @@ struct TooltipsWindow : public Window
 
 		this->InitNested();
 
-		CLRBITS(this->flags, WF_WHITE_BORDER);
+		this->flags.Reset(WindowFlag::WhiteBorder);
 	}
 
 	Point OnInitialPosition(int16_t sm_width, int16_t sm_height, int window_number) override
@@ -866,11 +873,11 @@ void QueryString::DrawEditBox(const Window *w, WidgetID wid) const
 	Rect cr = r.WithWidth(clearbtn_width, !rtl);
 	Rect fr = r.Indent(clearbtn_width, !rtl);
 
-	DrawFrameRect(cr, wi->colour, wi->IsLowered() ? FR_LOWERED : FR_NONE);
+	DrawFrameRect(cr, wi->colour, wi->IsLowered() ? FrameFlag::Lowered : FrameFlags{});
 	DrawSpriteIgnorePadding(rtl ? SPR_IMG_DELETE_RIGHT : SPR_IMG_DELETE_LEFT, PAL_NONE, cr, SA_CENTER);
 	if (StrEmpty(this->text.GetText())) GfxFillRect(cr.Shrink(WidgetDimensions::scaled.bevel), GetColourGradient(wi->colour, SHADE_DARKER), FILLRECT_CHECKER);
 
-	DrawFrameRect(fr, wi->colour, FR_LOWERED | FR_DARKENED);
+	DrawFrameRect(fr, wi->colour, {FrameFlag::Lowered, FrameFlag::Darkened});
 	GfxFillRect(fr.Shrink(WidgetDimensions::scaled.bevel), PC_BLACK);
 
 	fr = fr.Shrink(WidgetDimensions::scaled.framerect);
@@ -1146,7 +1153,7 @@ static constexpr NWidgetPart _nested_query_string_widgets[] = {
 static WindowDesc _query_string_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_QUERY_STRING, WC_NONE,
-	0,
+	{},
 	_nested_query_string_widgets
 );
 
@@ -1320,7 +1327,7 @@ static constexpr NWidgetPart _nested_query_widgets[] = {
 static WindowDesc _query_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_CONFIRM_POPUP_QUERY, WC_NONE,
-	WDF_MODAL,
+	WindowDefaultFlag::Modal,
 	_nested_query_widgets
 );
 
@@ -1453,7 +1460,7 @@ struct ModifierKeyToggleWindow : Window {
 static WindowDesc _modifier_key_toggle_desc(__FILE__, __LINE__,
 	WDP_AUTO, "modifier_key_toggle", 0, 0,
 	WC_MODIFIER_KEY_TOGGLE, WC_NONE,
-	WDF_NO_FOCUS,
+	WindowDefaultFlag::NoFocus,
 	_modifier_key_toggle_widgets
 );
 

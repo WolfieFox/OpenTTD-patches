@@ -10,7 +10,9 @@
 #include "../../stdafx.h"
 #include "script_airport.hpp"
 #include "script_station.hpp"
+#include "../../landscape_cmd.h"
 #include "../../station_base.h"
+#include "../../station_cmd.h"
 #include "../../town.h"
 
 #include "../../safeguards.h"
@@ -78,9 +80,7 @@ extern uint8_t GetAirportNoiseLevelForDistance(const struct AirportSpec *as, uin
 	EnforcePrecondition(false, IsValidAirportType(type));
 	EnforcePrecondition(false, station_id == ScriptStation::STATION_NEW || station_id == ScriptStation::STATION_JOIN_ADJACENT || ScriptStation::IsValidStation(station_id));
 
-	uint p2 = station_id == ScriptStation::STATION_JOIN_ADJACENT ? 0 : 1;
-	p2 |= (ScriptStation::IsValidStation(station_id) ? station_id : INVALID_STATION) << 16;
-	return ScriptObject::DoCommandOld(tile, type, p2, CMD_BUILD_AIRPORT);
+	return ScriptObject::Command<CMD_BUILD_AIRPORT>::Do(tile, type, 0, (ScriptStation::IsValidStation(station_id) ? station_id : INVALID_STATION), station_id != ScriptStation::STATION_JOIN_ADJACENT);
 }
 
 /* static */ bool ScriptAirport::RemoveAirport(TileIndex tile)
@@ -89,7 +89,7 @@ extern uint8_t GetAirportNoiseLevelForDistance(const struct AirportSpec *as, uin
 	EnforcePrecondition(false, ::IsValidTile(tile))
 	EnforcePrecondition(false, IsAirportTile(tile) || IsHangarTile(tile));
 
-	return ScriptObject::DoCommandOld(tile, 0, 0, CMD_LANDSCAPE_CLEAR);
+	return ScriptObject::Command<CMD_LANDSCAPE_CLEAR>::Do(tile);
 }
 
 /* static */ SQInteger ScriptAirport::GetNumHangars(TileIndex tile)

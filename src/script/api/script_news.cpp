@@ -15,6 +15,7 @@
 #include "script_town.hpp"
 #include "script_error.hpp"
 #include "../../command_type.h"
+#include "../../news_cmd.h"
 #include "../../string_func.h"
 
 #include "../../safeguards.h"
@@ -35,9 +36,8 @@
 	                           (ref_type == NR_INDUSTRY && ScriptIndustry::IsValidIndustry(reference)) ||
 	                           (ref_type == NR_TOWN     && ScriptTown::IsValidTown(reference)));
 
-	uint8_t c = company;
-	if (company == ScriptCompany::COMPANY_INVALID) c = INVALID_COMPANY;
+	::CompanyID c = ScriptCompany::FromScriptCompanyID(company);
 
 	if (ref_type == NR_NONE) reference = 0;
-	return ScriptObject::DoCommandOld(0, type | (ref_type << 8) | (c << 16), reference, CMD_CUSTOM_NEWS_ITEM, encoded);
+	return ScriptObject::Command<CMD_CUSTOM_NEWS_ITEM>::Do((::NewsType)type, (::NewsReferenceType)ref_type, c, reference, encoded);
 }

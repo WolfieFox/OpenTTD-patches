@@ -2,6 +2,45 @@
 
 * * *
 
+### v0.65.1 (2025-04-18)
+* Fix crash when loading certain 32bpp-only GRFs in dedicated server mode.
+* Fix displaying whether a train is exempt from speed adaptation in the train details window.
+* Fix cargo produced string in house placer window.
+* Add picker tool support for house placing.
+* Allow exchanging a waypoint's name with another waypoint in the same town.
+* Handle requires service conditional orders when predicting arrival/departure times in the timetable window.
+* Departure boards: Resolve all requires service conditional jumps as not required.
+* Bump trunk base from commit 6d1f56ce6b782ee8b4cbf41239f7ce2c08e7bece to commit 56b1e9df1f5c7909c4ff956a62b9d60932761c4a.
+
+### v0.65.0 (2025-04-12)
+* Departure boards:
+  * Fix arrival estimates for late vehicles.
+  * Improve tracking of lateness across scheduled dispatch orders.
+  * Disallow setting the filter station to the source station.
+* Fix regressions in v0.65-rc1:
+  * Fix crash when deleting sign via ctrl-click.
+  * Fix adding scheduled dispatch departure slots via the single-entry drop-down window.
+  * Fix not being able to create/edit template-based train replacement templates.
+
+### v0.65-rc1 (2025-03-31)
+* Fix incorrect path reservation behaviour when a train reversed on a tunnel/bridge head tile, where the train then exited the tunnel/bridge, which could cause train crashes.
+* Fix signal spacing arrow button pointing the wrong way in the signal window.
+* Fix conditions under which some buttons are enabled/disabled in the plan window.
+* Fix position of click hit box for settings in the cheats/sandbox window.
+* Fix auto-separate warnings about non-stop orders being shown for ships and aircraft.
+* Fix incorrect news message when using the merge_companies console command.
+* Routing restrictions:
+  * Fix creating a new counter from the order window for change counter value orders.
+  * Add action and order type to release all slots in a slot group.
+  * Add condition and conditional order type to test whether a vehicle is in/not in any slot in a slot group.
+* Programmable pre-signals:
+  * Disallow adding a signal state condition on the current signal.
+  * Fix handling of public slots/counters.
+  * Fix various minor issues with the window.
+  * No longer show an error message box when exceeding the signal evaluation limit.
+* Adjust link graph scheduling for very large networks to avoid over-estimating the amount of time required.
+* Bump trunk base from commit e2b0ea15097561844b7b29560cd80ae7a9a6e7af to commit 6d1f56ce6b782ee8b4cbf41239f7ce2c08e7bece, with some further commits picked.
+
 ### v0.64.2 (2025-02-20)
 * Fix not being being able to change the counter in set counter orders.
 * Routing restrictions: Add a text label routing restriction instruction.

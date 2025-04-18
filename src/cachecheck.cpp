@@ -48,7 +48,7 @@ static bool SignalInfraTotalMatches()
 	}
 
 	std::array<int, MAX_COMPANIES> new_signal_totals = {};
-	for (TileIndex tile(0); tile < MapSize(); ++tile) {
+	for (TileIndex tile(0); tile < Map::Size(); ++tile) {
 		switch (GetTileType(tile)) {
 			case MP_RAILWAY:
 				if (HasSignals(tile)) {
@@ -505,7 +505,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 		}
 
 		for (Station *st : Station::Iterate()) {
-			for (CargoID c = 0; c < NUM_CARGO; c++) {
+			for (CargoType c = 0; c < NUM_CARGO; c++) {
 				if (st->goods[c].data == nullptr) continue;
 
 				uint old_count = st->goods[c].data->cargo.TotalCount();
@@ -571,6 +571,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 
 		if (!TraceRestrictSlot::ValidateVehicleIndex()) cclog("Trace restrict slot vehicle index validation failed");
 		TraceRestrictSlot::ValidateSlotOccupants(log);
+		TraceRestrictSlot::ValidateSlotGroupDescendants(log);
 
 		if (!CargoPacket::ValidateDeferredCargoPayments()) cclog("Cargo packets deferred payments validation failed");
 

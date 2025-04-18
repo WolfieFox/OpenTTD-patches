@@ -39,6 +39,7 @@
 #include "string_func.h"
 #include "core/checksum_func.hpp"
 #include "newgrf_roadstop.h"
+#include "road_cmd.h"
 
 #include "table/strings.h"
 
@@ -247,7 +248,7 @@ void RoadVehUpdateCache(RoadVehicle *v, bool same_length)
 		if (!(HasBit(u->vcache.cached_vis_effect, VE_ADVANCED_EFFECT) && GB(u->vcache.cached_vis_effect, 0, VE_ADVANCED_EFFECT) == VESM_NONE)) last_vis_effect = u;
 
 		/* Update cargo aging period. */
-		if (unlikely(v->GetGRFID() == BSWAP32(0x44450602))) {
+		if (unlikely(v->GetGRFID() == std::byteswap<uint32_t>(0x44450602))) {
 			/* skip callback for known bad GRFs */
 			u->vcache.cached_cargo_age_period = EngInfo(u->engine_type)->cargo_age_period;
 		} else {
@@ -302,7 +303,7 @@ CommandCost CmdBuildRoadVehicle(TileIndex tile, DoCommandFlag flags, const Engin
 
 		v->spritenum = rvi->image_index;
 		v->cargo_type = e->GetDefaultCargoType();
-		assert(IsValidCargoID(v->cargo_type));
+		assert(IsValidCargoType(v->cargo_type));
 		v->cargo_cap = rvi->capacity;
 		v->refit_cap = 0;
 
@@ -315,7 +316,6 @@ CommandCost CmdBuildRoadVehicle(TileIndex tile, DoCommandFlag flags, const Engin
 		v->reliability_spd_dec = e->reliability_spd_dec;
 		v->breakdown_chance_factor = 128;
 		v->max_age = e->GetLifeLengthInDays();
-		_new_vehicle_id = v->index;
 
 		v->SetServiceInterval(Company::Get(v->owner)->settings.vehicle.servint_roadveh);
 
@@ -1432,7 +1432,7 @@ static bool CanBuildTramTrackOnTile(CompanyID c, TileIndex t, RoadType rt, RoadB
 	/* The 'current' company is not necessarily the owner of the vehicle. */
 	Backup<CompanyID> cur_company(_current_company, c, FILE_LINE);
 
-	CommandCost ret = DoCommandOld(t, rt << 4 | r, INVALID_TOWN, DC_NO_WATER, CMD_BUILD_ROAD);
+	CommandCost ret = Command<CMD_BUILD_ROAD>::Do(DC_NO_WATER, t, r, rt, DRD_NONE, INVALID_TOWN, BuildRoadFlags::None);
 
 	cur_company.Restore();
 	return ret.Succeeded();

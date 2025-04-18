@@ -205,7 +205,7 @@ static constexpr NWidgetPart _nested_main_window_widgets[] = {
 	NWidget(NWID_VIEWPORT, INVALID_COLOUR, WID_M_VIEWPORT), SetResize(1, 1),
 };
 
-enum {
+enum GlobalHotKeys : int32_t {
 	GHK_QUIT,
 	GHK_ABANDON,
 	GHK_CONSOLE,
@@ -250,7 +250,7 @@ struct MainWindow : Window
 	MainWindow(WindowDesc &desc) : Window(desc)
 	{
 		this->InitNested(0);
-		CLRBITS(this->flags, WF_WHITE_BORDER);
+		this->flags.Reset(WindowFlag::WhiteBorder);
 		ResizeWindow(this, _screen.width, _screen.height);
 
 		NWidgetViewport *nvp = this->GetWidget<NWidgetViewport>(WID_M_VIEWPORT);
@@ -552,7 +552,7 @@ struct MainWindow : Window
 			/* Show tooltip with last month production or town name */
 			const Point p = GetTileBelowCursor();
 			const TileIndex tile = TileVirtXY(p.x, p.y);
-			if (tile < MapSize()) ShowTooltipForTile(this, tile);
+			if (tile < Map::Size()) ShowTooltipForTile(this, tile);
 		}
 	}
 
@@ -622,7 +622,7 @@ HotkeyList MainWindow::hotkeys("global", global_hotkeys);
 static WindowDesc _main_window_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0,
 	WC_MAIN_WINDOW, WC_NONE,
-	WDF_NO_CLOSE,
+	WindowDefaultFlag::NoClose,
 	_nested_main_window_widgets,
 	&MainWindow::hotkeys
 );

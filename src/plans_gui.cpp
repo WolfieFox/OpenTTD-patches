@@ -84,7 +84,7 @@ static constexpr NWidgetPart _nested_plans_widgets[] = {
 static WindowDesc _plans_desc(__FILE__, __LINE__,
 	WDP_AUTO, "plans", 350, 100,
 	WC_PLANS, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_plans_widgets
 );
 
@@ -473,7 +473,7 @@ public:
 				uint text_right = (rtl ? btn_left - 4 : ir.right);
 				const_cast<PlansWindow*>(this)->vis_btn_left = btn_left;
 
-				for (uint16_t i = this->vscroll->GetPosition(); this->vscroll->IsVisible(i) && i < this->vscroll->GetCount(); i++) {
+				for (int32_t i = this->vscroll->GetPosition(); this->vscroll->IsVisible(i) && i < this->vscroll->GetCount(); i++) {
 					Plan *p = Plan::Get(list[i].plan_id);
 
 					if (i == this->selected) GfxFillRect(r.left + 1, y, r.right, y + this->resize.step_height, PC_DARK_GREY);
@@ -608,7 +608,7 @@ public:
 		}
 
 		const TileIndex tile = TileVirtXY(pt.x, pt.y);
-		if (_current_plan != nullptr && tile < MapSize()) {
+		if (_current_plan != nullptr && tile < Map::Size()) {
 			if (_ctrl_pressed && _current_plan->temp_line.tiles.empty() && _current_plan->last_tile != INVALID_TILE) {
 				_current_plan->StoreTempTile(_current_plan->last_tile);
 				_current_plan->last_tile = INVALID_TILE;
@@ -706,9 +706,9 @@ void ShowPlansWindow()
  */
 void CcAddPlan(const CommandCost &result)
 {
-	if (result.Failed()) return;
+	if (result.Failed() || !result.HasResultData()) return;
 
-	_current_plan = _new_plan;
+	_current_plan = Plan::Get(result.GetResultData());
 	_current_plan->SetVisibility(true);
 
 	Window *w = FindWindowById(WC_PLANS, 0);

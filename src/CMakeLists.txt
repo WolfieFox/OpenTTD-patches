@@ -60,6 +60,7 @@ add_files(
     autoreplace.cpp
     autoreplace_base.h
     autoreplace_cmd.cpp
+    autoreplace_cmd.h
     autoreplace_func.h
     autoreplace_gui.cpp
     autoreplace_gui.h
@@ -97,7 +98,6 @@ add_files(
     clear_cmd.cpp
     clear_func.h
     clear_map.h
-    cmd_helper.h
     command.cpp
     command_func.h
     command_log.h
@@ -171,6 +171,7 @@ add_files(
     elrail_func.h
     engine.cpp
     engine_base.h
+    engine_cmd.h
     engine_func.h
     engine_gui.cpp
     engine_gui.h
@@ -219,6 +220,7 @@ add_files(
     ground_vehicle.hpp
     group.h
     group_cmd.cpp
+    group_cmd.h
     group_gui.cpp
     group_gui.h
     group_type.h
@@ -237,6 +239,7 @@ add_files(
     house_type.h
     industry.h
     industry_cmd.cpp
+    industry_cmd.h
     industry_gui.cpp
     industry_map.h
     industry_type.h
@@ -250,6 +253,7 @@ add_files(
     landscape.cpp
     landscape_ppz.cpp
     landscape.h
+    landscape_cmd.h
     landscape_type.h
     language.h
     league_base.h
@@ -284,6 +288,9 @@ add_files(
     newgrf_animation_type.h
     newgrf_analysis.cpp
     newgrf_analysis.h
+    newgrf_badge.cpp
+    newgrf_badge.h
+    newgrf_badge_type.h
     newgrf_cache_check.h
     newgrf_callbacks.h
     newgrf_canal.cpp
@@ -345,6 +352,7 @@ add_files(
     newgrf_town.h
     newgrf_townname.cpp
     newgrf_townname.h
+    news_cmd.h
     news_func.h
     news_gui.cpp
     news_gui.h
@@ -352,6 +360,7 @@ add_files(
     object.h
     object_base.h
     object_cmd.cpp
+    object_cmd.h
     object_gui.cpp
     object_map.h
     object_type.h
@@ -392,6 +401,7 @@ add_files(
     rail.cpp
     rail.h
     rail_cmd.cpp
+    rail_cmd.h
     rail_gui.cpp
     rail_gui.h
     rail_gui_type.h
@@ -445,6 +455,7 @@ add_files(
     signs.cpp
     signs_base.h
     signs_cmd.cpp
+    signs_cmd.h
     signs_func.h
     signs_gui.cpp
     signs_type.h
@@ -473,6 +484,7 @@ add_files(
     station.cpp
     station_base.h
     station_cmd.cpp
+    station_cmd.h
     station_func.h
     station_gui.cpp
     station_gui.h
@@ -502,6 +514,7 @@ add_files(
     strings_type.h
     subsidy.cpp
     subsidy_base.h
+    subsidy_cmd.h
     subsidy_func.h
     subsidy_gui.cpp
     subsidy_type.h
@@ -519,6 +532,7 @@ add_files(
     tbtr_template_vehicle_func.h
     tbtr_template_vehicle_type.h
     terraform_cmd.cpp
+    terraform_cmd.h
     terraform_gui.cpp
     terraform_gui.h
     textbuf.cpp
@@ -578,6 +592,7 @@ add_files(
     tunnel_map.h
     tunnelbridge.h
     tunnelbridge_cmd.cpp
+    tunnelbridge_cmd.h
     tunnelbridge_map.h
     unit_conversion.h
     vehicle.cpp
@@ -605,10 +620,12 @@ add_files(
     walltime_func.h
     water.h
     water_cmd.cpp
+    water_cmd.h
     water_map.h
     waypoint.cpp
     waypoint_base.h
     waypoint_cmd.cpp
+    waypoint_cmd.h
     waypoint_func.h
     waypoint_gui.cpp
     widget.cpp

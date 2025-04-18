@@ -85,14 +85,14 @@ RoadType _last_built_roadtype;
 RoadType _last_built_tramtype;
 
 /** Toobar modes */
-enum ToolbarMode {
+enum ToolbarMode : uint8_t {
 	TB_NORMAL,
 	TB_UPPER,
 	TB_LOWER
 };
 
 /** Callback functions. */
-enum CallBackFunction {
+enum CallBackFunction : uint8_t {
 	CBF_NONE,
 	CBF_PLACE_SIGN,
 	CBF_PLACE_LANDINFO,
@@ -245,7 +245,7 @@ static CallBackFunction ToolbarFastForwardClick(Window *)
 /**
  * Game Option button menu entries.
  */
-enum OptionMenuEntries {
+enum OptionMenuEntries : uint8_t {
 	OME_GAMEOPTIONS,
 	OME_SETTINGS,
 	OME_AI_SETTINGS,
@@ -261,6 +261,7 @@ enum OptionMenuEntries {
 	OME_SHOW_STATIONNAMES_BUS,
 	OME_SHOW_STATIONNAMES_SHIP,
 	OME_SHOW_STATIONNAMES_PLANE,
+	OME_SHOW_STATIONNAMES_GHOST,
 	OME_SHOW_WAYPOINTNAMES,
 	OME_SHOW_SIGNS,
 	OME_SHOW_COMPETITOR_SIGNS,
@@ -304,6 +305,7 @@ static CallBackFunction ToolbarOptionsClick(Window *w)
 	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_BUS_STOP) != 0,    STR_SETTINGS_MENU_STATION_NAMES_BUS,       OME_SHOW_STATIONNAMES_BUS, false, false, 1));
 	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_DOCK) != 0,        STR_SETTINGS_MENU_STATION_NAMES_SHIP,      OME_SHOW_STATIONNAMES_SHIP, false, false, 1));
 	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_AIRPORT) != 0,     STR_SETTINGS_MENU_STATION_NAMES_PLANE,     OME_SHOW_STATIONNAMES_PLANE, false, false, 1));
+	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_GHOST) != 0,       STR_SETTINGS_MENU_STATION_NAMES_GHOST,     OME_SHOW_STATIONNAMES_GHOST, false, false, 1));
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_SHOW_WAYPOINT_NAMES),   STR_SETTINGS_MENU_WAYPOINTS_DISPLAYED,     OME_SHOW_WAYPOINTNAMES, false));
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_SHOW_SIGNS),            STR_SETTINGS_MENU_SIGNS_DISPLAYED,         OME_SHOW_SIGNS, false));
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_SHOW_COMPETITOR_SIGNS), STR_SETTINGS_MENU_SHOW_COMPETITOR_SIGNS,   OME_SHOW_COMPETITOR_SIGNS, false));
@@ -359,6 +361,7 @@ static CallBackFunction MenuClickSettings(int index)
 		case OME_SHOW_STATIONNAMES_BUS: ToggleFacilityDisplay(FACIL_BUS_STOP); break;
 		case OME_SHOW_STATIONNAMES_SHIP: ToggleFacilityDisplay(FACIL_DOCK); break;
 		case OME_SHOW_STATIONNAMES_PLANE: ToggleFacilityDisplay(FACIL_AIRPORT); break;
+		case OME_SHOW_STATIONNAMES_GHOST: ToggleFacilityDisplay(FACIL_GHOST); break;
 		case OME_SHOW_WAYPOINTNAMES:   ToggleBit(_display_opt, DO_SHOW_WAYPOINT_NAMES); break;
 		case OME_SHOW_SIGNS:           ToggleBit(_display_opt, DO_SHOW_SIGNS);          break;
 		case OME_SHOW_COMPETITOR_SIGNS:
@@ -379,7 +382,7 @@ static CallBackFunction MenuClickSettings(int index)
 /**
  * SaveLoad entries in scenario editor mode.
  */
-enum SaveLoadEditorMenuEntries {
+enum SaveLoadEditorMenuEntries : uint8_t {
 	SLEME_SAVE_SCENARIO = 0,
 	SLEME_LOAD_SCENARIO,
 	SLEME_SAVE_HEIGHTMAP,
@@ -391,7 +394,7 @@ enum SaveLoadEditorMenuEntries {
 /**
  * SaveLoad entries in normal game mode.
  */
-enum SaveLoadNormalMenuEntries {
+enum SaveLoadNormalMenuEntries : uint8_t {
 	SLNME_SAVE_GAME = 0,
 	SLNME_LOAD_GAME,
 	SLNME_EXIT_TOINTRO,
@@ -455,7 +458,7 @@ static CallBackFunction MenuClickSaveLoad(int index = 0)
 
 /* --- Map button menu --- */
 
-enum MapMenuEntries {
+enum MapMenuEntries : uint8_t {
 	MME_SHOW_SMALLMAP        = 0,
 	MME_SHOW_EXTRAVIEWPORTS,
 	MME_SHOW_LINKGRAPH,
@@ -512,13 +515,21 @@ static CallBackFunction MenuClickMap(int index)
 
 /* --- Town button menu --- */
 
+enum TownMenuEntries {
+	TME_SHOW_DIRECTORY = 0,
+	TME_SHOW_FOUND_TOWN,
+	TME_SHOW_PLACE_HOUSES,
+};
+
 static CallBackFunction ToolbarTownClick(Window *w)
 {
-	if (_settings_game.economy.found_town == TF_FORBIDDEN) {
-		PopupMainToolbarMenu(w, WID_TN_TOWNS, {STR_TOWN_MENU_TOWN_DIRECTORY});
-	} else {
-		PopupMainToolbarMenu(w, WID_TN_TOWNS, {STR_TOWN_MENU_TOWN_DIRECTORY, STR_TOWN_MENU_FOUND_TOWN});
-	}
+	DropDownList list;
+	list.push_back(MakeDropDownListStringItem(STR_TOWN_MENU_TOWN_DIRECTORY, TME_SHOW_DIRECTORY));
+	if (_settings_game.economy.found_town != TF_FORBIDDEN) list.push_back(MakeDropDownListStringItem(STR_TOWN_MENU_FOUND_TOWN, TME_SHOW_FOUND_TOWN));
+	if (_settings_game.economy.place_houses != PH_FORBIDDEN) list.push_back(MakeDropDownListStringItem(STR_SCENEDIT_TOWN_MENU_PACE_HOUSE, TME_SHOW_PLACE_HOUSES));
+
+	PopupMainToolbarMenu(w, WID_TN_TOWNS, std::move(list), 0);
+
 	return CBF_NONE;
 }
 
@@ -531,9 +542,12 @@ static CallBackFunction ToolbarTownClick(Window *w)
 static CallBackFunction MenuClickTown(int index)
 {
 	switch (index) {
-		case 0: ShowTownDirectory(); break;
-		case 1: // setting could be changed when the dropdown was open
+		case TME_SHOW_DIRECTORY: ShowTownDirectory(); break;
+		case TME_SHOW_FOUND_TOWN: // Setting could be changed when the dropdown was open
 			if (_settings_game.economy.found_town != TF_FORBIDDEN) ShowFoundTownWindow();
+			break;
+		case TME_SHOW_PLACE_HOUSES: // Setting could be changed when the dropdown was open
+			if (_settings_game.economy.place_houses != PH_FORBIDDEN) ShowBuildHousePicker(nullptr);
 			break;
 	}
 	return CBF_NONE;
@@ -1187,6 +1201,13 @@ static void UsePickerTool(TileIndex tile)
 			break;
 		}
 
+		case MP_HOUSE: {
+			if (_game_mode == GM_EDITOR || _settings_game.economy.place_houses != PH_FORBIDDEN) {
+				ShowBuildHousePickerAndSelect(tile);
+			}
+			break;
+		}
+
 		default:
 			break;
 	}
@@ -1372,7 +1393,7 @@ static CallBackFunction ToolbarScenDatePanel(Window *w)
 static CallBackFunction ToolbarScenDateBackward(Window *w)
 {
 	/* don't allow too fast scrolling */
-	if (!(w->flags & WF_TIMEOUT) || w->timeout_timer <= 1) {
+	if (!w->flags.Test(WindowFlag::Timeout) || w->timeout_timer <= 1) {
 		w->HandleButtonClick(WID_TE_DATE_BACKWARD);
 		w->SetDirty();
 
@@ -1385,7 +1406,7 @@ static CallBackFunction ToolbarScenDateBackward(Window *w)
 static CallBackFunction ToolbarScenDateForward(Window *w)
 {
 	/* don't allow too fast scrolling */
-	if (!(w->flags & WF_TIMEOUT) || w->timeout_timer <= 1) {
+	if (!w->flags.Test(WindowFlag::Timeout) || w->timeout_timer <= 1) {
 		w->HandleButtonClick(WID_TE_DATE_FORWARD);
 		w->SetDirty();
 
@@ -2162,7 +2183,7 @@ struct MainToolbarWindow : Window {
 		this->InitNested(0);
 
 		_last_started_action = CBF_NONE;
-		CLRBITS(this->flags, WF_WHITE_BORDER);
+		this->flags.Reset(WindowFlag::WhiteBorder);
 		this->SetWidgetDisabledState(WID_TN_FAST_FORWARD, _networking); // if networking, disable fast-forward button
 		PositionMainToolbar(this);
 		DoZoomInOutWindow(ZOOM_NONE, this);
@@ -2454,7 +2475,7 @@ static constexpr NWidgetPart _nested_toolbar_normal_widgets[] = {
 static WindowDesc _toolb_normal_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0,
 	WC_MAIN_TOOLBAR, WC_NONE,
-	WDF_NO_FOCUS | WDF_NO_CLOSE,
+	{WindowDefaultFlag::NoFocus, WindowDefaultFlag::NoClose},
 	_nested_toolbar_normal_widgets,
 	&MainToolbarWindow::hotkeys
 );
@@ -2514,7 +2535,7 @@ static ToolbarButtonProc * const _scen_toolbar_button_procs[] = {
 	ToolbarSwitchClick,
 };
 
-enum MainToolbarEditorHotkeys {
+enum MainToolbarEditorHotkeys : int32_t {
 	MTEHK_PAUSE,
 	MTEHK_FASTFORWARD,
 	MTEHK_SETTINGS,
@@ -2552,7 +2573,7 @@ struct ScenarioEditorToolbarWindow : Window {
 		this->InitNested(0);
 
 		_last_started_action = CBF_NONE;
-		CLRBITS(this->flags, WF_WHITE_BORDER);
+		this->flags.Reset(WindowFlag::WhiteBorder);
 		PositionMainToolbar(this);
 		DoZoomInOutWindow(ZOOM_NONE, this);
 
@@ -2821,7 +2842,7 @@ static constexpr NWidgetPart _nested_toolb_scen_widgets[] = {
 static WindowDesc _toolb_scen_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0,
 	WC_MAIN_TOOLBAR, WC_NONE,
-	WDF_NO_FOCUS | WDF_NO_CLOSE,
+	{WindowDefaultFlag::NoFocus, WindowDefaultFlag::NoClose},
 	_nested_toolb_scen_widgets,
 	&ScenarioEditorToolbarWindow::hotkeys
 );

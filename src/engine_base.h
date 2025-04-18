@@ -12,27 +12,29 @@
 
 #include "engine_type.h"
 #include "vehicle_type.h"
+#include "core/enum_type.hpp"
 #include "core/pool_type.hpp"
 #include "core/tinystring_type.hpp"
 #include "newgrf_commons.h"
 
 #include "3rdparty/cpp-btree/btree_map.h"
+#include "3rdparty/svector/svector.h"
 #include <vector>
 
 struct WagonOverride {
-	std::vector<EngineID> engines;
-	CargoID cargo;
+	ankerl::svector<EngineID, 1> engines;
+	CargoType cargo;
 	const SpriteGroup *group;
 };
 
 /** Flags used client-side in the purchase/autorenew engine list. */
-enum class EngineDisplayFlags : uint8_t {
-	None        = 0,         ///< No flag set.
-	HasVariants = (1U << 0), ///< Set if engine has variants.
-	IsFolded    = (1U << 1), ///< Set if display of variants should be folded (hidden).
-	Shaded      = (1U << 2), ///< Set if engine should be masked.
+enum class EngineDisplayFlag : uint8_t {
+	HasVariants, ///< Set if engine has variants.
+	IsFolded, ///< Set if display of variants should be folded (hidden).
+	Shaded, ///< Set if engine should be masked.
 };
-DECLARE_ENUM_AS_BIT_SET(EngineDisplayFlags)
+
+using EngineDisplayFlags = EnumBitSet<EngineDisplayFlag, uint8_t>;
 
 typedef Pool<Engine, EngineID, 64, 64000> EnginePool;
 extern EnginePool _engine_pool;
@@ -87,8 +89,9 @@ struct Engine : EnginePool::PoolItem<&_engine_pool> {
 	 * Used for obtaining the sprite offset of custom sprites, and for
 	 * evaluating callbacks.
 	 */
-	GRFFilePropsBase<NUM_CARGO + 2> grf_prop;
-	std::vector<WagonOverride> overrides;
+	VariableGRFFileProps grf_prop;
+	ankerl::svector<WagonOverride, 0> overrides;
+	std::vector<BadgeID> badges;
 
 	SpriteGroupCallbacksUsed callbacks_used = SGCU_ALL;
 	uint64_t cb36_properties_used = UINT64_MAX;
@@ -111,12 +114,12 @@ struct Engine : EnginePool::PoolItem<&_engine_pool> {
 	 * @return The default cargo type.
 	 * @see CanCarryCargo
 	 */
-	CargoID GetDefaultCargoType() const
+	CargoType GetDefaultCargoType() const
 	{
 		return this->info.cargo_type;
 	}
 
-	uint DetermineCapacity(const Vehicle *v, uint16_t *mail_capacity = nullptr, CargoID attempt_refit = INVALID_CARGO) const;
+	uint DetermineCapacity(const Vehicle *v, uint16_t *mail_capacity = nullptr, CargoType attempt_refit = INVALID_CARGO) const;
 
 	bool CanCarryCargo() const;
 	bool CanPossiblyCarryCargo() const;
@@ -133,7 +136,7 @@ struct Engine : EnginePool::PoolItem<&_engine_pool> {
 	 * @return The default capacity
 	 * @see GetDefaultCargoType
 	 */
-	uint GetDisplayDefaultCapacity(uint16_t *mail_capacity = nullptr, CargoID attempt_refit = INVALID_CARGO) const
+	uint GetDisplayDefaultCapacity(uint16_t *mail_capacity = nullptr, CargoType attempt_refit = INVALID_CARGO) const
 	{
 		return this->DetermineCapacity(nullptr, mail_capacity, attempt_refit);
 	}

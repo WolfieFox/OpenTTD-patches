@@ -29,7 +29,10 @@
 #include "../fileio_func.h"
 #include "../league_type.h"
 #include "../goal_type.h"
+#include "../group_type.h"
+#include "../signs_type.h"
 #include "../story_type.h"
+#include "../vehicle_type.h"
 
 #include "../core/format.hpp"
 
@@ -130,7 +133,7 @@ void ScriptInstance::RegisterAPI()
 
 bool ScriptInstance::LoadCompatibilityScripts(const std::string &api_version, Subdirectory dir)
 {
-	const char *api_vers[] = { "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "12", "13", "14" };
+	const char *api_vers[] = { "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "12", "13", "14", "15" };
 	uint api_idx = 0;
 	for (; api_idx < lengthof(api_vers) ; api_idx++) {
 		if (api_version == api_vers[api_idx]) break;
@@ -309,17 +312,17 @@ void ScriptInstance::CollectGarbage()
 
 /* static */ void ScriptInstance::DoCommandReturnVehicleID(ScriptInstance *instance)
 {
-	instance->engine->InsertResult(ScriptObject::GetNewVehicleID());
+	instance->engine->InsertResult(ScriptObject::GetLastCommandResultData<VehicleID>(::INVALID_VEHICLE));
 }
 
 /* static */ void ScriptInstance::DoCommandReturnSignID(ScriptInstance *instance)
 {
-	instance->engine->InsertResult(ScriptObject::GetNewSignID());
+	instance->engine->InsertResult(ScriptObject::GetLastCommandResultData<SignID>(::INVALID_SIGN));
 }
 
 /* static */ void ScriptInstance::DoCommandReturnGroupID(ScriptInstance *instance)
 {
-	instance->engine->InsertResult(ScriptObject::GetNewGroupID());
+	instance->engine->InsertResult(ScriptObject::GetLastCommandResultData<GroupID>(::INVALID_GROUP));
 }
 
 /* static */ void ScriptInstance::DoCommandReturnGoalID(ScriptInstance *instance)

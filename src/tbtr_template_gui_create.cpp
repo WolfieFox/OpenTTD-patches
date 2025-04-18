@@ -54,7 +54,7 @@ class TemplateReplaceWindow;
 // some space in front of the virtual train in the matrix
 uint16_t TRAIN_FRONT_SPACE = 16;
 
-enum TemplateReplaceCreateWindowWidgets {
+enum TemplateReplaceCreateWindowWidgets : WidgetID {
 	TCW_CAPTION,
 	TCW_NEW_TMPL_PANEL,
 	TCW_INFO_PANEL,
@@ -102,7 +102,7 @@ static WindowDesc _template_create_window_desc(__FILE__, __LINE__,
 	456, 100,                       // window size
 	WC_CREATE_TEMPLATE,             // window class
 	WC_TEMPLATEGUI_MAIN,            // parent window class
-	WDF_CONSTRUCTION,               // window flags
+	WindowDefaultFlag::Construction,// window flags
 	_template_create_window_widgets
 );
 
@@ -375,7 +375,7 @@ public:
 						cargo_caps[tmp->cargo_type] += tmp->cargo_cap;
 					}
 					y += GetCharacterHeight(FS_NORMAL) * 2;
-					for (CargoID i = 0; i < NUM_CARGO; ++i) {
+					for (CargoType i = 0; i < NUM_CARGO; ++i) {
 						if (cargo_caps[i] > 0) {
 							SetDParam(0, i);
 							SetDParam(1, cargo_caps[i]);
@@ -425,7 +425,7 @@ public:
 		/* Build tooltipstring */
 		std::string details;
 
-		for (CargoID cargo_type = 0; cargo_type < NUM_CARGO; cargo_type++) {
+		for (CargoType cargo_type = 0; cargo_type < NUM_CARGO; cargo_type++) {
 			if (capacity[cargo_type] == 0) continue;
 
 			SetDParam(0, cargo_type);           // {CARGO} #1
@@ -567,7 +567,7 @@ public:
 			if (full_cargo_weight > 0 || _settings_client.gui.show_train_weight_ratios_in_details) height += GetCharacterHeight(FS_NORMAL);
 			if (_settings_game.vehicle.train_acceleration_model != AM_ORIGINAL) height += GetCharacterHeight(FS_NORMAL);
 
-			for (CargoID i = 0; i < NUM_CARGO; ++i) {
+			for (CargoType i = 0; i < NUM_CARGO; ++i) {
 				if (cargo_caps[i] > 0) {
 					height += GetCharacterHeight(FS_NORMAL);
 				}
@@ -676,14 +676,13 @@ public:
 
 	void RearrangeVirtualTrain()
 	{
-		if (!this->virtual_train) return;
+		if (this->virtual_train == nullptr) return;
 		this->virtual_train = this->virtual_train->First();
 		assert(HasBit(this->virtual_train->subtype, GVSF_VIRTUAL));
 		for (; this->virtual_train != nullptr; this->virtual_train = this->virtual_train->GetNextUnit()) {
 			if (this->pending_deletions.count(this->virtual_train->index) == 0) break;
 		}
 	}
-
 
 	void UpdateButtonState()
 	{
@@ -711,11 +710,11 @@ void ShowTemplateCreateWindow(TemplateVehicle *to_edit, bool *create_window_open
 
 void CcSetVirtualTrain(const CommandCost &result)
 {
-	if (result.Failed()) return;
+	if (result.Failed() || !result.HasResultData()) return;
 
 	Window *window = FindWindowById(WC_CREATE_TEMPLATE, 0);
-	if (window!= nullptr) {
-		Train *train = Train::From(Vehicle::Get(_new_vehicle_id));
+	if (window != nullptr) {
+		Train *train = Train::From(Vehicle::Get(result.GetResultData()));
 		((TemplateCreateWindow *)window)->SetVirtualTrain(train);
 		window->InvalidateData();
 	}
@@ -737,7 +736,7 @@ void CcDeleteVirtualTrain(const CommandCost &result, VehicleID veh_id, SellVehic
 	if (result.Failed()) return;
 
 	Window *window = FindWindowById(WC_CREATE_TEMPLATE, 0);
-	if (window!= nullptr) {
+	if (window != nullptr) {
 		((TemplateCreateWindow *)window)->VirtualVehicleDeleted(veh_id);
 		window->InvalidateData();
 	}
