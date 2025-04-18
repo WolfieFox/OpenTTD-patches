@@ -16,13 +16,14 @@
 #include "landscape_type.h"
 #include "cargo_type.h"
 #include "newgrf_animation_type.h"
+#include "newgrf_badge_type.h"
 #include "newgrf_commons.h"
 #include <array>
 #include <vector>
 #include <variant>
 
 /** Available types of industry lifetimes. */
-enum IndustryLifeType {
+enum IndustryLifeType : uint8_t {
 	INDUSTRYLIFE_BLACK_HOLE =      0, ///< Like power plants and banks
 	INDUSTRYLIFE_EXTRACTIVE = 1 << 0, ///< Like mines
 	INDUSTRYLIFE_ORGANIC    = 1 << 1, ///< Like forests
@@ -33,21 +34,21 @@ enum IndustryLifeType {
  * Available procedures to check whether an industry may build at a given location.
  * @see CheckNewIndustryProc, _check_new_industry_procs[]
  */
-enum CheckProc {
+enum CheckProc : uint8_t {
 	CHECK_NOTHING,    ///< Always succeeds.
 	CHECK_FOREST,     ///< %Industry should be build above snow-line in arctic climate.
 	CHECK_REFINERY,   ///< %Industry should be positioned near edge of the map.
 	CHECK_FARM,       ///< %Industry should be below snow-line in arctic.
 	CHECK_PLANTATION, ///< %Industry should NOT be in the desert.
 	CHECK_WATER,      ///< %Industry should be in the desert.
-	CHECK_LUMBERMILL, ///< %Industry should be in the rain forest.
+	CHECK_LUMBERMILL, ///< %Industry should be in the rainforest.
 	CHECK_BUBBLEGEN,  ///< %Industry should be in low land.
 	CHECK_OIL_RIG,    ///< Industries at sea should be positioned near edge of the map.
 	CHECK_END,        ///< End marker of the industry check procedures.
 };
 
 /** How was the industry created */
-enum IndustryConstructionType {
+enum IndustryConstructionType : uint8_t {
 	ICT_UNKNOWN,          ///< in previous game version or without newindustries activated
 	ICT_NORMAL_GAMEPLAY,  ///< either by user or random creation process
 	ICT_MAP_GENERATION,   ///< during random map creation
@@ -55,7 +56,7 @@ enum IndustryConstructionType {
 };
 
 /** Various industry behaviours mostly to represent original TTD specialities */
-enum IndustryBehaviour {
+enum IndustryBehaviour : uint32_t {
 	INDUSTRYBEH_NONE                  =      0,
 	INDUSTRYBEH_PLANT_FIELDS          = 1 << 0,  ///< periodically plants fields around itself (temp and arctic farms)
 	INDUSTRYBEH_CUT_TREES             = 1 << 1,  ///< cuts trees and produce first output cargo from them (lumber mill)
@@ -82,7 +83,7 @@ enum IndustryBehaviour {
 DECLARE_ENUM_AS_BIT_SET(IndustryBehaviour)
 
 /** Flags for miscellaneous industry tile specialities */
-enum IndustryTileSpecialFlags {
+enum IndustryTileSpecialFlags : uint8_t {
 	INDTILE_SPECIAL_NONE                  = 0,
 	INDTILE_SPECIAL_NEXTFRAME_RANDOMBITS  = 1 << 0, ///< Callback 0x26 needs random bits
 	INDTILE_SPECIAL_ACCEPTS_ALL_CARGO     = 1 << 1, ///< Tile always accepts all cargoes the associated industry accepts
@@ -109,14 +110,14 @@ struct IndustrySpec {
 	uint32_t prospecting_chance;                ///< Chance prospecting succeeds
 	IndustryType conflicting[3];                ///< Industries this industry cannot be close to
 	uint8_t check_proc;                         ///< Index to a procedure to check for conflicting circumstances
-	std::array<CargoID, INDUSTRY_NUM_OUTPUTS> produced_cargo{};
+	std::array<CargoType, INDUSTRY_NUM_OUTPUTS> produced_cargo{};
 	std::array<uint8_t, INDUSTRY_NUM_OUTPUTS> production_rate{};
 	/**
 	 * minimum amount of cargo transported to the stations.
 	 * If the waiting cargo is less than this number, no cargo is moved to it.
 	 */
 	uint8_t minimal_cargo;
-	std::array<CargoID, INDUSTRY_NUM_INPUTS> accepts_cargo{}; ///< 16 accepted cargoes.
+	std::array<CargoType, INDUSTRY_NUM_INPUTS> accepts_cargo{}; ///< 16 accepted cargoes.
 	uint16_t input_cargo_multiplier[INDUSTRY_NUM_INPUTS][INDUSTRY_NUM_OUTPUTS]; ///< Input cargo multipliers (multiply amount of incoming cargo for the produced cargoes)
 	IndustryLifeType life_type;                 ///< This is also known as Industry production flag, in newgrf specs
 	uint8_t climate_availability;               ///< Bitmask, giving landscape enums as bit position
@@ -135,6 +136,7 @@ struct IndustrySpec {
 	bool enabled;                               ///< entity still available (by default true).newgrf can disable it, though
 	GRFFileProps grf_prop;                      ///< properties related to the grf file
 	std::vector<uint8_t> random_sounds;         ///< Random sounds;
+	std::vector<BadgeID> badges;
 
 	std::array<std::variant<CargoLabel, MixedCargoType>, INDUSTRY_ORIGINAL_NUM_OUTPUTS> produced_cargo_label; ///< Cargo labels of produced cargo for default industries.
 	std::array<std::variant<CargoLabel, MixedCargoType>, INDUSTRY_ORIGINAL_NUM_INPUTS> accepts_cargo_label; ///< Cargo labels of accepted cargo for default industries.
@@ -151,7 +153,7 @@ struct IndustrySpec {
  * @note A tile can at most accept 3 types of cargo, even if an industry as a whole can accept more types.
  */
 struct IndustryTileSpec {
-	std::array<CargoID, INDUSTRY_NUM_INPUTS> accepts_cargo; ///< Cargo accepted by this tile
+	std::array<CargoType, INDUSTRY_NUM_INPUTS> accepts_cargo; ///< Cargo accepted by this tile
 	std::array<int8_t, INDUSTRY_NUM_INPUTS> acceptance;     ///< Level of acceptance per cargo type (signed, may be negative!)
 	Slope slopes_refused;                 ///< slope pattern on which this tile cannot be built
 	uint8_t anim_production;              ///< Animation frame to start when goods are produced
@@ -167,6 +169,7 @@ struct IndustryTileSpec {
 	IndustryTileSpecialFlags special_flags; ///< Bitmask of extra flags used by the tile
 	bool enabled;                           ///< entity still available (by default true).newgrf can disable it, though
 	GRFFileProps grf_prop;                  ///< properties related to the grf file
+	std::vector<BadgeID> badges;
 
 	std::array<std::variant<CargoLabel, MixedCargoType>, INDUSTRY_ORIGINAL_NUM_INPUTS> accepts_cargo_label; ///< Cargo labels of accepted cargo for default industry tiles.
 };

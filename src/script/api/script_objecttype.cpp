@@ -13,6 +13,7 @@
 
 #include "script_error.hpp"
 #include "script_map.hpp"
+#include "../../object_cmd.h"
 
 #include "../../safeguards.h"
 
@@ -43,13 +44,13 @@
 	EnforcePrecondition(false, view >= 0 && view < GetViews(object_type));
 	EnforcePrecondition(false, ScriptMap::IsValidTile(tile));
 
-	return ScriptObject::DoCommandOld(tile, object_type, view, CMD_BUILD_OBJECT);
+	return ScriptObject::Command<CMD_BUILD_OBJECT>::Do(tile, object_type, view);
 }
 
 /* static */ ObjectType ScriptObjectType::ResolveNewGRFID(SQInteger grfid, SQInteger grf_local_id)
 {
 	EnforcePrecondition(INVALID_OBJECT_TYPE, IsInsideBS(grf_local_id, 0x00, NUM_OBJECTS));
 
-	grfid = BSWAP32(GB(grfid, 0, 32)); // Match people's expectations.
+	grfid = std::byteswap(GB(grfid, 0, 32)); // Match people's expectations.
 	return _object_mngr.GetID(grf_local_id, grfid);
 }

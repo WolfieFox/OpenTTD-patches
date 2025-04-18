@@ -37,7 +37,7 @@ const size_t MAX_SLE_INT = INT_MAX;
 static constexpr uint MAX_SIGNAL_DRAG_DISTANCE = 40;
 
 /** Settings profiles and highscore tables. */
-enum SettingsProfile {
+enum SettingsProfile : uint8_t {
 	SP_BEGIN = 0,
 	SP_EASY = SP_BEGIN,                       ///< Easy difficulty.
 	SP_MEDIUM,                                ///< Medium difficulty.
@@ -53,7 +53,7 @@ enum SettingsProfile {
 };
 
 /** Available industry map generation densities. */
-enum IndustryDensity {
+enum IndustryDensity : uint8_t {
 	ID_FUND_ONLY, ///< The game does not build industries.
 	ID_MINIMAL,   ///< Start with just the industries that must be present.
 	ID_VERY_LOW,  ///< Very few industries at game start.
@@ -93,6 +93,13 @@ enum RightClickClose : uint8_t {
 	RCC_YES_EXCEPT_STICKY,
 };
 
+/** Possible values for "place_houses" setting. */
+enum PlaceHouses : uint8_t {
+	PH_FORBIDDEN = 0,
+	PH_ALLOWED,
+	PH_ALLOWED_CONSTRUCTED,
+};
+
 /** Settings related to the difficulty of the game */
 struct DifficultySettings {
 	uint8_t  competitor_start_time;                 ///< Unused value, used to load old savegames.
@@ -125,7 +132,7 @@ struct DifficultySettings {
 };
 
 /** Settings relating to viewport/smallmap scrolling. */
-enum ViewportScrollMode {
+enum ViewportScrollMode : uint8_t {
 	VSM_VIEWPORT_RMB_FIXED, ///< Viewport moves with mouse movement on holding right mouse button, cursor position is fixed.
 	VSM_MAP_RMB_FIXED,      ///< Map moves with mouse movement on holding right mouse button, cursor position is fixed.
 	VSM_MAP_RMB,            ///< Map moves with mouse movement on holding right mouse button, cursor moves.
@@ -134,7 +141,7 @@ enum ViewportScrollMode {
 };
 
 /** Settings related to scroll wheel behavior. */
-enum ScrollWheelScrollingSetting {
+enum ScrollWheelScrollingSetting : uint8_t {
 	SWS_ZOOM_MAP = 0,       ///< Scroll wheel zooms the map.
 	SWS_SCROLL_MAP = 1,     ///< Scroll wheel scrolls the map.
 	SWS_OFF = 2             ///< Scroll wheel has no effect.
@@ -154,6 +161,16 @@ enum PublicRoadsConstruction : uint8_t {
 	PRC_AVOID_CURVES,             ///< Generate roads avoiding curves if possible
 
 	PRC_END
+};
+
+/** Deaptures conditional jump result */
+enum DeparturesConditionalJumpResult : uint8_t {
+	DCJD_BEGIN = 0,
+	DCJD_GIVE_UP = DCJD_BEGIN,    ///< Give up
+	DCJD_TAKEN,                   ///< Handle as taken
+	DCJD_NOT_TAKEN,               ///< Handle as not taken
+
+	DCJD_LAST = DCJD_NOT_TAKEN
 };
 
 /** Settings related to time display. This may be loaded from the savegame and/or overridden by the client. */
@@ -266,7 +283,7 @@ struct GUISettings : public TimeSettings {
 	bool        departure_larger_font;                           ///< whether to show the calling at list in a larger font
 	bool        departure_destination_type;                      ///< whether to show destination types for ports and airports
 	bool        departure_smart_terminus;                        ///< whether to only show passenger services
-	uint8_t     departure_conditionals;                          ///< how to handle conditional orders
+	DeparturesConditionalJumpResult departure_conditionals;      ///< how to handle conditional orders
 	bool        departure_merge_identical;                       ///< whether to merge identical departures
 	uint8_t     departure_default_mode;                          ///< default mode for non-waypoint departure board window
 	uint8_t     departure_default_source;                        ///< default source for departure board window
@@ -518,7 +535,7 @@ struct GameCreationSettings {
 	uint8_t  se_flat_world_height;           ///< land height a flat world gets in SE
 	uint8_t  town_name;                      ///< the town name generator used for town names
 	uint8_t  landscape;                      ///< the landscape we're currently in
-	Borders  water_borders;                  ///< bitset of the borders that are water
+	BorderFlags water_borders;               ///< bitset of the borders that are water
 	uint16_t custom_town_number;             ///< manually entered number of towns
 	uint16_t custom_industry_number;         ///< manually entered number of industries
 	uint8_t  variety;                        ///< variety level applied to TGP
@@ -766,6 +783,7 @@ struct EconomySettings {
 	uint16_t min_town_land_area;             ///< minimum contiguous lang area for towns.
 	uint16_t min_city_land_area;             ///< minimum contiguous lang area for cities.
 	TownFounding found_town;                 ///< town founding.
+	PlaceHouses place_houses;                ///< players are allowed to place town houses.
 	bool     station_noise_level;            ///< build new airports when the town noise level is still within accepted limits
 	uint16_t town_noise_population[3];       ///< population to base decision on noise evaluation (@see town_council_tolerance)
 	bool     infrastructure_sharing[4];      ///< enable infrastructure sharing for rail/road/water/air
@@ -811,7 +829,7 @@ struct LinkGraphSettings {
 	uint8_t short_path_saturation;                      ///< percentage up to which short paths are saturated before saturating most capacious paths
 	uint16_t aircraft_link_scale;                       ///< scale effective distance of aircraft links
 
-	inline DistributionType GetDistributionType(CargoID cargo) const
+	inline DistributionType GetDistributionType(CargoType cargo) const
 	{
 		if (this->distribution_per_cargo[cargo] != DT_PER_CARGO_DEFAULT) return this->distribution_per_cargo[cargo];
 		if (IsCargoInClass(cargo, CC_PASSENGERS)) return this->distribution_pax;

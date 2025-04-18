@@ -142,8 +142,8 @@ void FillStaticNetworkServerGameInfo()
 	_network_game_info.calendar_start = CalTime::ConvertYMDToDate(_settings_game.game_creation.starting_year, 0, 1);
 	_network_game_info.clients_max    = _settings_client.network.max_clients;
 	_network_game_info.companies_max  = _settings_client.network.max_companies;
-	_network_game_info.map_width      = MapSizeX();
-	_network_game_info.map_height     = MapSizeY();
+	_network_game_info.map_width      = Map::SizeX();
+	_network_game_info.map_height     = Map::SizeY();
 	_network_game_info.landscape      = _settings_game.game_creation.landscape;
 	_network_game_info.dedicated      = _network_dedicated;
 	_network_game_info.grfconfig      = _grfconfig;
@@ -178,20 +178,20 @@ const NetworkServerGameInfo &GetCurrentNetworkServerGameInfo()
  * @param config The GRF to handle.
  * @param name The name of the NewGRF, empty when unknown.
  */
-static void HandleIncomingNetworkGameInfoGRFConfig(GRFConfig *config, std::string_view name)
+static void HandleIncomingNetworkGameInfoGRFConfig(GRFConfig &config, std::string_view name)
 {
 	/* Find the matching GRF file */
-	const GRFConfig *f = FindGRFConfig(config->ident.grfid, FGCM_EXACT, &config->ident.md5sum);
+	const GRFConfig *f = FindGRFConfig(config.ident.grfid, FGCM_EXACT, &config.ident.md5sum);
 	if (f == nullptr) {
-		AddGRFTextToList(config->name, name.empty() ? GetString(STR_CONFIG_ERROR_INVALID_GRF_UNKNOWN) : name);
-		config->status = GCS_NOT_FOUND;
+		AddGRFTextToList(config.name, name.empty() ? GetString(STR_CONFIG_ERROR_INVALID_GRF_UNKNOWN) : name);
+		config.status = GCS_NOT_FOUND;
 	} else {
-		config->filename = f->filename;
-		config->name = f->name;
-		config->info = f->info;
-		config->url = f->url;
+		config.filename = f->filename;
+		config.name = f->name;
+		config.info = f->info;
+		config.url = f->url;
 	}
-	SetBit(config->flags, GCF_COPY);
+	SetBit(config.flags, GCF_COPY);
 }
 
 /**
@@ -404,7 +404,7 @@ void DeserializeNetworkGameInfo(Packet &p, NetworkGameInfo &info, const GameInfo
 
 				GRFConfig *c = new GRFConfig();
 				c->ident = grf.ident;
-				HandleIncomingNetworkGameInfoGRFConfig(c, grf.name);
+				HandleIncomingNetworkGameInfoGRFConfig(*c, grf.name);
 
 				/* Append GRFConfig to the list */
 				*dst = c;
@@ -524,7 +524,7 @@ void DeserializeNetworkGameInfoExtended(Packet &p, NetworkGameInfo &info)
 
 			GRFConfig *c = new GRFConfig();
 			c->ident = grf.ident;
-			HandleIncomingNetworkGameInfoGRFConfig(c, grf.name);
+			HandleIncomingNetworkGameInfoGRFConfig(*c, grf.name);
 
 			/* Append GRFConfig to the list */
 			*dst = c;

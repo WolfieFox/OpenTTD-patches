@@ -12,10 +12,12 @@
 #include "company_func.h"
 #include "hotkeys.h"
 #include "newgrf.h"
+#include "newgrf_badge.h"
 #include "newgrf_object.h"
 #include "newgrf_text.h"
 #include "object.h"
 #include "object_base.h"
+#include "object_cmd.h"
 #include "picker_gui.h"
 #include "sound_func.h"
 #include "strings_func.h"
@@ -42,6 +44,8 @@ static ObjectPickerSelection _object_gui; ///< Settings of the object picker.
 class ObjectPickerCallbacks : public PickerCallbacksNewGRFClass<ObjectClass> {
 public:
 	ObjectPickerCallbacks() : PickerCallbacksNewGRFClass<ObjectClass>("fav_objects") {}
+
+	GrfSpecFeature GetFeature() const override { return GSF_OBJECTS; }
 
 	StringID GetClassTooltip() const override { return STR_PICKER_OBJECT_CLASS_TOOLTIP; }
 	StringID GetTypeTooltip() const override { return STR_PICKER_OBJECT_TYPE_TOOLTIP; }
@@ -73,6 +77,13 @@ public:
 	{
 		const auto *spec = this->GetSpec(cls_id, id);
 		return (spec == nullptr || !spec->IsEverAvailable()) ? INVALID_STRING_ID : spec->name;
+	}
+
+	std::span<const BadgeID> GetTypeBadges(int cls_id, int id) const override
+	{
+		const auto *spec = this->GetSpec(cls_id, id);
+		if (spec == nullptr || !spec->IsEverAvailable()) return {};
+		return spec->badges;
 	}
 
 	bool IsTypeAvailable(int cls_id, int id) const override
@@ -221,6 +232,11 @@ public:
 				const ObjectSpec *spec = objclass->GetSpec(_object_gui.sel_type);
 				if (spec == nullptr) break;
 
+				Rect tr = r;
+				const int bottom = tr.bottom;
+				tr.bottom = INT16_MAX;
+				tr.top = DrawBadgeNameList(tr, spec->badges, GSF_OBJECTS);
+
 				/* Get the extra message for the GUI */
 				if (HasBit(spec->callback_mask, CBM_OBJ_FUND_MORE_TEXT)) {
 					uint16_t callback_res = GetObjectCallback(CBID_OBJECT_FUND_MORE_TEXT, 0, 0, spec, nullptr, INVALID_TILE, _object_gui.sel_view);
@@ -234,17 +250,19 @@ public:
 								/* Use all the available space left from where we stand up to the
 								 * end of the window. We ALSO enlarge the window if needed, so we
 								 * can 'go' wild with the bottom of the window. */
-								int y = DrawStringMultiLine(r.left, r.right, r.top, UINT16_MAX, message, TC_ORANGE) - r.top - 1;
+								tr.top = DrawStringMultiLine(tr, message, TC_ORANGE);
 								StopTextRefStackUsage();
-								if (y > this->info_height) {
-									BuildObjectWindow *bow = const_cast<BuildObjectWindow *>(this);
-									bow->info_height = y;
-									bow->ReInit();
-								}
 							}
 						}
 					}
 				}
+
+				if (tr.top > bottom) {
+					BuildObjectWindow *bow = const_cast<BuildObjectWindow *>(this);
+					bow->info_height += tr.top - bottom;
+					bow->ReInit();
+				}
+
 				break;
 			}
 
@@ -318,7 +336,7 @@ public:
 		if (_settings_game.construction.build_object_area_permitted && spec->size == OBJECT_SIZE_1X1) {
 			VpStartPlaceSizing(tile, VPM_X_AND_Y, DDSP_BUILD_OBJECT);
 		} else {
-			DoCommandPOld(tile, spec->Index(), _object_gui.sel_view, CMD_BUILD_OBJECT | CMD_MSG(STR_ERROR_CAN_T_BUILD_OBJECT), CommandCallback::Terraform);
+			Command<CMD_BUILD_OBJECT>::Post(STR_ERROR_CAN_T_BUILD_OBJECT, CommandCallback::PlaySound_CONSTRUCTION_OTHER, tile, spec->Index(), _object_gui.sel_view);
 		}
 	}
 
@@ -336,12 +354,11 @@ public:
 		if (!_settings_game.construction.freeform_edges) {
 			/* When end_tile is MP_VOID, the error tile will not be visible to the
 			 * user. This happens when terraforming at the southern border. */
-			if (TileX(end_tile) == MapMaxX()) end_tile += TileDiffXY(-1, 0);
-			if (TileY(end_tile) == MapMaxY()) end_tile += TileDiffXY(0, -1);
+			if (TileX(end_tile) == Map::MaxX()) end_tile += TileDiffXY(-1, 0);
+			if (TileY(end_tile) == Map::MaxY()) end_tile += TileDiffXY(0, -1);
 		}
-		DoCommandPOld(end_tile, start_tile,
-				( ObjectClass::Get(_object_gui.sel_class)->GetSpec(_object_gui.sel_type)->Index() << 3) | (_object_gui.sel_view << 1) | (_ctrl_pressed ? 1 : 0),
-				CMD_BUILD_OBJECT_AREA | CMD_MSG(STR_ERROR_CAN_T_BUILD_OBJECT), CommandCallback::Terraform);
+		Command<CMD_BUILD_OBJECT_AREA>::Post(STR_ERROR_CAN_T_PURCHASE_THIS_LAND, CommandCallback::PlaySound_CONSTRUCTION_OTHER,
+				end_tile, start_tile, ObjectClass::Get(_object_gui.sel_class)->GetSpec(_object_gui.sel_type)->Index(), _object_gui.sel_view, _ctrl_pressed);
 	}
 
 	void OnPlaceObjectAbort() override
@@ -398,7 +415,7 @@ static constexpr NWidgetPart _nested_build_object_widgets[] = {
 static WindowDesc _build_object_desc(__FILE__, __LINE__,
 	WDP_AUTO, "build_object", 0, 0,
 	WC_BUILD_OBJECT, WC_BUILD_TOOLBAR,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_build_object_widgets,
 	&BuildObjectWindow::hotkeys
 );
@@ -423,7 +440,7 @@ void ShowBuildObjectPickerAndSelect(const ObjectSpec *spec)
 {
 	if (spec == nullptr || !spec->IsAvailable() || !ObjectPickerCallbacks::instance.IsActive() || spec->class_index == INVALID_OBJECT_CLASS) return;
 
-	BuildObjectWindow *w = AllocateWindowDescFront<BuildObjectWindow>(_build_object_desc, 0, true);
+	BuildObjectWindow *w = AllocateWindowDescFront<BuildObjectWindow, true>(_build_object_desc, 0);
 	if (w != nullptr) {
 		w->PickItem(spec->class_index, spec->index);
 	}

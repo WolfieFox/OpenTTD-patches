@@ -12,9 +12,11 @@
 #include "script_rail.hpp"
 #include "../script_instance.hpp"
 #include "../../bridge_map.h"
+#include "../../landscape_cmd.h"
 #include "../../strings_func.h"
 #include "../../date_func.h"
 #include "../../tunnelbridge_cmd.h"
+#include "../../road_cmd.h"
 #include "table/strings.h"
 
 #include "../../safeguards.h"
@@ -81,22 +83,6 @@ static void _DoCommandReturnBuildBridge1(class ScriptInstance *instance)
 	EnforcePrecondition(false, vehicle_type != ScriptVehicle::VT_ROAD || ScriptRoad::IsRoadTypeAvailable(ScriptRoad::GetCurrentRoadType()));
 	EnforcePrecondition(false, ScriptCompanyMode::IsValid() || vehicle_type == ScriptVehicle::VT_ROAD);
 
-	uint type = (1 << 17);
-	switch (vehicle_type) {
-		case ScriptVehicle::VT_ROAD:
-			type |= (TRANSPORT_ROAD << 15);
-			type |= (ScriptRoad::GetCurrentRoadType() << 8);
-			break;
-		case ScriptVehicle::VT_RAIL:
-			type |= (TRANSPORT_RAIL << 15);
-			type |= (ScriptRail::GetCurrentRailType() << 8);
-			break;
-		case ScriptVehicle::VT_WATER:
-			type |= (TRANSPORT_WATER << 15);
-			break;
-		default: NOT_REACHED();
-	}
-
 	switch (vehicle_type) {
 		case ScriptVehicle::VT_ROAD:
 			ScriptObject::SetCallbackVariable(0, start.base());
@@ -121,7 +107,7 @@ static void _DoCommandReturnBuildBridge1(class ScriptInstance *instance)
 	DiagDirection dir_1 = ::DiagdirBetweenTiles(end, start);
 	DiagDirection dir_2 = ::ReverseDiagDir(dir_1);
 
-	return ScriptObject::DoCommandOld(start + ::TileOffsByDiagDir(dir_1), ::DiagDirToRoadBits(dir_2) | (ScriptRoad::GetCurrentRoadType() << 4) | (1 << 13), INVALID_TOWN, CMD_BUILD_ROAD, nullptr, &::_DoCommandReturnBuildBridge2);
+	return ScriptObject::Command<CMD_BUILD_ROAD>::Do(&::_DoCommandReturnBuildBridge2, start + ::TileOffsByDiagDir(dir_1), ::DiagDirToRoadBits(dir_2), (::RoadType)ScriptRoad::GetCurrentRoadType(), DRD_NONE, INVALID_TOWN, BuildRoadFlags::NoCustomBridgeHeads);
 }
 
 /* static */ bool ScriptBridge::_BuildBridgeRoad2()
@@ -135,14 +121,14 @@ static void _DoCommandReturnBuildBridge1(class ScriptInstance *instance)
 	DiagDirection dir_1 = ::DiagdirBetweenTiles(end, start);
 	DiagDirection dir_2 = ::ReverseDiagDir(dir_1);
 
-	return ScriptObject::DoCommandOld(end + ::TileOffsByDiagDir(dir_2), ::DiagDirToRoadBits(dir_1) | (ScriptRoad::GetCurrentRoadType() << 4) | (1 << 13), INVALID_TOWN, CMD_BUILD_ROAD);
+	return ScriptObject::Command<CMD_BUILD_ROAD>::Do(end + ::TileOffsByDiagDir(dir_2), ::DiagDirToRoadBits(dir_1), (::RoadType)ScriptRoad::GetCurrentRoadType(), DRD_NONE, INVALID_TOWN, BuildRoadFlags::NoCustomBridgeHeads);
 }
 
 /* static */ bool ScriptBridge::RemoveBridge(TileIndex tile)
 {
 	EnforceCompanyModeValid(false);
 	EnforcePrecondition(false, IsBridgeTile(tile));
-	return ScriptObject::DoCommandOld(tile, 0, 0, CMD_LANDSCAPE_CLEAR);
+	return ScriptObject::Command<CMD_LANDSCAPE_CLEAR>::Do(tile);
 }
 
 /* static */ std::optional<std::string> ScriptBridge::GetName(BridgeType bridge_type, ScriptVehicle::VehicleType vehicle_type)

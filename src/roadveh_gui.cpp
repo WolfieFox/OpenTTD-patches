@@ -56,16 +56,16 @@ void DrawRoadVehDetails(const Vehicle *v, const Rect &r)
 
 		bool first = true;
 		for (const CargoSpec *cs : _sorted_cargo_specs) {
-			CargoID cid = cs->Index();
-			if (max_cargo[cid] > 0) {
+			CargoType cargo_type = cs->Index();
+			if (max_cargo[cargo_type] > 0) {
 				if (!first) capacity += list_separator;
 
-				SetDParam(0, cid);
-				SetDParam(1, max_cargo[cid]);
+				SetDParam(0, cargo_type);
+				SetDParam(1, max_cargo[cargo_type]);
 				AppendStringInPlace(capacity, STR_JUST_CARGO);
 
-				if (subtype_text[cid] != STR_NULL) {
-					AppendStringInPlace(capacity, subtype_text[cid]);
+				if (subtype_text[cargo_type] != STR_NULL) {
+					AppendStringInPlace(capacity, subtype_text[cargo_type]);
 				}
 
 				first = false;
@@ -170,6 +170,6 @@ void DrawRoadVehImage(const Vehicle *v, const Rect &r, VehicleID selection, Engi
 	if (v->index == selection) {
 		int height = ScaleSpriteTrad(12);
 		Rect hr = {(rtl ? px : 0), 0, (rtl ? max_width : px) - 1, height - 1};
-		DrawFrameRect(hr.Translate(r.left, CenterBounds(r.top, r.bottom, height)).Expand(WidgetDimensions::scaled.bevel), COLOUR_WHITE, FR_BORDERONLY);
+		DrawFrameRect(hr.Translate(r.left, CenterBounds(r.top, r.bottom, height)).Expand(WidgetDimensions::scaled.bevel), COLOUR_WHITE, FrameFlag::BorderOnly);
 	}
 }

@@ -64,10 +64,10 @@ static constexpr NWidgetPart _nested_departures_list[] = {
 		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_EMPTY), SetMinimalSize(11, 12), SetFill(0, 1), SetStringTip(STR_DEPARTURES_EMPTY_BUTTON, STR_DEPARTURES_EMPTY_TOOLTIP),
 		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_VIA), SetMinimalSize(11, 12), SetFill(0, 1), SetStringTip(STR_DEPARTURES_VIA_BUTTON, STR_DEPARTURES_VIA_TOOLTIP),
 		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_FILTER), SetMinimalSize(11, 12), SetFill(0, 1), SetStringTip(STR_DEPARTURES_FILTER_BUTTON, STR_DEPARTURES_FILTER_TOOLTIP),
-		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_TRAINS), SetMinimalSize(14, 12), SetFill(0, 1), SetStringTip(STR_TRAIN, STR_NULL),
-		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_ROADVEHS), SetMinimalSize(14, 12), SetFill(0, 1), SetStringTip(STR_LORRY, STR_NULL),
-		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_SHIPS), SetMinimalSize(14, 12), SetFill(0, 1), SetStringTip(STR_SHIP, STR_NULL),
-		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_PLANES),  SetMinimalSize(14, 12), SetFill(0, 1), SetStringTip(STR_PLANE, STR_NULL),
+		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_TRAINS), SetAspect(WidgetDimensions::ASPECT_VEHICLE_ICON), SetStringTip(STR_TRAIN, STR_NULL),
+		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_ROADVEHS), SetAspect(WidgetDimensions::ASPECT_VEHICLE_ICON), SetStringTip(STR_LORRY, STR_NULL),
+		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_SHIPS), SetAspect(WidgetDimensions::ASPECT_VEHICLE_ICON), SetStringTip(STR_SHIP, STR_NULL),
+		NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_DB_SHOW_PLANES), SetAspect(WidgetDimensions::ASPECT_VEHICLE_ICON), SetStringTip(STR_PLANE, STR_NULL),
 		NWidget(WWT_RESIZEBOX, COLOUR_GREY),
 	EndContainer(),
 };
@@ -75,7 +75,7 @@ static constexpr NWidgetPart _nested_departures_list[] = {
 static WindowDesc _departures_desc(__FILE__, __LINE__,
 	WDP_AUTO, "depatures", 260, 246,
 	WC_DEPARTURES_BOARD, WC_NONE,
-	0,
+	{},
 	_nested_departures_list
 );
 
@@ -612,7 +612,7 @@ public:
 			case WID_DB_LOCATION: {
 				TileIndex tile;
 				if (this->source_type == DST_DEPOT) {
-					tile = TileIndex(this->window_number & (MapSize() - 1));
+					tile = TileIndex(this->window_number & (Map::Size() - 1));
 				} else {
 					tile = BaseStation::Get(this->window_number)->xy;
 				}
@@ -673,6 +673,11 @@ public:
 	{
 		CallAtTargetID target = CallAtTargetID::FromTile(tile);
 		if (target.IsValid() && target.IsStationID()) {
+			if (this->source.BaseStationMatches(target.GetStationID())) {
+				/* Attempting to filter on the departures source, this is not useful so do not apply the filter */
+				ResetObjectToPlace();
+				return;
+			}
 			this->filter_target = target;
 			this->OnInvalidateData(0, false);
 			ResetObjectToPlace();
@@ -832,7 +837,7 @@ public:
 					break;
 				}
 			}
-			new DeparturesWindow(_departures_desc, DeparturesWindow::DepotTag{}, TileIndex(this->window_number & (MapSize() - 1)), vt);
+			new DeparturesWindow(_departures_desc, DeparturesWindow::DepotTag{}, TileIndex(this->window_number & (Map::Size() - 1)), vt);
 		} else {
 			new DeparturesWindow(_departures_desc, (StationID)this->window_number);
 		}
@@ -1060,8 +1065,6 @@ void DeparturesWindow::DrawDeparturesListItems(const Rect &r) const
 
 	uint departure = 0;
 	uint arrival = 0;
-
-	StateTicks now_date = _state_ticks;
 
 	/* Draw each departure. */
 	for (uint i = 0; i < max_departures; ++i) {
@@ -1292,15 +1295,17 @@ void DeparturesWindow::DrawDeparturesListItems(const Rect &r) const
 				/* Display as scheduled. */
 				DrawString(status_left, status_right, y + 1, STR_DEPARTURES_SCHEDULED);
 			} else {
-				if (d->lateness <= TimetableAbsoluteDisplayUnitSize() && d->scheduled_tick > now_date) {
+				Ticks arrival_lateness = d->lateness;
+				if (d->type == D_DEPARTURE) {
+					arrival_lateness -= std::max<Ticks>(d->EffectiveWaitingTime(), 0);
+				}
+				if (arrival_lateness <= TimetableAbsoluteDisplayUnitSize() && d->scheduled_tick > _state_ticks) {
 					/* We have no evidence that the vehicle is late, so assume it is on time. */
 					DrawString(status_left, status_right, y + 1, STR_DEPARTURES_ON_TIME);
 				} else {
-					StateTicks expected_arrival = d->scheduled_tick + d->lateness;
-					if (d->type == D_DEPARTURE) expected_arrival -= d->EffectiveWaitingTime();
-					if (expected_arrival < now_date) {
+					StateTicks expected_arrival = d->scheduled_tick + arrival_lateness;
+					if (expected_arrival < _state_ticks) {
 						/* The vehicle was expected to have arrived by now, even if we knew it was going to be late. */
-						/* We assume that the train stays at least a day at a station so it won't accidentally be marked as delayed for a fraction of a day. */
 						DrawString(status_left, status_right, y + 1, STR_DEPARTURES_DELAYED);
 					} else {
 						/* The vehicle is expected to be late and is not yet due to arrive. */

@@ -1170,7 +1170,7 @@ static void v_PositionStatusbar(int32_t new_value)
 
 /**
  * Redraw the smallmap after a colour scheme change.
- * @param p1 Callback parameter.
+ * @param new_value Callback parameter.
  */
 static void RedrawSmallmap(int32_t new_value)
 {
@@ -1452,7 +1452,7 @@ static void TrainAccelerationModelChanged(int32_t new_value)
 static bool CheckTrainBrakingModelChange(int32_t &new_value)
 {
 	if (new_value == TBM_REALISTIC && (_game_mode == GM_NORMAL || _game_mode == GM_EDITOR)) {
-		for (TileIndex t(0); t < MapSize(); t++) {
+		for (TileIndex t(0); t < Map::Size(); t++) {
 			if (IsTileType(t, MP_RAILWAY) && GetRailTileType(t) == RAIL_TILE_SIGNALS) {
 				uint signals = GetPresentSignals(t);
 				if ((signals & 0x3) & ((signals & 0x3) - 1) || (signals & 0xC) & ((signals & 0xC) - 1)) {
@@ -1488,7 +1488,7 @@ static void TrainBrakingModelChanged(int32_t new_value)
 		}
 	}
 	if (new_value == TBM_REALISTIC && (_game_mode == GM_NORMAL || _game_mode == GM_EDITOR)) {
-		for (TileIndex t(0); t < MapSize(); t++) {
+		for (TileIndex t(0); t < Map::Size(); t++) {
 			if (IsTileType(t, MP_RAILWAY) && GetRailTileType(t) == RAIL_TILE_SIGNALS) {
 				TrackBits bits = GetTrackBits(t);
 				do {
@@ -1737,7 +1737,7 @@ static void ScriptMaxMemoryChange(int32_t new_value)
 
 /**
  * Invalidate the company details window after the shares setting changed.
- * @param p1 Unused.
+ * @param new_value Unused.
  * @return Always true.
  */
 static void InvalidateCompanyWindow(int32_t new_value)
@@ -1929,26 +1929,26 @@ static bool CheckFreeformEdges(int32_t &new_value)
 			}
 		}
 	} else {
-		for (uint i = 0; i < MapMaxX(); i++) {
+		for (uint i = 0; i < Map::MaxX(); i++) {
 			if (TileHeight(TileXY(i, 1)) != 0) {
 				ShowErrorMessage(STR_CONFIG_SETTING_EDGES_NOT_WATER, INVALID_STRING_ID, WL_ERROR);
 				return false;
 			}
 		}
-		for (uint i = 1; i < MapMaxX(); i++) {
-			if (!IsTileType(TileXY(i, MapMaxY() - 1), MP_WATER) || TileHeight(TileXY(1, MapMaxY())) != 0) {
+		for (uint i = 1; i < Map::MaxX(); i++) {
+			if (!IsTileType(TileXY(i, Map::MaxY() - 1), MP_WATER) || TileHeight(TileXY(1, Map::MaxY())) != 0) {
 				ShowErrorMessage(STR_CONFIG_SETTING_EDGES_NOT_WATER, INVALID_STRING_ID, WL_ERROR);
 				return false;
 			}
 		}
-		for (uint i = 0; i < MapMaxY(); i++) {
+		for (uint i = 0; i < Map::MaxY(); i++) {
 			if (TileHeight(TileXY(1, i)) != 0) {
 				ShowErrorMessage(STR_CONFIG_SETTING_EDGES_NOT_WATER, INVALID_STRING_ID, WL_ERROR);
 				return false;
 			}
 		}
-		for (uint i = 1; i < MapMaxY(); i++) {
-			if (!IsTileType(TileXY(MapMaxX() - 1, i), MP_WATER) || TileHeight(TileXY(MapMaxX(), i)) != 0) {
+		for (uint i = 1; i < Map::MaxY(); i++) {
+			if (!IsTileType(TileXY(Map::MaxX() - 1, i), MP_WATER) || TileHeight(TileXY(Map::MaxX(), i)) != 0) {
 				ShowErrorMessage(STR_CONFIG_SETTING_EDGES_NOT_WATER, INVALID_STRING_ID, WL_ERROR);
 				return false;
 			}
@@ -1962,15 +1962,15 @@ static void UpdateFreeformEdges(int32_t new_value)
 	if (_game_mode == GM_MENU) return;
 
 	if (new_value != 0) {
-		for (uint x = 0; x < MapSizeX(); x++) MakeVoid(TileXY(x, 0));
-		for (uint y = 0; y < MapSizeY(); y++) MakeVoid(TileXY(0, y));
+		for (uint x = 0; x < Map::SizeX(); x++) MakeVoid(TileXY(x, 0));
+		for (uint y = 0; y < Map::SizeY(); y++) MakeVoid(TileXY(0, y));
 	} else {
 		/* Make tiles at the border water again. */
-		for (uint i = 0; i < MapMaxX(); i++) {
+		for (uint i = 0; i < Map::MaxX(); i++) {
 			SetTileHeight(TileXY(i, 0), 0);
 			MakeSea(TileXY(i, 0));
 		}
-		for (uint i = 0; i < MapMaxY(); i++) {
+		for (uint i = 0; i < Map::MaxY(); i++) {
 			SetTileHeight(TileXY(0, i), 0);
 			MakeSea(TileXY(0, i));
 		}
@@ -1992,17 +1992,17 @@ bool CheckMapEdgesAreWater(bool allow_non_flat_void)
 		return false;
 	};
 	check_tile(        0,         0, SLOPE_S);
-	check_tile(        0, MapMaxY(), SLOPE_W);
-	check_tile(MapMaxX(),         0, SLOPE_E);
-	check_tile(MapMaxX(), MapMaxY(), SLOPE_N);
+	check_tile(        0, Map::MaxY(), SLOPE_W);
+	check_tile(Map::MaxX(),         0, SLOPE_E);
+	check_tile(Map::MaxX(), Map::MaxY(), SLOPE_N);
 
-	for (uint x = 1; x < MapMaxX(); x++) {
+	for (uint x = 1; x < Map::MaxX(); x++) {
 		if (!check_tile(x, 0, SLOPE_SE)) return false;
-		if (!check_tile(x, MapMaxY(), SLOPE_NW)) return false;
+		if (!check_tile(x, Map::MaxY(), SLOPE_NW)) return false;
 	}
-	for (uint y = 1; y < MapMaxY(); y++) {
+	for (uint y = 1; y < Map::MaxY(); y++) {
 		if (!check_tile(0, y, SLOPE_SW)) return false;
-		if (!check_tile(MapMaxX(), y, SLOPE_NE)) return false;
+		if (!check_tile(Map::MaxX(), y, SLOPE_NE)) return false;
 	}
 
 	return true;
@@ -2026,13 +2026,13 @@ static void MapEdgeModeChanged(int32_t new_value)
 
 	if (_game_mode == GM_MENU || !_settings_game.construction.freeform_edges || new_value == 0) return;
 
-	for (uint x = 0; x <= MapMaxX(); x++) {
+	for (uint x = 0; x <= Map::MaxX(); x++) {
 		SetTileHeight(TileXY(x, 0), 0);
-		SetTileHeight(TileXY(x, MapMaxY()), 0);
+		SetTileHeight(TileXY(x, Map::MaxY()), 0);
 	}
-	for (uint y = 1; y < MapMaxY(); y++) {
+	for (uint y = 1; y < Map::MaxY(); y++) {
 		SetTileHeight(TileXY(0, y), 0);
-		SetTileHeight(TileXY(MapMaxX(), y), 0);
+		SetTileHeight(TileXY(Map::MaxX(), y), 0);
 	}
 }
 
@@ -2059,7 +2059,7 @@ static bool CheckMaxHeightLevel(int32_t &new_value)
 
 	/* Check if at least one mountain on the map is higher than the new value.
 	 * If yes, disallow the change. */
-	for (TileIndex t(0); t < MapSize(); t++) {
+	for (TileIndex t(0); t < Map::Size(); t++) {
 		if ((int32_t)TileHeight(t) > new_value) {
 			ShowErrorMessage(STR_CONFIG_SETTING_TOO_HIGH_MOUNTAIN, INVALID_STRING_ID, WL_ERROR);
 			/* Return old, unchanged value */
@@ -2533,7 +2533,7 @@ static void GraphicsSetLoadConfig(IniFile &ini)
 		if (const IniItem *item = group->GetItem("name"); item != nullptr && item->value) BaseGraphics::ini_data.name = *item->value;
 
 		if (const IniItem *item = group->GetItem("shortname"); item != nullptr && item->value && item->value->size() == 8) {
-			BaseGraphics::ini_data.shortname = BSWAP32(std::strtoul(item->value->c_str(), nullptr, 16));
+			BaseGraphics::ini_data.shortname = std::byteswap<uint32_t>(std::strtoul(item->value->c_str(), nullptr, 16));
 		}
 
 		if (const IniItem *item = group->GetItem("extra_version"); item != nullptr && item->value) BaseGraphics::ini_data.extra_version = std::strtoul(item->value->c_str(), nullptr, 10);
@@ -2616,7 +2616,7 @@ static GRFConfig *GRFLoadConfig(const IniFile &ini, const char *grpname, bool is
 		}
 
 		/* Check if item is valid */
-		if (!FillGRFDetails(c, is_static) || HasBit(c->flags, GCF_INVALID)) {
+		if (!FillGRFDetails(*c, is_static) || HasBit(c->flags, GCF_INVALID)) {
 			if (c->status == GCS_NOT_FOUND) {
 				SetDParam(1, STR_CONFIG_ERROR_INVALID_GRF_NOT_FOUND);
 			} else if (HasBit(c->flags, GCF_UNSAFE)) {
@@ -2745,12 +2745,12 @@ static void GraphicsSetSaveConfig(IniFile &ini)
 	group.Clear();
 
 	group.GetOrCreateItem("name").SetValue(used_set->name);
-	group.GetOrCreateItem("shortname").SetValue(fmt::format("{:08X}", BSWAP32(used_set->shortname)));
+	group.GetOrCreateItem("shortname").SetValue(fmt::format("{:08X}", std::byteswap(used_set->shortname)));
 
 	const GRFConfig *extra_cfg = used_set->GetExtraConfig();
 	if (extra_cfg != nullptr && !extra_cfg->param.empty()) {
 		group.GetOrCreateItem("extra_version").SetValue(fmt::format("{}", extra_cfg->version));
-		group.GetOrCreateItem("extra_params").SetValue(GRFBuildParamList(extra_cfg));
+		group.GetOrCreateItem("extra_params").SetValue(GRFBuildParamList(*extra_cfg));
 	}
 }
 
@@ -2759,13 +2759,12 @@ static void GRFSaveConfig(IniFile &ini, const char *grpname, const GRFConfig *li
 {
 	IniGroup &group = ini.GetOrCreateGroup(grpname);
 	group.Clear();
-	const GRFConfig *c;
 
-	for (c = list; c != nullptr; c = c->next) {
+	for (const GRFConfig *c = list; c != nullptr; c = c->next) {
 		/* Hex grfid (4 bytes in nibbles), "|", hex md5sum (16 bytes in nibbles), "|", file system path. */
 		format_buffer key;
-		key.format("{:08X}|{}|{}", BSWAP32(c->ident.grfid), c->ident.md5sum, c->filename);
-		group.GetOrCreateItem(key).SetValue(GRFBuildParamList(c));
+		key.format("{:08X}|{}|{}", std::byteswap(c->ident.grfid), c->ident.md5sum, c->filename);
+		group.GetOrCreateItem(key).SetValue(GRFBuildParamList(*c));
 	}
 }
 
@@ -3741,13 +3740,13 @@ static std::vector<const SettingDesc *> MakeSettingsPatxList(std::initializer_li
  */
 struct SettingsExtLoad {
 	uint32_t flags;
-	char name[256];
+	std::string name;
 	uint32_t setting_length;
 };
 
 static const SaveLoad _settings_ext_load_desc[] = {
 	SLE_VAR(SettingsExtLoad, flags,          SLE_UINT32),
-	SLE_STR(SettingsExtLoad, name,           SLE_STRB, 256),
+	SLE_SSTR(SettingsExtLoad, name,          SLE_STR),
 	SLE_VAR(SettingsExtLoad, setting_length, SLE_UINT32),
 };
 
@@ -3778,7 +3777,7 @@ static void LoadSettingsPatx(void *object)
 
 		// now try to find corresponding setting
 		bool exact_match = false;
-		auto iter = std::lower_bound(sorted_patx_settings.begin(), sorted_patx_settings.end(), current_setting.name, [&](const SettingDesc *a, const char *b) {
+		auto iter = std::lower_bound(sorted_patx_settings.begin(), sorted_patx_settings.end(), current_setting.name.c_str(), [&](const SettingDesc *a, const char *b) {
 			int result = strcmp(a->patx_name, b);
 			if (result == 0) exact_match = true;
 			return result < 0;
@@ -3870,7 +3869,7 @@ void LoadSettingsPlyx(bool skip)
 
 			// not many company settings, so perform a linear scan
 			for (auto &sd : _company_settings) {
-				if (sd->patx_name != nullptr && strcmp(sd->patx_name, current_setting.name) == 0) {
+				if (sd->patx_name != nullptr && current_setting.name == sd->patx_name) {
 					setting = sd.get();
 					break;
 				}

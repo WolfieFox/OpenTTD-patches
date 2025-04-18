@@ -14,6 +14,7 @@
 #include "script_error.hpp"
 #include "../../strings_func.h"
 #include "../../industry.h"
+#include "../../industry_cmd.h"
 #include "../../newgrf_industries.h"
 #include "../../core/random_func.hpp"
 
@@ -70,8 +71,8 @@
 	const IndustrySpec *ins = ::GetIndustrySpec(industry_type);
 
 	ScriptList *list = new ScriptList();
-	for (const CargoID &c : ins->produced_cargo) {
-		if (::IsValidCargoID(c)) list->AddItem(c);
+	for (const CargoType &c : ins->produced_cargo) {
+		if (::IsValidCargoType(c)) list->AddItem(c);
 	}
 
 	return list;
@@ -84,8 +85,8 @@
 	const IndustrySpec *ins = ::GetIndustrySpec(industry_type);
 
 	ScriptList *list = new ScriptList();
-	for (const CargoID &c : ins->accepts_cargo) {
-		if (::IsValidCargoID(c)) list->AddItem(c);
+	for (const CargoType &c : ins->accepts_cargo) {
+		if (::IsValidCargoType(c)) list->AddItem(c);
 	}
 
 	return list;
@@ -124,7 +125,7 @@
 
 	uint32_t seed = ScriptBase::Rand();
 	uint32_t layout_index = ScriptBase::RandRange((uint32_t)::GetIndustrySpec(industry_type)->layouts.size());
-	return ScriptObject::DoCommandOld(tile, (1 << 16) | (layout_index << 8) | industry_type, seed, CMD_BUILD_INDUSTRY);
+	return ScriptObject::Command<CMD_BUILD_INDUSTRY>::Do(tile, industry_type, layout_index, true, seed);
 }
 
 /* static */ bool ScriptIndustryType::ProspectIndustry(IndustryType industry_type)
@@ -133,7 +134,7 @@
 	EnforcePrecondition(false, CanProspectIndustry(industry_type));
 
 	uint32_t seed = ScriptBase::Rand();
-	return ScriptObject::DoCommandOld(0, industry_type, seed, CMD_BUILD_INDUSTRY);
+	return ScriptObject::Command<CMD_BUILD_INDUSTRY>::Do(TileIndex{}, industry_type, 0, false, seed);
 }
 
 /* static */ bool ScriptIndustryType::IsBuiltOnWater(IndustryType industry_type)
@@ -161,6 +162,6 @@
 {
 	EnforcePrecondition(IT_INVALID, IsInsideBS(grf_local_id, 0x00, NUM_INDUSTRYTYPES_PER_GRF));
 
-	grfid = BSWAP32(GB(grfid, 0, 32)); // Match people's expectations.
+	grfid = std::byteswap(GB(grfid, 0, 32)); // Match people's expectations.
 	return _industry_mngr.GetID(grf_local_id, grfid);
 }

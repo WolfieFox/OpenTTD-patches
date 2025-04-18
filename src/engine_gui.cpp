@@ -77,7 +77,7 @@ struct EnginePreviewWindow : Window {
 		this->InitNested(window_number);
 
 		/* There is no way to recover the window; so disallow closure via DEL; unless SHIFT+DEL */
-		this->flags |= WF_STICKY;
+		this->flags.Set(WindowFlag::Sticky);
 	}
 
 	void UpdateWidgetSize(WidgetID widget, Dimension &size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
@@ -149,7 +149,7 @@ struct EnginePreviewWindow : Window {
 static WindowDesc _engine_preview_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_ENGINE_PREVIEW, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_engine_preview_widgets
 );
 
@@ -165,7 +165,7 @@ void ShowEnginePreviewWindow(EngineID engine)
  * @param attempt_refit Attempt to get capacity when refitting to this cargo.
  * @return The capacity.
  */
-uint GetTotalCapacityOfArticulatedParts(EngineID engine, CargoID attempt_refit)
+uint GetTotalCapacityOfArticulatedParts(EngineID engine, CargoType attempt_refit)
 {
 	CargoArray cap = GetCapacityOfArticulatedParts(engine, attempt_refit);
 	return cap.GetSum<uint>();
@@ -238,7 +238,7 @@ static StringID GetTrainEngineInfoString(const Engine *e)
 
 static StringID GetAircraftEngineInfoString(const Engine *e)
 {
-	CargoID cargo = e->GetDefaultCargoType();
+	CargoType cargo = e->GetDefaultCargoType();
 	uint16_t mail_capacity;
 	uint capacity = e->GetDisplayDefaultCapacity(&mail_capacity);
 	uint16_t range = e->GetRange();
@@ -257,7 +257,7 @@ static StringID GetAircraftEngineInfoString(const Engine *e)
 	SetDParam(9, mail_capacity > 0 ? STR_ENGINE_PREVIEW_CAPACITY_2 : STR_ENGINE_PREVIEW_CAPACITY);
 	SetDParam(10, cargo);
 	SetDParam(11, capacity);
-	SetDParam(12, GetCargoIDByLabel(CT_MAIL));
+	SetDParam(12, GetCargoTypeByLabel(CT_MAIL));
 	SetDParam(13, mail_capacity);
 
 	return STR_ENGINE_PREVIEW_TEXT4;

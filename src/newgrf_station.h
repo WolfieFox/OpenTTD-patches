@@ -12,6 +12,7 @@
 
 #include "core/enum_type.hpp"
 #include "newgrf_animation_type.h"
+#include "newgrf_badge_type.h"
 #include "newgrf_callbacks.h"
 #include "newgrf_class.h"
 #include "newgrf_commons.h"
@@ -28,7 +29,7 @@ struct StationScopeResolver : public ScopeResolver {
 	TileIndex tile;                     ///< %Tile of the station.
 	struct BaseStation *st;             ///< Instance of the station.
 	const struct StationSpec *statspec; ///< Station (type) specification.
-	CargoID cargo_type;                 ///< Type of cargo of the station.
+	CargoType cargo_type;               ///< Type of cargo of the station.
 	Axis axis;                          ///< Station axis, used only for the slope check callback.
 	RailType rt;                        ///< %RailType of the station (unbuilt stations only).
 
@@ -100,12 +101,11 @@ enum StationClassID : uint16_t {
 	STAT_CLASS_WAYP,         ///< Waypoint class.
 	STAT_CLASS_MAX = UINT16_MAX, ///< Maximum number of classes.
 };
-template <> struct EnumPropsT<StationClassID> : MakeEnumPropsT<StationClassID, uint8_t, STAT_CLASS_BEGIN, STAT_CLASS_MAX, STAT_CLASS_MAX, 16> {};
 
 /** Allow incrementing of StationClassID variables */
-DECLARE_POSTFIX_INCREMENT(StationClassID)
+DECLARE_INCREMENT_DECREMENT_OPERATORS(StationClassID)
 
-enum StationSpecFlags {
+enum StationSpecFlags : uint8_t {
 	SSF_SEPARATE_GROUND,      ///< Use different sprite set for ground sprites.
 	SSF_DIV_BY_STATION_SIZE,  ///< Divide cargo amount by station size.
 	SSF_CB141_RANDOM_BITS,    ///< Callback 141 needs random bits.
@@ -114,7 +114,7 @@ enum StationSpecFlags {
 };
 
 /** Randomisation triggers for stations */
-enum StationRandomTrigger {
+enum StationRandomTrigger : uint8_t {
 	SRT_NEW_CARGO,        ///< Trigger station on new cargo arrival.
 	SRT_CARGO_TAKEN,      ///< Trigger station when cargo is completely taken.
 	SRT_TRAIN_ARRIVES,    ///< Trigger platform when train arrives.
@@ -141,7 +141,7 @@ struct StationSpec : NewGRFSpecBase<StationClassID> {
 	 * Used for obtaining the sprite offset of custom sprites, and for
 	 * evaluating callbacks.
 	 */
-	GRFFilePropsBase<NUM_CARGO + 3> grf_prop;
+	VariableGRFFileProps grf_prop;
 	StringID name;             ///< Name of this station.
 
 	/**
@@ -183,12 +183,12 @@ struct StationSpec : NewGRFSpecBase<StationClassID> {
 	};
 	std::vector<BridgeAboveFlags> bridge_above_flags; ///< List of bridge above flags.
 
-	enum class TileFlags : uint8_t {
-		None = 0,
-		Pylons = 1U << 0, ///< Tile should contain catenary pylons.
-		NoWires = 1U << 1, ///< Tile should NOT contain catenary wires.
-		Blocked = 1U << 2, ///< Tile is blocked to vehicles.
+	enum class TileFlag : uint8_t {
+		Pylons = 0, ///< Tile should contain catenary pylons.
+		NoWires = 1, ///< Tile should NOT contain catenary wires.
+		Blocked = 2, ///< Tile is blocked to vehicles.
 	};
+	using TileFlags = EnumBitSet<TileFlag, uint8_t>;
 	std::vector<TileFlags> tileflags; ///< List of tile flags.
 
 	AnimationInfo animation;
@@ -198,13 +198,14 @@ struct StationSpec : NewGRFSpecBase<StationClassID> {
 	/** Custom platform layouts, keyed by platform and length combined. */
 	std::unordered_map<uint16_t, std::vector<uint8_t>> layouts;
 
+	std::vector<BadgeID> badges;
+
 	BridgeAboveFlags GetBridgeAboveFlags(uint gfx) const
 	{
 		if (gfx < this->bridge_above_flags.size()) return this->bridge_above_flags[gfx];
 		return {};
 	}
 };
-DECLARE_ENUM_AS_BIT_SET(StationSpec::TileFlags);
 
 /** Class containing information relating to station classes. */
 using StationClass = NewGRFClass<StationSpec, StationClassID, STAT_CLASS_MAX>;
@@ -251,8 +252,8 @@ bool DrawStationTile(int x, int y, RailType railtype, Axis axis, StationClassID 
 
 void AnimateStationTile(TileIndex tile);
 uint8_t GetStationTileAnimationSpeed(TileIndex tile);
-void TriggerStationAnimation(BaseStation *st, TileIndex tile, StationAnimationTrigger trigger, CargoID cargo_type = INVALID_CARGO);
-void TriggerStationRandomisation(Station *st, TileIndex tile, StationRandomTrigger trigger, CargoID cargo_type = INVALID_CARGO);
+void TriggerStationAnimation(BaseStation *st, TileIndex tile, StationAnimationTrigger trigger, CargoType cargo_type = INVALID_CARGO);
+void TriggerStationRandomisation(Station *st, TileIndex tile, StationRandomTrigger trigger, CargoType cargo_type = INVALID_CARGO);
 void StationUpdateCachedTriggers(BaseStation *st);
 
 void UpdateStationTileCacheFlags(bool force_update);

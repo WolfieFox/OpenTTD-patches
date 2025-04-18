@@ -163,7 +163,7 @@ public:
 			/* Show tooltip with last month production or town name */
 			const Point p = GetTileBelowCursor();
 			const TileIndex tile = TileVirtXY(p.x, p.y);
-			if (tile < MapSize()) ShowTooltipForTile(this, tile);
+			if (tile < Map::Size()) ShowTooltipForTile(this, tile);
 		}
 	}
 
@@ -183,7 +183,7 @@ public:
 static WindowDesc _extra_viewport_desc(__FILE__, __LINE__,
 	WDP_AUTO, "extra_viewport", 300, 268,
 	WC_EXTRA_VIEWPORT, WC_NONE,
-	0,
+	{},
 	_nested_extra_viewport_widgets
 );
 

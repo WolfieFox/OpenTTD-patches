@@ -413,10 +413,10 @@ void DemandCalculator::CalcMinimisedDistanceDemand(LinkGraphJob &job, const std:
  * @param job Job to calculate the demands for.
  */
 DemandCalculator::DemandCalculator(LinkGraphJob &job) :
-	base_distance(IntSqrt(DistanceMaxPlusManhattan(TileXY(0,0), TileXY(MapMaxX(), MapMaxY()))))
+	base_distance(IntSqrt(DistanceMaxPlusManhattan(TileXY(0,0), TileXY(Map::MaxX(), Map::MaxY()))))
 {
 	const LinkGraphSettings &settings = job.Settings();
-	CargoID cargo = job.Cargo();
+	CargoType cargo = job.Cargo();
 
 	this->accuracy = settings.accuracy;
 	this->mod_dist = settings.demand_distance;

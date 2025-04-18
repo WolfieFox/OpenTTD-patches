@@ -205,8 +205,9 @@ public:
 		const FlowStatMap &Flows() const { return this->node_anno.flows; }
 
 		/**
-		 * Get the paths this node is part of. Paths are always expected to be
-		 * sorted so that those with flow == 0 are in the back of the list.
+		 * Get the paths this node is part of.
+		 * Paths are expected to have non-zero flow.
+		 * nullptr entries may be present in this list.
 		 * @return Paths.
 		 */
 		PathList &Paths() { return this->node_anno.paths; }
@@ -350,7 +351,7 @@ public:
 	 * Get the cargo of the underlying link graph.
 	 * @return Cargo.
 	 */
-	inline CargoID Cargo() const { return this->link_graph.Cargo(); }
+	inline CargoType Cargo() const { return this->link_graph.Cargo(); }
 
 	/**
 	 * Get the state tick when the underlying link graph was last compressed.
@@ -473,7 +474,7 @@ public:
 };
 static_assert(std::is_trivially_destructible_v<Path>);
 
-inline bool IsLinkGraphCargoExpress(CargoID cargo)
+inline bool IsLinkGraphCargoExpress(CargoType cargo)
 {
 	return IsCargoInClass(cargo, CC_PASSENGERS) ||
 			IsCargoInClass(cargo, CC_MAIL) ||

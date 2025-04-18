@@ -131,7 +131,7 @@ bool SignList::match_case = false;
 std::string SignList::default_name;
 
 /** Enum referring to the Hotkeys in the sign list window */
-enum SignListHotkeys {
+enum SignListHotkeys : int32_t {
 	SLHK_FOCUS_FILTER_BOX, ///< Focus the edit box for editing the filter string
 };
 
@@ -384,7 +384,7 @@ static constexpr NWidgetPart _nested_sign_list_widgets[] = {
 static WindowDesc _sign_list_desc(__FILE__, __LINE__,
 	WDP_AUTO, "list_signs", 358, 138,
 	WC_SIGN_LIST, WC_NONE,
-	0,
+	{},
 	_nested_sign_list_widgets,
 	&SignListWindow::hotkeys
 );
@@ -405,10 +405,10 @@ Window *ShowSignList()
  * @param text  the new name.
  * @return true if the window will already be removed after returning.
  */
-static bool RenameSign(SignID index, const char *text)
+static bool RenameSign(SignID index, std::string text)
 {
-	bool remove = StrEmpty(text);
-	Command<CMD_RENAME_SIGN>::Post(StrEmpty(text) ? STR_ERROR_CAN_T_DELETE_SIGN : STR_ERROR_CAN_T_CHANGE_SIGN_NAME, index, text);
+	bool remove = text.empty();
+	Command<CMD_RENAME_SIGN>::Post(remove ? STR_ERROR_CAN_T_DELETE_SIGN : STR_ERROR_CAN_T_CHANGE_SIGN_NAME, index, std::move(text));
 	return remove;
 }
 
@@ -513,7 +513,7 @@ struct SignWindow : Window, SignList {
 
 			case WID_QES_DELETE:
 				/* Only need to set the buffer to null, the rest is handled as the OK button */
-				RenameSign(this->cur_sign, "");
+				RenameSign(this->cur_sign, {});
 				/* don't delete this, we are deleted in Sign::~Sign() -> DeleteRenameSignWindow() */
 				break;
 
@@ -550,7 +550,7 @@ static constexpr NWidgetPart _nested_query_sign_edit_widgets[] = {
 static WindowDesc _query_sign_edit_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_QUERY_STRING, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_query_sign_edit_widgets
 );
 
@@ -564,7 +564,7 @@ void HandleClickOnSign(const Sign *si)
 	if (!CompanyCanRenameSign(si)) return;
 
 	if (_ctrl_pressed && (si->owner == _local_company || (si->owner == OWNER_DEITY && _game_mode == GM_EDITOR))) {
-		RenameSign(si->index, nullptr);
+		RenameSign(si->index, {});
 		return;
 	}
 

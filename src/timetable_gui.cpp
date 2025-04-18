@@ -28,6 +28,7 @@
 #include "tracerestrict.h"
 #include "scope.h"
 #include "timetable_cmd.h"
+#include "group_cmd.h"
 #include "core/backup_type.hpp"
 
 #include "widgets/timetable_widget.h"
@@ -127,6 +128,7 @@ static void FillTimetableArrivalDepartureTable(const Vehicle *v, VehicleOrderID 
 	bool predicted = false;
 	bool no_offset = false;
 	bool skip_travel = false;
+	bool reached_depot = false;
 
 	btree::btree_map<uint, LastDispatchRecord> dispatch_records;
 
@@ -187,6 +189,12 @@ static void FillTimetableArrivalDepartureTable(const Vehicle *v, VehicleOrderID 
 					break;
 				}
 
+				case OCV_REQUIRES_SERVICE: {
+					bool requires_service = reached_depot ? false : v->NeedsServicing();
+					jump = OrderConditionCompare(order->GetConditionComparator(), requires_service, order->GetConditionValue());
+					break;
+				}
+
 				default:
 					return;
 			}
@@ -200,6 +208,8 @@ static void FillTimetableArrivalDepartureTable(const Vehicle *v, VehicleOrderID 
 			} else {
 				skip = true;
 			}
+		} else if (order->IsType(OT_GOTO_DEPOT)) {
+			reached_depot = true;
 		}
 
 		/* Automatic orders don't influence the overall timetable;
@@ -299,7 +309,7 @@ void ProcessTimetableWarnings(const Vehicle *v, std::function<void(StringID, boo
 		if (order->IsType(OT_GOTO_STATION) && !have_bad_full_load && (assume_timetabled || order->IsWaitTimetabled())) {
 			if (order->GetLoadType() & OLFB_FULL_LOAD) have_bad_full_load = true;
 			if (order->GetLoadType() == OLFB_CARGO_TYPE_LOAD) {
-				for (CargoID c = 0; c < NUM_CARGO; c++) {
+				for (CargoType c = 0; c < NUM_CARGO; c++) {
 					if (order->GetCargoLoadTypeRaw(c) & OLFB_FULL_LOAD) {
 						have_bad_full_load = true;
 						break;
@@ -1193,7 +1203,7 @@ struct TimetableWindow : GeneralVehicleWindow {
 			}
 
 			case WID_VT_ADD_VEH_GROUP: {
-				DoCommandPOld(0, VehicleListIdentifier(VL_SINGLE_VEH, v->type, v->owner, v->index).Pack(), CargoFilterCriteria::CF_ANY, CMD_CREATE_GROUP_FROM_LIST | CMD_MSG(STR_ERROR_GROUP_CAN_T_CREATE), CommandCallback::None, str->c_str());
+				Command<CMD_CREATE_GROUP_FROM_LIST>::Post(STR_ERROR_GROUP_CAN_T_CREATE, VehicleListIdentifier(VL_SINGLE_VEH, v->type, v->owner, v->index), CargoFilterCriteria::CF_ANY, *str);
 				break;
 			}
 		}
@@ -1281,7 +1291,7 @@ static constexpr NWidgetPart _nested_timetable_widgets[] = {
 static WindowDesc _timetable_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_vehicle_timetable", 400, 130,
 	WC_VEHICLE_TIMETABLE, WC_VEHICLE_VIEW,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_timetable_widgets
 );
 

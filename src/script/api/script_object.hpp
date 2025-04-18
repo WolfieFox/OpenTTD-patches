@@ -11,6 +11,7 @@
 #define SCRIPT_OBJECT_HPP
 
 #include "../../command_type.h"
+#include "../../company_type.h"
 #include "../../road_type.h"
 #include "../../rail_type.h"
 #include "../../core/random_func.hpp"
@@ -85,7 +86,7 @@ protected:
 
 public:
 	/**
-	 * Store the latest result of a DoCommandOld per company.
+	 * Store the latest result of a DoCommand per company.
 	 * @param res The result of the last command.
 	 */
 	static void SetLastCommandRes(bool res);
@@ -112,42 +113,6 @@ private:
 	static bool DoCommandImplementation(Commands cmd, TileIndex tile, CommandPayloadBase &&payload, Script_SuspendCallbackProc *callback, DoCommandIntlFlag intl_flags);
 
 protected:
-	struct OldCommandValueWrapper {
-		uint32_t value;
-
-		template <typename T>
-		OldCommandValueWrapper(const T &value) : value((uint32_t)value) {}
-		OldCommandValueWrapper(TileIndex tile) : value(tile.base()) {}
-	};
-
-	/**
-	 * Executes a raw DoCommandOld for the script.
-	 */
-	static bool DoCommandEx(OldCommandValueWrapper tile, OldCommandValueWrapper p1, OldCommandValueWrapper p2, uint64_t p3, Commands cmd, const char *text = nullptr, Script_SuspendCallbackProc *callback = nullptr)
-	{
-		extern CommandFlags GetCommandFlags(Commands cmd);
-
-		P123CmdData payload(p1.value, p2.value, p3);
-		if (GetCommandFlags(cmd) & CMD_CLIENT_ID) SetCommandPayloadClientID(payload, (ClientID)UINT32_MAX);
-		if (text != nullptr) payload.text = text;
-		return ScriptObject::DoCommandImplementation(cmd, TileIndex(tile.value), std::move(payload), callback, DCIF_NONE);
-	}
-
-	static bool DoCommandEx(OldCommandValueWrapper tile, OldCommandValueWrapper p1, OldCommandValueWrapper p2, uint64_t p3, Commands cmd, const std::string &text, Script_SuspendCallbackProc *callback = nullptr)
-	{
-		return ScriptObject::DoCommandEx(tile, p1, p2, p3, cmd, text.c_str(), callback);
-	}
-
-	static bool DoCommandOld(OldCommandValueWrapper tile, OldCommandValueWrapper p1, OldCommandValueWrapper p2, Commands cmd, const char *text = nullptr, Script_SuspendCallbackProc *callback = nullptr)
-	{
-		return ScriptObject::DoCommandEx(tile, p1, p2, 0, cmd, text, callback);
-	}
-
-	static bool DoCommandOld(OldCommandValueWrapper tile, OldCommandValueWrapper p1, OldCommandValueWrapper p2, Commands cmd, const std::string &text, Script_SuspendCallbackProc *callback = nullptr)
-	{
-		return ScriptObject::DoCommandEx(tile, p1, p2, 0, cmd, text.c_str(), callback);
-	}
-
 	template <Commands cmd>
 	static bool DoCommand(TileIndex tile, typename CommandTraits<cmd>::PayloadType &&payload, Script_SuspendCallbackProc *callback = nullptr)
 	{
@@ -207,27 +172,27 @@ protected:
 	static bool CheckLastCommand(Commands cmd, TileIndex tile, CallbackParameter cb_param);
 
 	/**
-	 * Sets the DoCommandOld costs counter to a value.
+	 * Sets the DoCommand costs counter to a value.
 	 */
 	static void SetDoCommandCosts(Money value);
 
 	/**
-	 * Increase the current value of the DoCommandOld costs counter.
+	 * Increase the current value of the DoCommand costs counter.
 	 */
 	static void IncreaseDoCommandCosts(Money value);
 
 	/**
-	 * Get the current DoCommandOld costs counter.
+	 * Get the current DoCommand costs counter.
 	 */
 	static Money GetDoCommandCosts();
 
 	/**
-	 * Set the DoCommandOld last error.
+	 * Set the DoCommand last error.
 	 */
 	static void SetLastError(ScriptErrorType last_error);
 
 	/**
-	 * Get the DoCommandOld last error.
+	 * Get the DoCommand last error.
 	 */
 	static ScriptErrorType GetLastError();
 
@@ -282,29 +247,19 @@ protected:
 	static ScriptObject *GetDoCommandAsyncModeInstance();
 
 	/**
-	 * Set the delay of the DoCommandOld.
+	 * Set the delay of the DoCommand.
 	 */
 	static void SetDoCommandDelay(uint ticks);
 
 	/**
-	 * Get the delay of the DoCommandOld.
+	 * Get the delay of the DoCommand.
 	 */
 	static uint GetDoCommandDelay();
 
 	/**
-	 * Get the latest result of a DoCommandOld.
+	 * Get the latest result of a DoCommand.
 	 */
 	static bool GetLastCommandRes();
-
-	/**
-	 * Get the latest stored new_vehicle_id.
-	 */
-	static VehicleID GetNewVehicleID();
-
-	/**
-	 * Get the latest stored new_group_id.
-	 */
-	static GroupID GetNewGroupID();
 
 	/**
 	 * Store a allow_do_command per company.
@@ -315,7 +270,7 @@ protected:
 	/**
 	 * Get the internal value of allow_do_command. This can differ
 	 * from CanSuspend() if the reason we are not allowed
-	 * to execute a DoCommandOld is in squirrel and not the API.
+	 * to execute a DoCommand is in squirrel and not the API.
 	 * In that case use this function to restore the previous value.
 	 * @return True iff DoCommands are allowed in the current scope.
 	 */
@@ -326,21 +281,21 @@ protected:
 	 *  information about.
 	 * @param company The new company.
 	 */
-	static void SetCompany(CompanyID company);
+	static void SetCompany(::CompanyID company);
 
 	/**
 	 * Get the current company we are executing commands for or
 	 *  requesting information about.
 	 * @return The current company.
 	 */
-	static CompanyID GetCompany();
+	static ::CompanyID GetCompany();
 
 	/**
 	 * Get the root company, the company that the script really
 	 *  runs under / for.
 	 * @return The root company.
 	 */
-	static CompanyID GetRootCompany();
+	static ::CompanyID GetRootCompany();
 
 	/**
 	 * Set the cost of the last command.
@@ -408,18 +363,6 @@ protected:
 
 private:
 	static std::pair<uint32_t, bool> GetLastCommandResultDataRaw();
-
-	/**
-	 * Store a new_vehicle_id per company.
-	 * @param vehicle_id The new VehicleID.
-	 */
-	static void SetNewVehicleID(VehicleID vehicle_id);
-
-	/**
-	 * Store a new_group_id per company.
-	 * @param group_id The new GroupID.
-	 */
-	static void SetNewGroupID(GroupID group_id);
 
 	static Randomizer random_states[OWNER_END]; ///< Random states for each of the scripts (game script uses OWNER_DEITY)
 };

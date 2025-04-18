@@ -34,9 +34,7 @@ enum VehicleType : uint8_t {
 	VEH_END,
 	VEH_INVALID = 0xFF,           ///< Non-existing type of vehicle.
 };
-DECLARE_POSTFIX_INCREMENT(VehicleType)
-/** Helper information for extract tool. */
-template <> struct EnumPropsT<VehicleType> : MakeEnumPropsT<VehicleType, uint8_t, VEH_TRAIN, VEH_END, VEH_INVALID, 3> {};
+DECLARE_INCREMENT_DECREMENT_OPERATORS(VehicleType)
 DECLARE_ENUM_AS_ADDABLE(VehicleType)
 
 using VehicleTypeMask = uint8_t;
@@ -59,15 +57,14 @@ struct BaseVehicle
 static const VehicleID INVALID_VEHICLE = 0xFFFFF; ///< Constant representing a non-existing vehicle.
 
 /** Flags for goto depot commands. */
-enum class DepotCommand : uint8_t {
-	None         = 0,         ///< No special flags.
-	Service      = (1U << 0), ///< The vehicle will leave the depot right after arrival (service only)
-	Cancel       = (1U << 1), ///< Cancel depot/service order
-	DontCancel   = (1U << 2), ///< Don't cancel current goto depot command if any
-	Specific     = (1U << 3), ///< Send vehicle to specific depot
-	Sell         = (1U << 4), ///< Go to depot and sell order
+enum class DepotCommandFlag : uint8_t {
+	Service,     ///< The vehicle will leave the depot right after arrival (service only)
+	Cancel,      ///< Cancel depot/service order
+	DontCancel,  ///< Don't cancel current goto depot command if any
+	Specific,    ///< Send vehicle to specific depot
+	Sell,        ///< Go to depot and sell order
 };
-DECLARE_ENUM_AS_BIT_SET(DepotCommand)
+using DepotCommandFlags = EnumBitSet<DepotCommandFlag, uint8_t>;
 
 static const uint MAX_LENGTH_VEHICLE_NAME_CHARS = 128; ///< The maximum length of a vehicle name in characters including '\0'
 
@@ -93,7 +90,7 @@ enum BreakdownType {
 };
 
 /** Vehicle acceleration models. */
-enum AccelerationModel {
+enum AccelerationModel : uint8_t {
 	AM_ORIGINAL,
 	AM_REALISTIC,
 };
@@ -111,7 +108,7 @@ enum TrainRealisticBrakingAspectLimitedMode {
 };
 
 /** Visualisation contexts of vehicles and engines. */
-enum EngineImageType {
+enum EngineImageType : uint8_t {
 	EIT_ON_MAP     = 0x00,  ///< Vehicle drawn in viewport.
 	EIT_IN_DEPOT   = 0x10,  ///< Vehicle drawn in depot.
 	EIT_IN_DETAILS = 0x11,  ///< Vehicle drawn in vehicle details, refit window, ...

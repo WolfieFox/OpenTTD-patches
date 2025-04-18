@@ -10,6 +10,7 @@
 #include "stdafx.h"
 #include "debug.h"
 #include "newgrf_airporttiles.h"
+#include "newgrf_badge.h"
 #include "newgrf_extension.h"
 #include "newgrf_spritegroup.h"
 #include "newgrf_sound.h"
@@ -151,7 +152,7 @@ static uint32_t GetAirportTileIDAtOffset(TileIndex tile, const Station *st, uint
 		}
 	}
 	/* Not an 'old type' tile */
-	if (ats->grf_prop.spritegroup[0] != nullptr) { // tile has a spritegroup ?
+	if (ats->grf_prop.GetSpriteGroup() != nullptr) { // tile has a spritegroup ?
 		if (ats->grf_prop.grfid == cur_grfid) { // same airport, same grf ?
 			return ats->grf_prop.local_id;
 		} else {
@@ -194,6 +195,8 @@ static uint32_t GetAirportTileIDAtOffset(TileIndex tile, const Station *st, uint
 		/* Get airport tile ID at offset */
 		case 0x62: return GetAirportTileIDAtOffset(GetNearbyTile(parameter, this->tile), this->st, this->ro.grffile->grfid);
 
+		case 0x7A: return GetBadgeVariableResult(*this->ro.grffile, this->ats->badges, parameter);
+
 		case A2VRI_AIRPORTTILES_AIRPORT_LAYOUT:
 			return this->st->airport.layout;
 
@@ -227,7 +230,7 @@ AirportTileResolverObject::AirportTileResolverObject(const AirportTileSpec *ats,
 		tiles_scope(*this, ats, tile, st),
 		airport_scope(*this, tile, st, st != nullptr ? AirportSpec::Get(st->airport.type) : nullptr, st != nullptr ? st->airport.layout : 0)
 {
-	this->root_spritegroup = ats->grf_prop.spritegroup[0];
+	this->root_spritegroup = ats->grf_prop.GetSpriteGroup();
 }
 
 GrfSpecFeature AirportTileResolverObject::GetFeature() const
@@ -305,7 +308,7 @@ void AnimateAirportTile(TileIndex tile)
 	AirportTileAnimationBase::AnimateTile(ats, Station::GetByTile(tile), tile, HasBit(ats->animation_special_flags, 0));
 }
 
-void AirportTileAnimationTrigger(Station *st, TileIndex tile, AirpAnimationTrigger trigger, CargoID cargo_type)
+void AirportTileAnimationTrigger(Station *st, TileIndex tile, AirpAnimationTrigger trigger, CargoType cargo_type)
 {
 	const AirportTileSpec *ats = AirportTileSpec::GetByTile(tile);
 	if (!HasBit(ats->animation.triggers, trigger)) return;
@@ -313,7 +316,7 @@ void AirportTileAnimationTrigger(Station *st, TileIndex tile, AirpAnimationTrigg
 	AirportTileAnimationBase::ChangeAnimationFrame(CBID_AIRPTILE_ANIM_START_STOP, ats, st, tile, Random(), (uint8_t)trigger | (cargo_type << 8));
 }
 
-void AirportAnimationTrigger(Station *st, AirpAnimationTrigger trigger, CargoID cargo_type)
+void AirportAnimationTrigger(Station *st, AirpAnimationTrigger trigger, CargoType cargo_type)
 {
 	if (st->airport.tile == INVALID_TILE) return;
 

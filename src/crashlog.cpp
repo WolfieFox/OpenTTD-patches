@@ -48,6 +48,8 @@
 #include "company_func.h"
 #include "walltime_func.h"
 
+#include <bit>
+
 #ifdef WITH_ALLEGRO
 #	include <allegro.h>
 #endif /* WITH_ALLEGRO */
@@ -194,11 +196,7 @@ void CrashLog::LogOpenTTDVersion(format_target &buffer) const
 #else
 			32,
 #endif
-#if (TTD_ENDIAN == TTD_LITTLE_ENDIAN)
-			"little",
-#else
-			"big",
-#endif
+			(std::endian::native == std::endian::little) ? "little" : "big",
 #ifdef DEDICATED
 			"yes",
 #else
@@ -279,7 +277,7 @@ void CrashLog::LogConfiguration(format_target &buffer) const
 
 	this->CrashLogFaultSectionCheckpoint(buffer);
 
-	buffer.format("Map size: 0x{:X} ({} x {}){}\n\n", MapSize(), MapSizeX(), MapSizeY(), (_m.tile_data == nullptr || _me.tile_data == nullptr) ? ", NO MAP ALLOCATED" : "");
+	buffer.format("Map size: 0x{:X} ({} x {}){}\n\n", Map::Size(), Map::SizeX(), Map::SizeY(), (_m.tile_data == nullptr || _me.tile_data == nullptr) ? ", NO MAP ALLOCATED" : "");
 
 	if (_settings_game.debug.chicken_bits != 0) {
 		buffer.format("Chicken bits: 0x{:08X}\n\n", _settings_game.debug.chicken_bits);
@@ -309,7 +307,7 @@ void CrashLog::LogConfiguration(format_target &buffer) const
 	if (_grfconfig_static != nullptr) {
 		buffer.append("Static NewGRFs present:\n");
 		for (GRFConfig *c = _grfconfig_static; c != nullptr; c = c->next) {
-			buffer.format(" GRF ID: {:08X}, checksum {}, {}", BSWAP32(c->ident.grfid), c->ident.md5sum, c->GetDisplayPath());
+			buffer.format(" GRF ID: {:08X}, checksum {}, {}", std::byteswap(c->ident.grfid), c->ident.md5sum, c->GetDisplayPath());
 			const char *name = GetDefaultLangGRFStringFromGRFText(c->name);
 			if (name != nullptr) buffer.format(", '{}'", name);
 			buffer.push_back('\n');

@@ -25,15 +25,13 @@
 /**
  * Flags to describe the look of the frame
  */
-enum FrameFlags {
-	FR_NONE         =  0,
-	FR_TRANSPARENT  =  1 << 0,  ///< Makes the background transparent if set
-	FR_BORDERONLY   =  1 << 4,  ///< Draw border only, no background
-	FR_LOWERED      =  1 << 5,  ///< If set the frame is lowered and the background colour brighter (ie. buttons when pressed)
-	FR_DARKENED     =  1 << 6,  ///< If set the background is darker, allows for lowered frames with normal background colour when used with FR_LOWERED (ie. dropdown boxes)
+enum class FrameFlag : uint8_t {
+	Transparent, ///< Makes the background transparent if set
+	BorderOnly, ///< Draw border only, no background
+	Lowered, ///< If set the frame is lowered and the background colour brighter (ie. buttons when pressed)
+	Darkened, ///< If set the background is darker, allows for lowered frames with normal background colour when used with FrameFlag::Lowered (ie. dropdown boxes)
 };
-
-DECLARE_ENUM_AS_BIT_SET(FrameFlags)
+using FrameFlags = EnumBitSet<FrameFlag, uint8_t>;
 
 class WidgetDimensions {
 public:
@@ -159,12 +157,24 @@ inline void IncrementWindowUpdateNumber()
 
 
 /** How do we the window to be placed? */
-enum WindowPosition {
+enum WindowPosition : uint8_t {
 	WDP_MANUAL,        ///< Manually align the window (so no automatic location finding)
 	WDP_AUTO,          ///< Find a place automatically
 	WDP_CENTER,        ///< Center the window
 	WDP_ALIGN_TOOLBAR, ///< Align toward the toolbar
 };
+
+/**
+ * Window default widget/window handling flags
+ */
+enum class WindowDefaultFlag : uint8_t {
+	Construction, ///< This window is used for construction; close it whenever changing company.
+	Modal, ///< The window is a modal child of some other window, meaning the parent is 'inactive'
+	NoFocus, ///< This window won't get focus/make any other window lose focus when click
+	NoClose, ///< This window can't be interactively closed
+	Network, ///< This window is used for network client functionality
+};
+using WindowDefaultFlags = EnumBitSet<WindowDefaultFlag, uint8_t>;
 
 Point GetToolbarAlignedWindowPosition(int window_width);
 
@@ -182,7 +192,7 @@ struct WindowDescPreferences {
 struct WindowDesc {
 
 	WindowDesc(const char * const file, const int line, WindowPosition default_pos, const char *ini_key, int16_t def_width_trad, int16_t def_height_trad,
-			WindowClass window_class, WindowClass parent_class, uint32_t flags,
+			WindowClass window_class, WindowClass parent_class, WindowDefaultFlags flags,
 			const std::span<const NWidgetPart> nwid_parts, HotkeyList *hotkeys = nullptr, WindowDesc *ini_parent = nullptr);
 
 	~WindowDesc();
@@ -193,7 +203,7 @@ struct WindowDesc {
 	WindowClass cls;               ///< Class of the window, @see WindowClass.
 	WindowClass parent_cls;        ///< Class of the parent window. @see WindowClass
 	const char *ini_key;           ///< Key to store window defaults in openttd.cfg. \c nullptr if nothing shall be stored.
-	uint32_t flags;                ///< Flags. @see WindowDefaultFlag
+	const WindowDefaultFlags flags; ///< Flags. @see WindowDefaultFlag
 	const std::span<const NWidgetPart> nwid_parts; ///< Span of nested widget parts describing the window.
 	HotkeyList *hotkeys;           ///< Hotkeys for the window.
 	WindowDesc *ini_parent;        ///< Other window desc to use for WindowDescPreferences.
@@ -221,17 +231,6 @@ private:
 };
 
 /**
- * Window default widget/window handling flags
- */
-enum WindowDefaultFlag {
-	WDF_CONSTRUCTION    =   1 << 0, ///< This window is used for construction; close it whenever changing company.
-	WDF_MODAL           =   1 << 1, ///< The window is a modal child of some other window, meaning the parent is 'inactive'
-	WDF_NO_FOCUS        =   1 << 2, ///< This window won't get focus/make any other window lose focus when click
-	WDF_NO_CLOSE        =   1 << 3, ///< This window can't be interactively closed
-	WDF_NETWORK         =   1 << 4, ///< This window is used for network client functionality
-};
-
-/**
  * Data structure for resizing a window
  */
 struct ResizeInfo {
@@ -240,7 +239,7 @@ struct ResizeInfo {
 };
 
 /** State of a sort direction button. */
-enum SortButtonState {
+enum SortButtonState : uint8_t {
 	SBS_OFF,  ///< Do not sort (with this button).
 	SBS_DOWN, ///< Sort ascending.
 	SBS_UP,   ///< Sort descending.
@@ -249,26 +248,27 @@ enum SortButtonState {
 /**
  * Window flags.
  */
-enum WindowFlags : uint16_t {
-	WF_TIMEOUT           = 1 <<  0, ///< Window timeout counter.
+enum class WindowFlag : uint8_t {
+	Timeout,          ///< Window timeout counter.
 
-	WF_DRAGGING          = 1 <<  3, ///< Window is being dragged.
-	WF_SIZING_RIGHT      = 1 <<  4, ///< Window is being resized towards the right.
-	WF_SIZING_LEFT       = 1 <<  5, ///< Window is being resized towards the left.
-	WF_SIZING            = WF_SIZING_RIGHT | WF_SIZING_LEFT, ///< Window is being resized.
-	WF_STICKY            = 1 <<  6, ///< Window is made sticky by user
-	WF_DISABLE_VP_SCROLL = 1 <<  7, ///< Window does not do autoscroll, @see HandleAutoscroll().
-	WF_WHITE_BORDER      = 1 <<  8, ///< Window white border counter bit mask.
-	WF_HIGHLIGHTED       = 1 <<  9, ///< Window has a widget that has a highlight.
-	WF_CENTERED          = 1 << 10, ///< Window is centered and shall stay centered after ReInit.
-	WF_DIRTY             = 1 << 11, ///< Whole window is dirty, and requires repainting.
-	WF_WIDGETS_DIRTY     = 1 << 12, ///< One or more widgets are dirty, and require repainting.
-	WF_DRAG_DIRTIED      = 1 << 13, ///< The window has already been marked dirty as blocks as part of the current drag operation
+	Dragging,         ///< Window is being dragged.
+	SizingRight,      ///< Window is being resized towards the right.
+	SizingLeft,       ///< Window is being resized towards the left.
+
+	Sticky,           ///< Window is made sticky by user
+	DisableVpScroll,  ///< Window does not do autoscroll, @see HandleAutoscroll().
+	WhiteBorder,      ///< Window white border counter bit mask.
+	Highlighted,      ///< Window has a widget that has a highlight.
+	Centred,          ///< Window is centered and shall stay centered after ReInit.
+
+	Dirty,            ///< Whole window is dirty, and requires repainting.
+	WidgetsDirty,     ///< One or more widgets are dirty, and require repainting.
+	DragDirtied,      ///< The window has already been marked dirty as blocks as part of the current drag operation
 };
-DECLARE_ENUM_AS_BIT_SET(WindowFlags)
+using WindowFlags = EnumBitSet<WindowFlag, uint16_t>;
 
-static const int TIMEOUT_DURATION = 7; ///< The initial timeout value for WF_TIMEOUT.
-static const int WHITE_BORDER_DURATION = 3; ///< The initial timeout value for WF_WHITE_BORDER.
+static const int TIMEOUT_DURATION = 7; ///< The initial timeout value for WindowFlag::Timeout.
+static const int WHITE_BORDER_DURATION = 3; ///< The initial timeout value for WindowFlag::WhiteBorder.
 
 /**
  * Data structure for a window viewport.
@@ -291,7 +291,7 @@ struct ViewportData : Viewport {
 struct QueryString;
 
 /* misc_gui.cpp */
-enum TooltipCloseCondition {
+enum TooltipCloseCondition : uint8_t {
 	TCC_RIGHT_CLICK,
 	TCC_HOVER,
 	TCC_NONE,
@@ -345,8 +345,8 @@ public:
 
 	int scale; ///< Scale of this window -- used to determine how to resize.
 
-	uint8_t timeout_timer;      ///< Timer value of the WF_TIMEOUT for flags.
-	uint8_t white_border_timer; ///< Timer value of the WF_WHITE_BORDER for flags.
+	uint8_t timeout_timer;      ///< Timer value of the WindowFlag::Timeout for flags.
+	uint8_t white_border_timer; ///< Timer value of the WindowFlag::WhiteBorder for flags.
 
 	int left;   ///< x position of left edge of the window
 	int top;    ///< y position of top edge of the window
@@ -400,7 +400,7 @@ public:
 	 */
 	inline void SetTimeout()
 	{
-		this->flags |= WF_TIMEOUT;
+		this->flags.Set(WindowFlag::Timeout);
 		this->timeout_timer = TIMEOUT_DURATION;
 	}
 
@@ -409,7 +409,7 @@ public:
 	 */
 	inline void SetWhiteBorder()
 	{
-		this->flags |= WF_WHITE_BORDER;
+		this->flags.Set(WindowFlag::WhiteBorder);
 		this->white_border_timer = WHITE_BORDER_DURATION;
 	}
 
@@ -1098,18 +1098,19 @@ Window *FindWindowFromPt(int x, int y);
 
 /**
  * Open a new window.
- * @tparam Wcls %Window class to use if the window does not exist.
+ * @tparam Twindow %Window class to use if the window does not exist.
+ * @tparam Treturn_existing If set, also return the window if it already existed.
  * @param desc The pointer to the WindowDesc to be created
  * @param window_number the window number of the new window
- * @param return_existing If set, also return the window if it already existed.
- * @return %Window pointer of the newly created window, or the existing one if \a return_existing is set, or \c nullptr.
+ * @param extra_arguments optional extra arguments to pass to the window's constructor.
+ * @return %Window pointer of the newly created window, or the existing one if \a Treturn_existing is set, or \c nullptr.
  */
-template <typename Wcls>
-Wcls *AllocateWindowDescFront(WindowDesc &desc, int window_number, bool return_existing = false)
+template <typename Twindow, bool Treturn_existing = false, typename... Targs>
+Twindow *AllocateWindowDescFront(WindowDesc &desc, WindowNumber window_number, Targs... extra_arguments)
 {
-	Wcls *w = static_cast<Wcls *>(BringWindowToFrontById(desc.cls, window_number));
-	if (w != nullptr) return return_existing ? w : nullptr;
-	return new Wcls(desc, window_number);
+	Twindow *w = static_cast<Twindow *>(BringWindowToFrontById(desc.cls, window_number));
+	if (w != nullptr) return Treturn_existing ? w : nullptr;
+	return new Twindow(desc, window_number, std::forward<Targs>(extra_arguments)...);
 }
 
 void RelocateAllWindows(int neww, int newh);
@@ -1130,7 +1131,7 @@ extern Rect _scrolling_viewport_bound;
 extern bool _mouse_hovering;
 
 /** Mouse modes. */
-enum SpecialMouseMode {
+enum SpecialMouseMode : uint8_t {
 	WSM_NONE,     ///< No special mouse mode.
 	WSM_DRAGDROP, ///< Drag&drop an object.
 	WSM_SIZING,   ///< Sizing mode.

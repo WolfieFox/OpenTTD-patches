@@ -20,6 +20,8 @@
 #include "newgrf_storage.h"
 #include "newgrf_commons.h"
 
+#include "3rdparty/svector/svector.h"
+
 #include <map>
 #include <vector>
 
@@ -99,8 +101,8 @@ struct RealSpriteGroup : SpriteGroup {
 	 * with small amount of cargo whilst loading is for stations with a lot
 	 * of da stuff. */
 
-	std::vector<const SpriteGroup *> loaded;  ///< List of loaded groups (can be SpriteIDs or Callback results)
-	std::vector<const SpriteGroup *> loading; ///< List of loading groups (can be SpriteIDs or Callback results)
+	ankerl::svector<const SpriteGroup *, 2> loaded;  ///< List of loaded groups (can be SpriteIDs or Callback results)
+	ankerl::svector<const SpriteGroup *, 2> loading; ///< List of loading groups (can be SpriteIDs or Callback results)
 
 protected:
 	const SpriteGroup *Resolve(ResolverObject &object) const override;
@@ -116,7 +118,7 @@ enum VarSpriteGroupScope : uint8_t {
 
 	VSG_END
 };
-DECLARE_POSTFIX_INCREMENT(VarSpriteGroupScope)
+DECLARE_INCREMENT_DECREMENT_OPERATORS(VarSpriteGroupScope)
 
 enum VarSpriteGroupScopeRelativeMode : uint8_t {
 	VSGSRM_BACKWARD_SELF         = 0,
@@ -598,10 +600,10 @@ struct IndustryProductionSpriteGroup : SpriteGroup {
 	uint8_t version;                              ///< Production callback version used, or 0xFF if marked invalid
 	uint8_t num_input;                            ///< How many subtract_input values are valid
 	int16_t subtract_input[INDUSTRY_NUM_INPUTS];  ///< Take this much of the input cargo (can be negative, is indirect in cb version 1+)
-	CargoID cargo_input[INDUSTRY_NUM_INPUTS];     ///< Which input cargoes to take from (only cb version 2)
+	CargoType cargo_input[INDUSTRY_NUM_INPUTS];   ///< Which input cargoes to take from (only cb version 2)
 	uint8_t num_output;                           ///< How many add_output values are valid
 	uint16_t add_output[INDUSTRY_NUM_OUTPUTS];    ///< Add this much output cargo when successful (unsigned, is indirect in cb version 1+)
-	CargoID cargo_output[INDUSTRY_NUM_OUTPUTS];   ///< Which output cargoes to add to (only cb version 2)
+	CargoType cargo_output[INDUSTRY_NUM_OUTPUTS]; ///< Which output cargoes to add to (only cb version 2)
 	uint8_t again;
 
 };

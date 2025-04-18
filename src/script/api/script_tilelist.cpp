@@ -61,9 +61,9 @@ static void FillIndustryCatchment(const Industry *i, SQInteger radius, BitmapTil
 		int tx = TileX(cur_tile);
 		int ty = TileY(cur_tile);
 		for (int y = -radius; y <= radius; y++) {
-			if (ty + y < 0 || ty + y > (int)MapMaxY()) continue;
+			if (ty + y < 0 || ty + y > (int)Map::MaxY()) continue;
 			for (int x = -radius; x <= radius; x++) {
-				if (tx + x < 0 || tx + x > (int)MapMaxX()) continue;
+				if (tx + x < 0 || tx + x > (int)Map::MaxX()) continue;
 				TileIndex tile = TileXY(tx + x, ty + y);
 				if (!IsValidTile(tile)) continue;
 				if (::IsTileType(tile, MP_INDUSTRY) && ::GetIndustryIndex(tile) == i->index) continue;
@@ -97,7 +97,7 @@ ScriptTileList_IndustryAccepting::ScriptTileList_IndustryAccepting(IndustryID in
 		CargoArray acceptance = ::GetAcceptanceAroundTiles(cur_tile, 1, 1, radius);
 		{
 			const auto &accepted = i->Accepted();
-			if (std::none_of(std::begin(accepted), std::end(accepted), [&acceptance](const auto &a) { return ::IsValidCargoID(a.cargo) && acceptance[a.cargo] != 0; })) continue;
+			if (std::none_of(std::begin(accepted), std::end(accepted), [&acceptance](const auto &a) { return ::IsValidCargoType(a.cargo) && acceptance[a.cargo] != 0; })) continue;
 		}
 
 		this->AddTile(cur_tile);

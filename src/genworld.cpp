@@ -43,6 +43,8 @@
 #include "signal_func.h"
 #include "newgrf_industrytiles.h"
 #include "station_func.h"
+#include "town_cmd.h"
+#include "signs_cmd.h"
 
 #include "safeguards.h"
 
@@ -139,8 +141,8 @@ static void _GenerateWorld()
 
 			/* Make sure the tiles at the north border are void tiles if needed. */
 			if (_settings_game.construction.freeform_edges) {
-				for (uint x = 0; x < MapSizeX(); x++) MakeVoid(TileXY(x, 0));
-				for (uint y = 0; y < MapSizeY(); y++) MakeVoid(TileXY(0, y));
+				for (uint x = 0; x < Map::SizeX(); x++) MakeVoid(TileXY(x, 0));
+				for (uint y = 0; y < Map::SizeY(); y++) MakeVoid(TileXY(0, y));
 			}
 
 			/* Make the map the height of the setting */
@@ -365,7 +367,7 @@ void GenerateWorld(GenWorldMode mode, uint size_x, uint size_y, bool reset_setti
 
 	/* Centre the view on the map */
 	if (FindWindowById(WC_MAIN_WINDOW, 0) != nullptr) {
-		ScrollMainWindowToTile(TileXY(MapSizeX() / 2, MapSizeY() / 2), true);
+		ScrollMainWindowToTile(TileXY(Map::SizeX() / 2, Map::SizeY() / 2), true);
 	}
 
 	_GenerateWorld();
@@ -424,7 +426,7 @@ struct ExternalTownData {
 static bool TryFoundTownNearby(TileIndex tile, void *user_data)
 {
 	ExternalTownData &town = *static_cast<ExternalTownData *>(user_data);
-	CommandCost result = DoCommandOld(tile, TSZ_SMALL | town.is_city << 2 | _settings_game.economy.town_layout << 3, 0, DC_EXEC, CMD_FOUND_TOWN, town.name.c_str());
+	CommandCost result = Command<CMD_FOUND_TOWN>::Do(DC_EXEC, tile, TSZ_SMALL, town.is_city, _settings_game.economy.town_layout, false, 0, town.name);
 	if (result.HasResultData()) {
 		/* The command succeeded, send the ID back through user_data. */
 		town.town_id = result.GetResultData();
@@ -523,11 +525,11 @@ void LoadTownData()
 		switch (_settings_game.game_creation.heightmap_rotation) {
 			case HM_CLOCKWISE:
 				/* Tile coordinates align with what we expect. */
-				tile = TileXY(town.x_proportion * MapMaxX(), town.y_proportion * MapMaxY());
+				tile = TileXY(town.x_proportion * Map::MaxX(), town.y_proportion * Map::MaxY());
 				break;
 			case HM_COUNTER_CLOCKWISE:
 				/* Tile coordinates are rotated and must be adjusted. */
-				tile = TileXY((1 - town.y_proportion * MapMaxX()), town.x_proportion * MapMaxY());
+				tile = TileXY((1 - town.y_proportion * Map::MaxX()), town.x_proportion * Map::MaxY());
 				break;
 			default: NOT_REACHED();
 		}
@@ -540,7 +542,7 @@ void LoadTownData()
 		/* If we still fail to found the town, we'll create a sign at the intended location and tell the player how many towns we failed to create in an error message.
 		 * This allows the player to diagnose a heightmap misalignment, if towns end up in the sea, or place towns manually, if in rough terrain. */
 		if (!success) {
-			DoCommandPOld(tile, 0, 0, CMD_PLACE_SIGN, CommandCallback::None, town.name.c_str());
+			Command<CMD_PLACE_SIGN>::Post(tile, town.name);
 			failed_towns++;
 			continue;
 		}
@@ -572,7 +574,7 @@ void LoadTownData()
 
 		do {
 			uint before = t->cache.num_houses;
-			DoCommandPOld(0, t->index, HOUSES_TO_GROW, CMD_EXPAND_TOWN);
+			Command<CMD_EXPAND_TOWN>::Post(t->index, HOUSES_TO_GROW);
 			if (t->cache.num_houses <= before) fail_limit--;
 		} while (fail_limit > 0 && try_limit-- > 0 && t->cache.population < population);
 	}

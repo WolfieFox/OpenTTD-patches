@@ -12,11 +12,14 @@
 #include "station_base.h"
 #include "waypoint_base.h"
 #include "window_gui.h"
+#include "station_cmd.h"
 #include "station_gui.h"
 #include "terraform_gui.h"
 #include "viewport_func.h"
 #include "command_func.h"
+#include "waypoint_cmd.h"
 #include "waypoint_func.h"
+#include "newgrf_badge.h"
 #include "newgrf_station.h"
 #include "company_base.h"
 #include "strings_func.h"
@@ -35,6 +38,7 @@
 #include "engine_base.h"
 #include "vehicle_func.h"
 #include "zoom_func.h"
+#include "rail_cmd.h"
 #include "rail_gui.h"
 #include "tracerestrict.h"
 #include "programmable_signals.h"
@@ -46,6 +50,8 @@
 #include "tunnelbridge_map.h"
 
 #include "widgets/rail_widget.h"
+
+#include <variant>
 
 #include "safeguards.h"
 
@@ -105,19 +111,22 @@ void CcPlaySound_CONSTRUCTION_RAIL(const CommandCost &result, TileIndex tile)
 	if (result.Succeeded() && _settings_client.sound.confirm) SndPlayTileFx(SND_20_CONSTRUCTION_RAIL, tile);
 }
 
-static CommandContainer<P123CmdData> GenericPlaceRailCmd(TileIndex tile, Track track)
-{
-	CommandContainer<P123CmdData> ret = NewCommandContainerBasic(
-		tile,          // tile
-		_cur_railtype, // p1
-		track | (_settings_client.gui.auto_remove_signals << 3), // p2
-		(uint32_t) (_remove_button_clicked ?
-				CMD_REMOVE_SINGLE_RAIL | CMD_MSG(STR_ERROR_CAN_T_REMOVE_RAILROAD_TRACK) :
-				CMD_BUILD_SINGLE_RAIL | CMD_MSG(STR_ERROR_CAN_T_BUILD_RAILROAD_TRACK)), // cmd
-		CommandCallback::PlaySound_CONSTRUCTION_RAIL // callback
-	);
+using RailTrackCommandContainer = std::variant<CommandContainer<CMD_BUILD_RAILROAD_TRACK>, CommandContainer<CMD_REMOVE_RAILROAD_TRACK>, CommandContainer<CMD_BUILD_SINGLE_RAIL>, CommandContainer<CMD_REMOVE_SINGLE_RAIL>>;
 
-	return ret;
+static BuildRailTrackFlags GetBaseBuildRailTrackFlags()
+{
+	return _settings_client.gui.auto_remove_signals ? BuildRailTrackFlags::AutoRemoveSignals : BuildRailTrackFlags::None;
+}
+
+static RailTrackCommandContainer GenericPlaceRailCmd(TileIndex tile, Track track)
+{
+	if (_remove_button_clicked) {
+		return CommandContainer<CMD_REMOVE_SINGLE_RAIL>(STR_ERROR_CAN_T_REMOVE_RAILROAD_TRACK, tile,
+				CmdPayload<CMD_REMOVE_SINGLE_RAIL>::Make(track), CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+	} else {
+		return CommandContainer<CMD_BUILD_SINGLE_RAIL>(STR_ERROR_CAN_T_BUILD_RAILROAD_TRACK, tile,
+				CmdPayload<CMD_BUILD_SINGLE_RAIL>::Make(_cur_railtype, track, GetBaseBuildRailTrackFlags()), CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+	}
 }
 
 /**
@@ -133,7 +142,7 @@ static void PlaceExtraDepotRail(TileIndex tile, DiagDirection dir, Track track)
 	if (GetRailTileType(tile) == RAIL_TILE_SIGNALS && !_settings_client.gui.auto_remove_signals) return;
 	if ((GetTrackBits(tile) & DiagdirReachesTracks(dir)) == 0) return;
 
-	DoCommandPOld(tile, _cur_railtype, track | (_settings_client.gui.auto_remove_signals << 3), CMD_BUILD_SINGLE_RAIL);
+	Command<CMD_BUILD_SINGLE_RAIL>::Post(tile, _cur_railtype, track, GetBaseBuildRailTrackFlags());
 }
 
 /** Additional pieces of track to add at the entrance of a depot. */
@@ -150,14 +159,9 @@ static const DiagDirection _place_depot_extra_dir[12] = {
 	DIAGDIR_NW, DIAGDIR_NE, DIAGDIR_NW, DIAGDIR_NE,
 };
 
-void CcRailDepot(const CommandCost &result, Commands cmd, TileIndex tile, const CommandPayloadBase &payload, CallbackParameter param)
+void CcRailDepot(const CommandCost &result, TileIndex tile, RailType railtype, DiagDirection dir)
 {
 	if (result.Failed()) return;
-
-	auto *data = dynamic_cast<const typename CommandTraits<CMD_BUILD_TRAIN_DEPOT>::PayloadType *>(&payload);
-	if (data == nullptr) return;
-
-	DiagDirection dir = (DiagDirection)data->p2;
 
 	if (_settings_client.sound.confirm) SndPlayTileFx(SND_20_CONSTRUCTION_RAIL, tile);
 	if (!_settings_client.gui.persistent_buildingtools) ResetObjectToPlace();
@@ -195,7 +199,7 @@ static void PlaceRail_Waypoint(TileIndex tile)
 	} else {
 		/* Tile where we can't build rail waypoints. This is always going to fail,
 		 * but provides the user with a proper error message. */
-		DoCommandPOld(tile, 1 << 8 | 1 << 16, STAT_CLASS_WAYP | INVALID_STATION << 16, CMD_BUILD_RAIL_WAYPOINT | CMD_MSG(STR_ERROR_CAN_T_BUILD_TRAIN_WAYPOINT));
+		Command<CMD_BUILD_RAIL_WAYPOINT>::Post(STR_ERROR_CAN_T_BUILD_TRAIN_WAYPOINT, tile, AXIS_X, 1, 1, STAT_CLASS_WAYP, 0, INVALID_STATION, false);
 	}
 }
 
@@ -226,13 +230,20 @@ static void PlaceRail_Station(TileIndex tile)
 		if (!_station_gui.axis) Swap(w, h);
 
 		StationPickerSelection params = _station_gui;
-		uint32_t p1 = _cur_railtype | params.axis << 6 | _settings_client.gui.station_numtracks << 8 | _settings_client.gui.station_platlength << 16 | _ctrl_pressed << 24;
-		uint32_t p2 = params.sel_class | INVALID_STATION << 16;
-		uint64_t p3 = params.sel_type;
+		RailType rt = _cur_railtype;
+		uint8_t numtracks = _settings_client.gui.station_numtracks;
+		uint8_t platlength = _settings_client.gui.station_platlength;
+		bool adjacent = _ctrl_pressed;
 
-		CommandContainer<P123CmdData> cmdcont = NewCommandContainerBasic(tile, p1, p2, CMD_BUILD_RAIL_STATION | CMD_MSG(STR_ERROR_CAN_T_BUILD_RAILROAD_STATION), CommandCallback::Station);
-		cmdcont.payload.p3 = p3;
-		ShowSelectStationIfNeeded(cmdcont, TileArea(tile, w, h));
+		auto proc = [=](bool test, StationID to_join) -> bool {
+			if (test) {
+				return Command<CMD_BUILD_RAIL_STATION>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_RAIL_STATION>()), tile, rt, params.axis, numtracks, platlength, params.sel_class, params.sel_type, INVALID_STATION, adjacent).Succeeded();
+			} else {
+				return Command<CMD_BUILD_RAIL_STATION>::Post(STR_ERROR_CAN_T_BUILD_RAILROAD_STATION, CommandCallback::Station, tile, rt, params.axis, numtracks, platlength, params.sel_class, params.sel_type, to_join, adjacent);
+			}
+		};
+
+		ShowSelectStationIfNeeded(TileArea(tile, w, h), proc);
 	}
 }
 
@@ -263,7 +274,7 @@ static void GenericPlaceSignals(TileIndex tile)
 	Track track = FindFirstTrack(trackbits);
 
 	if (_remove_button_clicked) {
-		DoCommandPOld(tile, track, 0, CMD_REMOVE_SIGNALS | CMD_MSG(STR_ERROR_CAN_T_REMOVE_SIGNALS_FROM), CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+		Command<CMD_REMOVE_SINGLE_SIGNAL>::Post(STR_ERROR_CAN_T_REMOVE_SIGNALS_FROM, CommandCallback::PlaySound_CONSTRUCTION_RAIL, tile, track, RemoveSignalFlags::None);
 		return;
 	}
 
@@ -291,9 +302,6 @@ static void GenericPlaceSignals(TileIndex tile)
 
 	const Window *w = FindWindowById(WC_BUILD_SIGNAL, 0);
 
-	/* various bitstuffed elements for CmdBuildSingleSignal() */
-	uint32_t p1 = track;
-
 	/* Which signals should we cycle through? */
 	SignalCycleGroups cycle_types;
 	if (_settings_client.gui.cycle_signal_types == SIGNAL_CYCLE_PATH) {
@@ -307,28 +315,29 @@ static void GenericPlaceSignals(TileIndex tile)
 		cycle_types = SCG_CURRENT_GROUP;
 	}
 
+	BuildSignalFlags build_flags{};
+	if (_ctrl_pressed) build_flags |= BuildSignalFlags::CtrlPressed;
+	if (_settings_client.gui.adv_sig_bridge_tun_modes) build_flags |= BuildSignalFlags::PermitBidiTunnelBridge;
+
+	SignalVariant sigvar;
+	SignalType sigtype;
+	uint8_t signal_style = 0;
+	uint8_t num_dir_cycle = 0;
 	if (w != nullptr) {
 		/* signal GUI is used */
-		SB(p1, 3, 1, _ctrl_pressed);
-		SB(p1, 4, 1, _cur_signal_variant);
-		SB(p1, 5, 3, _cur_signal_type);
-		SB(p1, 8, 1, _convert_signal_button);
-		SB(p1, 9, 2, cycle_types);
-		SB(p1, 19, 4, _cur_signal_style);
-		if (_cur_signal_type == SIGTYPE_NO_ENTRY) SB(p1, 15, 2, 1); // reverse default signal direction
+		sigvar = _cur_signal_variant;
+		sigtype = _cur_signal_type;
+		if (_convert_signal_button) build_flags |= BuildSignalFlags::Convert;
+		signal_style = _cur_signal_style;
+		if (_cur_signal_type == SIGTYPE_NO_ENTRY) num_dir_cycle = 1; // reverse default signal direction
 	} else {
-		SB(p1, 3, 1, _ctrl_pressed);
-		SB(p1, 4, 1, (CalTime::CurYear() < _settings_client.gui.semaphore_build_before ? SIG_SEMAPHORE : SIG_ELECTRIC));
-		SB(p1, 5, 3, GetDefaultSignalType());
-		SB(p1, 8, 1, 0);
-		SB(p1, 9, 2, cycle_types);
+		sigvar = CalTime::CurYear() < _settings_client.gui.semaphore_build_before ? SIG_SEMAPHORE : SIG_ELECTRIC;
+		sigtype = GetDefaultSignalType();
 	}
-	SB(p1, 18, 1, _settings_client.gui.adv_sig_bridge_tun_modes);
-	SB(p1, 23, 5, Clamp<int>(_settings_client.gui.drag_signals_density, 1, 16));
 
-	DoCommandPOld(tile, p1, 0, CMD_BUILD_SIGNALS |
-			CMD_MSG((w != nullptr && _convert_signal_button) ? STR_ERROR_SIGNAL_CAN_T_CONVERT_SIGNALS_HERE : STR_ERROR_CAN_T_BUILD_SIGNALS_HERE),
-			CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+	StringID err = (w != nullptr && _convert_signal_button) ? STR_ERROR_SIGNAL_CAN_T_CONVERT_SIGNALS_HERE : STR_ERROR_CAN_T_BUILD_SIGNALS_HERE;
+	Command<CMD_BUILD_SINGLE_SIGNAL>::Post(err, CommandCallback::PlaySound_CONSTRUCTION_RAIL, tile, track, sigtype, sigvar, signal_style,
+			Clamp<uint8_t>(_settings_client.gui.drag_signals_density, 1, 16), build_flags, cycle_types, num_dir_cycle, 0);
 }
 
 /**
@@ -431,19 +440,17 @@ static void BuildRailClick_Remove(Window *w)
 	}
 }
 
-static CommandContainer<P123CmdData> DoRailroadTrackCmd(TileIndex start_tile, TileIndex end_tile, Track track)
+static RailTrackCommandContainer DoRailroadTrackCmd(TileIndex start_tile, TileIndex end_tile, Track track)
 {
-	CommandContainer<P123CmdData> ret = NewCommandContainerBasic(
-		start_tile,                   // tile
-		end_tile.base(),              // p1
-		(uint32_t) (_cur_railtype | (track << 6) | (_settings_client.gui.auto_remove_signals << 13)), // p2
-		(uint32_t) (_remove_button_clicked ?
-				CMD_REMOVE_RAILROAD_TRACK | CMD_MSG(STR_ERROR_CAN_T_REMOVE_RAILROAD_TRACK) :
-				CMD_BUILD_RAILROAD_TRACK  | CMD_MSG(STR_ERROR_CAN_T_BUILD_RAILROAD_TRACK)), // cmd
-		CommandCallback::PlaySound_CONSTRUCTION_RAIL       // callback
-	);
-
-	return ret;
+	if (_remove_button_clicked) {
+		return CommandContainer<CMD_REMOVE_RAILROAD_TRACK>(STR_ERROR_CAN_T_REMOVE_RAILROAD_TRACK, end_tile,
+				CmdPayload<CMD_REMOVE_RAILROAD_TRACK>::Make(start_tile, track),
+				CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+	} else {
+		return CommandContainer<CMD_BUILD_RAILROAD_TRACK>(STR_ERROR_CAN_T_BUILD_RAILROAD_TRACK, end_tile,
+				CmdPayload<CMD_BUILD_RAILROAD_TRACK>::Make(start_tile, _cur_railtype, track, GetBaseBuildRailTrackFlags(), false),
+				CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+	}
 }
 
 static void HandleAutodirPlacement()
@@ -452,17 +459,17 @@ static void HandleAutodirPlacement()
 	TileIndex start_tile = TileVirtXY(_thd.selstart.x, _thd.selstart.y);
 	TileIndex end_tile = TileVirtXY(_thd.selend.x, _thd.selend.y);
 
-	CommandContainer<P123CmdData> cmd = (_thd.drawstyle & HT_RAIL) ?
-			GenericPlaceRailCmd(end_tile, track) : // one tile case
-			DoRailroadTrackCmd(start_tile, end_tile, track); // multitile selection
+	RailTrackCommandContainer cmd = (_thd.drawstyle & HT_RAIL) ?
+			RailTrackCommandContainer(GenericPlaceRailCmd(end_tile, track)) : // one tile case
+			RailTrackCommandContainer(DoRailroadTrackCmd(start_tile, end_tile, track)); // multitile selection
 
 	/* When overbuilding existing tracks in polyline mode we just want to move the
 	 * snap point without altering the user with the "already built" error. Don't
 	 * execute the command right away, firstly check if tracks are being overbuilt. */
 	if (!(_thd.place_mode & HT_POLY) || _shift_pressed ||
-			DoCommandContainer(cmd, DC_AUTO | DC_NO_WATER).GetErrorMessage() != STR_ERROR_ALREADY_BUILT) {
+			std::visit([](const auto &val) -> StringID { return DoCommandContainer(val, DC_AUTO | DC_NO_WATER).GetErrorMessage(); }, cmd) != STR_ERROR_ALREADY_BUILT) {
 		/* place tracks */
-		if (!DoCommandPContainer(cmd)) return;
+		if (!std::visit([](const auto &val) -> bool { return DoCommandPContainer(val); }, cmd)) return;
 	}
 
 	/* save new snap points for the polyline tool */
@@ -479,8 +486,7 @@ static void HandleAutodirPlacement()
  */
 static void HandleAutoSignalPlacement()
 {
-	uint32_t p2 = GB(_thd.drawstyle, 0, 3); // 0..5
-	uint64_t p3 = 0;
+	Track track = (Track)GB(_thd.drawstyle, 0, 3); // 0..5
 
 	if ((_thd.drawstyle & HT_DRAG_MASK) == HT_RECT) { // one tile case
 		GenericPlaceSignals(TileVirtXY(_thd.selend.x, _thd.selend.y));
@@ -489,33 +495,35 @@ static void HandleAutoSignalPlacement()
 
 	const Window *w = FindWindowById(WC_BUILD_SIGNAL, 0);
 
+	SignalDragFlags drag_flags{};
+	if (_ctrl_pressed) drag_flags |= SignalDragFlags::Autofill;
+	if (_settings_client.gui.drag_signals_skip_stations) drag_flags |= SignalDragFlags::SkipOverStations;
+	if (!_settings_client.gui.drag_signals_fixed_distance) drag_flags |= SignalDragFlags::MinimiseGaps;
+
+	SignalVariant sigvar;
+	SignalType sigtype;
+	uint8_t signal_style = 0;
 	if (w != nullptr) {
 		/* signal GUI is used */
-		SB(p2,  3, 1, 0);
-		SB(p2,  4, 1, _cur_signal_variant);
-		SB(p2,  6, 1, _ctrl_pressed);
-		SB(p2,  7, 3, _cur_signal_type);
-		SB(p2, 24, 8, _settings_client.gui.drag_signals_density);
-		SB(p2, 10, 1, !_settings_client.gui.drag_signals_fixed_distance);
-		SB(p2, 11, 4, _cur_signal_style);
+		sigvar = _cur_signal_variant;
+		sigtype = _cur_signal_type;
+		signal_style = _cur_signal_style;
 	} else {
-		SB(p2,  3, 1, 0);
-		SB(p2,  4, 1, (CalTime::CurYear() < _settings_client.gui.semaphore_build_before ? SIG_SEMAPHORE : SIG_ELECTRIC));
-		SB(p2,  6, 1, _ctrl_pressed);
-		SB(p2,  7, 3, GetDefaultSignalType());
-		SB(p2, 24, 8, _settings_client.gui.drag_signals_density);
-		SB(p2, 10, 1, !_settings_client.gui.drag_signals_fixed_distance);
+		sigvar = CalTime::CurYear() < _settings_client.gui.semaphore_build_before ? SIG_SEMAPHORE : SIG_ELECTRIC;
+		sigtype = GetDefaultSignalType();
 	}
-	SB(p3, 0, 1, _settings_client.gui.drag_signals_skip_stations);
-	SB(p3, 1, 1, _ctrl_pressed && _settings_client.gui.drag_signals_stop_restricted_signal);
 
-	/* _settings_client.gui.drag_signals_density is given as a parameter such that each user
-	 * in a network game can specify their own signal density */
-	DoCommandPEx(TileVirtXY(_thd.selstart.x, _thd.selstart.y), TileVirtXY(_thd.selend.x, _thd.selend.y), p2, p3,
-			_remove_button_clicked ?
-			CMD_REMOVE_SIGNAL_TRACK | CMD_MSG(STR_ERROR_CAN_T_REMOVE_SIGNALS_FROM) :
-			CMD_BUILD_SIGNAL_TRACK  | CMD_MSG(STR_ERROR_CAN_T_BUILD_SIGNALS_HERE),
-			CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+	TileIndex start_tile = TileVirtXY(_thd.selstart.x, _thd.selstart.y);
+	TileIndex end_tile = TileVirtXY(_thd.selend.x, _thd.selend.y);
+	if (_remove_button_clicked) {
+		RemoveSignalFlags remove_flags{};
+		if (_ctrl_pressed && _settings_client.gui.drag_signals_stop_restricted_signal) remove_flags |= RemoveSignalFlags::NoRemoveRestricted;
+		Command<CMD_REMOVE_SIGNAL_TRACK>::Post(STR_ERROR_CAN_T_REMOVE_SIGNALS_FROM, CommandCallback::PlaySound_CONSTRUCTION_RAIL,
+				start_tile, end_tile, track, drag_flags, remove_flags);
+	} else {
+		Command<CMD_BUILD_SIGNAL_TRACK>::Post(STR_ERROR_CAN_T_BUILD_SIGNALS_HERE, CommandCallback::PlaySound_CONSTRUCTION_RAIL,
+				start_tile, end_tile, track, sigtype, sigvar, signal_style, false, drag_flags, _settings_client.gui.drag_signals_density);
+	}
 }
 
 
@@ -872,9 +880,7 @@ struct BuildRailToolbarWindow : Window {
 				break;
 
 			case WID_RAT_BUILD_DEPOT:
-				DoCommandPOld(tile, _cur_railtype, _build_depot_direction,
-						CMD_BUILD_TRAIN_DEPOT | CMD_MSG(STR_ERROR_CAN_T_BUILD_TRAIN_DEPOT),
-						CommandCallback::RailDepot);
+				Command<CMD_BUILD_TRAIN_DEPOT>::Post(STR_ERROR_CAN_T_BUILD_TRAIN_DEPOT, CommandCallback::RailDepot, tile, _cur_railtype, _build_depot_direction);
 				break;
 
 			case WID_RAT_BUILD_WAYPOINT:
@@ -940,14 +946,12 @@ struct BuildRailToolbarWindow : Window {
 					break;
 
 				case DDSP_CONVERT_RAIL:
-					DoCommandPOld(end_tile, start_tile, _cur_railtype | (_ctrl_pressed ? (1 << 6) : 0), CMD_CONVERT_RAIL | CMD_MSG(STR_ERROR_CAN_T_CONVERT_RAIL), CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+					Command<CMD_CONVERT_RAIL>::Post(STR_ERROR_CAN_T_CONVERT_RAIL, CommandCallback::PlaySound_CONSTRUCTION_RAIL, end_tile, start_tile, _cur_railtype, _ctrl_pressed);
 					break;
 
 				case DDSP_CONVERT_RAIL_TRACK: {
 					Track track = (Track)(_thd.drawstyle & HT_DIR_MASK); // 0..5
-					TileIndex start_tile = TileVirtXY(_thd.selstart.x, _thd.selstart.y);
-					TileIndex end_tile = TileVirtXY(_thd.selend.x, _thd.selend.y);
-					DoCommandPOld((_thd.drawstyle & HT_RAIL) ? end_tile : start_tile, end_tile, _cur_railtype | (track << 6), CMD_CONVERT_RAIL_TRACK | CMD_MSG(STR_ERROR_CAN_T_CONVERT_RAIL), CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+					Command<CMD_CONVERT_RAIL_TRACK>::Post(STR_ERROR_CAN_T_CONVERT_RAIL, CommandCallback::PlaySound_CONSTRUCTION_RAIL, end_tile, (_thd.drawstyle & HT_RAIL) ? end_tile : start_tile, track, _cur_railtype);
 					break;
 				}
 
@@ -956,23 +960,30 @@ struct BuildRailToolbarWindow : Window {
 					if (this->IsWidgetLowered(WID_RAT_BUILD_STATION)) {
 						/* Station */
 						if (_remove_button_clicked) {
-							DoCommandPOld(end_tile, start_tile, _ctrl_pressed ? 0 : 1, CMD_REMOVE_FROM_RAIL_STATION | CMD_MSG(STR_ERROR_CAN_T_REMOVE_PART_OF_STATION), CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+							bool keep_rail = !_ctrl_pressed;
+							Command<CMD_REMOVE_FROM_RAIL_STATION>::Post(STR_ERROR_CAN_T_REMOVE_PART_OF_STATION, CommandCallback::PlaySound_CONSTRUCTION_RAIL, end_tile, start_tile, keep_rail);
 						} else {
 							HandleStationPlacement(start_tile, end_tile);
 						}
 					} else {
 						/* Waypoint */
 						if (_remove_button_clicked) {
-							DoCommandPOld(end_tile, start_tile, _ctrl_pressed ? 0 : 1, CMD_REMOVE_FROM_RAIL_WAYPOINT | CMD_MSG(STR_ERROR_CAN_T_REMOVE_TRAIN_WAYPOINT), CommandCallback::PlaySound_CONSTRUCTION_RAIL);
+							bool keep_rail = !_ctrl_pressed;
+							Command<CMD_REMOVE_FROM_RAIL_WAYPOINT>::Post(STR_ERROR_CAN_T_REMOVE_TRAIN_WAYPOINT, CommandCallback::PlaySound_CONSTRUCTION_RAIL, end_tile, start_tile, keep_rail);
 						} else {
 							TileArea ta(start_tile, end_tile);
-							uint32_t p1 = _cur_railtype | (select_method == VPM_X_LIMITED ? AXIS_X : AXIS_Y) << 6 | ta.w << 8 | ta.h << 16 | _ctrl_pressed << 24;
-							uint32_t p2 = _waypoint_gui.sel_class | INVALID_STATION << 16;
-							uint64_t p3 = _waypoint_gui.sel_type;
+							Axis axis = select_method == VPM_X_LIMITED ? AXIS_X : AXIS_Y;
+							bool adjacent = _ctrl_pressed;
 
-							CommandContainer<P123CmdData> cmdcont = NewCommandContainerBasic(ta.tile, p1, p2, CMD_BUILD_RAIL_WAYPOINT | CMD_MSG(STR_ERROR_CAN_T_BUILD_TRAIN_WAYPOINT), CommandCallback::PlaySound_CONSTRUCTION_RAIL);
-							cmdcont.payload.p3 = p3;
-							ShowSelectWaypointIfNeeded(cmdcont, ta);
+							auto proc = [=](bool test, StationID to_join) -> bool {
+								if (test) {
+									return Command<CMD_BUILD_RAIL_WAYPOINT>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_RAIL_WAYPOINT>()), ta.tile, axis, ta.w, ta.h, _waypoint_gui.sel_class, _waypoint_gui.sel_type, INVALID_STATION, adjacent).Succeeded();
+								} else {
+									return Command<CMD_BUILD_RAIL_WAYPOINT>::Post(STR_ERROR_CAN_T_BUILD_TRAIN_WAYPOINT, CommandCallback::PlaySound_CONSTRUCTION_RAIL, ta.tile, axis, ta.w, ta.h, _waypoint_gui.sel_class, _waypoint_gui.sel_type, to_join, adjacent);
+								}
+							};
+
+							ShowSelectRailWaypointIfNeeded(ta, proc);
 						}
 					}
 					break;
@@ -1012,7 +1023,7 @@ struct BuildRailToolbarWindow : Window {
 
 	void OnRealtimeTick([[maybe_unused]] uint delta_ms) override
 	{
-		if (this->IsWidgetLowered(WID_RAT_BUILD_WAYPOINT)) CheckRedrawWaypointCoverage(this, false);
+		if (this->IsWidgetLowered(WID_RAT_BUILD_WAYPOINT)) CheckRedrawRailWaypointCoverage(this);
 	}
 
 	static HotkeyList hotkeys;
@@ -1105,7 +1116,7 @@ static constexpr NWidgetPart _nested_build_rail_widgets[] = {
 static WindowDesc _build_rail_desc(__FILE__, __LINE__,
 	WDP_ALIGN_TOOLBAR, "toolbar_rail", 0, 0,
 	WC_BUILD_TOOLBAR, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_build_rail_widgets,
 	&BuildRailToolbarWindow::hotkeys
 );
@@ -1142,13 +1153,18 @@ static void HandleStationPlacement(TileIndex start, TileIndex end)
 	if (_station_gui.axis == AXIS_X) Swap(numtracks, platlength);
 
 	StationPickerSelection params = _station_gui;
-	uint32_t p1 = _cur_railtype | params.axis << 6 | numtracks << 8 | platlength << 16 | _ctrl_pressed << 24;
-	uint32_t p2 = params.sel_class | INVALID_STATION << 16;
-	uint64_t p3 = params.sel_type;
+	RailType rt = _cur_railtype;
+	bool adjacent = _ctrl_pressed;
 
-	CommandContainer<P123CmdData> cmdcont = NewCommandContainerBasic(ta.tile, p1, p2, CMD_BUILD_RAIL_STATION | CMD_MSG(STR_ERROR_CAN_T_BUILD_RAILROAD_STATION), CommandCallback::Station);
-	cmdcont.payload.p3 = p3;
-	ShowSelectStationIfNeeded(cmdcont, ta);
+	auto proc = [=](bool test, StationID to_join) -> bool {
+		if (test) {
+			return Command<CMD_BUILD_RAIL_STATION>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_RAIL_STATION>()), ta.tile, rt, params.axis, numtracks, platlength, params.sel_class, params.sel_type, INVALID_STATION, adjacent).Succeeded();
+		} else {
+			return Command<CMD_BUILD_RAIL_STATION>::Post(STR_ERROR_CAN_T_BUILD_RAILROAD_STATION, CommandCallback::Station, ta.tile, rt, params.axis, numtracks, platlength, params.sel_class, params.sel_type, to_join, adjacent);
+		}
+	};
+
+	ShowSelectStationIfNeeded(ta, proc);
 }
 
 /**
@@ -1167,6 +1183,8 @@ static bool StationUsesDefaultType(const BaseStation *bst)
 class StationPickerCallbacks : public PickerCallbacksNewGRFClass<StationClass> {
 public:
 	StationPickerCallbacks() : PickerCallbacksNewGRFClass<StationClass>("fav_stations") {}
+
+	GrfSpecFeature GetFeature() const override { return GSF_STATIONS; }
 
 	StringID GetClassTooltip() const override { return STR_PICKER_STATION_CLASS_TOOLTIP; }
 	StringID GetTypeTooltip() const override { return STR_PICKER_STATION_TYPE_TOOLTIP; }
@@ -1204,6 +1222,13 @@ public:
 	{
 		const auto *spec = this->GetSpec(cls_id, id);
 		return (spec == nullptr) ? STR_STATION_CLASS_DFLT_STATION : spec->name;
+	}
+
+	std::span<const BadgeID> GetTypeBadges(int cls_id, int id) const override
+	{
+		const auto *spec = this->GetSpec(cls_id, id);
+		if (spec == nullptr) return {};
+		return spec->badges;
 	}
 
 	bool IsTypeAvailable(int cls_id, int id) const override
@@ -1351,6 +1376,7 @@ public:
 		/* 'Accepts' and 'Supplies' texts. */
 		Rect r = this->GetWidget<NWidgetBase>(WID_BRAS_COVERAGE_TEXTS)->GetCurrentRect();
 		int top = r.top;
+		if (statspec != nullptr) top = DrawBadgeNameList(Rect{r.left, top, r.right, INT_MAX}, statspec->badges, GSF_STATIONS);
 		top = DrawStationCoverageAreaText(r.left, r.right, top, SCT_ALL, rad, false) + WidgetDimensions::scaled.vsep_normal;
 		top = DrawStationCoverageAreaText(r.left, r.right, top, SCT_ALL, rad, true);
 		/* Resize background if the window is too small.
@@ -1630,7 +1656,7 @@ static constexpr NWidgetPart _nested_station_builder_widgets[] = {
 static WindowDesc _station_builder_desc(__FILE__, __LINE__,
 	WDP_AUTO, "build_station_rail", 0, 0,
 	WC_BUILD_STATION, WC_BUILD_TOOLBAR,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_station_builder_widgets,
 	&BuildRailStationWindow::hotkeys
 );
@@ -2117,7 +2143,7 @@ static constexpr NWidgetPart _nested_signal_builder_widgets[] = {
 static WindowDesc _signal_builder_desc(__FILE__, __LINE__,
 	WDP_AUTO, nullptr, 0, 0,
 	WC_BUILD_SIGNAL, WC_BUILD_TOOLBAR,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_signal_builder_widgets,
 	&BuildSignalWindow::hotkeys
 );
@@ -2199,7 +2225,7 @@ static constexpr NWidgetPart _nested_build_depot_widgets[] = {
 static WindowDesc _build_depot_desc(__FILE__, __LINE__,
 	WDP_AUTO, nullptr, 0, 0,
 	WC_BUILD_DEPOT, WC_BUILD_TOOLBAR,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_build_depot_widgets
 );
 
@@ -2211,6 +2237,8 @@ static void ShowBuildTrainDepotPicker(Window *parent)
 class WaypointPickerCallbacks : public PickerCallbacksNewGRFClass<StationClass> {
 public:
 	WaypointPickerCallbacks() : PickerCallbacksNewGRFClass<StationClass>("fav_waypoints") {}
+
+	GrfSpecFeature GetFeature() const override { return GSF_STATIONS; }
 
 	StringID GetClassTooltip() const override { return STR_PICKER_WAYPOINT_CLASS_TOOLTIP; }
 	StringID GetTypeTooltip() const override { return STR_PICKER_WAYPOINT_TYPE_TOOLTIP; }
@@ -2249,6 +2277,13 @@ public:
 	{
 		const auto *spec = this->GetSpec(cls_id, id);
 		return (spec == nullptr) ? STR_STATION_CLASS_WAYP_WAYPOINT : spec->name;
+	}
+
+	std::span<const BadgeID> GetTypeBadges(int cls_id, int id) const override
+	{
+		const auto *spec = this->GetSpec(cls_id, id);
+		if (spec == nullptr) return {};
+		return spec->badges;
 	}
 
 	bool IsTypeAvailable(int cls_id, int id) const override
@@ -2310,7 +2345,7 @@ static constexpr NWidgetPart _nested_build_waypoint_widgets[] = {
 static WindowDesc _build_waypoint_desc(__FILE__, __LINE__,
 	WDP_AUTO, "build_waypoint", 0, 0,
 	WC_BUILD_WAYPOINT, WC_BUILD_TOOLBAR,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_build_waypoint_widgets,
 	&BuildRailWaypointWindow::hotkeys
 );
@@ -2360,7 +2395,7 @@ static void SetDefaultRailGui()
 			/* Find the most used rail type */
 			uint count[RAILTYPE_END];
 			memset(count, 0, sizeof(count));
-			for (TileIndex t(0); t < MapSize(); t++) {
+			for (TileIndex t(0); t < Map::Size(); t++) {
 				if (IsTileType(t, MP_RAILWAY) || IsLevelCrossingTile(t) || HasStationTileRail(t) ||
 						(IsTileType(t, MP_TUNNELBRIDGE) && GetTunnelBridgeTransportType(t) == TRANSPORT_RAIL)) {
 					count[GetRailType(t)]++;
@@ -2472,6 +2507,9 @@ DropDownList GetRailTypeDropDownList(bool for_replacement, bool all_option)
 		}
 	}
 
+	/* Shared list so that each item can take ownership. */
+	auto badge_class_list = std::make_shared<GUIBadgeClasses>(GSF_RAILTYPES);
+
 	for (const auto &rt : _sorted_railtypes) {
 		/* If it's not used ever, don't show it to the user. */
 		if (!HasBit(used_railtypes, rt)) continue;
@@ -2481,10 +2519,10 @@ DropDownList GetRailTypeDropDownList(bool for_replacement, bool all_option)
 		SetDParam(0, rti->strings.menu_text);
 		SetDParam(1, rti->max_speed);
 		if (for_replacement) {
-			list.push_back(MakeDropDownListStringItem(rti->strings.replace_text, rt, !HasBit(avail_railtypes, rt)));
+			list.push_back(MakeDropDownListBadgeItem(badge_class_list, rti->badges, GSF_RAILTYPES, rti->introduction_date, rti->strings.replace_text, rt, !HasBit(avail_railtypes, rt)));
 		} else {
 			StringID str = rti->max_speed > 0 ? STR_TOOLBAR_RAILTYPE_VELOCITY : STR_JUST_STRING;
-			list.push_back(MakeDropDownListIconItem(d, rti->gui_sprites.build_x_rail, PAL_NONE, str, rt, !HasBit(avail_railtypes, rt)));
+			list.push_back(MakeDropDownListBadgeIconItem(badge_class_list, rti->badges, GSF_RAILTYPES, rti->introduction_date, d, rti->gui_sprites.build_x_rail, PAL_NONE, str, rt, !HasBit(avail_railtypes, rt)));
 		}
 	}
 

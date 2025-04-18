@@ -198,7 +198,7 @@ struct ChildScreenSpriteToDraw {
  * Mode of "sprite combining"
  * @see StartSpriteCombine
  */
-enum SpriteCombineMode {
+enum SpriteCombineMode : uint8_t {
 	SPRITE_COMBINE_NONE,     ///< Every #AddSortableSpriteToDraw start its own bounding box
 	SPRITE_COMBINE_PENDING,  ///< %Sprite combining will start with the next unclipped sprite.
 	SPRITE_COMBINE_ACTIVE,   ///< %Sprite combining is active. #AddSortableSpriteToDraw outputs child sprites.
@@ -920,7 +920,7 @@ inline void UpdateViewportDirtyBlockLeftMargin(Viewport *vp)
 static void SetViewportPosition(Window *w, int x, int y, bool force_update_overlay)
 {
 	if (unlikely(HasBit(_viewport_debug_flags, VDF_DIRTY_WHOLE_VIEWPORT))) {
-		w->flags |= WF_DIRTY;
+		w->flags.Set(WindowFlag::Dirty);
 	}
 
 	Viewport *vp = w->viewport;
@@ -1643,7 +1643,7 @@ static void DrawAutorailSelection(const TileInfo *ti, HighLightStyle autorail_ty
 	}
 }
 
-enum TileHighlightType {
+enum TileHighlightType : uint8_t {
 	THT_NONE,
 	THT_WHITE,
 	THT_BLUE,
@@ -1690,9 +1690,8 @@ static TileHighlightType GetTileHighlightType(TileIndex t)
 	}
 
 	if (_viewport_highlight_tracerestrict_program != nullptr) {
-		const TraceRestrictRefId *refs = _viewport_highlight_tracerestrict_program->GetRefIdsPtr();
-		for (uint i = 0; i < _viewport_highlight_tracerestrict_program->refcount; i++) {
-			if (GetTraceRestrictRefIdTileIndex(refs[i]) == t) return THT_LIGHT_BLUE;
+		for (TraceRestrictRefId ref : _viewport_highlight_tracerestrict_program->GetReferences()) {
+			if (GetTraceRestrictRefIdTileIndex(ref) == t) return THT_LIGHT_BLUE;
 		}
 	}
 
@@ -1887,8 +1886,8 @@ static void ViewportAddLandscape()
 			_cur_ti.x = tilecoord.x * TILE_SIZE;
 			_cur_ti.y = tilecoord.y * TILE_SIZE;
 
-			if (IsInsideBS(tilecoord.x, 0, MapSizeX()) && IsInsideBS(tilecoord.y, 0, MapSizeY())) {
-				/* This includes the south border at MapMaxX / MapMaxY. When terraforming we still draw tile selections there. */
+			if (IsInsideBS(tilecoord.x, 0, Map::SizeX()) && IsInsideBS(tilecoord.y, 0, Map::SizeY())) {
+				/* This includes the south border at Map::MaxX / Map::MaxY. When terraforming we still draw tile selections there. */
 				_cur_ti.tile = TileXY(tilecoord.x, tilecoord.y);
 				tile_type = GetTileType(_cur_ti.tile);
 			} else {
@@ -1976,7 +1975,7 @@ static StringSpriteToDraw *ViewportAddString(ViewportDrawerDynamic *vdd, const D
 	int right  = left + dpi->width;
 	int bottom = top + dpi->height;
 
-	bool small = HasFlag(flags, ViewportStringFlags::Small);
+	bool small = flags.Test(ViewportStringFlag::Small);
 	int sign_height     = ScaleByZoom(WidgetDimensions::scaled.fullbevel.top + GetCharacterHeight(small ? FS_SMALL : FS_NORMAL) + WidgetDimensions::scaled.fullbevel.bottom, dpi->zoom);
 	int sign_half_width = ScaleByZoom((small ? sign->width_small : sign->width_normal) / 2, dpi->zoom);
 
@@ -2034,7 +2033,7 @@ static Rect ExpandRectWithViewportSignMargins(Rect r, ZoomLevel zoom)
 static void ViewportAddTownStrings(ViewportDrawerDynamic *vdd, DrawPixelInfo *dpi, const std::vector<const Town *> &towns, bool small)
 {
 	ViewportStringFlags flags{};
-	if (small) flags = ViewportStringFlags::Small | ViewportStringFlags::Shadow;
+	if (small) flags.Set(ViewportStringFlag::Small).Set(ViewportStringFlag::Shadow);
 
 	StringID stringid = small ? STR_VIEWPORT_TOWN_LABEL_TINY : STR_VIEWPORT_TOWN_LABEL;
 	for (const Town *t : towns) {
@@ -2055,11 +2054,11 @@ static void ViewportAddTownStrings(ViewportDrawerDynamic *vdd, DrawPixelInfo *dp
 static void ViewportAddSignStrings(ViewportDrawerDynamic *vdd, DrawPixelInfo *dpi, const std::vector<const Sign *> &signs, bool small)
 {
 	ViewportStringFlags flags{};
-	if (small) flags = ViewportStringFlags::Small;
+	if (small) flags.Set(ViewportStringFlag::Small);
 
 	/* Signs placed by a game script don't have a frame. */
 	ViewportStringFlags deity_flags{flags};
-	flags |= vdd->IsTransparencySet(TO_SIGNS) ? ViewportStringFlags::TransparentRect : ViewportStringFlags::ColourRect;
+	flags.Set(vdd->IsTransparencySet(TO_SIGNS) ? ViewportStringFlag::TransparentRect : ViewportStringFlag::ColourRect);
 
 	for (const Sign *si : signs) {
 		StringSpriteToDraw *str = ViewportAddString(vdd, dpi, &si->sign, (si->owner == OWNER_DEITY) ? deity_flags : flags);
@@ -2079,8 +2078,8 @@ static void ViewportAddSignStrings(ViewportDrawerDynamic *vdd, DrawPixelInfo *dp
 static void ViewportAddStationStrings(ViewportDrawerDynamic *vdd, DrawPixelInfo *dpi, const std::vector<const BaseStation *> &stations, bool small)
 {
 	/* Transparent station signs have colour text instead of a colour panel. */
-	ViewportStringFlags flags{vdd->IsTransparencySet(TO_SIGNS) ? ViewportStringFlags::TextColour : ViewportStringFlags::ColourRect};
-	if (small) flags |= ViewportStringFlags::Small;
+	ViewportStringFlags flags{vdd->IsTransparencySet(TO_SIGNS) ? ViewportStringFlag::TextColour : ViewportStringFlag::ColourRect};
+	if (small) flags.Set(ViewportStringFlag::Small);
 
 	for (const BaseStation *st : stations) {
 		StringSpriteToDraw *str = ViewportAddString(vdd, dpi, &st->sign, flags);
@@ -2117,7 +2116,12 @@ static void ViewportAddKdtreeSigns(ViewportDrawerDynamic *vdd, DrawPixelInfo *dp
 			case ViewportSignKdtreeItem::VKI_STATION: {
 				if (!show_stations) break;
 				const BaseStation *st = BaseStation::Get(item.id.station);
-				if ((_facility_display_opt & st->facilities) == 0) break;
+
+				/* If no facilities are present the station is a ghost station. */
+				StationFacility facilities = st->facilities;
+				if (facilities == FACIL_NONE) facilities = FACIL_GHOST;
+
+				if ((_facility_display_opt & facilities) == 0) break;
 
 				/* Don't draw if station is owned by another company and competitor station names are hidden. Stations owned by none are never ignored. */
 				if (!show_competitors && _local_company != st->owner && st->owner != OWNER_NONE) break;
@@ -2545,7 +2549,7 @@ void ViewportDrawDirtyBlocks(const DrawPixelInfo *dpi, bool increment_colour)
 static void ViewportDrawStrings(ViewportDrawerDynamic *vdd, ZoomLevel zoom, const StringSpriteToDrawVector *sstdv)
 {
 	for (const StringSpriteToDraw &ss : *sstdv) {
-		bool small = HasFlag(ss.flags, ViewportStringFlags::Small);
+		bool small = ss.flags.Test(ViewportStringFlag::Small);
 		int w = ss.width;
 		int x = UnScaleByZoom(ss.x, zoom);
 		int y = UnScaleByZoom(ss.y, zoom);
@@ -2556,14 +2560,14 @@ static void ViewportDrawStrings(ViewportDrawerDynamic *vdd, ZoomLevel zoom, cons
 		GetStringWithArgs(StringBuilder(string), ss.string, string_params);
 
 		TextColour colour = TC_WHITE;
-		if (HasFlag(ss.flags, ViewportStringFlags::ColourRect)) {
-			if (ss.colour != INVALID_COLOUR) DrawFrameRect(x, y, x + w - 1, y + h - 1, ss.colour, FR_NONE);
+		if (ss.flags.Test(ViewportStringFlag::ColourRect)) {
+			if (ss.colour != INVALID_COLOUR) DrawFrameRect(x, y, x + w - 1, y + h - 1, ss.colour, {});
 			colour = TC_BLACK;
-		} else if (HasFlag(ss.flags, ViewportStringFlags::TransparentRect)) {
-			DrawFrameRect(x, y, x + w - 1, y + h - 1, ss.colour, FR_TRANSPARENT);
+		} else if (ss.flags.Test(ViewportStringFlag::TransparentRect)) {
+			DrawFrameRect(x, y, x + w - 1, y + h - 1, ss.colour, FrameFlag::Transparent);
 		}
 
-		if (HasFlag(ss.flags, ViewportStringFlags::TextColour)) {
+		if (ss.flags.Test(ViewportStringFlag::TextColour)) {
 			if (ss.colour != INVALID_COLOUR) colour = static_cast<TextColour>(GetColourGradient(ss.colour, SHADE_LIGHTER) | TC_IS_PALETTE_COLOUR);
 		}
 
@@ -2572,7 +2576,7 @@ static void ViewportDrawStrings(ViewportDrawerDynamic *vdd, ZoomLevel zoom, cons
 		int top = y + WidgetDimensions::scaled.fullbevel.top;
 
 		int shadow_offset = 0;
-		if (small && HasFlag(ss.flags, ViewportStringFlags::Shadow)) {
+		if (small && ss.flags.Test(ViewportStringFlag::Shadow)) {
 			/* Shadow needs to be shifted 1 pixel. */
 			shadow_offset = WidgetDimensions::scaled.fullbevel.top;
 			DrawString(left + shadow_offset, right + shadow_offset, top, string, TC_BLACK | TC_FORCED, SA_HOR_CENTER, false, FS_SMALL);
@@ -3546,26 +3550,26 @@ static uint32_t ViewportMapVoidColour()
 template <bool is_32bpp, bool show_slope>
 uint32_t ViewportMapGetColour(const Viewport * const vp, int x, int y, const uint colour_index)
 {
-	if (x >= static_cast<int>(MapMaxX() * TILE_SIZE) || y >= static_cast<int>(MapMaxY() * TILE_SIZE)) return ViewportMapVoidColour();
+	if (x >= static_cast<int>(Map::MaxX() * TILE_SIZE) || y >= static_cast<int>(Map::MaxY() * TILE_SIZE)) return ViewportMapVoidColour();
 
 	/* Very approximative but fast way to get the tile when taking Z into account. */
 	const TileIndex tile_tmp = TileVirtXY(std::max(0, x), std::max(0, y));
 	const int z = TileHeight(tile_tmp) * 4;
-	if (x + z < 0 || y + z < 0 || static_cast<uint>(x + z) >= MapSizeX() << 4) {
+	if (x + z < 0 || y + z < 0 || static_cast<uint>(x + z) >= Map::SizeX() << 4) {
 		/* Wrapping of tile X coordinate causes a graphic glitch below south west border. */
 		return ViewportMapVoidColour();
 	}
 	TileIndex tile = TileVirtXY(x + z, y + z);
-	if (tile >= MapSize()) return ViewportMapVoidColour();
+	if (tile >= Map::Size()) return ViewportMapVoidColour();
 	const int z2 = TileHeight(tile) * 4;
 	if (unlikely(z2 != z)) {
 		const int approx_z = (z + z2) / 2;
-		if (x + approx_z < 0 || y + approx_z < 0 || static_cast<uint>(x + approx_z) >= MapSizeX() << 4) {
+		if (x + approx_z < 0 || y + approx_z < 0 || static_cast<uint>(x + approx_z) >= Map::SizeX() << 4) {
 			/* Wrapping of tile X coordinate causes a graphic glitch below south west border. */
 			return ViewportMapVoidColour();
 		}
 		tile = TileVirtXY(x + approx_z, y + approx_z);
-		if (tile >= MapSize()) return ViewportMapVoidColour();
+		if (tile >= Map::Size()) return ViewportMapVoidColour();
 	}
 	TileType tile_type = MP_VOID;
 	tile = ViewportMapGetMostSignificantTileType(vp, tile, &tile_type);
@@ -3694,11 +3698,7 @@ static void ViewportMapDrawSelection(const Viewport * const vp)
 	draw_line(mid2_pt, start_pt);
 
 	if (BlitterFactory::GetCurrentBlitter()->GetScreenDepth() == 32) {
-		static std::vector<Point> points(4);
-		points[0] = start_pt;
-		points[1] = mid1_pt;
-		points[2] = end_pt;
-		points[3] = mid2_pt;
+		static std::array<Point, 4> points{ start_pt, mid1_pt, end_pt, mid2_pt };
 		GfxFillPolygon(points, 0, FILLRECT_FUNCTOR, [](void *dst, int count) {
 			uint32_t *buf = reinterpret_cast<uint32_t *>(dst);
 			for (int i = 0; i < count; i++) {
@@ -4393,7 +4393,7 @@ static void ClampSmoothScroll(uint32_t delta_ms, int64_t delta_hi, int64_t delta
 	/* Move at most 75% of the distance every 30ms, for a smooth experience */
 	int64_t delta_left = delta_hi * std::pow(0.75, delta_ms / 30.0);
 	/* Move never more than 16 tiles per 30ms. */
-	int max_scroll = ScaleByMapSize1D(16 * PIXELS_PER_TILE * delta_ms / 30);
+	int max_scroll = Map::ScaleBySize1D(16 * PIXELS_PER_TILE * delta_ms / 30);
 
 	/* We never go over the max_scroll speed. */
 	delta_hi_clamped = Clamp(delta_hi - delta_left, -max_scroll, max_scroll);
@@ -4603,18 +4603,18 @@ void MarkViewportDirty(Viewport * const vp, int left, int top, int right, int bo
 			/* Set only high bits for first block in column */
 			vp->dirty_blocks[pos] |= (~static_cast<ViewPortBlockT>(0)) << (y % VP_BLOCK_BITS);
 
-			uint left = h_non_first;
-			while (left > 0) {
+			uint h_left = h_non_first;
+			while (h_left > 0) {
 				pos++;
-				if (left < VP_BLOCK_BITS) {
+				if (h_left < VP_BLOCK_BITS) {
 					/* Set only low bits for last block in column */
-					vp->dirty_blocks[pos] |= GetBitMaskSC<ViewPortBlockT>(0, left);
+					vp->dirty_blocks[pos] |= GetBitMaskSC<ViewPortBlockT>(0, h_left);
 					break;
 				} else {
 					/* Set all bits for middle blocks in column */
 					vp->dirty_blocks[pos] = ~static_cast<ViewPortBlockT>(0);
 				}
-				left -= VP_BLOCK_BITS;
+				h_left -= VP_BLOCK_BITS;
 			}
 		}
 	}
@@ -4954,11 +4954,11 @@ static void SetSelectionTilesDirty()
 		dbg_assert(x_size >= 0);
 		dbg_assert(y_size >= 0);
 
-		int x_end = Clamp(x_start + x_size, 0, MapSizeX() * TILE_SIZE - TILE_SIZE);
-		int y_end = Clamp(y_start + y_size, 0, MapSizeY() * TILE_SIZE - TILE_SIZE);
+		int x_end = Clamp(x_start + x_size, 0, Map::SizeX() * TILE_SIZE - TILE_SIZE);
+		int y_end = Clamp(y_start + y_size, 0, Map::SizeY() * TILE_SIZE - TILE_SIZE);
 
-		x_start = Clamp(x_start, 0, MapSizeX() * TILE_SIZE - TILE_SIZE);
-		y_start = Clamp(y_start, 0, MapSizeY() * TILE_SIZE - TILE_SIZE);
+		x_start = Clamp(x_start, 0, Map::SizeX() * TILE_SIZE - TILE_SIZE);
+		y_start = Clamp(y_start, 0, Map::SizeY() * TILE_SIZE - TILE_SIZE);
 
 		/* make sure everything is multiple of TILE_SIZE */
 		dbg_assert((x_end | y_end | x_start | y_start) % TILE_SIZE == 0);
@@ -5037,7 +5037,7 @@ static void SetSelectionTilesDirty()
 				uint x = (_thd.pos.x + (a + b) / 2) / TILE_SIZE;
 				uint y = (_thd.pos.y + (a - b) / 2) / TILE_SIZE;
 
-				if (x < MapMaxX() && y < MapMaxY()) {
+				if (x < Map::MaxX() && y < Map::MaxY()) {
 					MarkTileDirtyByTile(TileXY(x, y), VMDF_NOT_MAP_MODE);
 				}
 			}
@@ -5390,8 +5390,8 @@ bool ScrollWindowTo(int x, int y, int z, Window *w, bool instant)
 {
 	/* The slope cannot be acquired outside of the map, so make sure we are always within the map. */
 	if (z == -1) {
-		if ( x >= 0 && x <= (int)MapSizeX() * (int)TILE_SIZE - 1
-				&& y >= 0 && y <= (int)MapSizeY() * (int)TILE_SIZE - 1) {
+		if ( x >= 0 && x <= (int)Map::SizeX() * (int)TILE_SIZE - 1
+				&& y >= 0 && y <= (int)Map::SizeY() * (int)TILE_SIZE - 1) {
 			z = GetSlopePixelZ(x, y);
 		} else {
 			z = TileHeightOutsideMap(x / (int)TILE_SIZE, y / (int)TILE_SIZE);
@@ -6232,9 +6232,9 @@ static void CalcRaildirsDrawstyle(int x, int y, int method)
 					/* Make sure we do not overflow the map! */
 					CheckUnderflow(x, y, 1);
 					CheckUnderflow(y, x, 1);
-					CheckOverflow(x, y, (MapMaxX() - 1) * TILE_SIZE, 1);
-					CheckOverflow(y, x, (MapMaxY() - 1) * TILE_SIZE, 1);
-					assert(x >= 0 && y >= 0 && x <= (int)(MapMaxX() * TILE_SIZE) && y <= (int)(MapMaxY() * TILE_SIZE));
+					CheckOverflow(x, y, (Map::MaxX() - 1) * TILE_SIZE, 1);
+					CheckOverflow(y, x, (Map::MaxY() - 1) * TILE_SIZE, 1);
+					assert(x >= 0 && y >= 0 && x <= (int)(Map::MaxX() * TILE_SIZE) && y <= (int)(Map::MaxY() * TILE_SIZE));
 				}
 				break;
 
@@ -6267,9 +6267,9 @@ static void CalcRaildirsDrawstyle(int x, int y, int method)
 					/* Make sure we do not overflow the map! */
 					CheckUnderflow(x, y, -1);
 					CheckUnderflow(y, x, -1);
-					CheckOverflow(x, y, (MapMaxX() - 1) * TILE_SIZE, -1);
-					CheckOverflow(y, x, (MapMaxY() - 1) * TILE_SIZE, -1);
-					assert(x >= 0 && y >= 0 && x <= (int)(MapMaxX() * TILE_SIZE) && y <= (int)(MapMaxY() * TILE_SIZE));
+					CheckOverflow(x, y, (Map::MaxX() - 1) * TILE_SIZE, -1);
+					CheckOverflow(y, x, (Map::MaxY() - 1) * TILE_SIZE, -1);
+					assert(x >= 0 && y >= 0 && x <= (int)(Map::MaxX() * TILE_SIZE) && y <= (int)(Map::MaxY() * TILE_SIZE));
 				}
 				break;
 
@@ -6799,13 +6799,13 @@ Point GetViewportStationMiddle(const Viewport *vp, const Station *st)
 	 * Don't rebase point into screen coordinates in viewport map mode.
 	 */
 	if (vp->zoom < ZOOM_LVL_DRAW_MAP) {
-		int z = GetSlopePixelZ(Clamp(x, 0, MapSizeX() * TILE_SIZE - 1), Clamp(y, 0, MapSizeY() * TILE_SIZE - 1));
+		int z = GetSlopePixelZ(Clamp(x, 0, Map::SizeX() * TILE_SIZE - 1), Clamp(y, 0, Map::SizeY() * TILE_SIZE - 1));
 		Point p = RemapCoords(x, y, z);
 		p.x = UnScaleByZoom(p.x - vp->virtual_left, vp->zoom) + vp->left;
 		p.y = UnScaleByZoom(p.y - vp->virtual_top, vp->zoom) + vp->top;
 		return p;
 	} else {
-		int z = st->xy < MapSize() ? TILE_HEIGHT * TileHeight(st->xy) : 0;
+		int z = st->xy < Map::Size() ? TILE_HEIGHT * TileHeight(st->xy) : 0;
 		Point p = RemapCoords(x, y, z);
 		p.x = UnScaleByZoomLower(p.x, vp->zoom);
 		p.y = UnScaleByZoomLower(p.y, vp->zoom);

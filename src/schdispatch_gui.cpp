@@ -42,7 +42,7 @@
 
 #include "safeguards.h"
 
-enum SchdispatchWidgets {
+enum SchdispatchWidgets : WidgetID {
 	WID_SCHDISPATCH_CAPTION,         ///< Caption of window.
 	WID_SCHDISPATCH_RENAME,          ///< Rename button.
 	WID_SCHDISPATCH_MOVE_LEFT,       ///< Move current schedule left (-1).
@@ -112,7 +112,7 @@ static void ScheduleAddIntl(VehicleID veh, uint schedule_index, StateTicks date,
  */
 static void ScheduleAddCallback(const Window *w, StateTicks date, void *callback_data)
 {
-	Command<CMD_SCH_DISPATCH_SET_START_DATE>::Post(STR_ERROR_CAN_T_TIMETABLE_VEHICLE, w->window_number, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(callback_data)), date);
+	ScheduleAddIntl(w->window_number, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(callback_data)), date, 0, 0);
 }
 
 /**
@@ -1520,7 +1520,7 @@ static constexpr NWidgetPart _nested_schdispatch_widgets[] = {
 static WindowDesc _schdispatch_desc(__FILE__, __LINE__,
 	WDP_AUTO, "scheduled_dispatch_slots", 400, 130,
 	WC_SCHDISPATCH_SLOTS, WC_VEHICLE_TIMETABLE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_schdispatch_widgets
 );
 
@@ -1533,7 +1533,7 @@ void ShowSchdispatchWindow(const Vehicle *v)
 	AllocateWindowDescFront<SchdispatchWindow>(_schdispatch_desc, v->index);
 }
 
-enum ScheduledDispatchAddSlotsWindowWidgets {
+enum ScheduledDispatchAddSlotsWindowWidgets : WidgetID {
 	WID_SCHDISPATCH_ADD_SLOT_START_HOUR,
 	WID_SCHDISPATCH_ADD_SLOT_START_MINUTE,
 	WID_SCHDISPATCH_ADD_SLOT_STEP_HOUR,
@@ -1727,7 +1727,7 @@ static constexpr NWidgetPart _nested_scheduled_dispatch_add_widgets[] = {
 static WindowDesc _scheduled_dispatch_add_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_SET_DATE, WC_NONE,
-	0,
+	{},
 	_nested_scheduled_dispatch_add_widgets
 );
 

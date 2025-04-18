@@ -10,6 +10,7 @@
 #include "stdafx.h"
 #include "economy_func.h"
 #include "window_gui.h"
+#include "station_cmd.h"
 #include "station_gui.h"
 #include "terraform_gui.h"
 #include "sound_func.h"
@@ -21,6 +22,7 @@
 #include "company_base.h"
 #include "station_type.h"
 #include "newgrf_airport.h"
+#include "newgrf_badge.h"
 #include "newgrf_callbacks.h"
 #include "dropdown_type.h"
 #include "dropdown_func.h"
@@ -29,6 +31,7 @@
 #include "vehicle_func.h"
 #include "gui.h"
 #include "zoom_func.h"
+#include "command_func.h"
 
 #include "widgets/airport_widget.h"
 
@@ -58,13 +61,20 @@ void CcBuildAirport(const CommandCost &result, TileIndex tile)
 static void PlaceAirport(TileIndex tile)
 {
 	if (_selected_airport_index == -1) return;
-	uint32_t p2 = _ctrl_pressed;
-	SB(p2, 16, 16, INVALID_STATION); // no station to join
 
-	uint32_t p1 = AirportClass::Get(_selected_airport_class)->GetSpec(_selected_airport_index)->GetIndex();
-	p1 |= _selected_airport_layout << 8;
-	CommandContainer<P123CmdData> cmdcont = NewCommandContainerBasic(tile, p1, p2, CMD_BUILD_AIRPORT | CMD_MSG(STR_ERROR_CAN_T_BUILD_AIRPORT_HERE), CommandCallback::BuildAirport);
-	ShowSelectStationIfNeeded(cmdcont, TileArea(tile, _thd.size.x / TILE_SIZE, _thd.size.y / TILE_SIZE));
+	uint8_t airport_type = AirportClass::Get(_selected_airport_class)->GetSpec(_selected_airport_index)->GetIndex();
+	uint8_t layout = _selected_airport_layout;
+	bool adjacent = _ctrl_pressed;
+
+	auto proc = [=](bool test, StationID to_join) -> bool {
+		if (test) {
+			return Command<CMD_BUILD_AIRPORT>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_AIRPORT>()), tile, airport_type, layout, INVALID_STATION, adjacent).Succeeded();
+		} else {
+			return Command<CMD_BUILD_AIRPORT>::Post(STR_ERROR_CAN_T_BUILD_AIRPORT_HERE, CommandCallback::BuildAirport, tile, airport_type, layout, to_join, adjacent);
+		}
+	};
+
+	ShowSelectStationIfNeeded(TileArea(tile, _thd.size.x / TILE_SIZE, _thd.size.y / TILE_SIZE), proc);
 }
 
 /** Airport build toolbar window handler. */
@@ -202,7 +212,7 @@ static constexpr NWidgetPart _nested_air_toolbar_widgets[] = {
 static WindowDesc _air_toolbar_desc(__FILE__, __LINE__,
 	WDP_ALIGN_TOOLBAR, "toolbar_air", 0, 0,
 	WC_BUILD_TOOLBAR, WC_NONE,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_air_toolbar_widgets,
 	&BuildAirToolbarWindow::hotkeys
 );
@@ -435,6 +445,7 @@ public:
 			}
 
 			/* strings such as 'Size' and 'Coverage Area' */
+			top = DrawBadgeNameList(Rect{r.left, top, r.right, INT_MAX}, as->badges, GSF_AIRPORTS) + WidgetDimensions::scaled.vsep_normal;
 			top = DrawStationCoverageAreaText(r.left, r.right, top, SCT_ALL, rad, false) + WidgetDimensions::scaled.vsep_normal;
 			top = DrawStationCoverageAreaText(r.left, r.right, top, SCT_ALL, rad, true);
 		}
@@ -608,7 +619,7 @@ static constexpr NWidgetPart _nested_build_airport_widgets[] = {
 static WindowDesc _build_airport_desc(__FILE__, __LINE__,
 	WDP_AUTO, nullptr, 0, 0,
 	WC_BUILD_STATION, WC_BUILD_TOOLBAR,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_build_airport_widgets
 );
 

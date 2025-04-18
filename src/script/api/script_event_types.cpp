@@ -37,7 +37,7 @@ std::optional<std::string> ScriptEventEnginePreview::GetName()
 	return GetString(STR_ENGINE_NAME);
 }
 
-CargoID ScriptEventEnginePreview::GetCargoType()
+CargoType ScriptEventEnginePreview::GetCargoType()
 {
 	if (!this->IsEngineValid()) return INVALID_CARGO;
 	CargoArray cap = ::GetCapacityOfArticulatedParts(this->engine);
@@ -45,7 +45,7 @@ CargoID ScriptEventEnginePreview::GetCargoType()
 	auto it = std::max_element(std::cbegin(cap), std::cend(cap));
 	if (*it == 0) return INVALID_CARGO;
 
-	return CargoID(std::distance(std::cbegin(cap), it));
+	return CargoType(std::distance(std::cbegin(cap), it));
 }
 
 int32_t ScriptEventEnginePreview::GetCapacity()
@@ -113,7 +113,7 @@ bool ScriptEventEnginePreview::AcceptPreview()
 bool ScriptEventCompanyAskMerger::AcceptMerger()
 {
 	EnforceCompanyModeValid(false);
-	return ScriptObject::Command<CMD_BUY_COMPANY>::Do((::CompanyID)this->owner, false);
+	return ScriptObject::Command<CMD_BUY_COMPANY>::Do(ScriptCompany::FromScriptCompanyID(this->owner), false);
 }
 
 ScriptEventAdminPort::ScriptEventAdminPort(const std::string &json) :

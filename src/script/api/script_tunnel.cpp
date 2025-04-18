@@ -11,8 +11,10 @@
 #include "script_tunnel.hpp"
 #include "script_rail.hpp"
 #include "../script_instance.hpp"
+#include "../../landscape_cmd.h"
 #include "../../tunnel_map.h"
 #include "../../tunnelbridge_cmd.h"
+#include "../../road_cmd.h"
 
 #include "../../safeguards.h"
 
@@ -86,15 +88,6 @@ static void _DoCommandReturnBuildTunnel1(class ScriptInstance *instance)
 	EnforcePrecondition(false, vehicle_type != ScriptVehicle::VT_ROAD || ScriptRoad::IsRoadTypeAvailable(ScriptRoad::GetCurrentRoadType()));
 	EnforcePrecondition(false, ScriptCompanyMode::IsValid() || vehicle_type == ScriptVehicle::VT_ROAD);
 
-	uint type = 0;
-	if (vehicle_type == ScriptVehicle::VT_ROAD) {
-		type |= (TRANSPORT_ROAD << 8);
-		type |= ScriptRoad::GetCurrentRoadType();
-	} else {
-		type |= (TRANSPORT_RAIL << 8);
-		type |= ScriptRail::GetCurrentRailType();
-	}
-
 	/* For rail we do nothing special */
 	if (vehicle_type == ScriptVehicle::VT_RAIL) {
 		return ScriptObject::Command<CMD_BUILD_TUNNEL>::Do(start, TRANSPORT_RAIL, ScriptRail::GetCurrentRailType());
@@ -115,7 +108,7 @@ static void _DoCommandReturnBuildTunnel1(class ScriptInstance *instance)
 	DiagDirection dir_1 = ::DiagdirBetweenTiles(end, start);
 	DiagDirection dir_2 = ::ReverseDiagDir(dir_1);
 
-	return ScriptObject::DoCommandOld(start + ::TileOffsByDiagDir(dir_1), ::DiagDirToRoadBits(dir_2) | (ScriptObject::GetRoadType() << 4), INVALID_TOWN, CMD_BUILD_ROAD, nullptr, &::_DoCommandReturnBuildTunnel2);
+	return ScriptObject::Command<CMD_BUILD_ROAD>::Do(&::_DoCommandReturnBuildTunnel2, start + ::TileOffsByDiagDir(dir_1), ::DiagDirToRoadBits(dir_2), ScriptObject::GetRoadType(), DRD_NONE, INVALID_TOWN, BuildRoadFlags::NoCustomBridgeHeads);
 }
 
 /* static */ bool ScriptTunnel::_BuildTunnelRoad2()
@@ -129,7 +122,7 @@ static void _DoCommandReturnBuildTunnel1(class ScriptInstance *instance)
 	DiagDirection dir_1 = ::DiagdirBetweenTiles(end, start);
 	DiagDirection dir_2 = ::ReverseDiagDir(dir_1);
 
-	return ScriptObject::DoCommandOld(end + ::TileOffsByDiagDir(dir_2), ::DiagDirToRoadBits(dir_1) | (ScriptObject::GetRoadType() << 4), INVALID_TOWN, CMD_BUILD_ROAD);
+	return ScriptObject::Command<CMD_BUILD_ROAD>::Do(end + ::TileOffsByDiagDir(dir_2), ::DiagDirToRoadBits(dir_1), ScriptObject::GetRoadType(), DRD_NONE, INVALID_TOWN, BuildRoadFlags::NoCustomBridgeHeads);
 }
 
 /* static */ bool ScriptTunnel::RemoveTunnel(TileIndex tile)
@@ -137,5 +130,5 @@ static void _DoCommandReturnBuildTunnel1(class ScriptInstance *instance)
 	EnforceCompanyModeValid(false);
 	EnforcePrecondition(false, IsTunnelTile(tile));
 
-	return ScriptObject::DoCommandOld(tile, 0, 0, CMD_LANDSCAPE_CLEAR);
+	return ScriptObject::Command<CMD_LANDSCAPE_CLEAR>::Do(tile);
 }

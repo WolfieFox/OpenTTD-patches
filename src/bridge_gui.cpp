@@ -20,7 +20,6 @@
 #include "sortlist_type.h"
 #include "dropdown_func.h"
 #include "core/geometry_func.hpp"
-#include "cmd_helper.h"
 #include "tunnelbridge_cmd.h"
 #include "tunnelbridge_map.h"
 #include "road_gui.h"
@@ -345,7 +344,7 @@ static constexpr NWidgetPart _nested_build_bridge_widgets[] = {
 static WindowDesc _build_bridge_desc(__FILE__, __LINE__,
 	WDP_AUTO, "build_bridge", 200, 114,
 	WC_BUILD_BRIDGE, WC_BUILD_TOOLBAR,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_build_bridge_widgets
 );
 

@@ -72,7 +72,7 @@ static const Order *ResolveOrder(VehicleID vehicle_id, ScriptOrder::OrderPositio
 	while (order->GetType() == OT_IMPLICIT) order = v->orders->GetNextNoWrap(order);
 	while (order_position > 0) {
 		order_position = (ScriptOrder::OrderPosition)(order_position - 1);
-		v->orders->GetNextNoWrap(order);
+		order = v->orders->GetNextNoWrap(order);
 		while (order->GetType() == OT_IMPLICIT) order = v->orders->GetNextNoWrap(order);
 	}
 	return order;
@@ -371,7 +371,7 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 	return (ScriptOrder::StopLocation)order->GetStopLocation();
 }
 
-/* static */ CargoID ScriptOrder::GetOrderRefit(VehicleID vehicle_id, OrderPosition order_position)
+/* static */ CargoType ScriptOrder::GetOrderRefit(VehicleID vehicle_id, OrderPosition order_position)
 {
 	if (!IsValidVehicleOrder(vehicle_id, order_position)) return CARGO_NO_REFIT;
 	if (order_position != ORDER_CURRENT && !IsGotoStationOrder(vehicle_id, order_position) && !IsGotoDepotOrder(vehicle_id, order_position)) return CARGO_NO_REFIT;
@@ -440,7 +440,7 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 	return ScriptObject::Command<CMD_MODIFY_ORDER>::Do(0, vehicle_id, order_pos, MOF_STOP_LOCATION, stop_location, {}, {});
 }
 
-/* static */ bool ScriptOrder::SetOrderRefit(VehicleID vehicle_id, OrderPosition order_position, CargoID refit_cargo)
+/* static */ bool ScriptOrder::SetOrderRefit(VehicleID vehicle_id, OrderPosition order_position, CargoType refit_cargo)
 {
 	EnforceCompanyModeValid(false);
 	EnforcePrecondition(false, IsValidVehicleOrder(vehicle_id, order_position));
@@ -561,7 +561,7 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 }
 
 /**
- * Callback handler as SetOrderFlags possibly needs multiple DoCommandOld calls
+ * Callback handler as SetOrderFlags possibly needs multiple DoCommand calls
  * to be able to set all order flags correctly. As we need to wait till the
  * command has completed before we know the next bits to change we need to
  * call the function multiple times. Each time it'll reduce the difference

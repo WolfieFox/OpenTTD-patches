@@ -23,6 +23,8 @@
 #include "departures_gui.h"
 #include "newgrf_debug.h"
 #include "zoom_func.h"
+#include "waypoint_cmd.h"
+#include "tilehighlight_func.h"
 
 #include "widgets/waypoint_widget.h"
 
@@ -36,6 +38,7 @@ private:
 	VehicleType vt; ///< Vehicle type using the waypoint.
 	Waypoint *wp;   ///< Waypoint displayed by the window.
 	bool show_hide_label; ///< Show hide label button
+	bool place_object_active = false;
 
 	/**
 	 * Get the center tile of the waypoint.
@@ -98,7 +101,7 @@ public:
 		this->FinishInitNested(window_number);
 
 		this->owner = this->wp->owner;
-		this->flags |= WF_DISABLE_VP_SCROLL;
+		this->flags.Set(WindowFlag::DisableVpScroll);
 
 		NWidgetViewport *nvp = this->GetWidget<NWidgetViewport>(WID_W_VIEWPORT);
 		nvp->InitializeViewport(this, this->GetCenterTile().base(), ScaleZoomGUI(ZOOM_LVL_VIEWPORT));
@@ -116,6 +119,17 @@ public:
 	void SetStringParameters(WidgetID widget) const override
 	{
 		if (widget == WID_W_CAPTION) SetDParam(0, this->wp->index);
+	}
+
+	bool OnTooltip(Point pt, WidgetID widget, TooltipCloseCondition close_cond) override
+	{
+		if (widget == WID_W_RENAME) {
+			SetDParam(0, this->GetWidget<NWidgetCore>(WID_W_RENAME)->GetToolTip());
+			GuiShowTooltips(this, STR_WAYPOINT_VIEW_RENAME_TOOLTIP_EXTRA, close_cond, 1);
+			return true;
+		}
+
+		return false;
 	}
 
 	void OnPaint() override
@@ -139,6 +153,17 @@ public:
 				break;
 
 			case WID_W_RENAME: // rename
+				if (_ctrl_pressed) {
+					this->ToggleWidgetLoweredState(widget);
+					this->SetWidgetDirty(widget);
+					if (this->IsWidgetLowered(widget)) {
+						this->place_object_active = true;
+						SetObjectToPlaceWnd(ANIMCURSOR_PICKSTATION, PAL_NONE, HT_RECT, this);
+					} else {
+						ResetObjectToPlace();
+					}
+					break;
+				}
 				SetDParam(0, this->wp->index);
 				ShowQueryString(STR_WAYPOINT_NAME, STR_EDIT_WAYPOINT_NAME, MAX_LENGTH_STATION_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
 				break;
@@ -156,8 +181,31 @@ public:
 				break;
 
 			case WID_W_TOGGLE_HIDDEN:
-				DoCommandPOld(0, this->window_number, HasBit(this->wp->waypoint_flags, WPF_HIDE_LABEL) ? 0 : 1, CMD_SET_WAYPOINT_LABEL_HIDDEN | CMD_MSG(STR_ERROR_CAN_T_CHANGE_WAYPOINT_NAME));
+				Command<CMD_SET_WAYPOINT_LABEL_HIDDEN>::Post(STR_ERROR_CAN_T_DO_THIS, this->window_number, !HasBit(this->wp->waypoint_flags, WPF_HIDE_LABEL));
 				break;
+		}
+	}
+
+	void OnPlaceObject(Point pt, TileIndex tile) override
+	{
+		if (IsTileType(tile, MP_STATION)) {
+			Command<CMD_EXCHANGE_WAYPOINT_NAMES>::Post(STR_ERROR_CAN_T_EXCHANGE_WAYPOINT_NAMES, this->window_number, GetStationIndex(tile));
+			ResetObjectToPlace();
+		}
+	}
+
+	void OnPlaceObjectAbort() override
+	{
+		this->place_object_active = false;
+		this->RaiseWidget(WID_W_RENAME);
+		this->SetWidgetDirty(WID_W_RENAME);
+	}
+
+	void OnTimeout() override
+	{
+		if (!this->place_object_active) {
+			this->RaiseWidget(WID_W_RENAME);
+			this->SetWidgetDirty(WID_W_RENAME);
 		}
 	}
 
@@ -202,7 +250,7 @@ public:
 	{
 		if (!str.has_value()) return;
 
-		DoCommandPOld(0, this->window_number, 0, CMD_RENAME_WAYPOINT | CMD_MSG(STR_ERROR_CAN_T_CHANGE_WAYPOINT_NAME), CommandCallback::None, str->c_str());
+		Command<CMD_RENAME_WAYPOINT>::Post(STR_ERROR_CAN_T_CHANGE_WAYPOINT_NAME, this->window_number, *str);
 	}
 
 	bool IsNewGRFInspectable() const override
@@ -220,7 +268,7 @@ public:
 static constexpr NWidgetPart _nested_waypoint_view_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
-		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_W_RENAME), SetAspect(WidgetDimensions::ASPECT_RENAME), SetSpriteTip(SPR_RENAME, STR_BUOY_VIEW_RENAME_TOOLTIP),
+		NWidget(WWT_IMGBTN, COLOUR_GREY, WID_W_RENAME), SetAspect(WidgetDimensions::ASPECT_RENAME), SetSpriteTip(SPR_RENAME, STR_BUOY_VIEW_RENAME_TOOLTIP),
 		NWidget(WWT_CAPTION, COLOUR_GREY, WID_W_CAPTION), SetStringTip(STR_WAYPOINT_VIEW_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
 		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_W_CENTER_VIEW), SetAspect(WidgetDimensions::ASPECT_LOCATION), SetSpriteTip(SPR_GOTO_LOCATION, STR_BUOY_VIEW_CENTER_TOOLTIP),
 		NWidget(WWT_DEBUGBOX, COLOUR_GREY),
@@ -248,7 +296,7 @@ static constexpr NWidgetPart _nested_waypoint_view_widgets[] = {
 static WindowDesc _waypoint_view_desc(__FILE__, __LINE__,
 	WDP_AUTO, "view_waypoint", 260, 118,
 	WC_WAYPOINT_VIEW, WC_NONE,
-	0,
+	{},
 	_nested_waypoint_view_widgets
 );
 

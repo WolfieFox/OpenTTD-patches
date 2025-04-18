@@ -1043,7 +1043,7 @@ static const std::initializer_list<uint8_t> _farm_sounds = { SND_24_FARM_1, SND_
 /** Array with... hem... a sound of toyland */
 static const std::initializer_list<uint8_t> _plastic_mine_sounds = { SND_33_PLASTIC_MINE };
 
-enum IndustryTypes {
+enum IndustryTypes : uint8_t {
 	IT_COAL_MINE           =   0,
 	IT_POWER_STATION       =   1,
 	IT_SAWMILL             =   2,
@@ -1133,7 +1133,7 @@ enum IndustryTypes {
 		{INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO}, \
 		{{im1, 0}, {im2, 0}, {im3, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}}, \
 		pr, clim, bev, col, in, intx, s1, s2, s3, STR_UNDEFINED, {ai1, ai2, ai3, ai4}, {ag1, ag2, ag3, ag4}, \
-		0, true, GRFFileProps(IT_INVALID), snd, \
+		0, true, GRFFileProps(IT_INVALID), snd, {}, \
 		{{p1, p2}}, {{a1, a2, a3}}}
 	/* Format:
 	   tile table                              count and sounds table
@@ -1533,7 +1533,7 @@ static const IndustrySpec _origin_industry_specs[NEW_INDUSTRYOFFSET] = {
  */
 #define MT(ca1, c1, ca2, c2, ca3, c3, sl, a1, a2, a3) { \
 	{INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO, INVALID_CARGO}, \
-	{ca1, ca2, ca3}, sl, a1, a2, a3, 0, {0, ANIM_STATUS_NO_ANIMATION, 2, 0}, INDTILE_SPECIAL_NONE, true, GRFFileProps(INVALID_INDUSTRYTILE), {c1, c2, c3} \
+	{ca1, ca2, ca3}, sl, a1, a2, a3, 0, {0, ANIM_STATUS_NO_ANIMATION, 2, 0}, INDTILE_SPECIAL_NONE, true, GRFFileProps(INVALID_INDUSTRYTILE), {}, {c1, c2, c3} \
 }
 static const IndustryTileSpec _origin_industry_tile_specs[NEW_INDUSTRYTILEOFFSET] = {
 	/* Coal Mine */

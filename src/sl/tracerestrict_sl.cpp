@@ -167,7 +167,7 @@ static const NamedSaveLoad _trace_restrict_slot_desc[] = {
 	NSL("name",          SLE_SSTR(TraceRestrictSlot, name, SLE_STR | SLF_ALLOW_CONTROL)),
 	NSL("owner",         SLE_VAR(TraceRestrictSlot, owner, SLE_UINT8)),
 	NSL("vehicle_type",  SLE_CONDVAR_X(TraceRestrictSlot, vehicle_type, SLE_UINT8, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_TRACE_RESTRICT, 13))),
-	NSL("occupants",     SLE_VARVEC(TraceRestrictSlot, occupants, SLE_UINT32)),
+	NSL("occupants",     SLE_CUSTOMLIST(TraceRestrictSlot, occupants, SLE_UINT32)),
 	NSLT("flags",        SLE_VAR(TraceRestrictSlot, flags, SLE_UINT8)),
 	NSLT("parent_group", SLE_VAR(TraceRestrictSlot, parent_group, SLE_UINT16)),
 };
@@ -269,12 +269,21 @@ static void Save_TRRC()
 }
 
 /**
- * Update program reference counts from just-loaded mapping
+ * Update program reference counts from just-loaded mapping and slot group memberships from slot parent values
  */
 void AfterLoadTraceRestrict()
 {
 	for (const auto &it : _tracerestrictprogram_mapping) {
 		_tracerestrictprogram_pool.Get(it.second.program_id)->IncrementRefCount(it.first);
+	}
+
+	for (const TraceRestrictSlot *slot : TraceRestrictSlot::Iterate()) {
+		TraceRestrictSlotGroupID parent = slot->parent_group;
+		while (parent != INVALID_TRACE_RESTRICT_SLOT_GROUP) {
+			TraceRestrictSlotGroup *sg = TraceRestrictSlotGroup::Get(parent);
+			sg->contained_slots.push_back(slot->index);
+			parent = sg->parent;
+		}
 	}
 }
 

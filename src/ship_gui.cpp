@@ -52,7 +52,7 @@ void DrawShipImage(const Vehicle *v, const Rect &r, VehicleID selection, EngineI
 		x += x_offs;
 		y += UnScaleGUI(rect.top);
 		Rect hr = {x, y, x + width - 1, y + UnScaleGUI(rect.Height()) - 1};
-		DrawFrameRect(hr.Expand(WidgetDimensions::scaled.bevel), COLOUR_WHITE, FR_BORDERONLY);
+		DrawFrameRect(hr.Expand(WidgetDimensions::scaled.bevel), COLOUR_WHITE, FrameFlag::BorderOnly);
 	}
 }
 
@@ -92,7 +92,7 @@ void DrawShipDetails(const Vehicle *v, const Rect &r)
 		AppendStringInPlace(capacity, STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY);
 
 		bool first = true;
-		for (CargoID i = 0; i < NUM_CARGO; i++) {
+		for (CargoType i = 0; i < NUM_CARGO; i++) {
 			if (max_cargo[i] > 0) {
 				if (!first) capacity.append(", ");
 				SetDParam(0, i);

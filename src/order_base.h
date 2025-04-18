@@ -64,6 +64,7 @@ void ClearOrderDestinationRefcountMap();
  * xdata users:
  * OT_COUNTER: Counter operation value (not counter ID)
  * OCV_SLOT_OCCUPANCY, OCV_VEH_IN_SLOT: Trace restrict slot ID
+ * OCV_VEH_IN_SLOT_GROUP: Trace restrict slot group ID
  * OCV_COUNTER_VALUE: Bits 0-15: Counter comparison value, Bits 16-31: Counter ID
  * OCV_TIMETABLE: Timetable lateness/earliness
  * OCV_TIME_DATE: Time/date
@@ -121,7 +122,7 @@ private:
 	uint16_t flags{};              ///< Load/unload types, depot order/action types.
 	DestinationID dest{};          ///< The destination of the order.
 	uint8_t type{};                ///< The type of order + non-stop flags
-	CargoID refit_cargo{};         ///< Refit CargoID
+	CargoType refit_cargo{};       ///< Refit CargoType
 	uint8_t occupancy{};           ///< Estimate of vehicle occupancy on departure, for the current order, 0 indicates invalid, 1 - 101 indicate 0 - 100%
 
 	TimetableTicks wait_time{};    ///< How long in ticks to wait at the destination.
@@ -261,7 +262,7 @@ public:
 	void Free();
 
 	void MakeGoToStation(StationID destination);
-	void MakeGoToDepot(DepotID destination, OrderDepotTypeFlags order, OrderNonStopFlags non_stop_type = ONSF_NO_STOP_AT_INTERMEDIATE_STATIONS, OrderDepotActionFlags action = ODATF_SERVICE_ONLY, CargoID cargo = CARGO_NO_REFIT);
+	void MakeGoToDepot(DepotID destination, OrderDepotTypeFlags order, OrderNonStopFlags non_stop_type = ONSF_NO_STOP_AT_INTERMEDIATE_STATIONS, OrderDepotActionFlags action = ODATF_SERVICE_ONLY, CargoType cargo = CARGO_NO_REFIT);
 	void MakeGoToWaypoint(StationID destination);
 	void MakeLoading(bool ordered);
 	void MakeLeaveStation();
@@ -272,6 +273,7 @@ public:
 	void MakeLoadingAdvance(StationID destination);
 	void MakeReleaseSlot();
 	void MakeTryAcquireSlot();
+	void MakeReleaseSlotGroup();
 	void MakeChangeCounter();
 	void MakeLabel(OrderLabelSubType subtype);
 
@@ -295,7 +297,7 @@ public:
 
 	/**
 	 * Gets the destination of this order.
-	 * @pre IsType(OT_GOTO_WAYPOINT) || IsType(OT_GOTO_DEPOT) || IsType(OT_GOTO_STATION) || IsType(OT_SLOT) || IsType(OT_COUNTER) || IsType(OT_LABEL).
+	 * @pre IsType(OT_GOTO_WAYPOINT) || IsType(OT_GOTO_DEPOT) || IsType(OT_GOTO_STATION) || IsSlotCounterOrder() || IsType(OT_LABEL).
 	 * @return the destination of the order.
 	 */
 	inline DestinationID GetDestination() const { return this->dest; }
@@ -303,7 +305,7 @@ public:
 	/**
 	 * Sets the destination of this order.
 	 * @param destination the new destination of the order.
-	 * @pre IsType(OT_GOTO_WAYPOINT) || IsType(OT_GOTO_DEPOT) || IsType(OT_GOTO_STATION) || IsType(OT_SLOT) || IsType(OT_COUNTER) || IsType(OT_LABEL).
+	 * @pre IsType(OT_GOTO_WAYPOINT) || IsType(OT_GOTO_DEPOT) || IsType(OT_GOTO_STATION) || IsSlotCounterOrder() || IsType(OT_LABEL).
 	 */
 	inline void SetDestination(DestinationID destination) { this->dest = destination; }
 
@@ -326,9 +328,9 @@ public:
 	 * @pre IsType(OT_GOTO_DEPOT) || IsType(OT_GOTO_STATION)
 	 * @return the cargo type.
 	 */
-	inline CargoID GetRefitCargo() const { return this->refit_cargo; }
+	inline CargoType GetRefitCargo() const { return this->refit_cargo; }
 
-	void SetRefit(CargoID cargo);
+	void SetRefit(CargoType cargo);
 
 	/**
 	 * Update the jump_counter of this order.
@@ -353,7 +355,7 @@ public:
 	 * @param cargo_id The cargo type index.
 	 * @return The load type for this cargo.
 	 */
-	inline OrderLoadFlags GetCargoLoadTypeRaw(CargoID cargo_id) const
+	inline OrderLoadFlags GetCargoLoadTypeRaw(CargoType cargo_id) const
 	{
 		assert(cargo_id < NUM_CARGO);
 		if (!this->extra) return OLF_LOAD_IF_POSSIBLE;
@@ -365,7 +367,7 @@ public:
 	 * @param cargo_id The cargo type index.
 	 * @return The load type for this cargo.
 	 */
-	inline OrderLoadFlags GetCargoLoadType(CargoID cargo_id) const
+	inline OrderLoadFlags GetCargoLoadType(CargoType cargo_id) const
 	{
 		assert(cargo_id < NUM_CARGO);
 		OrderLoadFlags olf = this->GetLoadType();
@@ -387,7 +389,7 @@ public:
 	 * @param cargo_id The cargo type index.
 	 * @return The unload type for this cargo.
 	 */
-	inline OrderUnloadFlags GetCargoUnloadTypeRaw(CargoID cargo_id) const
+	inline OrderUnloadFlags GetCargoUnloadTypeRaw(CargoType cargo_id) const
 	{
 		assert(cargo_id < NUM_CARGO);
 		if (!this->extra) return OUF_UNLOAD_IF_POSSIBLE;
@@ -399,7 +401,7 @@ public:
 	 * @param cargo_id The cargo type index.
 	 * @return The unload type for this cargo.
 	 */
-	inline OrderUnloadFlags GetCargoUnloadType(CargoID cargo_id) const
+	inline OrderUnloadFlags GetCargoUnloadType(CargoType cargo_id) const
 	{
 		assert(cargo_id < NUM_CARGO);
 		OrderUnloadFlags ouf = this->GetUnloadType();
@@ -411,7 +413,7 @@ public:
 	{
 		if ((this->GetLoadType() == OLFB_CARGO_TYPE_LOAD) || (this->GetUnloadType() == OUFB_CARGO_TYPE_UNLOAD)) {
 			CargoTypes output_mask = cargo_mask;
-			for (CargoID cargo : SetCargoBitIterator(cargo_mask)) {
+			for (CargoType cargo : SetCargoBitIterator(cargo_mask)) {
 				if (!filter_func(this, cargo)) ClrBit(output_mask, cargo);
 			}
 			return output_mask;
@@ -466,7 +468,7 @@ public:
 	 * @param load_type The load type.
 	 * @param cargo_id The cargo type index.
 	 */
-	inline void SetLoadType(OrderLoadFlags load_type, CargoID cargo_id)
+	inline void SetLoadType(OrderLoadFlags load_type, CargoType cargo_id)
 	{
 		assert(cargo_id < NUM_CARGO);
 		this->CheckExtraInfoAlloced();
@@ -486,7 +488,7 @@ public:
 	 * @param unload_type The unload type.
 	 * @param cargo_id The cargo type index.
 	 */
-	inline void SetUnloadType(OrderUnloadFlags unload_type, CargoID cargo_id)
+	inline void SetUnloadType(OrderUnloadFlags unload_type, CargoType cargo_id)
 	{
 		assert(cargo_id < NUM_CARGO);
 		this->CheckExtraInfoAlloced();
@@ -531,8 +533,10 @@ public:
 	 * autofilled we can be sure that any non-zero values for their wait_time and travel_time are
 	 * explicitly set (but travel_time is actually unused for conditionals). */
 
+	inline bool IsSlotCounterOrder() const { return this->IsType(OT_COUNTER) || this->IsType(OT_SLOT) || this->IsType(OT_SLOT_GROUP); }
+
 	/* Does this order not have any associated travel or wait times */
-	inline bool HasNoTimetableTimes() const { return this->IsType(OT_COUNTER) || this->IsType(OT_SLOT) || this->IsType(OT_LABEL); }
+	inline bool HasNoTimetableTimes() const { return this->IsSlotCounterOrder() || this->IsType(OT_LABEL); }
 
 	/** Does this order have an explicit wait time set? */
 	inline bool IsWaitTimetabled() const
@@ -652,7 +656,7 @@ public:
 
 	bool ShouldStopAtStation(StationID last_station_visited, StationID station, bool waypoint) const;
 	bool ShouldStopAtStation(const Vehicle *v, StationID station, bool waypoint) const;
-	bool CanLeaveWithCargo(bool has_cargo, CargoID cargo) const;
+	bool CanLeaveWithCargo(bool has_cargo, CargoType cargo) const;
 
 	TileIndex GetLocation(const Vehicle *v, bool airport = false) const;
 	TileIndex GetAuxiliaryLocation(bool secondary = false) const;
@@ -707,6 +711,11 @@ public:
 		return (OrderSlotSubType)GB(this->flags, 0, 8);
 	}
 
+	inline OrderSlotGroupSubType GetSlotGroupSubType() const
+	{
+		return (OrderSlotGroupSubType)GB(this->flags, 0, 8);
+	}
+
 	inline OrderLabelSubType GetLabelSubType() const
 	{
 		return (OrderLabelSubType)GB(this->flags, 0, 8);
@@ -758,7 +767,7 @@ public:
 	CargoStationIDStackSet()
 			: first(ALL_CARGOTYPES, INVALID_STATION) {}
 
-	const StationIDStack& Get(CargoID cargo) const
+	const StationIDStack& Get(CargoType cargo) const
 	{
 		if (HasBit(first.cargo_mask, cargo)) return first.station;
 		for (size_t i = 0; i < more.size(); i++) {
@@ -773,7 +782,7 @@ public:
 template <typename F> CargoTypes FilterCargoMask(F filter_func, CargoTypes cargo_mask = ALL_CARGOTYPES)
 {
 	CargoTypes output_mask = cargo_mask;
-	for (CargoID cargo : SetCargoBitIterator(cargo_mask)) {
+	for (CargoType cargo : SetCargoBitIterator(cargo_mask)) {
 		if (!filter_func(cargo)) ClrBit(output_mask, cargo);
 	}
 	return output_mask;
@@ -781,11 +790,11 @@ template <typename F> CargoTypes FilterCargoMask(F filter_func, CargoTypes cargo
 
 template <typename T, typename F> T CargoMaskValueFilter(CargoTypes &cargo_mask, F filter_func)
 {
-	CargoID first_cargo_id = FindFirstBit(cargo_mask);
+	CargoType first_cargo_id = FindFirstBit(cargo_mask);
 	T value = filter_func(first_cargo_id);
 	CargoTypes other_cargo_mask = cargo_mask;
 	ClrBit(other_cargo_mask, first_cargo_id);
-	for (CargoID cargo : SetCargoBitIterator(other_cargo_mask)) {
+	for (CargoType cargo : SetCargoBitIterator(other_cargo_mask)) {
 		if (value != filter_func(cargo)) ClrBit(cargo_mask, cargo);
 	}
 	return value;

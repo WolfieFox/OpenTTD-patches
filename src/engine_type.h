@@ -17,6 +17,7 @@
 #include "date_type.h"
 #include "sound_type.h"
 #include "strings_type.h"
+#include "newgrf_badge_type.h"
 #include <variant>
 
 typedef uint16_t EngineID; ///< Unique identification number of an engine.
@@ -91,7 +92,7 @@ struct ShipVehicleInfo {
  * If bit 0 is 0 then it is a helicopter, otherwise it is a plane
  * in which case bit 1 tells us whether it's a big(fast) plane or not.
  */
-enum AircraftSubTypeBits {
+enum AircraftSubTypeBits : uint8_t {
 	AIR_HELI = 0,
 	AIR_CTOL = 1, ///< Conventional Take Off and Landing, i.e. planes
 	AIR_FAST = 2
@@ -133,14 +134,13 @@ struct RoadVehicleInfo {
  * Extra engine flags for NewGRF features.
  * This is defined in the specification a 32 bit value, but most bits are not currently used.
  */
-enum class ExtraEngineFlags : uint8_t {
-	None = 0,
-	NoNews          = (1U << 0), ///< No 'new vehicle' news will be generated.
-	NoPreview       = (1U << 1), ///< No exclusive preview will be offered.
-	JoinPreview     = (1U << 2), ///< Engine will join exclusive preview with variant parent.
-	SyncReliability = (1U << 3), ///< Engine reliability will be synced with variant parent.
+enum class ExtraEngineFlag : uint8_t {
+	NoNews          = 0, ///< No 'new vehicle' news will be generated.
+	NoPreview       = 1, ///< No exclusive preview will be offered.
+	JoinPreview     = 2, ///< Engine will join exclusive preview with variant parent.
+	SyncReliability = 3, ///< Engine reliability will be synced with variant parent.
 };
-DECLARE_ENUM_AS_BIT_SET(ExtraEngineFlags);
+using ExtraEngineFlags = EnumBitSet<ExtraEngineFlag, uint8_t>;
 
 /**
  * Information about a vehicle
@@ -153,7 +153,7 @@ struct EngineInfo {
 	uint8_t decay_speed;
 	uint8_t load_amount;
 	uint8_t climates;          ///< Climates supported by the engine.
-	CargoID cargo_type;
+	CargoType cargo_type;
 	std::variant<CargoLabel, MixedCargoType> cargo_label;
 	CargoTypes refit_mask;
 	uint8_t refit_cost;
@@ -169,7 +169,7 @@ struct EngineInfo {
 /**
  * EngineInfo.misc_flags is a bitmask, with the following values
  */
-enum EngineMiscFlags {
+enum EngineMiscFlags : uint8_t {
 	EF_RAIL_TILTS = 0, ///< Rail vehicle tilts in curves
 	EF_ROAD_TRAM  = 0, ///< Road vehicle is a tram/light rail vehicle
 	EF_USES_2CC   = 1, ///< Vehicle uses two company colours
@@ -184,7 +184,7 @@ enum EngineMiscFlags {
 /**
  * Engine.flags is a bitmask, with the following values.
  */
-enum EngineFlags {
+enum EngineFlags : uint8_t {
 	ENGINE_AVAILABLE         = 1, ///< This vehicle is available to everyone.
 	ENGINE_EXCLUSIVE_PREVIEW = 2, ///< This vehicle is in the exclusive preview stage, either being used or being offered to a company.
 };

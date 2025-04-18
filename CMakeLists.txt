@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.16)
 
 if(NOT BINARY_NAME)
     set(BINARY_NAME openttd)
@@ -44,9 +44,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS YES)
 
 # An empty target for the tools
 add_custom_target(tools)
-
-include(Endian)
-add_endian_definition()
 
 include(CompileFlags)
 compile_flags()
@@ -130,7 +127,9 @@ else()
 endif()
 
 if(NOT OPTION_DEDICATED)
-    if(NOT WIN32)
+    if(WIN32)
+        find_package(Xaudio2)
+    else()
         find_package(Allegro)
         if(NOT APPLE)
             find_package(Freetype)
@@ -196,7 +195,6 @@ if (MINGW)
 endif (MINGW)
 
 find_package(SSE)
-find_package(Xaudio2)
 
 find_package(Grfcodec)
 
@@ -261,8 +259,6 @@ endif()
 include(CTest)
 include(SourceList)
 
-# Needed by rev.cpp
-include_directories(${CMAKE_SOURCE_DIR}/src)
 # Needed by everything that uses Squirrel
 include_directories(${CMAKE_SOURCE_DIR}/src/3rdparty/squirrel/include)
 
@@ -470,6 +466,7 @@ if(EMSCRIPTEN)
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/desync.md@/docs/desync.md")
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/directory_structure.md@/docs/directory_structure.md")
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/eints.md@/docs/eints.md")
+    target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/fonts.md@/docs/fonts.md")
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/linkgraph.md@/docs/linkgraph.md")
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/logging_and_performance_metrics.md@/docs/logging_and_performance_metrics.md")
     target_link_libraries(WASM::WASM INTERFACE "--preload-file ${CMAKE_SOURCE_DIR}/docs/multiplayer.md@/docs/multiplayer.md")

@@ -18,7 +18,7 @@
 #include "tile_map.h"
 
 /** The returned bits of VehicleEnterTile. */
-enum VehicleEnterTileStatus {
+enum VehicleEnterTileStatus : uint32_t {
 	VETS_ENTERED_STATION  = 1, ///< The vehicle entered a station
 	VETS_ENTERED_WORMHOLE = 2, ///< The vehicle either entered a bridge, tunnel or depot tile (this includes the last tile of the bridge/tunnel)
 	VETS_CANNOT_ENTER     = 3, ///< The vehicle cannot enter the tile
@@ -69,6 +69,7 @@ struct TileDesc {
 	uint16_t road_speed;        ///< Speed limit of road (bridges and track)
 	StringID tramtype;          ///< Type of tram on the tile.
 	uint16_t tram_speed;        ///< Speed limit of tram (bridges and track)
+	std::optional<bool> town_can_upgrade; ///< Whether the town can upgrade this house during town growth.
 };
 
 struct DrawTileProcParams {

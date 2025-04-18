@@ -1,15 +1,16 @@
 add_files(
+    alignment.hpp
     alloc_func.cpp
     alloc_func.hpp
     alloc_type.hpp
     backup_type.hpp
+    base_bitset_type.hpp
     bit_cast.hpp
     bitmath_func.hpp
     checksum_func.hpp
     container_func.hpp
     dyn_arena_alloc.hpp
     endian_func.hpp
-    endian_type.hpp
     enum_type.hpp
     hash_func.hpp
     format.cpp

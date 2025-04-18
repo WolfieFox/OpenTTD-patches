@@ -416,7 +416,7 @@ DEF_CONSOLE_CMD(ConScrollToTile)
 		case 1: {
 			uint32_t result;
 			if (GetArgumentInteger(&result, argv[arg_index])) {
-				if (result >= MapSize()) {
+				if (result >= Map::Size()) {
 					IConsolePrint(CC_ERROR, "Tile does not exist.");
 					return true;
 				}
@@ -429,7 +429,7 @@ DEF_CONSOLE_CMD(ConScrollToTile)
 		case 2: {
 			uint32_t x, y;
 			if (GetArgumentInteger(&x, argv[arg_index]) && GetArgumentInteger(&y, argv[arg_index + 1])) {
-				if (x >= MapSizeX() || y >= MapSizeY()) {
+				if (x >= Map::SizeX() || y >= Map::SizeY()) {
 					IConsolePrint(CC_ERROR, "Tile does not exist.");
 					return true;
 				}
@@ -464,7 +464,7 @@ DEF_CONSOLE_CMD(ConHighlightTile)
 		case 2: {
 			uint32_t result;
 			if (GetArgumentInteger(&result, argv[1])) {
-				if (result >= MapSize()) {
+				if (result >= Map::Size()) {
 					IConsolePrint(CC_ERROR, "Tile does not exist.");
 					return true;
 				}
@@ -477,7 +477,7 @@ DEF_CONSOLE_CMD(ConHighlightTile)
 		case 3: {
 			uint32_t x, y;
 			if (GetArgumentInteger(&x, argv[1]) && GetArgumentInteger(&y, argv[2])) {
-				if (x >= MapSizeX() || y >= MapSizeY()) {
+				if (x >= Map::SizeX() || y >= Map::SizeY()) {
 					IConsolePrint(CC_ERROR, "Tile does not exist.");
 					return true;
 				}
@@ -1463,8 +1463,8 @@ DEF_CONSOLE_CMD(ConRestart)
 	if (argc == 1 || std::string_view(argv[1]) == "newgame") {
 		StartNewGameWithoutGUI(_settings_game.game_creation.generation_seed);
 	} else {
-		_settings_game.game_creation.map_x = MapLogX();
-		_settings_game.game_creation.map_y = MapLogY();
+		_settings_game.game_creation.map_x = Map::LogX();
+		_settings_game.game_creation.map_y = Map::LogY();
 		_switch_mode = SM_RESTARTGAME;
 	}
 
@@ -1485,8 +1485,8 @@ DEF_CONSOLE_CMD(ConReload)
 	}
 
 	/* Use a switch-mode to prevent copying over newgame settings to active settings. */
-	_settings_game.game_creation.map_x = MapLogX();
-	_settings_game.game_creation.map_y = MapLogY();
+	_settings_game.game_creation.map_x = Map::LogX();
+	_settings_game.game_creation.map_y = Map::LogY();
 	_switch_mode = SM_RELOADGAME;
 	return true;
 }
@@ -2210,7 +2210,7 @@ static std::vector<std::pair<std::string_view, NetworkAuthorizedKeys *>> _consol
 	{ "settings", &_settings_client.network.settings_authorized_keys },
 };
 
-enum ConNetworkAuthorizedKeyAction {
+enum ConNetworkAuthorizedKeyAction : uint8_t {
 	CNAKA_LIST,
 	CNAKA_ADD,
 	CNAKA_REMOVE,
@@ -2863,7 +2863,7 @@ DEF_CONSOLE_CMD(ConRunTileLoopTile)
 		uint32_t tile;
 		if (!GetArgumentInteger(&tile, argv[1])) return false;
 
-		if (tile >= MapSize()) {
+		if (tile >= Map::Size()) {
 			IConsolePrint(CC_ERROR, "Tile does not exist.");
 			return true;
 		}
@@ -3139,12 +3139,12 @@ DEF_CONSOLE_CMD(ConDumpRoadTypes)
 				HasBit(rti->extra_flags, RXTF_NO_TOWN_MODIFICATION) ? 't' : '-',
 				HasBit(rti->extra_flags, RXTF_NO_TUNNELS)           ? 'T' : '-',
 				HasBit(rti->extra_flags, RXTF_NO_TRAIN_COLLISION)   ? 'c' : '-',
-				BSWAP32(grfid),
+				std::byteswap(grfid),
 				GetStringPtr(rti->strings.name)
 		);
 	}
 	for (const auto &grf : grfs) {
-		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", BSWAP32(grf.first), grf.second->filename);
+		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", std::byteswap(grf.first), grf.second->filename);
 	}
 	return true;
 }
@@ -3197,12 +3197,12 @@ DEF_CONSOLE_CMD(ConDumpRailTypes)
 				HasBit(rti->ctrl_flags, RTCF_RESTRICTEDSIG) ? 'r' : '-',
 				HasBit(rti->ctrl_flags, RTCF_NOREALISTICBRAKING) ? 'b' : '-',
 				HasBit(rti->ctrl_flags, RTCF_NOENTRYSIG)    ? 'n' : '-',
-				BSWAP32(grfid),
+				std::byteswap(grfid),
 				GetStringPtr(rti->strings.name)
 		);
 	}
 	for (const auto &grf : grfs) {
-		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", BSWAP32(grf.first), grf.second->filename);
+		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", std::byteswap(grf.first), grf.second->filename);
 	}
 	return true;
 }
@@ -3247,14 +3247,14 @@ DEF_CONSOLE_CMD(ConDumpBridgeTypes)
 				spec->pillar_flags[9],
 				spec->pillar_flags[10],
 				spec->pillar_flags[11],
-				BSWAP32(grfid),
+				std::byteswap(grfid),
 				GetStringPtr(spec->material)
 		);
 	}
 	for (uint32_t grfid : grfids) {
 		extern GRFFile *GetFileByGRFID(uint32_t grfid);
 		const GRFFile *grffile = GetFileByGRFID(grfid);
-		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", BSWAP32(grfid), grffile ? (std::string_view)grffile->filename : "????");
+		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", std::byteswap(grfid), grffile ? (std::string_view)grffile->filename : "????");
 	}
 	return true;
 }
@@ -3293,7 +3293,7 @@ DEF_CONSOLE_CMD(ConDumpCargoTypes)
 	static const char tae_char[NUM_TAE] = { '-', 'P', 'M', 'G', 'W', 'F' };
 
 	btree::btree_map<uint32_t, const GRFFile *> grfs;
-	for (CargoID i = 0; i < NUM_CARGO; i++) {
+	for (CargoType i = 0; i < NUM_CARGO; i++) {
 		const CargoSpec *spec = CargoSpec::Get(i);
 		if (!spec->IsValid()) continue;
 		uint32_t grfid = 0;
@@ -3331,12 +3331,12 @@ DEF_CONSOLE_CMD(ConDumpCargoTypes)
 				(spec->classes & CC_NON_POTABLE)  != 0 ? 'i' : '-',
 				(spec->classes & CC_SPECIAL)      != 0 ? 'S' : '-',
 				tae_char[spec->town_acceptance_effect - TAE_BEGIN],
-				BSWAP32(grfid),
+				std::byteswap(grfid),
 				GetStringPtr(spec->name)
 		);
 	}
 	for (const auto &grf : grfs) {
-		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", BSWAP32(grf.first), grf.second->filename);
+		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", std::byteswap(grf.first), grf.second->filename);
 	}
 	return true;
 }
@@ -3379,7 +3379,7 @@ DEF_CONSOLE_CMD(ConDumpTile)
 		case 2: {
 			uint32_t result;
 			if (GetArgumentInteger(&result, argv[1])) {
-				if (result >= MapSize()) {
+				if (result >= Map::Size()) {
 					IConsolePrint(CC_ERROR, "Tile does not exist.");
 					return true;
 				}
@@ -3395,7 +3395,7 @@ DEF_CONSOLE_CMD(ConDumpTile)
 		case 3: {
 			uint32_t x, y;
 			if (GetArgumentInteger(&x, argv[1]) && GetArgumentInteger(&y, argv[2])) {
-				if (x >= MapSizeX() || y >= MapSizeY()) {
+				if (x >= Map::SizeX() || y >= Map::SizeY()) {
 					IConsolePrint(CC_ERROR, "Tile does not exist.");
 					return true;
 				}
@@ -3426,7 +3426,7 @@ DEF_CONSOLE_CMD(ConDumpGrfCargoTables)
 	for (const GRFFile *grf : files) {
 		if (grf->cargo_list.empty()) continue;
 
-		IConsolePrint(CC_DEFAULT, "[{:08X}] {}: {} cargoes", BSWAP32(grf->grfid), grf->filename, grf->cargo_list.size());
+		IConsolePrint(CC_DEFAULT, "[{:08X}] {}: {} cargoes", std::byteswap(grf->grfid), grf->filename, grf->cargo_list.size());
 
 		uint i = 0;
 		for (const CargoLabel &cl : grf->cargo_list) {
@@ -3474,7 +3474,7 @@ DEF_CONSOLE_CMD(ConDumpSignalStyles)
 		}
 		IConsolePrint(CC_DEFAULT, "  {:2}: GRF: {:08X}, Local: {:2}, Extra aspects: {:3}, Flags: {}{}{}{}{}{}{}{}, {}",
 				(uint) (i + 1),
-				BSWAP32(grfid),
+				std::byteswap(grfid),
 				style.grf_local_id,
 				style.lookahead_extra_aspects,
 				HasBit(style.style_flags, NSSF_NO_ASPECT_INC)           ? 'n' : '-',
@@ -3489,7 +3489,7 @@ DEF_CONSOLE_CMD(ConDumpSignalStyles)
 		);
 	}
 	for (const auto &grf : grfs) {
-		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", BSWAP32(grf.first), grf.second->filename);
+		IConsolePrint(CC_DEFAULT, "  GRF: {:08X} = {}", std::byteswap(grf.first), grf.second->filename);
 	}
 
 	return true;
@@ -3873,7 +3873,7 @@ DEF_CONSOLE_CMD(ConNewGRFProfile)
 			bool active = selected && profiler->active;
 			TextColour tc = active ? TC_LIGHT_BLUE : selected ? TC_GREEN : CC_INFO;
 			const char *statustext = active ? " (active)" : selected ? " (selected)" : "";
-			IConsolePrint(tc, "{}: [{:08X}] {}{}", i, BSWAP32(grf->grfid), grf->filename, statustext);
+			IConsolePrint(tc, "{}: [{:08X}] {}{}", i, std::byteswap(grf->grfid), grf->filename, statustext);
 			i++;
 		}
 		return true;
@@ -3889,7 +3889,7 @@ DEF_CONSOLE_CMD(ConNewGRFProfile)
 			}
 			GRFFile *grf = files[grfnum - 1];
 			if (std::any_of(_newgrf_profilers.begin(), _newgrf_profilers.end(), [&](NewGRFProfiler &pr) { return pr.grffile == grf; })) {
-				IConsolePrint(CC_WARNING, "GRF number {} [{:08X}] is already selected for profiling.", grfnum, BSWAP32(grf->grfid));
+				IConsolePrint(CC_WARNING, "GRF number {} [{:08X}] is already selected for profiling.", grfnum, std::byteswap(grf->grfid));
 				continue;
 			}
 			_newgrf_profilers.emplace_back(grf);
@@ -3925,7 +3925,7 @@ DEF_CONSOLE_CMD(ConNewGRFProfile)
 				started++;
 
 				if (!grfids.empty()) grfids += ", ";
-				fmt::format_to(std::back_inserter(grfids), "[{:08X}]", BSWAP32(pr.grffile->grfid));
+				fmt::format_to(std::back_inserter(grfids), "[{:08X}]", std::byteswap(pr.grffile->grfid));
 			}
 		}
 		if (started > 0) {
@@ -4119,7 +4119,7 @@ DEF_CONSOLE_CMD(ConFindNonRealisticBrakingSignal)
 		return true;
 	}
 
-	for (TileIndex t(0); t < MapSize(); t++) {
+	for (TileIndex t(0); t < Map::Size(); t++) {
 		if (IsTileType(t, MP_RAILWAY) && GetRailTileType(t) == RAIL_TILE_SIGNALS) {
 			uint signals = GetPresentSignals(t);
 			if ((signals & 0x3) & ((signals & 0x3) - 1) || (signals & 0xC) & ((signals & 0xC) - 1)) {

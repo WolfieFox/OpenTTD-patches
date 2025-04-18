@@ -36,7 +36,7 @@
 DropDownList GetSlotDropDownList(Owner owner, TraceRestrictSlotID slot_id, int &selected, VehicleType vehtype, bool show_other_types);
 DropDownList GetCounterDropDownList(Owner owner, TraceRestrictCounterID ctr_id, int &selected);
 
-enum ProgramWindowWidgets {
+enum ProgramWindowWidgets : WidgetID {
 	PROGRAM_WIDGET_CAPTION,
 	PROGRAM_WIDGET_INSTRUCTION_LIST,
 	PROGRAM_WIDGET_SCROLLBAR,
@@ -63,7 +63,7 @@ enum ProgramWindowWidgets {
 	PROGRAM_WIDGET_COPY_PROGRAM,
 };
 
-enum PanelWidgets {
+enum PanelWidgets : uint8_t {
 	// Left
 	DPL_COND_VARIABLE = 0,
 	DPL_SET_STATE,
@@ -536,10 +536,10 @@ public:
 
 				case QSM_NEW_SLOT:
 				case QSM_NEW_COUNTER: {
-					using Payload = typename CommandTraits<CMD_PROGPRESIG_MODIFY_INSTRUCTION>::PayloadType;
+					using Payload = CmdPayload<CMD_PROGPRESIG_MODIFY_INSTRUCTION>;
 					ProgPresigModifyCommandType mode = (this->query_submode == QSM_NEW_SLOT) ? PPMCT_SLOT : PPMCT_COUNTER;
 					Payload follow_up_payload = Payload::Make(this->track, si->Id(), mode, {}, {});
-					TraceRestrictFollowUpCmdData follow_up{ BaseCommandContainer<Payload>{ CMD_PROGPRESIG_MODIFY_INSTRUCTION, (StringID)0, this->tile, std::move(follow_up_payload) } };
+					TraceRestrictFollowUpCmdData follow_up{ BaseCommandContainer<CMD_PROGPRESIG_MODIFY_INSTRUCTION>((StringID)0, this->tile, std::move(follow_up_payload)) };
 					if (this->query_submode == QSM_NEW_SLOT) {
 						TraceRestrictCreateSlotCmdData data;
 						data.vehtype = VEH_TRAIN;
@@ -1003,7 +1003,7 @@ static constexpr NWidgetPart _nested_program_widgets[] = {
 static WindowDesc _program_desc(__FILE__, __LINE__,
 	WDP_AUTO, "signal_program", 384, 100,
 	WC_SIGNAL_PROGRAM, WC_BUILD_SIGNAL,
-	WDF_CONSTRUCTION,
+	WindowDefaultFlag::Construction,
 	_nested_program_widgets
 );
 

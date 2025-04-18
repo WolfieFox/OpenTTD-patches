@@ -76,7 +76,7 @@ static uint32_t saveSTC(const SlxiSubChunkInfo &info, bool dry_run);
 const std::initializer_list<SlxiSubChunkInfo> _sl_xv_sub_chunk_infos = {
 	{ XSLFI_VERSION_LABEL,                    XSCF_IGNORABLE_ALL,       1,   1, "version_label",                    saveVL,  loadVL,  nullptr          },
 	{ XSLFI_UPSTREAM_VERSION,                 XSCF_NULL,                2,   2, "upstream_version",                 saveUV,  loadUV,  nullptr          },
-	{ XSLFI_TRACE_RESTRICT,                   XSCF_NULL,               20,  20, "tracerestrict",                    nullptr, nullptr, "TRRM,TRRP,TRRS,TRRG" },
+	{ XSLFI_TRACE_RESTRICT,                   XSCF_NULL,               21,  21, "tracerestrict",                    nullptr, nullptr, "TRRM,TRRP,TRRS,TRRG" },
 	{ XSLFI_TRACE_RESTRICT_OWNER,             XSCF_NULL,                1,   1, "tracerestrict_owner",              nullptr, nullptr, nullptr          },
 	{ XSLFI_TRACE_RESTRICT_ORDRCND,           XSCF_NULL,                4,   4, "tracerestrict_order_cond",         nullptr, nullptr, nullptr          },
 	{ XSLFI_TRACE_RESTRICT_STATUSCND,         XSCF_NULL,                2,   2, "tracerestrict_status_cond",        nullptr, nullptr, nullptr          },
@@ -105,7 +105,7 @@ const std::initializer_list<SlxiSubChunkInfo> _sl_xv_sub_chunk_infos = {
 	{ XSLFI_INFRA_SHARING,                    XSCF_NULL,                2,   2, "infra_sharing",                    nullptr, nullptr, "CPDP"           },
 	{ XSLFI_VARIABLE_DAY_LENGTH,              XSCF_NULL,                7,   7, "variable_day_length",              nullptr, nullptr, nullptr          },
 	{ XSLFI_ORDER_OCCUPANCY,                  XSCF_NULL,                2,   2, "order_occupancy",                  nullptr, nullptr, nullptr          },
-	{ XSLFI_MORE_COND_ORDERS,                 XSCF_NULL,               19,  19, "more_cond_orders",                 nullptr, nullptr, nullptr          },
+	{ XSLFI_MORE_COND_ORDERS,                 XSCF_NULL,               20,  20, "more_cond_orders",                 nullptr, nullptr, nullptr          },
 	{ XSLFI_EXTRA_LARGE_MAP,                  XSCF_NULL,                0,   1, "extra_large_map",                  nullptr, nullptr, nullptr          },
 	{ XSLFI_REVERSE_AT_WAYPOINT,              XSCF_NULL,                1,   1, "reverse_at_waypoint",              nullptr, nullptr, nullptr          },
 	{ XSLFI_VEH_LIFETIME_PROFIT,              XSCF_NULL,                1,   1, "veh_lifetime_profit",              nullptr, nullptr, nullptr          },
@@ -219,6 +219,8 @@ const std::initializer_list<SlxiSubChunkInfo> _sl_xv_sub_chunk_infos = {
 	{ XSLFI_GROUP_NUMBERS,                    XSCF_IGNORABLE_UNKNOWN,   1,   1, "slv_group_numbers",                nullptr, nullptr, nullptr          },
 	{ XSLFI_WATER_TILE_TYPE,                  XSCF_NULL,                1,   1, "slv_water_tile_type",              nullptr, nullptr, nullptr          },
 	{ XSLFI_INDUSTRY_CARGO_REORGANISE,        XSCF_NULL,                2,   2, "slv_industry_cargo_reorganise",    nullptr, nullptr, nullptr          },
+	{ XSLFI_ENCODED_STRING_FORMAT,            XSCF_NULL,                1,   1, "slv_encoded_string_format",        nullptr, nullptr, nullptr          },
+	{ XSLFI_PROTECT_PLACED_HOUSES,            XSCF_NULL,                1,   1, "slv_protect_placed_houses",        nullptr, nullptr, nullptr          },
 
 	{ XSLFI_TABLE_PATS,                       XSCF_NULL,                1,   1, "table_pats",                       nullptr, nullptr, nullptr          },
 	{ XSLFI_TABLE_PLYR,                       XSCF_NULL,                1,   1, "table_plyr",                       nullptr, nullptr, nullptr          },
@@ -311,7 +313,7 @@ void SlXvSetCurrentState()
 	for (const SlxiSubChunkInfo &info : _sl_xv_sub_chunk_infos) {
 		_sl_xv_feature_versions[info.index] = info.save_version;
 	}
-	if (MapSizeX() > 8192 || MapSizeY() > 8192) {
+	if (Map::SizeX() > 8192 || Map::SizeY() > 8192) {
 		_sl_xv_feature_versions[XSLFI_EXTRA_LARGE_MAP] = 1;
 	}
 	if (IsScenarioSave()) {
@@ -636,13 +638,13 @@ static void Load_SLXI()
 	// flags are not in use yet, reserve for future expansion
 	if (chunk_flags != 0) SlErrorCorruptFmt("SLXI chunk: unknown chunk header flags: 0x{:X}", chunk_flags);
 
-	char name_buffer[256];
+	std::string name_buffer;
 	const SaveLoad xlsi_sub_chunk_name_desc[] = {
-		SLEG_STR(name_buffer, SLE_STRB),
+		SLEG_SSTR(name_buffer, SLE_STR),
 	};
 
-	auto version_error = [](StringID str, const char *feature, int64_t p1, int64_t p2) {
-		auto tmp_params = MakeParameters(_sl_xv_version_label.empty() ? STR_EMPTY : STR_GAME_SAVELOAD_FROM_VERSION, _sl_xv_version_label, feature, p1, p2);
+	auto version_error = [](StringID str, std::string_view feature, int64_t p1, int64_t p2) {
+		auto tmp_params = MakeParameters(_sl_xv_version_label.empty() ? STR_EMPTY : STR_GAME_SAVELOAD_FROM_VERSION, _sl_xv_version_label, std::string{feature}, p1, p2);
 		SlError(STR_JUST_RAW_STRING, GetStringWithArgs(str, tmp_params));
 	};
 
@@ -655,7 +657,7 @@ static void Load_SLXI()
 		// linearly scan through feature list until found name match
 		const SlxiSubChunkInfo *info = nullptr;
 		for (const SlxiSubChunkInfo &it : _sl_xv_sub_chunk_infos) {
-			if (strcmp(name_buffer, it.name) == 0) {
+			if (name_buffer == it.name) {
 				info = &it;
 				break;
 			}

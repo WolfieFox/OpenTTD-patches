@@ -314,12 +314,12 @@ static inline bool MaybeAddToTodoSet(TileIndex t1, DiagDirection d1, TileIndex t
 
 
 /** Current signal block state flags */
-enum SigFlags {
-	SF_NONE    = 0,
-	SF_TRAIN   = 1 << 0, ///< train found in segment
-	SF_FULL    = 1 << 1, ///< some of buffers was full, do not continue
-	SF_PBS     = 1 << 2, ///< pbs signal found
-	SF_JUNCTION= 1 << 3, ///< junction found
+enum SigFlags : uint8_t {
+	SF_NONE     = 0,
+	SF_TRAIN    = 1 << 0, ///< train found in segment
+	SF_FULL     = 1 << 1, ///< some of buffers was full, do not continue
+	SF_PBS      = 1 << 2, ///< pbs signal found
+	SF_JUNCTION = 1 << 3, ///< junction found
 };
 
 DECLARE_ENUM_AS_BIT_SET(SigFlags)
@@ -1794,7 +1794,7 @@ void FlushDeferredDetermineCombineNormalShuntMode(Train *v)
 
 void UpdateAllSignalAspects()
 {
-	for (TileIndex tile(0); tile != MapSize(); ++tile) {
+	for (TileIndex tile(0); tile != Map::Size(); ++tile) {
 		if (IsTileType(tile, MP_RAILWAY) && HasSignals(tile)) {
 			TrackBits bits = GetTrackBits(tile);
 			do {
@@ -1850,7 +1850,7 @@ static bool RemapNewSignalStyles(const std::array<NewSignalStyleMapping, MAX_NEW
 	auto populate_usage_table = [&]() {
 		usage_table_populated = true;
 
-		const uint32_t map_size = MapSize();
+		const uint32_t map_size = Map::Size();
 		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_RAILWAY) && HasSignals(t)) {
 				for (Track track : { TRACK_LOWER, TRACK_UPPER }) {
@@ -1908,7 +1908,7 @@ static bool RemapNewSignalStyles(const std::array<NewSignalStyleMapping, MAX_NEW
 
 	bool signal_remapped = false;
 	if (do_remap) {
-		const uint32_t map_size = MapSize();
+		const uint32_t map_size = Map::Size();
 		for (TileIndex t(0); t < map_size; t++) {
 			if (IsTileType(t, MP_RAILWAY) && HasSignals(t)) {
 				for (Track track : { TRACK_LOWER, TRACK_UPPER }) {
@@ -2115,7 +2115,7 @@ void UpdateAllSignalReserveThroughBits()
 				}
 			} while (bits != TRACK_BIT_NONE);
 		}
-	} while (++tile != MapSize());
+	} while (++tile != Map::Size());
 }
 
 void UpdateSignalSpecialPropagationFlag(TileIndex tile, Track track, const struct TraceRestrictProgram *prog, bool update_signal)
@@ -2176,5 +2176,5 @@ void UpdateAllSignalsSpecialPropagationFlag()
 		} else if (IsTunnelBridgeWithSignalSimulation(tile)) {
 			UpdateTunnelBridgeSignalSpecialPropagationFlag(tile, false);
 		}
-	} while (++tile != MapSize());
+	} while (++tile != Map::Size());
 }

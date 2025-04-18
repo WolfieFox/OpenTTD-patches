@@ -28,6 +28,7 @@
 #include "zoom_func.h"
 #include "date_func.h"
 #include "vehicle_func.h"
+#include "autoreplace_cmd.h"
 #include "autoreplace_func.h"
 #include "autoreplace_gui.h"
 #include "station_base.h"
@@ -102,7 +103,6 @@ static const uint GEN_HASHY_BUCKET_BITS = 6;
 //static const uint GEN_HASHX_MASK =  (1 << GEN_HASHX_BITS) - 1;
 //static const uint GEN_HASHY_MASK = ((1 << GEN_HASHY_BITS) - 1) << GEN_HASHX_BITS;
 
-VehicleID _new_vehicle_id;
 uint _returned_refit_capacity;        ///< Stores the capacity after a refit operation.
 uint16_t _returned_mail_refit_capacity; ///< Stores the mail capacity after a refit operation (Aircraft only).
 CargoArray _returned_vehicle_capacities; ///< Stores the cargo capacities after a vehicle build operation
@@ -324,7 +324,7 @@ bool Vehicle::NeedsServicing() const
 
 		/* Is there anything to refit? */
 		if (union_mask != 0) {
-			CargoID cargo_type;
+			CargoType cargo_type;
 			CargoTypes cargo_mask = GetCargoTypesOfArticulatedVehicle(v, &cargo_type);
 			if (!HasAtMostOneBit(cargo_mask)) {
 				CargoTypes new_engine_default_cargoes = GetCargoTypesOfArticulatedParts(new_engine);
@@ -1802,22 +1802,19 @@ void CallVehicleTicks()
 
 		tmpl_cur_company.Change(t->owner);
 
-		_new_vehicle_id = INVALID_VEHICLE;
 
 		CommandCost res = Command<CMD_TEMPLATE_REPLACE_VEHICLE>::Do(DC_EXEC, t->index);
-
-		if (_new_vehicle_id != INVALID_VEHICLE) {
-			VehicleID t_new = _new_vehicle_id;
-			t = Train::Get(t_new);
-			const Company *c = Company::Get(_current_company);
-			SubtractMoneyFromCompany(CommandCost(EXPENSES_NEW_VEHICLES, (Money)c->settings.engine_renew_money));
-			CommandCost res2 = DoCommandOld(0, t_new, 1, DC_EXEC, CMD_AUTOREPLACE_VEHICLE);
-			if (res2.HasResultData()) {
-				t = Train::Get(res2.GetResultData());
-			}
-			SubtractMoneyFromCompany(CommandCost(EXPENSES_NEW_VEHICLES, -(Money)c->settings.engine_renew_money));
-			if (res2.Succeeded() || res.GetCost() == 0) res.AddCost(res2);
+		if (res.HasResultData()) {
+			t = Train::Get(res.GetResultData());
 		}
+		const Company *c = Company::Get(_current_company);
+		SubtractMoneyFromCompany(CommandCost(EXPENSES_NEW_VEHICLES, (Money)c->settings.engine_renew_money));
+		CommandCost res2 = Command<CMD_AUTOREPLACE_VEHICLE>::Do(DC_EXEC, t->index, true);
+		if (res2.HasResultData()) {
+			t = Train::Get(res2.GetResultData());
+		}
+		SubtractMoneyFromCompany(CommandCost(EXPENSES_NEW_VEHICLES, -(Money)c->settings.engine_renew_money));
+		if (res2.Succeeded() || res.GetCost() == 0) res.AddCost(res2);
 
 		if (!IsLocalCompany()) continue;
 
@@ -1855,7 +1852,7 @@ void CallVehicleTicks()
 
 		const Company *c = Company::Get(_current_company);
 		SubtractMoneyFromCompany(CommandCost(EXPENSES_NEW_VEHICLES, (Money)c->settings.engine_renew_money));
-		CommandCost res = DoCommandOld(0, v->index, 0, DC_EXEC, CMD_AUTOREPLACE_VEHICLE);
+		CommandCost res = Command<CMD_AUTOREPLACE_VEHICLE>::Do(DC_EXEC, v->index, false);
 		SubtractMoneyFromCompany(CommandCost(EXPENSES_NEW_VEHICLES, -(Money)c->settings.engine_renew_money));
 
 		if (!IsLocalCompany()) continue;
@@ -2664,7 +2661,7 @@ uint8_t CalcPercentVehicleFilled(const Vehicle *front, StringID *colour)
 	}
 }
 
-uint8_t CalcPercentVehicleFilledOfCargo(const Vehicle *front, CargoID cargo)
+uint8_t CalcPercentVehicleFilledOfCargo(const Vehicle *front, CargoType cargo)
 {
 	int count = 0;
 	int max = 0;
@@ -3134,7 +3131,7 @@ bool CanBuildVehicleInfrastructure(VehicleType type, uint8_t subtype)
  */
 LiveryScheme GetEngineLiveryScheme(EngineID engine_type, EngineID parent_engine_type, const Vehicle *v)
 {
-	CargoID cargo_type = v == nullptr ? INVALID_CARGO : v->cargo_type;
+	CargoType cargo_type = v == nullptr ? INVALID_CARGO : v->cargo_type;
 	const Engine *e = Engine::Get(engine_type);
 	switch (e->type) {
 		default: NOT_REACHED();
@@ -3147,9 +3144,9 @@ LiveryScheme GetEngineLiveryScheme(EngineID engine_type, EngineID parent_engine_
 				/* Note: Luckily cargo_type is not needed for engines */
 			}
 
-			if (!IsValidCargoID(cargo_type)) cargo_type = e->GetDefaultCargoType();
-			if (!IsValidCargoID(cargo_type)) cargo_type = GetCargoIDByLabel(CT_GOODS); // The vehicle does not carry anything, let's pick some freight cargo
-			assert(IsValidCargoID(cargo_type));
+			if (!IsValidCargoType(cargo_type)) cargo_type = e->GetDefaultCargoType();
+			if (!IsValidCargoType(cargo_type)) cargo_type = GetCargoTypeByLabel(CT_GOODS); // The vehicle does not carry anything, let's pick some freight cargo
+			assert(IsValidCargoType(cargo_type));
 			if (e->u.rail.railveh_type == RAILVEH_WAGON) {
 				if (!CargoSpec::Get(cargo_type)->is_freight) {
 					if (parent_engine_type == INVALID_ENGINE) {
@@ -3188,9 +3185,9 @@ LiveryScheme GetEngineLiveryScheme(EngineID engine_type, EngineID parent_engine_
 				e = Engine::Get(engine_type);
 				cargo_type = v->First()->cargo_type;
 			}
-			if (!IsValidCargoID(cargo_type)) cargo_type = e->GetDefaultCargoType();
-			if (!IsValidCargoID(cargo_type)) cargo_type = GetCargoIDByLabel(CT_GOODS); // The vehicle does not carry anything, let's pick some freight cargo
-			assert(IsValidCargoID(cargo_type));
+			if (!IsValidCargoType(cargo_type)) cargo_type = e->GetDefaultCargoType();
+			if (!IsValidCargoType(cargo_type)) cargo_type = GetCargoTypeByLabel(CT_GOODS); // The vehicle does not carry anything, let's pick some freight cargo
+			assert(IsValidCargoType(cargo_type));
 
 			/* Important: Use Tram Flag of front part. Luckily engine_type refers to the front part here. */
 			if (HasBit(e->info.misc_flags, EF_ROAD_TRAM)) {
@@ -3202,9 +3199,9 @@ LiveryScheme GetEngineLiveryScheme(EngineID engine_type, EngineID parent_engine_
 			}
 
 		case VEH_SHIP:
-			if (!IsValidCargoID(cargo_type)) cargo_type = e->GetDefaultCargoType();
-			if (!IsValidCargoID(cargo_type)) cargo_type = GetCargoIDByLabel(CT_GOODS); // The vehicle does not carry anything, let's pick some freight cargo
-			assert(IsValidCargoID(cargo_type));
+			if (!IsValidCargoType(cargo_type)) cargo_type = e->GetDefaultCargoType();
+			if (!IsValidCargoType(cargo_type)) cargo_type = GetCargoTypeByLabel(CT_GOODS); // The vehicle does not carry anything, let's pick some freight cargo
+			assert(IsValidCargoType(cargo_type));
 			return IsCargoInClass(cargo_type, CC_PASSENGERS) ? LS_PASSENGER_SHIP : LS_FREIGHT_SHIP;
 
 		case VEH_AIRCRAFT:
@@ -3597,11 +3594,11 @@ void Vehicle::LeaveStation()
 	/* Only update the timetable if the vehicle was supposed to stop here. */
 	if (this->current_order.GetNonStopType() != ONSF_STOP_EVERYWHERE) UpdateVehicleTimetable(this, false);
 
-	CargoTypes cargoes_can_load_unload = this->current_order.FilterLoadUnloadTypeCargoMask([&](const Order *o, CargoID cargo) {
+	CargoTypes cargoes_can_load_unload = this->current_order.FilterLoadUnloadTypeCargoMask([&](const Order *o, CargoType cargo) {
 		return ((o->GetCargoLoadType(cargo) & OLFB_NO_LOAD) == 0) || ((o->GetCargoUnloadType(cargo) & OUFB_NO_UNLOAD) == 0);
 	});
 	CargoTypes has_cargo_mask = this->GetLastLoadingStationValidCargoMask();
-	CargoTypes cargoes_can_leave_with_cargo = FilterCargoMask([&](CargoID cargo) {
+	CargoTypes cargoes_can_leave_with_cargo = FilterCargoMask([&](CargoType cargo) {
 		return this->current_order.CanLeaveWithCargo(HasBit(has_cargo_mask, cargo), cargo);
 	}, cargoes_can_load_unload);
 
@@ -3879,7 +3876,7 @@ bool Vehicle::HasFullLoadOrder() const
 	for (const Order *o : this->Orders()) {
 		if (o->IsType(OT_GOTO_STATION) && o->GetLoadType() & (OLFB_FULL_LOAD | OLF_FULL_LOAD_ANY)) return true;
 		if (o->IsType(OT_GOTO_STATION) && o->GetLoadType() == OLFB_CARGO_TYPE_LOAD) {
-			for (CargoID cid = 0; cid < NUM_CARGO; cid++) {
+			for (CargoType cid = 0; cid < NUM_CARGO; cid++) {
 				if (o->GetCargoLoadType(cid) & (OLFB_FULL_LOAD | OLF_FULL_LOAD_ANY)) return true;
 			}
 		}
@@ -3998,16 +3995,17 @@ bool Vehicle::IsWaitingForUnbunching() const
  * Send this vehicle to the depot using the given command(s).
  * @param flags   the command flags (like execute and such).
  * @param command the command to execute.
+ * @param specific_depot specific depot to use, if DepotCommandFlags::Specific is set.
  * @return the cost of the depot action.
  */
-CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, TileIndex specific_depot)
+CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommandFlags command, TileIndex specific_depot)
 {
 	CommandCost ret = CheckOwnership(this->owner);
 	if (ret.Failed()) return ret;
 
 	if (this->vehstatus & VS_CRASHED) return CMD_ERROR;
 	if (this->IsStoppedInDepot()) {
-		if (HasFlag(command, DepotCommand::Sell) && !HasFlag(command, DepotCommand::Cancel) && (!HasFlag(command, DepotCommand::Specific) || specific_depot == this->tile)) {
+		if (command.Test(DepotCommandFlag::Sell) && !command.Test(DepotCommandFlag::Cancel) && (!command.Test(DepotCommandFlag::Specific) || specific_depot == this->tile)) {
 			/* Sell vehicle immediately */
 
 			if (flags & DC_EXEC) {
@@ -4060,7 +4058,7 @@ CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, Tile
 		}
 	};
 
-	if (HasFlag(command, DepotCommand::Cancel)) {
+	if (command.Test(DepotCommandFlag::Cancel)) {
 		if (this->current_order.IsType(OT_GOTO_DEPOT)) {
 			cancel_order();
 			return CommandCost();
@@ -4069,16 +4067,16 @@ CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, Tile
 		}
 	}
 
-	if (this->current_order.IsType(OT_GOTO_DEPOT) && !HasFlag(command, DepotCommand::Specific)) {
+	if (this->current_order.IsType(OT_GOTO_DEPOT) && !command.Test(DepotCommandFlag::Specific)) {
 		bool halt_in_depot = (this->current_order.GetDepotActionType() & ODATFB_HALT) != 0;
 		bool sell_in_depot = (this->current_order.GetDepotActionType() & ODATFB_SELL) != 0;
-		if (HasFlag(command, DepotCommand::Service) == halt_in_depot || HasFlag(command, DepotCommand::Sell) != sell_in_depot) {
-			/* We called with a different DepotCommand::Service or DepotCommand::Sell setting.
+		if (command.Test(DepotCommandFlag::Service) == halt_in_depot || command.Test(DepotCommandFlag::Sell) != sell_in_depot) {
+			/* We called with a different DepotCommandFlag::Service or DepotCommandFlag::Sell setting.
 			 * Now we change the setting to apply the new one and let the vehicle head for the same depot.
 			 * Note: the if is (true for requesting service == true for ordered to stop in depot)          */
 			if (flags & DC_EXEC) {
 				if (!(this->current_order.GetDepotOrderType() & ODTFB_BREAKDOWN)) this->current_order.SetDepotOrderType(ODTF_MANUAL);
-				this->current_order.SetDepotActionType(HasFlag(command, DepotCommand::Sell) ? ODATFB_HALT | ODATFB_SELL : (HasFlag(command, DepotCommand::Service) ? ODATF_SERVICE_ONLY : ODATFB_HALT));
+				this->current_order.SetDepotActionType(command.Test(DepotCommandFlag::Sell) ? ODATFB_HALT | ODATFB_SELL : (command.Test(DepotCommandFlag::Service) ? ODATF_SERVICE_ONLY : ODATFB_HALT));
 				this->ClearSeparation();
 				if (HasBit(this->vehicle_flags, VF_TIMETABLE_SEPARATION)) ClrBit(this->vehicle_flags, VF_TIMETABLE_STARTED);
 				SetWindowWidgetDirty(WC_VEHICLE_VIEW, this->index, WID_VV_START_STOP);
@@ -4086,14 +4084,14 @@ CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, Tile
 			return CommandCost();
 		}
 
-		if (HasFlag(command, DepotCommand::DontCancel)) return CMD_ERROR; // Requested no cancellation of depot orders
+		if (command.Test(DepotCommandFlag::DontCancel)) return CMD_ERROR; // Requested no cancellation of depot orders
 		cancel_order();
 		return CommandCost();
 	}
 
-	ClosestDepot closestDepot;
+	ClosestDepot closest_depot;
 	static const StringID no_depot[] = {STR_ERROR_UNABLE_TO_FIND_ROUTE_TO, STR_ERROR_UNABLE_TO_FIND_LOCAL_DEPOT, STR_ERROR_UNABLE_TO_FIND_LOCAL_DEPOT, STR_ERROR_CAN_T_SEND_AIRCRAFT_TO_HANGAR};
-	if (HasFlag(command, DepotCommand::Specific)) {
+	if (command.Test(DepotCommandFlag::Specific)) {
 		if (!(IsDepotTile(specific_depot) && GetDepotVehicleType(specific_depot) == this->type &&
 				IsInfraTileUsageAllowed(this->type, this->owner, specific_depot))) {
 			return CommandCost(no_depot[this->type]);
@@ -4102,12 +4100,12 @@ CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, Tile
 				(this->type == VEH_TRAIN && !HasBit(Train::From(this)->compatible_railtypes, GetRailType(tile)))) {
 			return CommandCost(no_depot[this->type]);
 		}
-		closestDepot.location = specific_depot;
-		closestDepot.destination = (this->type == VEH_AIRCRAFT) ? GetStationIndex(specific_depot) : GetDepotIndex(specific_depot);
-		closestDepot.reverse = false;
+		closest_depot.location = specific_depot;
+		closest_depot.destination = (this->type == VEH_AIRCRAFT) ? GetStationIndex(specific_depot) : GetDepotIndex(specific_depot);
+		closest_depot.reverse = false;
 	} else {
-		closestDepot = this->FindClosestDepot();
-		if (!closestDepot.found) return CommandCost(no_depot[this->type]);
+		closest_depot = this->FindClosestDepot();
+		if (!closest_depot.found) return CommandCost(no_depot[this->type]);
 	}
 
 	if (flags & DC_EXEC) {
@@ -4125,14 +4123,14 @@ CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, Tile
 			SetBit(gv_flags, GVF_SUPPRESS_IMPLICIT_ORDERS);
 		}
 
-		this->SetDestTile(closestDepot.location);
-		this->current_order.MakeGoToDepot(closestDepot.destination, ODTF_MANUAL);
-		if (HasFlag(command, DepotCommand::Sell)) {
+		this->SetDestTile(closest_depot.location);
+		this->current_order.MakeGoToDepot(closest_depot.destination, ODTF_MANUAL);
+		if (command.Test(DepotCommandFlag::Sell)) {
 			this->current_order.SetDepotActionType(ODATFB_HALT | ODATFB_SELL);
-		} else if (!HasFlag(command, DepotCommand::Service)) {
+		} else if (!command.Test(DepotCommandFlag::Service)) {
 			this->current_order.SetDepotActionType(ODATFB_HALT);
 		}
-		if (HasFlag(command, DepotCommand::Specific)) {
+		if (command.Test(DepotCommandFlag::Specific)) {
 			this->current_order.SetDepotExtraFlags(ODEFB_SPECIFIC);
 		}
 		SetWindowWidgetDirty(WC_VEHICLE_VIEW, this->index, WID_VV_START_STOP);
@@ -4141,13 +4139,13 @@ CommandCost Vehicle::SendToDepot(DoCommandFlag flags, DepotCommand command, Tile
 		this->cur_timetable_order_index = INVALID_VEH_ORDER_ID;
 
 		/* If there is no depot in front and the train is not already reversing, reverse automatically (trains only) */
-		if (this->type == VEH_TRAIN && (closestDepot.reverse ^ HasBit(Train::From(this)->flags, VRF_REVERSING))) {
+		if (this->type == VEH_TRAIN && (closest_depot.reverse ^ HasBit(Train::From(this)->flags, VRF_REVERSING))) {
 			Command<CMD_REVERSE_TRAIN_DIRECTION>::Do(DC_EXEC, this->index, false);
 		}
 
 		if (this->type == VEH_AIRCRAFT) {
 			Aircraft *a = Aircraft::From(this);
-			if (a->state == FLYING && a->targetairport != closestDepot.destination) {
+			if (a->state == FLYING && a->targetairport != closest_depot.destination) {
 				/* The aircraft is now heading for a different hangar than the next in the orders */
 				AircraftNextAirportPos_and_Order(a);
 			}

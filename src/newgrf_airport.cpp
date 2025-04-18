@@ -10,6 +10,7 @@
 #include "stdafx.h"
 #include "debug.h"
 #include "date_func.h"
+#include "newgrf_badge.h"
 #include "newgrf_spritegroup.h"
 #include "newgrf_text.h"
 #include "station_base.h"
@@ -101,8 +102,8 @@ bool AirportSpec::IsWithinMapBounds(uint8_t table, TileIndex tile) const
 	uint8_t h = this->size_y;
 	if (this->layouts[table].rotation == DIR_E || this->layouts[table].rotation == DIR_W) Swap(w, h);
 
-	return TileX(tile) + w < MapSizeX() &&
-		TileY(tile) + h < MapSizeY();
+	return TileX(tile) + w < Map::SizeX() &&
+		TileY(tile) + h < Map::SizeY();
 }
 
 /**
@@ -158,6 +159,8 @@ void AirportOverrideManager::SetEntitySpec(AirportSpec *as)
 {
 	switch (variable) {
 		case 0x40: return this->layout;
+
+		case 0x7A: return GetBadgeVariableResult(*this->ro.grffile, this->spec->badges, parameter);
 	}
 
 	if (this->st == nullptr) {
@@ -246,7 +249,7 @@ AirportResolverObject::AirportResolverObject(TileIndex tile, Station *st, const 
 		CallbackID callback, uint32_t param1, uint32_t param2)
 	: ResolverObject(spec->grf_prop.grffile, callback, param1, param2), airport_scope(*this, tile, st, spec, layout)
 {
-	this->root_spritegroup = spec->grf_prop.spritegroup[0];
+	this->root_spritegroup = spec->grf_prop.GetSpriteGroup();
 }
 
 SpriteID GetCustomAirportSprite(const AirportSpec *as, uint8_t layout)
