@@ -8,6 +8,7 @@
 /** @file misc_cmd.cpp Some misc functions that are better fitted in other files, but never got moved there... */
 
 #include "stdafx.h"
+#include "openttd.h"
 #include "command_func.h"
 #include "economy_func.h"
 #include "window_func.h"
@@ -24,6 +25,7 @@
 #include "cheat_type.h"
 #include "settings_cmd.h"
 #include "misc_cmd.h"
+#include "video/video_driver.hpp"
 
 #include "table/strings.h"
 
@@ -38,13 +40,12 @@
  * @param amount amount to increase the loan with, multitude of LOAN_INTERVAL. Only used when cmd == LoanCommand::Amount.
  * @return the cost of this operation or an error
  */
-CommandCost CmdIncreaseLoan(DoCommandFlag flags, LoanCommand cmd, Money amount)
+CommandCost CmdIncreaseLoan(DoCommandFlags flags, LoanCommand cmd, Money amount)
 {
 	Company *c = Company::Get(_current_company);
 	Money max_loan = c->GetMaxLoan();
 	if (c->current_loan >= max_loan) {
-		SetDParam(0, max_loan);
-		return CommandCost(STR_ERROR_MAXIMUM_PERMITTED_LOAN);
+		return CommandCostWithParam(STR_ERROR_MAXIMUM_PERMITTED_LOAN, max_loan);
 	}
 
 	Money loan;
@@ -67,7 +68,7 @@ CommandCost CmdIncreaseLoan(DoCommandFlag flags, LoanCommand cmd, Money amount)
 	 * immediately would not get us back to the same bank balance anymore. */
 	if (c->money > Money::max() - loan) return CMD_ERROR;
 
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		c->money        += loan;
 		c->current_loan += loan;
 		InvalidateCompanyWindows(c);
@@ -85,11 +86,11 @@ CommandCost CmdIncreaseLoan(DoCommandFlag flags, LoanCommand cmd, Money amount)
  * @param amount amount to decrease the loan with, multitude of LOAN_INTERVAL. Only used when cmd == LoanCommand::Amount.
  * @return the cost of this operation or an error
  */
-CommandCost CmdDecreaseLoan(DoCommandFlag flags, LoanCommand cmd, Money amount)
+CommandCost CmdDecreaseLoan(DoCommandFlags flags, LoanCommand cmd, Money amount)
 {
 	Company *c = Company::Get(_current_company);
 
-	if (c->current_loan == 0) return CommandCost(STR_ERROR_LOAN_ALREADY_REPAYED);
+	if (c->current_loan == 0) return CommandCost(STR_ERROR_LOAN_ALREADY_REPAID);
 
 	Money loan;
 	switch (cmd) {
@@ -108,11 +109,10 @@ CommandCost CmdDecreaseLoan(DoCommandFlag flags, LoanCommand cmd, Money amount)
 	}
 
 	if (GetAvailableMoneyForCommand() < loan) {
-		SetDParam(0, loan);
-		return CommandCost(STR_ERROR_CURRENCY_REQUIRED);
+		return CommandCostWithParam(STR_ERROR_CURRENCY_REQUIRED, loan);
 	}
 
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		c->money        -= loan;
 		c->current_loan -= loan;
 		InvalidateCompanyWindows(c);
@@ -126,7 +126,7 @@ CommandCost CmdDecreaseLoan(DoCommandFlag flags, LoanCommand cmd, Money amount)
  * @param amount the new max loan amount, will be rounded down to the multitude of LOAN_INTERVAL. If set to COMPANY_MAX_LOAN_DEFAULT reset the max loan to default(global) value.
  * @return zero cost or an error
  */
-CommandCost CmdSetCompanyMaxLoan(DoCommandFlag flags, CompanyID company, Money amount)
+CommandCost CmdSetCompanyMaxLoan(DoCommandFlags flags, CompanyID company, Money amount)
 {
 	if (_current_company != OWNER_DEITY) return CMD_ERROR;
 	if (amount != COMPANY_MAX_LOAN_DEFAULT) {
@@ -136,7 +136,7 @@ CommandCost CmdSetCompanyMaxLoan(DoCommandFlag flags, CompanyID company, Money a
 	Company *c = Company::GetIfValid(company);
 	if (c == nullptr) return CMD_ERROR;
 
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		/* Round the amount down to a multiple of LOAN_INTERVAL. */
 		if (amount != COMPANY_MAX_LOAN_DEFAULT) amount -= (int64_t)amount % LOAN_INTERVAL;
 
@@ -154,7 +154,7 @@ CommandCost CmdSetCompanyMaxLoan(DoCommandFlag flags, CompanyID company, Money a
 static void AskUnsafeUnpauseCallback(Window *, bool confirmed)
 {
 	if (confirmed) {
-		Command<CMD_PAUSE>::Post(PM_PAUSED_ERROR, false);
+		Command<CMD_PAUSE>::Post(PauseMode::Error, false);
 	}
 }
 
@@ -168,46 +168,49 @@ static void AskUnsafeUnpauseCallback(Window *, bool confirmed)
  * @param pause true pauses, false unpauses this mode
  * @return the cost of this operation or an error
  */
-CommandCost CmdPause(DoCommandFlag flags, PauseMode mode, bool pause)
+CommandCost CmdPause(DoCommandFlags flags, PauseMode mode, bool pause)
 {
 	switch (mode) {
-		case PM_PAUSED_SAVELOAD:
-		case PM_PAUSED_ERROR:
-		case PM_PAUSED_NORMAL:
-		case PM_PAUSED_GAME_SCRIPT:
-		case PM_PAUSED_LINK_GRAPH:
+		case PauseMode::SaveLoad:
+		case PauseMode::Error:
+		case PauseMode::Normal:
+		case PauseMode::GameScript:
+		case PauseMode::LinkGraph:
 			break;
 
-		case PM_PAUSED_JOIN:
-		case PM_PAUSED_ACTIVE_CLIENTS:
+		case PauseMode::Join:
+		case PauseMode::ActiveClients:
 			if (!_networking) return CMD_ERROR;
 			break;
 
 		default: return CMD_ERROR;
 	}
-	if (flags & DC_EXEC) {
-		if (mode == PM_PAUSED_NORMAL && _pause_mode & PM_PAUSED_ERROR) {
+	if (flags.Test(DoCommandFlag::Execute)) {
+		if (mode == PauseMode::Normal && _pause_mode.Test(PauseMode::Error)) {
 			ShowQuery(
-				STR_NEWGRF_UNPAUSE_WARNING_TITLE,
-				STR_NEWGRF_UNPAUSE_WARNING,
+				GetEncodedString(STR_NEWGRF_UNPAUSE_WARNING_TITLE),
+				GetEncodedString(STR_NEWGRF_UNPAUSE_WARNING),
 				nullptr,
 				AskUnsafeUnpauseCallback
 			);
 		} else {
-			PauseMode prev_mode = _pause_mode;
+			PauseModes prev_mode = _pause_mode;
 
 			if (pause) {
-				_pause_mode |= mode;
+				_pause_mode.Set(mode);
 			} else {
-				_pause_mode &= ~mode;
+				_pause_mode.Reset(mode);
 
 				/* If the only remaining reason to be paused is that we saw a command during pause, unpause. */
-				if (_pause_mode == PM_COMMAND_DURING_PAUSE) {
-					_pause_mode = PM_UNPAUSED;
+				if (_pause_mode == PauseMode::CommandDuringPause) {
+					_pause_mode = {};
 				}
 			}
 
 			NetworkHandlePauseChange(prev_mode, mode);
+
+			/* Screensaver should always be inhibited unless we're paused. */
+			VideoDriver::GetInstance()->SetScreensaverInhibited(_pause_mode.None());
 		}
 
 		SetWindowDirty(WC_STATUS_BAR, 0);
@@ -218,8 +221,8 @@ CommandCost CmdPause(DoCommandFlag flags, PauseMode mode, bool pause)
 
 void UnpauseStepGame(uint32_t steps)
 {
-	CmdPause(DC_EXEC, PM_PAUSED_NORMAL, false);
-	if (_pause_mode == PM_UNPAUSED) {
+	CmdPause(DoCommandFlag::Execute, PauseMode::Normal, false);
+	if (_pause_mode.None()) {
 		_pause_countdown = steps;
 	}
 }
@@ -229,10 +232,10 @@ void UnpauseStepGame(uint32_t steps)
  * @param amount the amount of money to receive (if positive), or spend (if negative)
  * @return the cost of this operation or an error
  */
-CommandCost CmdMoneyCheat(DoCommandFlag flags, Money amount)
+CommandCost CmdMoneyCheat(DoCommandFlags flags, Money amount)
 {
 	if (_networking && !_settings_game.difficulty.money_cheat_in_multiplayer) return CMD_ERROR;
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		_cheats.money.been_used = true;
 		SetWindowDirty(WC_CHEATS, 0);
 	}
@@ -244,9 +247,9 @@ CommandCost CmdMoneyCheat(DoCommandFlag flags, Money amount)
  * @param amount the amount of money to receive (if positive), or spend (if negative)
  * @return the cost of this operation or an error
  */
-CommandCost CmdMoneyCheatAdmin(DoCommandFlag flags, Money amount)
+CommandCost CmdMoneyCheatAdmin(DoCommandFlags flags, Money amount)
 {
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		_cheats.money.been_used = true;
 		SetWindowDirty(WC_CHEATS, 0);
 	}
@@ -260,7 +263,7 @@ CommandCost CmdMoneyCheatAdmin(DoCommandFlag flags, Money amount)
  * @param value the cheat value
  * @return the cost of this operation or an error
  */
-CommandCost CmdCheatSetting(DoCommandFlag flags, CheatNumbers cheat, uint32_t value)
+CommandCost CmdCheatSetting(DoCommandFlags flags, CheatNumbers cheat, uint32_t value)
 {
 	Cheat *cht = nullptr;
 	switch (cheat) {
@@ -277,7 +280,7 @@ CommandCost CmdCheatSetting(DoCommandFlag flags, CheatNumbers cheat, uint32_t va
 			break;
 
 		case CHT_INFLATION_INCOME:
-			if (flags & DC_EXEC) {
+			if (flags.Test(DoCommandFlag::Execute)) {
 				_cheats.inflation_income.been_used = true;
 				_economy.inflation_payment = Clamp<uint64_t>(value, 1 << 16, MAX_INFLATION);
 				if (_economy.inflation_payment > _economy.inflation_prices) {
@@ -290,7 +293,7 @@ CommandCost CmdCheatSetting(DoCommandFlag flags, CheatNumbers cheat, uint32_t va
 			return CommandCost();
 
 		case CHT_INFLATION_COST:
-			if (flags & DC_EXEC) {
+			if (flags.Test(DoCommandFlag::Execute)) {
 				_cheats.inflation_cost.been_used = true;
 				_economy.inflation_prices = Clamp<uint64_t>(value, 1 << 16, MAX_INFLATION);
 				if (_economy.inflation_payment > _economy.inflation_prices) {
@@ -313,7 +316,7 @@ CommandCost CmdCheatSetting(DoCommandFlag flags, CheatNumbers cheat, uint32_t va
 		default:
 			return CMD_ERROR;
 	}
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		cht->value = value;
 		cht->been_used = true;
 		SetWindowDirty(WC_CHEATS, 0);
@@ -339,13 +342,13 @@ CommandCost CmdCheatSetting(DoCommandFlag flags, CheatNumbers cheat, uint32_t va
  * @param expenses_type the expenses type which should register the cost/income @see ExpensesType.
  * @return zero cost or an error
  */
-CommandCost CmdChangeBankBalance(DoCommandFlag flags, TileIndex tile, Money delta, CompanyID company, ExpensesType expenses_type)
+CommandCost CmdChangeBankBalance(DoCommandFlags flags, TileIndex tile, Money delta, CompanyID company, ExpensesType expenses_type)
 {
 	if (!Company::IsValidID(company)) return CMD_ERROR;
 	if (expenses_type >= EXPENSES_END) return CMD_ERROR;
 	if (_current_company != OWNER_DEITY) return CMD_ERROR;
 
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		/* Change company bank balance of company. */
 		Backup<CompanyID> cur_company(_current_company, company, FILE_LINE);
 		SubtractMoneyFromCompany(CommandCost(expenses_type, -delta));
@@ -371,7 +374,7 @@ CommandCost CmdChangeBankBalance(DoCommandFlag flags, TileIndex tile, Money delt
  * @param dest_company the company to transfer the money to
  * @return the cost of this operation or an error
  */
-CommandCost CmdGiveMoney(DoCommandFlag flags, Money money, CompanyID dest_company)
+CommandCost CmdGiveMoney(DoCommandFlags flags, Money money, CompanyID dest_company)
 {
 	if (!_settings_game.economy.give_money) return CMD_ERROR;
 
@@ -382,7 +385,7 @@ CommandCost CmdGiveMoney(DoCommandFlag flags, Money money, CompanyID dest_compan
 	if (c->money - c->current_loan < amount.GetCost() || amount.GetCost() < 0) return CommandCost(STR_ERROR_INSUFFICIENT_FUNDS);
 	if (!Company::IsValidID(dest_company)) return CMD_ERROR;
 
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		/* Add money to company */
 		Backup<CompanyID> cur_company(_current_company, dest_company, FILE_LINE);
 		SubtractMoneyFromCompany(CommandCost(EXPENSES_OTHER, -amount.GetCost()));

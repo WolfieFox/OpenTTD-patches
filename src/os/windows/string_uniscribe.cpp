@@ -13,6 +13,7 @@
 #include "../../language.h"
 #include "../../strings_func.h"
 #include "../../string_func.h"
+#include "../../core/utf8.hpp"
 #include "../../table/control_codes.h"
 #include "../../zoom_func.h"
 #include "win32.h"
@@ -143,8 +144,7 @@ static HFONT HFontFromFont(Font *font)
 {
 	if (font->fc->GetOSHandle() != nullptr) return CreateFontIndirect(reinterpret_cast<PLOGFONT>(const_cast<void *>(font->fc->GetOSHandle())));
 
-	LOGFONT logfont;
-	ZeroMemory(&logfont, sizeof(LOGFONT));
+	LOGFONT logfont{};
 	logfont.lfHeight = font->fc->GetHeight();
 	logfont.lfWeight = FW_NORMAL;
 	logfont.lfCharSet = DEFAULT_CHARSET;
@@ -249,12 +249,10 @@ static bool UniscribeShapeRun(const UniscribeParagraphLayoutFactory::CharType *b
 static std::vector<SCRIPT_ITEM> UniscribeItemizeString(UniscribeParagraphLayoutFactory::CharType *buff, int32_t length)
 {
 	/* Itemize text. */
-	SCRIPT_CONTROL control;
-	ZeroMemory(&control, sizeof(SCRIPT_CONTROL));
+	SCRIPT_CONTROL control{};
 	control.uDefaultLanguage = _current_language->winlangid;
 
-	SCRIPT_STATE state;
-	ZeroMemory(&state, sizeof(SCRIPT_STATE));
+	SCRIPT_STATE state{};
 	state.uBidiLevel = _current_text_dir == TD_RTL ? 1 : 0;
 
 	std::vector<SCRIPT_ITEM> items(16);
@@ -519,10 +517,8 @@ std::span<const int> UniscribeParagraphLayout::UniscribeVisualRun::GetGlyphToCha
 }
 
 
-/* virtual */ void UniscribeStringIterator::SetString(const char *s)
+/* virtual */ void UniscribeStringIterator::SetString(std::string_view s)
 {
-	const char *string_base = s;
-
 	this->utf16_to_utf8.clear();
 	this->str_info.clear();
 	this->cur_pos = 0;
@@ -530,10 +526,10 @@ std::span<const int> UniscribeParagraphLayout::UniscribeVisualRun::GetGlyphToCha
 	/* Uniscribe operates on UTF-16, thus we have to convert the input string.
 	 * To be able to return proper offsets, we have to create a mapping at the same time. */
 	std::vector<wchar_t> utf16_str;     ///< UTF-16 copy of the string.
-	while (*s != '\0') {
-		size_t idx = s - string_base;
-
-		char32_t c = Utf8Consume(&s);
+	Utf8View view(s);
+	for (auto it = view.begin(), end = view.end(); it != end; ++it) {
+		size_t idx = it.GetByteOffset();
+		char32_t c = *it;
 		if (c < 0x10000) {
 			utf16_str.push_back((wchar_t)c);
 		} else {
@@ -544,7 +540,7 @@ std::span<const int> UniscribeParagraphLayout::UniscribeVisualRun::GetGlyphToCha
 		}
 		this->utf16_to_utf8.push_back(idx);
 	}
-	this->utf16_to_utf8.push_back(s - string_base);
+	this->utf16_to_utf8.push_back(s.size());
 
 	/* Query Uniscribe for word and cluster break information. */
 	this->str_info.resize(utf16_to_utf8.size());

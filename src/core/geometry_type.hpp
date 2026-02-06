@@ -16,17 +16,45 @@
 #	define Point OTTD_Point
 #endif /* __APPLE__ */
 
+/**
+ * Determine where to position a centred object.
+ * @param min The top or left coordinate.
+ * @param max The bottom or right coordinate.
+ * @param size The height or width of the object to draw.
+ * @return Offset of where to position the object.
+ */
+inline int CentreBounds(int min, int max, int size)
+{
+	return (min + max - size + 1) / 2;
+}
+
+/** A coordinate with two dimensons. */
+template <typename T>
+struct Coord2D {
+	T x = 0; ///< X coordinate.
+	T y = 0; ///< Y coordinate.
+
+	constexpr Coord2D() = default;
+	constexpr Coord2D(T x, T y) : x(x), y(y) {}
+
+	bool operator==(const Coord2D&) const = default;
+};
+
+/** A coordinate with three dimensions. */
+template <typename T>
+struct Coord3D {
+	T x = 0; ///< X coordinate.
+	T y = 0; ///< Y coordinate.
+	T z = 0; ///< Z coordinate.
+
+	constexpr Coord3D() = default;
+	constexpr Coord3D(T x, T y, T z) : x(x), y(y), z(z) {}
+
+	bool operator==(const Coord3D&) const = default;
+};
 
 /** Coordinates of a point in 2D */
-struct Point {
-	int x;
-	int y;
-
-	constexpr Point() : x(0), y(0) {}
-	constexpr Point(int x, int y) : x(x), y(y) {}
-
-	bool operator==(const Point&) const = default;
-};
+using Point = Coord2D<int>;
 
 /** Dimensions (a width and height) of a rectangle in 2D */
 struct Dimension {
@@ -51,10 +79,10 @@ struct Dimension {
 
 /** Padding dimensions to apply to each side of a Rect. */
 struct RectPadding {
-	uint8_t left;
-	uint8_t top;
-	uint8_t right;
-	uint8_t bottom;
+	uint8_t left = 0;
+	uint8_t top = 0;
+	uint8_t right = 0;
+	uint8_t bottom = 0;
 
 	static const RectPadding zero;
 
@@ -75,10 +103,10 @@ inline const RectPadding RectPadding::zero{};
 
 /** Specification of a rectangle with absolute coordinates of all edges */
 struct Rect {
-	int left;
-	int top;
-	int right;
-	int bottom;
+	int left = 0;
+	int top = 0;
+	int right = 0;
+	int bottom = 0;
 
 	/**
 	 * Get width of Rect.
@@ -187,8 +215,8 @@ struct Rect {
 	[[nodiscard]] inline Rect WithWidth(int width, bool end) const
 	{
 		return end
-			? Rect {this->right - width + 1, this->top, this->right,            this->bottom}
-			: Rect {this->left,              this->top, this->left + width - 1, this->bottom};
+			? this->WithX(this->right - width + 1, this->right)
+			: this->WithX(this->left, this->left + width - 1);
 	}
 
 	/**
@@ -200,21 +228,21 @@ struct Rect {
 	[[nodiscard]] inline Rect Indent(int indent, bool end) const
 	{
 		return end
-			? Rect {this->left,          this->top, this->right - indent, this->bottom}
-			: Rect {this->left + indent, this->top, this->right,          this->bottom};
+			? this->WithX(this->left, this->right - indent)
+			: this->WithX(this->left + indent, this->right);
 	}
 
 	/**
 	 * Copy Rect and set its height.
-	 * @param width height in pixels for new Rect.
+	 * @param height height in pixels for new Rect.
 	 * @param end   if set, set height at end of Rect, i.e. at bottom.
 	 * @return the new resized Rect.
 	 */
 	[[nodiscard]] inline Rect WithHeight(int height, bool end = false) const
 	{
 		return end
-			? Rect {this->left, this->bottom - height + 1, this->right, this->bottom}
-			: Rect {this->left, this->top,                 this->right, this->top + height - 1};
+			? this->WithY(this->bottom - height + 1, this->bottom)
+			: this->WithY(this->top, this->top + height - 1);
 	}
 
 	/**
@@ -225,8 +253,51 @@ struct Rect {
 	inline bool Contains(const Point &pt) const
 	{
 		/* This is a local version of IsInsideMM, to avoid including math_func everywhere. */
-		return (uint)(pt.x - this->left) < (uint)(this->right - this->left) && (uint)(pt.y - this->top) < (uint)(this->bottom - this->top);
+		return (uint)(pt.x - this->left) <= (uint)(this->right - this->left) && (uint)(pt.y - this->top) <= (uint)(this->bottom - this->top);
 	}
+
+	/**
+	 * Centre a dimension within this Rect.
+	 * @param width The horizontal dimension.
+	 * @param height The vertical dimension.
+	 * @return the new resized Rect.
+	 */
+	[[nodiscard]] inline Rect CentreTo(int width, int height) const
+	{
+		int new_left = CentreBounds(this->left, this->right, width);
+		int new_top = CentreBounds(this->top, this->bottom, height);
+		return {new_left, new_top, new_left + width - 1, new_top + height - 1};
+	}
+
+	/**
+	 * Create a new Rect, replacing the left and right coordiates.
+	 * @param new_left New left coordinate.
+	 * @param new_right New right coordinate.
+	 * @return The new Rect.
+	 */
+	[[nodiscard]] inline Rect WithX(int new_left, int new_right) const { return {new_left, this->top, new_right, this->bottom}; }
+
+	/**
+	 * Create a new Rect, replacing the top and bottom coordiates.
+	 * @param new_top New top coordinate.
+	 * @param new_bottom New bottom coordinate.
+	 * @return The new Rect.
+	 */
+	[[nodiscard]] inline Rect WithY(int new_top, int new_bottom) const { return {this->left, new_top, this->right, new_bottom}; }
+
+	/**
+	 * Create a new Rect, replacing the left and right coordiates.
+	 * @param other Rect containing the new left and right coordinates.
+	 * @return The new Rect.
+	 */
+	[[nodiscard]] inline Rect WithX(const Rect &other) const { return this->WithX(other.left, other.right); }
+
+	/**
+	 * Create a new Rect, replacing the top and bottom coordiates.
+	 * @param other Rect containing the new top and bottom coordinates.
+	 * @return The new Rect.
+	 */
+	[[nodiscard]] inline Rect WithY(const Rect &other) const { return this->WithY(other.top, other.bottom); }
 };
 
 struct Rect16 {
@@ -252,10 +323,10 @@ OutT ConvertRect(const InT &in)
  * (relative) width/height
  */
 struct PointDimension {
-	int x;
-	int y;
-	int width;
-	int height;
+	int x = 0;
+	int y = 0;
+	int width = 0;
+	int height = 0;
 };
 
 #endif /* GEOMETRY_TYPE_HPP */

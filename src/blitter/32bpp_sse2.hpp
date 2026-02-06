@@ -60,12 +60,12 @@ public:
 		uint16_t sprite_width;     ///< The width of the sprite.
 	};
 	struct SpriteData {
-		BlitterSpriteFlags flags;
-		SpriteInfo infos[ZOOM_LVL_SPR_COUNT];
+		BlitterSpriteFlags flags{};
+		SpriteCollMap<SpriteInfo> infos{};
 		uint8_t data[]; ///< Data, all zoomlevels.
 	};
 
-	Sprite *Encode(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator);
+	Sprite *Encode(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator);
 };
 
 /** The SSE2 32 bpp blitter (without palette animation). */
@@ -80,8 +80,9 @@ public:
 	template <BlitterMode mode, Blitter_32bppSSE_Base::ReadMode read_mode, Blitter_32bppSSE_Base::BlockType bt_last, bool translucent>
 	void Draw(const Blitter::BlitterParams *bp, ZoomLevel zoom);
 
-	Sprite *Encode(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator) override {
-		return Blitter_32bppSSE_Base::Encode(sprite, allocator);
+	Sprite *Encode(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator) override
+	{
+		return Blitter_32bppSSE_Base::Encode(sprite_type, sprite, allocator);
 	}
 
 	const char *GetName() override { return "32bpp-sse2"; }
@@ -91,7 +92,7 @@ public:
 class FBlitter_32bppSSE2 : public BlitterFactory {
 public:
 	FBlitter_32bppSSE2() : BlitterFactory("32bpp-sse2", "32bpp SSE2 Blitter (no palette animation)", HasCPUIDFlag(1, 3, 26)) {}
-	Blitter *CreateInstance() override { return new Blitter_32bppSSE2(); }
+	std::unique_ptr<Blitter> CreateInstance() override { return std::make_unique<Blitter_32bppSSE2>(); }
 };
 
 #endif /* WITH_SSE */

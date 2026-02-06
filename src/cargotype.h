@@ -13,9 +13,11 @@
 #include "economy_type.h"
 #include "cargo_type.h"
 #include "gfx_type.h"
+#include "newgrf_callbacks.h"
 #include "strings_type.h"
 #include "landscape_type.h"
 #include "core/bitmath_func.hpp"
+#include <array>
 #include <vector>
 
 /** Town growth effect when delivering cargo. */
@@ -46,28 +48,25 @@ enum TownProductionEffect : uint8_t {
 };
 
 /** Cargo classes. */
-enum CargoClass : uint16_t {
-	CC_NOAVAILABLE  = 0,       ///< No cargo class has been specified
-	CC_PASSENGERS   = 1 <<  0, ///< Passengers
-	CC_MAIL         = 1 <<  1, ///< Mail
-	CC_EXPRESS      = 1 <<  2, ///< Express cargo (Goods, Food, Candy, but also possible for passengers)
-	CC_ARMOURED     = 1 <<  3, ///< Armoured cargo (Valuables, Gold, Diamonds)
-	CC_BULK         = 1 <<  4, ///< Bulk cargo (Coal, Grain etc., Ores, Fruit)
-	CC_PIECE_GOODS  = 1 <<  5, ///< Piece goods (Livestock, Wood, Steel, Paper)
-	CC_LIQUID       = 1 <<  6, ///< Liquids (Oil, Water, Rubber)
-	CC_REFRIGERATED = 1 <<  7, ///< Refrigerated cargo (Food, Fruit)
-	CC_HAZARDOUS    = 1 <<  8, ///< Hazardous cargo (Nuclear Fuel, Explosives, etc.)
-	CC_COVERED      = 1 <<  9, ///< Covered/Sheltered Freight (Transportation in Box Vans, Silo Wagons, etc.)
-	CC_OVERSIZED    = 1 << 10, ///< Oversized (stake/flatbed wagon)
-	CC_POWDERIZED   = 1 << 11, ///< Powderized, moist protected (powder/silo wagon)
-	CC_NOT_POURABLE = 1 << 12, ///< Not Pourable (open wagon, but not hopper wagon)
-	CC_POTABLE      = 1 << 13, ///< Potable / food / clean.
-	CC_NON_POTABLE  = 1 << 14, ///< Non-potable / non-food / dirty.
-	CC_SPECIAL      = 1 << 15, ///< Special bit used for livery refit tricks instead of normal cargoes.
+enum class CargoClass : uint8_t {
+	Passengers   =  0, ///< Passengers
+	Mail         =  1, ///< Mail
+	Express      =  2, ///< Express cargo (Goods, Food, Candy, but also possible for passengers)
+	Armoured     =  3, ///< Armoured cargo (Valuables, Gold, Diamonds)
+	Bulk         =  4, ///< Bulk cargo (Coal, Grain etc., Ores, Fruit)
+	PieceGoods   =  5, ///< Piece goods (Livestock, Wood, Steel, Paper)
+	Liquid       =  6, ///< Liquids (Oil, Water, Rubber)
+	Refrigerated =  7, ///< Refrigerated cargo (Food, Fruit)
+	Hazardous    =  8, ///< Hazardous cargo (Nuclear Fuel, Explosives, etc.)
+	Covered      =  9, ///< Covered/Sheltered Freight (Transportation in Box Vans, Silo Wagons, etc.)
+	Oversized    = 10, ///< Oversized (stake/flatbed wagon)
+	Powderized   = 11, ///< Powderized, moist protected (powder/silo wagon)
+	NotPourable  = 12, ///< Not Pourable (open wagon, but not hopper wagon)
+	Potable      = 13, ///< Potable / food / clean.
+	NonPotable   = 14, ///< Non-potable / non-food / dirty.
+	Special      = 15, ///< Special bit used for livery refit tricks instead of normal cargoes.
 };
-
-/** Bitmask of cargo classes. */
-using CargoClasses = uint16_t;
+using CargoClasses = EnumBitSet<CargoClass, uint16_t>;
 
 static const uint8_t INVALID_CARGO_BITNUM = 0xFF; ///< Constant representing invalid cargo
 
@@ -77,8 +76,8 @@ static const uint TOWN_PRODUCTION_DIVISOR = 256;
 struct CargoSpec {
 	CargoLabel label;                      ///< Unique label of the cargo type.
 	uint8_t bitnum = INVALID_CARGO_BITNUM; ///< Cargo bit number, is #INVALID_CARGO_BITNUM for a non-used spec.
-	uint8_t legend_colour;
-	uint8_t rating_colour;
+	PixelColour legend_colour;
+	PixelColour rating_colour;
 	uint8_t weight;                        ///< Weight of a single unit of this cargo type in 1/16 ton (62.5 kg).
 	uint16_t multiplier = 0x100;           ///< Capacity multiplier for vehicles. (8 fractional bits)
 	CargoClasses classes;                  ///< Classes of this cargo type. @see CargoClass
@@ -89,7 +88,7 @@ struct CargoSpec {
 	TownAcceptanceEffect town_acceptance_effect;                   ///< The effect that delivering this cargo type has on towns. Also affects destination of subsidies.
 	TownProductionEffect town_production_effect = INVALID_TPE;     ///< The effect on town cargo production.
 	uint16_t town_production_multiplier = TOWN_PRODUCTION_DIVISOR; ///< Town production multiplier, if commanded by TownProductionEffect.
-	uint8_t callback_mask;                                         ///< Bitmask of cargo callbacks that have to be called
+	CargoCallbackMasks callback_mask;                              ///< Bitmask of cargo callbacks that have to be called
 
 	StringID name;                        ///< Name of this type of cargo.
 	StringID name_single;                 ///< Name of a single entity of this type of cargo.
@@ -177,7 +176,6 @@ struct CargoSpec {
 		};
 
 		bool operator==(const Iterator &other) const { return this->index == other.index; }
-		bool operator!=(const Iterator &other) const { return !(*this == other); }
 		CargoSpec * operator*() const { return CargoSpec::Get(this->index); }
 		Iterator & operator++() { this->index++; this->ValidateIndex(); return *this; }
 
@@ -213,7 +211,7 @@ struct CargoSpec {
 private:
 	static CargoSpec array[NUM_CARGO]; ///< Array holding all CargoSpecs
 
-	friend void SetupCargoForClimate(LandscapeID l);
+	friend void SetupCargoForClimate(LandscapeType l);
 	friend void BuildCargoLabelMap();
 	friend void FinaliseCargoArray();
 };
@@ -221,7 +219,7 @@ private:
 extern CargoTypes _cargo_mask;
 extern CargoTypes _standard_cargo_mask;
 
-void SetupCargoForClimate(LandscapeID l);
+void SetupCargoForClimate(LandscapeType l);
 bool IsDefaultCargo(CargoType cargo_type);
 void BuildCargoLabelMap();
 
@@ -250,13 +248,13 @@ uint ConvertDisplayQuantityToCargoQuantity(CargoType cargo, uint quantity);
 
 /**
  * Does cargo \a c have cargo class \a cc?
- * @param c  Cargo type.
+ * @param cargo Cargo type.
  * @param cc Cargo class.
  * @return The type fits in the class.
  */
-inline bool IsCargoInClass(CargoType c, CargoClass cc)
+inline bool IsCargoInClass(CargoType cargo, CargoClasses cc)
 {
-	return (CargoSpec::Get(c)->classes & cc) != 0;
+	return CargoSpec::Get(cargo)->classes.Any(cc);
 }
 
 using SetCargoBitIterator = SetBitIterator<CargoType, CargoTypes>;

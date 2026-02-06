@@ -38,21 +38,8 @@
  */
 class ScriptStoryPage : public ScriptObject {
 public:
-	/**
-	 * The story page IDs.
-	 */
-	enum StoryPageID {
-		/* Note: these values represent part of the in-game StoryPageID enum */
-		STORY_PAGE_INVALID = ::INVALID_STORY_PAGE, ///< An invalid story page id.
-	};
-
-	/**
-	 * The story page element IDs.
-	 */
-	enum StoryPageElementID {
-		/* Note: these values represent part of the in-game StoryPageElementID enum */
-		STORY_PAGE_ELEMENT_INVALID = ::INVALID_STORY_PAGE_ELEMENT, ///< An invalid story page element id.
-	};
+	static constexpr StoryPageID STORY_PAGE_INVALID = ::StoryPageID::Invalid(); ///< An invalid story page id.
+	static constexpr StoryPageElementID STORY_PAGE_ELEMENT_INVALID = ::StoryPageElementID::Invalid(); ///< An invalid story page element id.
 
 	/**
 	 * Story page element types.
@@ -295,7 +282,7 @@ public:
 	/**
 	 * Opens the Story Book if not yet open and selects the given page.
 	 * @param story_page_id The story page to update. If it is a global page, clients of all
-	 * companies are affecetd. Otherwise only the clients of the company which the page belongs
+	 * companies are affected. Otherwise only the clients of the company which the page belongs
 	 * to are affected.
 	 * @return True if the action succeeded.
 	 * @pre ScriptCompanyMode::IsDeity().
@@ -330,10 +317,10 @@ public:
 	static bool IsValidStoryPageButtonColour(StoryPageButtonColour colour);
 
 	/**
-	* Check whether this is a valid story page button flag.
-	* @param flags The StoryPageButtonFlags to check.
-	* @return True if and only if this story page button flag is valid.
-	*/
+	 * Check whether this is a valid story page button flag.
+	 * @param flags The StoryPageButtonFlags to check.
+	 * @return True if and only if this story page button flag is valid.
+	 */
 	static bool IsValidStoryPageButtonFlags(StoryPageButtonFlags flags);
 
 	/**

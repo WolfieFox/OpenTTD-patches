@@ -14,9 +14,9 @@
 #include "../textfile_type.h"
 
 void ShowScriptListWindow(CompanyID slot, bool show_all);
-struct Window *ShowScriptDebugWindow(CompanyID show_company = INVALID_COMPANY, bool new_window = false);
+struct Window *ShowScriptDebugWindow(CompanyID show_company = CompanyID::Invalid(), bool new_window = false);
 void ShowScriptSettingsWindow(CompanyID slot);
-void ShowScriptTextfileWindow(TextfileType file_type, CompanyID slot);
+void ShowScriptTextfileWindow(Window *parent, TextfileType file_type, CompanyID slot);
 void ShowScriptDebugWindowIfScriptError();
 void InitializeScriptGui();
 

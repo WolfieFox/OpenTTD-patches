@@ -10,6 +10,7 @@
 #ifndef TRACERESTRICT_H
 #define TRACERESTRICT_H
 
+#include "tracerestrict_id_type.h"
 #include "core/bitmath_func.hpp"
 #include "core/enum_type.hpp"
 #include "core/pool_type.hpp"
@@ -20,61 +21,56 @@
 #include "group_type.h"
 #include "vehicle_type.h"
 #include "signal_type.h"
+#include "station_type.h"
 #include "3rdparty/cpp-btree/btree_map.h"
 #include "3rdparty/svector/svector.h"
-#include <map>
 #include <vector>
 
 struct Train;
+struct Window;
 
-/** Program pool ID type. */
-typedef uint32_t TraceRestrictProgramID;
 struct TraceRestrictProgram;
 
 /** Tile/track mapping type. */
 typedef uint32_t TraceRestrictRefId;
 
 /** Type of the pool for trace restrict programs. */
-typedef Pool<TraceRestrictProgram, TraceRestrictProgramID, 16, 256000> TraceRestrictProgramPool;
+using TraceRestrictProgramPool = Pool<TraceRestrictProgram, TraceRestrictProgramID, 64>;
 /** The actual pool for trace restrict nodes. */
 extern TraceRestrictProgramPool _tracerestrictprogram_pool;
 
-/** Slot pool ID type. */
-typedef uint16_t TraceRestrictSlotID;
 struct TraceRestrictSlot;
 
 /** Type of the pool for trace restrict slots. */
-typedef Pool<TraceRestrictSlot, TraceRestrictSlotID, 16, 0xFFF0> TraceRestrictSlotPool;
+using TraceRestrictSlotPool = Pool<TraceRestrictSlot, TraceRestrictSlotID, 64>;
 /** The actual pool for trace restrict slots. */
 extern TraceRestrictSlotPool _tracerestrictslot_pool;
 
-static const TraceRestrictSlotID NEW_TRACE_RESTRICT_SLOT_ID = 0xFFFD;        // for GUI use only
-static const TraceRestrictSlotID ALL_TRAINS_TRACE_RESTRICT_SLOT_ID = 0xFFFE; // for GUI use only
-static const TraceRestrictSlotID INVALID_TRACE_RESTRICT_SLOT_ID = 0xFFFF;
+static constexpr TraceRestrictSlotID NEW_TRACE_RESTRICT_SLOT_ID{0xFFFD};        // for GUI use only
+static constexpr TraceRestrictSlotID ALL_TRAINS_TRACE_RESTRICT_SLOT_ID{0xFFFE}; // for GUI use only
+static constexpr TraceRestrictSlotID INVALID_TRACE_RESTRICT_SLOT_ID{0xFFFF};
 
-/** Slot group pool ID type. */
-typedef uint16_t TraceRestrictSlotGroupID;
+static const uint32_t TRACE_RESTRICT_SLOT_DEFAULT_MAX_OCCUPANCY = 1;
+
 struct TraceRestrictSlotGroup;
 
 /** Type of the pool for trace restrict slot groups. */
-typedef Pool<TraceRestrictSlotGroup, TraceRestrictSlotGroupID, 16, 0xFFF0> TraceRestrictSlotGroupPool;
+using TraceRestrictSlotGroupPool = Pool<TraceRestrictSlotGroup, TraceRestrictSlotGroupID, 64>;
 /** The actual pool for trace restrict slot groups. */
 extern TraceRestrictSlotGroupPool _tracerestrictslotgroup_pool;
 
-static const GroupID NEW_TRACE_RESTRICT_SLOT_GROUP     = 0xFFFE; ///< Sentinel for a to-be-created group.
-static const GroupID INVALID_TRACE_RESTRICT_SLOT_GROUP = 0xFFFF; ///< Sentinel for invalid slot groups. Ungrouped slots are in this group.
+static constexpr TraceRestrictSlotGroupID NEW_TRACE_RESTRICT_SLOT_GROUP{0xFFFE};     ///< Sentinel for a to-be-created group.
+static constexpr TraceRestrictSlotGroupID INVALID_TRACE_RESTRICT_SLOT_GROUP{0xFFFF}; ///< Sentinel for invalid slot groups. Ungrouped slots are in this group.
 
-/** Counter pool ID type. */
-typedef uint16_t TraceRestrictCounterID;
 struct TraceRestrictCounter;
 
 /** Type of the pool for trace restrict counters. */
-typedef Pool<TraceRestrictCounter, TraceRestrictCounterID, 16, 0xFFF0> TraceRestrictCounterPool;
+using TraceRestrictCounterPool = Pool<TraceRestrictCounter, TraceRestrictCounterID, 64>;
 /** The actual pool for trace restrict counters. */
 extern TraceRestrictCounterPool _tracerestrictcounter_pool;
 
-static const TraceRestrictCounterID NEW_TRACE_RESTRICT_COUNTER_ID = 0xFFFE;        // for GUI use only
-static const TraceRestrictCounterID INVALID_TRACE_RESTRICT_COUNTER_ID = 0xFFFF;
+static constexpr TraceRestrictCounterID NEW_TRACE_RESTRICT_COUNTER_ID{0xFFFE};     // for GUI use only
+static constexpr TraceRestrictCounterID INVALID_TRACE_RESTRICT_COUNTER_ID{0xFFFF};
 
 extern const uint16_t _tracerestrict_pathfinder_penalty_preset_values[];
 
@@ -285,7 +281,7 @@ enum TraceRestrictPhysPropRatioCondAuxField : uint8_t {
 /**
  * TraceRestrictItem auxiliary type field, for category type conditionals
  */
-enum TraceRestrictCatgeoryCondAuxField : uint8_t {
+enum TraceRestrictCategoryCondAuxField : uint8_t {
 	TRCCAF_ENGINE_CLASS           = 0,       ///< value field is an EngineClass type
 	/* space up to 3 */
 };
@@ -513,6 +509,42 @@ namespace TracerestrictDetail {
 				return static_cast<uint16_t>(GB(this->base(), TRIFA_VALUE_OFFSET, TRIFA_VALUE_COUNT));
 			}
 
+			/** Get value field, as a slot ID */
+			TraceRestrictSlotID GetValueAsSlot() const
+			{
+				return TraceRestrictSlotID(this->GetValue());
+			}
+
+			/** Get value field, as a slot group ID */
+			TraceRestrictSlotGroupID GetValueAsSlotGroup() const
+			{
+				return TraceRestrictSlotGroupID(this->GetValue());
+			}
+
+			/** Get value field, as a counter ID */
+			TraceRestrictCounterID GetValueAsCounter() const
+			{
+				return TraceRestrictCounterID(this->GetValue());
+			}
+
+			/** Get value field, as a company ID */
+			CompanyID GetValueAsCompany() const
+			{
+				return CompanyID(this->GetValue());
+			}
+
+			/** Get value field, as a station ID */
+			StationID GetValueAsStation() const
+			{
+				return StationID(this->GetValue());
+			}
+
+			/** Get value field, as a group ID */
+			GroupID GetValueAsGroup() const
+			{
+				return GroupID(this->GetValue());
+			}
+
 			/** Set type field */
 			inline void SetType(TraceRestrictItemType type)
 			{
@@ -547,6 +579,42 @@ namespace TracerestrictDetail {
 			inline void SetValue(uint16_t value)
 			{
 				SB(this->edit_base(), TRIFA_VALUE_OFFSET, TRIFA_VALUE_COUNT, value);
+			}
+
+			/** Set value field (slot ID) */
+			inline void SetValue(TraceRestrictSlotID value)
+			{
+				this->SetValue(value.base());
+			}
+
+			/** Set value field (slot group ID) */
+			inline void SetValue(TraceRestrictSlotGroupID value)
+			{
+				this->SetValue(value.base());
+			}
+
+			/** Set value field (counter ID) */
+			inline void SetValue(TraceRestrictCounterID value)
+			{
+				this->SetValue(value.base());
+			}
+
+			/** Set value field (company ID) */
+			inline void SetValue(CompanyID value)
+			{
+				this->SetValue(value.base());
+			}
+
+			/** Set value field (station ID) */
+			inline void SetValue(StationID value)
+			{
+				this->SetValue(value.base());
+			}
+
+			/** Set value field (group ID) */
+			inline void SetValue(GroupID value)
+			{
+				this->SetValue(value.base());
 			}
 
 			/** Is the type field a conditional type? */
@@ -1120,7 +1188,7 @@ inline TraceRestrictTypePropertySet GetTraceRestrictTypeProperties(TraceRestrict
 				break;
 
 			case TRIT_COND_CATEGORY:
-				switch (static_cast<TraceRestrictCatgeoryCondAuxField>(item.GetAuxField())) {
+				switch (static_cast<TraceRestrictCategoryCondAuxField>(item.GetAuxField())) {
 					case TRCCAF_ENGINE_CLASS:
 						out.value_type = TRVT_ENGINE_CLASS;
 						break;
@@ -1311,7 +1379,7 @@ void ShowTraceRestrictProgramWindow(TileIndex tile, Track track);
 int GetTraceRestrictTimeDateValue(TraceRestrictTimeDateValueField type);
 int GetTraceRestrictTimeDateValueFromStateTicks(TraceRestrictTimeDateValueField type, StateTicks state_ticks);
 
-void TraceRestrictRemoveDestinationID(TraceRestrictOrderCondAuxField type, uint16_t index);
+void TraceRestrictRemoveDestinationID(TraceRestrictOrderCondAuxField type, struct DestinationID index);
 void TraceRestrictRemoveGroupID(GroupID index);
 void TraceRestrictUpdateCompanyID(CompanyID old_company, CompanyID new_company);
 void TraceRestrictRemoveSlotID(TraceRestrictSlotID index);
@@ -1331,7 +1399,7 @@ void TraceRestrictRecordRecentSlotGroup(TraceRestrictSlotGroupID index);
 void TraceRestrictRecordRecentCounter(TraceRestrictCounterID index);
 void TraceRestrictClearRecentSlotsAndCounters();
 
-StringID TraceRestrictPrepareSlotCounterSelectTooltip(StringID base_str, VehicleType vtype);
+class EncodedString TraceRestrictPrepareSlotCounterSelectTooltip(StringID base_str, VehicleType vtype);
 
 static const uint MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS = 128; ///< The maximum length of a slot name in characters including '\0'
 
@@ -1341,13 +1409,13 @@ static const uint MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS = 128; ///< The maxi
 struct TraceRestrictSlot : TraceRestrictSlotPool::PoolItem<&_tracerestrictslot_pool> {
 	friend TraceRestrictSlotTemporaryState;
 
-	enum class Flags : uint8_t {
-		None        = 0,         ///< No flag set.
-		Public      = (1U << 0), ///< Public slot.
+	enum class Flag : uint8_t {
+		Public, ///< Public slot.
 	};
+	using Flags = EnumBitSet<Flag, uint8_t>;
 
 	Owner owner;
-	Flags flags = Flags::None;
+	Flags flags{};
 	VehicleType vehicle_type;
 	TraceRestrictSlotGroupID parent_group = INVALID_TRACE_RESTRICT_SLOT_GROUP;
 	uint32_t max_occupancy = 1;
@@ -1361,7 +1429,7 @@ struct TraceRestrictSlot : TraceRestrictSlotPool::PoolItem<&_tracerestrictslot_p
 	static void ValidateSlotGroupDescendants(std::function<void(std::string_view)> log);
 	static void PreCleanPool();
 
-	TraceRestrictSlot(CompanyID owner = INVALID_COMPANY, VehicleType type = VEH_TRAIN) : owner(owner), vehicle_type(type) {}
+	TraceRestrictSlot(CompanyID owner = CompanyID::Invalid(), VehicleType type = VEH_TRAIN) : owner(owner), vehicle_type(type) {}
 
 	~TraceRestrictSlot()
 	{
@@ -1380,7 +1448,11 @@ struct TraceRestrictSlot : TraceRestrictSlotPool::PoolItem<&_tracerestrictslot_p
 		return false;
 	}
 
-	inline bool IsUsableByOwner(Owner using_owner) const;
+	inline bool IsUsableByOwner(Owner using_owner) const
+	{
+		return this->owner == using_owner || this->flags.Test(Flag::Public);
+	}
+
 	bool Occupy(const Vehicle *v, bool force = false);
 	bool OccupyDryRun(VehicleID ids);
 	bool OccupyUsingTemporaryState(VehicleID id, TraceRestrictSlotTemporaryState *state);
@@ -1396,12 +1468,6 @@ private:
 	void DeIndex(VehicleID id, const Vehicle *v);
 };
 
-DECLARE_ENUM_AS_BIT_SET(TraceRestrictSlot::Flags)
-
-bool TraceRestrictSlot::IsUsableByOwner(Owner using_owner) const
-{
-	return this->owner == using_owner || HasFlag(this->flags, Flags::Public);
-}
 
 struct TraceRestrictVehicleTemporarySlotMembershipState {
 private:
@@ -1451,7 +1517,7 @@ struct TraceRestrictSlotGroup : TraceRestrictSlotGroupPool::PoolItem<&_tracerest
 	ankerl::svector<TraceRestrictSlotID, 8> contained_slots; ///< NOSAVE: slots directly and indirectly contained in this slot group, sorted
 	bool folded = false;        ///< NOSAVE: Is this slot group folded in the slot view?
 
-	TraceRestrictSlotGroup(CompanyID owner = INVALID_COMPANY, VehicleType type = VEH_TRAIN) : owner(owner), vehicle_type(type), parent(INVALID_TRACE_RESTRICT_SLOT_GROUP) {}
+	TraceRestrictSlotGroup(CompanyID owner = CompanyID::Invalid(), VehicleType type = VEH_TRAIN) : owner(owner), vehicle_type(type), parent(INVALID_TRACE_RESTRICT_SLOT_GROUP) {}
 
 	void AddSlotsToParentGroups();
 	void RemoveSlotsFromParentGroups();
@@ -1463,18 +1529,18 @@ struct TraceRestrictSlotGroup : TraceRestrictSlotGroupPool::PoolItem<&_tracerest
  * Counter type
  */
 struct TraceRestrictCounter : TraceRestrictCounterPool::PoolItem<&_tracerestrictcounter_pool> {
-	enum class Flags : uint8_t {
-		None        = 0,         ///< No flag set.
-		Public      = (1U << 0), ///< Public counter.
+	enum class Flag : uint8_t {
+		Public, ///< Public counter.
 	};
+	using Flags = EnumBitSet<Flag, uint8_t>;
 
 	Owner owner;
-	Flags flags = Flags::None;
+	Flags flags{};
 	int32_t value = 0;
 	std::string name;
 	ankerl::svector<SignalReference, 0> progsig_dependants;
 
-	TraceRestrictCounter(CompanyID owner = INVALID_COMPANY) : owner(owner) {}
+	TraceRestrictCounter(CompanyID owner = CompanyID::Invalid()) : owner(owner) {}
 
 	void UpdateValue(int32_t new_value);
 
@@ -1485,14 +1551,12 @@ struct TraceRestrictCounter : TraceRestrictCounterPool::PoolItem<&_tracerestrict
 		this->UpdateValue(TraceRestrictCounter::ApplyValue(this->value, op, value));
 	}
 
-	inline bool IsUsableByOwner(Owner using_owner) const;
+	inline bool IsUsableByOwner(Owner using_owner) const
+	{
+		return this->owner == using_owner || this->flags.Test(Flag::Public);
+	}
 };
 
-DECLARE_ENUM_AS_BIT_SET(TraceRestrictCounter::Flags)
 
-bool TraceRestrictCounter::IsUsableByOwner(Owner using_owner) const
-{
-	return this->owner == using_owner || HasFlag(this->flags, Flags::Public);
-}
-
+void ShowSlotCreationQueryString(Window &parent);
 #endif /* TRACERESTRICT_H */

@@ -10,8 +10,8 @@
 #ifndef NEWGRF_STORAGE_H
 #define NEWGRF_STORAGE_H
 
-#include "core/alloc_func.hpp"
 #include "core/pool_type.hpp"
+#include "newgrf.h"
 #include "tile_type.h"
 #include <array>
 
@@ -32,9 +32,9 @@ enum PersistentStorageMode : uint8_t {
  * so we have a generalised access to the virtual methods.
  */
 struct BasePersistentStorageArray {
-	uint32_t grfid;  ///< GRFID associated to this persistent storage. A value of zero means "default".
-	uint8_t feature; ///< NOSAVE: Used to identify in the owner of the array in debug output.
-	TileIndex tile;  ///< NOSAVE: Used to identify in the owner of the array in debug output.
+	uint32_t grfid = 0;                   ///< GRFID associated to this persistent storage. A value of zero means "default".
+	GrfSpecFeature feature = GSF_INVALID; ///< NOSAVE: Used to identify in the owner of the array in debug output.
+	TileIndex tile = INVALID_TILE;        ///< NOSAVE: Used to identify in the owner of the array in debug output.
 
 	virtual ~BasePersistentStorageArray();
 
@@ -181,16 +181,31 @@ struct TemporaryStorageArray {
 			this->init_key = 1;
 		}
 	}
+
+	std::span<const TYPE> GetValueRange(uint pos, uint count)
+	{
+		if (pos + count > SIZE) count = SIZE - pos;
+		for (uint i = pos; i < pos + count; i++) {
+			if (this->init[i] != this->init_key) this->storage[i] = 0;
+		}
+		return std::span<const TYPE>(this->storage.data() + pos, count);
+	}
+
+	std::span<const TYPE> GetValueRange(uint pos)
+	{
+		return this->GetValueRange(pos, SIZE - pos);
+	}
 };
 
 void AddChangedPersistentStorage(BasePersistentStorageArray *storage);
 
 typedef PersistentStorageArray<int32_t, 16> OldPersistentStorage;
 
-typedef uint32_t PersistentStorageID;
+struct PersistentStorageIDTag : public PoolIDTraits<uint32_t, 0xFF000, 0xFFFFF> {};
+using PersistentStorageID = PoolID<PersistentStorageIDTag>;
 
 struct PersistentStorage;
-typedef Pool<PersistentStorage, PersistentStorageID, 1, 0xFF000> PersistentStoragePool;
+using PersistentStoragePool = Pool<PersistentStorage, PersistentStorageID, 1>;
 
 extern PersistentStoragePool _persistent_storage_pool;
 
@@ -199,7 +214,7 @@ extern PersistentStoragePool _persistent_storage_pool;
  */
 struct PersistentStorage : PersistentStorageArray<int32_t, 256>, PersistentStoragePool::PoolItem<&_persistent_storage_pool> {
 	/** We don't want GCC to zero our struct! It already is zeroed and has an index! */
-	PersistentStorage(const uint32_t new_grfid, uint8_t feature, TileIndex tile)
+	PersistentStorage(const uint32_t new_grfid, GrfSpecFeature feature, TileIndex tile)
 	{
 		this->grfid = new_grfid;
 		this->feature = feature;

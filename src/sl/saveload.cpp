@@ -30,6 +30,7 @@
 #include "../strings_func.h"
 #include "../core/bitmath_func.hpp"
 #include "../core/endian_func.hpp"
+#include "../core/string_consumer.hpp"
 #include "../vehicle_base.h"
 #include "../company_func.h"
 #include "../date_func.h"
@@ -47,7 +48,7 @@
 #include "../scope.h"
 #include "../newgrf_railtype.h"
 #include "../newgrf_roadtype.h"
-#include "../core/ring_buffer.hpp"
+#include "../3rdparty/cpp-ring-buffer/ring_buffer.hpp"
 #include "../timer/timer_game_tick.h"
 #include <atomic>
 #include <string>
@@ -78,10 +79,7 @@
 
 #include "../safeguards.h"
 
-extern const SaveLoadVersion SAVEGAME_VERSION = SLV_CUSTOM_SUBSIDY_DURATION; ///< Current savegame version of OpenTTD.
-extern const SaveLoadVersion MAX_LOAD_SAVEGAME_VERSION = (SaveLoadVersion)(SL_MAX_VERSION - 1); ///< Max loadable savegame version of OpenTTD.
-
-const SaveLoadVersion SAVEGAME_VERSION_EXT = (SaveLoadVersion)(0x8000); ///< Savegame extension indicator mask
+static constexpr SaveLoadVersion SAVEGAME_VERSION_EXT = (SaveLoadVersion)(0x8000); ///< Savegame extension indicator mask
 
 SavegameType _savegame_type;      ///< type of savegame we are loading
 FileToSaveLoad _file_to_saveload; ///< File to save or load in the openttd loop.
@@ -111,6 +109,7 @@ namespace upstream_sl {
 	void SlSaveChunkChunkByID(uint32_t id);
 	void SlResetLoadState();
 	void FixSCCEncoded(std::string &str, bool fix_code);
+	void FixSCCEncodedNegative(std::string &str);
 }
 
 /** What are we currently doing? */
@@ -146,6 +145,10 @@ void ReadBuffer::SkipBytesSlowPath(size_t bytes)
 
 void ReadBuffer::AcquireBytes(size_t bytes)
 {
+	if (this->flags.Test(ReadBufferFlag::InhibitAcquireBytes)) {
+		SlErrorCorruptWithChunk("Unexpected end of sub-chunk");
+	}
+
 	size_t remainder = this->bufe - this->bufp;
 	if (remainder) {
 		memmove(this->buf, this->bufp, remainder);
@@ -421,7 +424,7 @@ static void SlNullPointers()
 	_sl.action = SLA_NULL;
 
 	/* Do upstream chunk tests before clearing version data */
-	ring_buffer<uint32_t> upstream_null_chunks;
+	jgr::ring_buffer<uint32_t> upstream_null_chunks;
 	for (auto &ch : ChunkHandlers()) {
 		_sl.current_chunk_id = ch.id;
 		if (ch.special_proc != nullptr && ch.special_proc(ch.id, CSLSO_PRE_NULL_PTRS) == CSLSOR_UPSTREAM_NULL_PTRS) {
@@ -951,9 +954,9 @@ void SlCopyBytesRead(void *p, size_t length)
 	_sl.reader->CopyBytes((uint8_t *)p, length);
 }
 
-void SlCopyBytesWrite(void *p, size_t length)
+void SlCopyBytesWrite(const void *p, size_t length)
 {
-	_sl.dumper->CopyBytes((uint8_t *)p, length);
+	_sl.dumper->CopyBytes((const uint8_t *)p, length);
 }
 
 /**
@@ -974,6 +977,18 @@ static void SlCopyBytes(void *ptr, size_t length)
 			break;
 		default: NOT_REACHED();
 	}
+}
+
+/**
+ * Read the given amount of bytes from the buffer into the string.
+ * @param str The string to write to.
+ * @param length The amount of bytes to read into the string.
+ * @note Does not perform any validation on validity of the string.
+ */
+void SlReadString(std::string &str, size_t length)
+{
+	str.resize(length);
+	SlCopyBytesRead((uint8_t *)str.data(), length);
 }
 
 /** Get the length of the current object */
@@ -1239,12 +1254,12 @@ void SlString(void *ptr, size_t length, VarType conv)
 			}
 
 			((char *)ptr)[len] = '\0'; // properly terminate the string
-			StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK;
+			StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark;
 			if ((conv & SLF_ALLOW_CONTROL) != 0) {
-				settings = settings | SVS_ALLOW_CONTROL_CODE;
+				settings.Set(StringValidationSetting::AllowControlCode);
 			}
 			if ((conv & SLF_ALLOW_NEWLINE) != 0) {
-				settings = settings | SVS_ALLOW_NEWLINE;
+				settings.Set(StringValidationSetting::AllowNewline);
 			}
 			StrMakeValidInPlace((char *)ptr, (char *)ptr + len, settings);
 			break;
@@ -1286,13 +1301,18 @@ void SlStdStringGeneric(std::string *ptr, VarType conv)
 			str.resize(len);
 			SlCopyBytesRead(str.data(), len);
 
-			StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK;
+			StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark;
 			if ((conv & SLF_ALLOW_CONTROL) != 0) {
-				settings = settings | SVS_ALLOW_CONTROL_CODE;
-				if (IsSavegameVersionBefore(SLV_ENCODED_STRING_FORMAT) && SlXvIsFeatureMissing(XSLFI_ENCODED_STRING_FORMAT)) upstream_sl::FixSCCEncoded(str, IsSavegameVersionBefore(SLV_169));
+				settings.Set(StringValidationSetting::AllowControlCode);
+				if (IsSavegameVersionBefore(SLV_ENCODED_STRING_FORMAT) && SlXvIsFeatureMissing(XSLFI_ENCODED_STRING_FORMAT)) {
+					upstream_sl::FixSCCEncoded(str, IsSavegameVersionBefore(SLV_169));
+				}
+				if (IsSavegameVersionBefore(SLV_FIX_SCC_ENCODED_NEGATIVE) && SlXvIsFeatureMissing(XSLFI_ENCODED_STRING_FORMAT, 2)) {
+					upstream_sl::FixSCCEncodedNegative(str);
+				}
 			}
 			if ((conv & SLF_ALLOW_NEWLINE) != 0) {
-				settings = settings | SVS_ALLOW_NEWLINE;
+				settings.Set(StringValidationSetting::AllowNewline);
 			}
 			StrMakeValidInPlace(str, settings);
 			break;
@@ -1589,9 +1609,9 @@ static size_t SlReadListLength()
 /**
  * Template class to help with list-like types.
  */
-template <template <typename> typename Tstorage, typename Tvar>
+template <template <typename, typename> typename Tstorage, typename Tvar, typename Tallocator = std::allocator<Tvar>>
 class SlStorageHelper {
-	typedef Tstorage<Tvar> SlStorageT;
+	typedef Tstorage<Tvar, Tallocator> SlStorageT;
 public:
 	/**
 	 * Internal templated helper to return the size in bytes of a list-like type.
@@ -1818,15 +1838,15 @@ static void SlVarList(void *list, VarType conv)
 static inline size_t SlCalcRingLen(const void *ring, VarType conv)
 {
 	switch (GetVarMemType(conv)) {
-		case SLE_VAR_BL: return SlStorageHelper<ring_buffer, bool>::SlCalcLen(ring, conv);
-		case SLE_VAR_I8: return SlStorageHelper<ring_buffer, int8_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_U8: return SlStorageHelper<ring_buffer, uint8_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_I16: return SlStorageHelper<ring_buffer, int16_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_U16: return SlStorageHelper<ring_buffer, uint16_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_I32: return SlStorageHelper<ring_buffer, int32_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_U32: return SlStorageHelper<ring_buffer, uint32_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_I64: return SlStorageHelper<ring_buffer, int64_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_U64: return SlStorageHelper<ring_buffer, uint64_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_BL: return SlStorageHelper<jgr::ring_buffer, bool>::SlCalcLen(ring, conv);
+		case SLE_VAR_I8: return SlStorageHelper<jgr::ring_buffer, int8_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_U8: return SlStorageHelper<jgr::ring_buffer, uint8_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_I16: return SlStorageHelper<jgr::ring_buffer, int16_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_U16: return SlStorageHelper<jgr::ring_buffer, uint16_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_I32: return SlStorageHelper<jgr::ring_buffer, int32_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_U32: return SlStorageHelper<jgr::ring_buffer, uint32_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_I64: return SlStorageHelper<jgr::ring_buffer, int64_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_U64: return SlStorageHelper<jgr::ring_buffer, uint64_t>::SlCalcLen(ring, conv);
 		default: NOT_REACHED();
 	}
 }
@@ -1840,15 +1860,15 @@ template <SaveLoadAction action>
 static void SlRing(void *ring, VarType conv)
 {
 	switch (GetVarMemType(conv)) {
-		case SLE_VAR_BL: SlStorageHelper<ring_buffer, bool>::SlSaveLoad<action>(ring, conv); break;
-		case SLE_VAR_I8: SlStorageHelper<ring_buffer, int8_t>::SlSaveLoad<action>(ring, conv); break;
-		case SLE_VAR_U8: SlStorageHelper<ring_buffer, uint8_t>::SlSaveLoad<action>(ring, conv); break;
-		case SLE_VAR_I16: SlStorageHelper<ring_buffer, int16_t>::SlSaveLoad<action>(ring, conv); break;
-		case SLE_VAR_U16: SlStorageHelper<ring_buffer, uint16_t>::SlSaveLoad<action>(ring, conv); break;
-		case SLE_VAR_I32: SlStorageHelper<ring_buffer, int32_t>::SlSaveLoad<action>(ring, conv); break;
-		case SLE_VAR_U32: SlStorageHelper<ring_buffer, uint32_t>::SlSaveLoad<action>(ring, conv); break;
-		case SLE_VAR_I64: SlStorageHelper<ring_buffer, int64_t>::SlSaveLoad<action>(ring, conv); break;
-		case SLE_VAR_U64: SlStorageHelper<ring_buffer, uint64_t>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_BL: SlStorageHelper<jgr::ring_buffer, bool>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_I8: SlStorageHelper<jgr::ring_buffer, int8_t>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_U8: SlStorageHelper<jgr::ring_buffer, uint8_t>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_I16: SlStorageHelper<jgr::ring_buffer, int16_t>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_U16: SlStorageHelper<jgr::ring_buffer, uint16_t>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_I32: SlStorageHelper<jgr::ring_buffer, int32_t>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_U32: SlStorageHelper<jgr::ring_buffer, uint32_t>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_I64: SlStorageHelper<jgr::ring_buffer, int64_t>::SlSaveLoad<action>(ring, conv); break;
+		case SLE_VAR_U64: SlStorageHelper<jgr::ring_buffer, uint64_t>::SlSaveLoad<action>(ring, conv); break;
 		default: NOT_REACHED();
 	}
 }
@@ -1930,7 +1950,7 @@ size_t SlCalcObjMemberLength(const void *object, const SaveLoad &sld)
 				case SL_ARR: return SlCalcArrayLen(sld.length, sld.conv);
 				case SL_STR: return SlCalcStringLen(GetVariableAddress(object, sld), sld.length, sld.conv);
 				case SL_REFLIST: return SlCalcRefListLen<std::list<void *>>(GetVariableAddress(object, sld));
-				case SL_REFRING: return SlCalcRefListLen<ring_buffer<void *>>(GetVariableAddress(object, sld));
+				case SL_REFRING: return SlCalcRefListLen<jgr::ring_buffer<void *>>(GetVariableAddress(object, sld));
 				case SL_REFVEC: return SlCalcRefListLen<std::vector<void *>>(GetVariableAddress(object, sld));
 				case SL_RING: return SlCalcRingLen(GetVariableAddress(object, sld), sld.conv);
 				case SL_VARVEC: {
@@ -2098,7 +2118,7 @@ bool SlObjectMemberGeneric(void *object, const SaveLoad &sld)
 				case SL_ARR: SlArray(ptr, sld.length, conv); break;
 				case SL_STR: SlString<action>(ptr, sld.length, sld.conv); break;
 				case SL_REFLIST: SlRefList<action, std::list<void *>>(ptr, (SLRefType)conv); break;
-				case SL_REFRING: SlRefList<action, ring_buffer<void *>>(ptr, (SLRefType)conv); break;
+				case SL_REFRING: SlRefList<action, jgr::ring_buffer<void *>>(ptr, (SLRefType)conv); break;
 				case SL_REFVEC: SlRefList<action, std::vector<void *>>(ptr, (SLRefType)conv); break;
 				case SL_RING: SlRing<action>(ptr, conv); break;
 				case SL_VARVEC: {
@@ -2577,8 +2597,24 @@ size_t SlGetStructListLength(size_t limit)
 {
 	size_t length = SlReadArrayLength();
 	if (length > limit) SlErrorCorruptWithChunk("List exceeds storage size");
+	if (limit >= UINT32_MAX && length > SlGetFieldLength()) SlErrorCorrupt("List size is implausibly large");
 
 	return length;
+}
+
+/**
+ * Read a uint32_t length field and validate that it is plausible for the current chunk/sub-chunk.
+ * @return The length value.
+ */
+uint32_t SlReadUint32LengthField()
+{
+	uint32_t size = SlReadUint32();
+	if (ReadBuffer::GetCurrent()->flags.Test(ReadBufferFlag::InhibitAcquireBytes)) {
+		if (size > ReadBuffer::GetCurrent()->RemainingInBuffer()) SlErrorCorrupt("Length field implausibly large in sub-chunk");
+	} else {
+		if (size > SlGetFieldLength()) SlErrorCorrupt("Length field implausibly large");
+	}
+	return size;
 }
 
 void SlSkipChunkContents()
@@ -2672,8 +2708,10 @@ SlLoadFromBufferState SlLoadFromBufferSetup(const uint8_t *buffer, size_t length
 	ReadBuffer *reader = ReadBuffer::GetCurrent();
 	state.old_bufp = reader->bufp;
 	state.old_bufe = reader->bufe;
+	state.old_flags = reader->flags.base();
 	reader->bufp = const_cast<uint8_t *>(buffer);
 	reader->bufe = const_cast<uint8_t *>(buffer) + length;
+	reader->flags.Set(ReadBufferFlag::InhibitAcquireBytes);
 
 	return state;
 }
@@ -2688,6 +2726,7 @@ void SlLoadFromBufferRestore(const SlLoadFromBufferState &state, const uint8_t *
 	_sl.obj_len = state.old_obj_len;
 	reader->bufp = state.old_bufp;
 	reader->bufe = state.old_bufe;
+	reader->flags.edit_base() = state.old_flags;
 }
 
 /*
@@ -3755,7 +3794,7 @@ static const SaveLoadFormat _saveload_formats[] = {
  * @param compression_level Output for telling what compression level we want.
  * @return Pointer to SaveLoadFormat struct giving all characteristics of this type of savegame
  */
-static const SaveLoadFormat *GetSavegameFormat(const std::string &full_name, uint8_t *compression_level, SaveModeFlags flags)
+static const SaveLoadFormat *GetSavegameFormat(std::string_view full_name, uint8_t *compression_level, SaveModeFlags flags)
 {
 	const SaveLoadFormat *def = lastof(_saveload_formats);
 
@@ -3766,31 +3805,33 @@ static const SaveLoadFormat *GetSavegameFormat(const std::string &full_name, uin
 		/* Get the ":..." of the compression level out of the way */
 		size_t separator = full_name.find(':');
 		bool has_comp_level = separator != std::string::npos;
-		const std::string name(full_name, 0, has_comp_level ? separator : full_name.size());
+		std::string_view name = has_comp_level ? full_name.substr(0, separator) : full_name;
 
 		for (const SaveLoadFormat *slf = &_saveload_formats[0]; slf != endof(_saveload_formats); slf++) {
 			if (slf->init_write != nullptr && name.compare(slf->name) == 0) {
 				*compression_level = slf->default_compression;
 				if (has_comp_level) {
-					const std::string complevel(full_name, separator + 1);
+					auto complevel = full_name.substr(separator + 1);
 
 					/* Get the level and determine whether all went fine. */
-					size_t processed;
-					long level = std::stol(complevel, &processed, 10);
-					if (processed == 0 || level != Clamp(level, slf->min_compression, slf->max_compression)) {
-						SetDParamStr(0, complevel);
-						ShowErrorMessage(STR_CONFIG_ERROR, STR_CONFIG_ERROR_INVALID_SAVEGAME_COMPRESSION_LEVEL, WL_CRITICAL);
+					auto level = ParseInteger<uint8_t>(complevel);
+					if (!level.has_value() || *level != Clamp(*level, slf->min_compression, slf->max_compression)) {
+						ShowErrorMessage(
+							GetEncodedString(STR_CONFIG_ERROR),
+							GetEncodedString(STR_CONFIG_ERROR_INVALID_SAVEGAME_COMPRESSION_LEVEL, complevel),
+							WL_CRITICAL);
 					} else {
-						*compression_level = level;
+						*compression_level = *level;
 					}
 				}
 				return slf;
 			}
 		}
 
-		SetDParamStr(0, name);
-		SetDParamStr(1, def->name);
-		ShowErrorMessage(STR_CONFIG_ERROR, STR_CONFIG_ERROR_INVALID_SAVEGAME_COMPRESSION_ALGORITHM, WL_CRITICAL);
+		ShowErrorMessage(
+			GetEncodedString(STR_CONFIG_ERROR),
+			GetEncodedString(STR_CONFIG_ERROR_INVALID_SAVEGAME_COMPRESSION_ALGORITHM, name, def->name),
+			WL_CRITICAL);
 	}
 	*compression_level = def->default_compression;
 	return def;
@@ -3863,16 +3904,15 @@ void SetSaveLoadError(StringID str)
 }
 
 /** Return the appropriate initial string for an error depending on whether we are saving or loading. */
-StringID GetSaveLoadErrorType()
+EncodedString GetSaveLoadErrorType()
 {
-	return _sl.action == SLA_SAVE ? STR_ERROR_GAME_SAVE_FAILED : STR_ERROR_GAME_LOAD_FAILED;
+	return GetEncodedString(_sl.action == SLA_SAVE ? STR_ERROR_GAME_SAVE_FAILED : STR_ERROR_GAME_LOAD_FAILED);
 }
 
 /** Return the description of the error. **/
-StringID GetSaveLoadErrorMessage()
+EncodedString GetSaveLoadErrorMessage()
 {
-	SetDParamStr(0, _sl.extra_msg);
-	return _sl.error_str;
+	return GetEncodedString(_sl.error_str, _sl.extra_msg);
 }
 
 /** Show a gui message when saving has failed */
@@ -3915,7 +3955,7 @@ static SaveOrLoadResult SaveFileToDisk(bool threaded)
 		 * cancelled due to a client disconnecting. */
 		if (_sl.error_str != STR_NETWORK_ERROR_LOSTCONNECTION) {
 			/* Skip the "colour" character */
-			Debug(sl, 0, "{}{}", strip_leading_colours(GetString(GetSaveLoadErrorType())), GetString(GetSaveLoadErrorMessage()));
+			Debug(sl, 0, "{}{}", strip_leading_colours(GetSaveLoadErrorType().GetDecodedString()), GetSaveLoadErrorMessage().GetDecodedString());
 			asfp = SaveFileError;
 		}
 
@@ -4354,7 +4394,7 @@ SaveOrLoadResult LoadWithFilter(std::shared_ptr<LoadFilter> reader)
 		ClearSaveLoadState();
 
 		/* Skip the "colour" character */
-		Debug(sl, 0, "{}{}", strip_leading_colours(GetString(GetSaveLoadErrorType())), GetString(GetSaveLoadErrorMessage()));
+		Debug(sl, 0, "{}{}", strip_leading_colours(GetSaveLoadErrorType().GetDecodedString()), GetSaveLoadErrorMessage().GetDecodedString());
 
 		return SL_REINIT;
 	}
@@ -4374,7 +4414,7 @@ SaveOrLoadResult SaveOrLoad(const std::string &filename, SaveLoadOperation fop, 
 	/* An instance of saving is already active, so don't go saving again */
 	if (_sl.saveinprogress && fop == SLO_SAVE && dft == DFT_GAME_FILE && threaded) {
 		/* if not an autosave, but a user action, show error message */
-		if (!_do_autosave) ShowErrorMessage(STR_ERROR_SAVE_STILL_IN_PROGRESS, INVALID_STRING_ID, WL_ERROR);
+		if (!_do_autosave) ShowErrorMessage(GetEncodedString(STR_ERROR_SAVE_STILL_IN_PROGRESS), {}, WL_ERROR);
 		return SL_OK;
 	}
 	WaitTillSaved();
@@ -4463,7 +4503,7 @@ SaveOrLoadResult SaveOrLoad(const std::string &filename, SaveLoadOperation fop, 
 		ClearSaveLoadState();
 
 		/* Skip the "colour" character */
-		if (fop != SLO_CHECK) Debug(sl, 0, "{}{}", strip_leading_colours(GetString(GetSaveLoadErrorType())), GetString(GetSaveLoadErrorMessage()));
+		if (fop != SLO_CHECK) Debug(sl, 0, "{}{}", strip_leading_colours(GetSaveLoadErrorType().GetDecodedString()), GetSaveLoadErrorMessage().GetDecodedString());
 
 		/* A saver/loader exception!! reinitialize all variables to prevent crash! */
 		return (fop == SLO_LOAD) ? SL_REINIT : SL_ERROR;
@@ -4493,7 +4533,7 @@ void DoAutoOrNetsave(FiosNumberedSaveName &counter, bool threaded, FiosNumberedS
 
 	Debug(sl, 2, "Autosaving to '{}'", filename);
 	if (SaveOrLoad(filename, SLO_SAVE, DFT_GAME_FILE, AUTOSAVE_DIR, threaded, SMF_ZSTD_OK) != SL_OK) {
-		ShowErrorMessage(STR_ERROR_AUTOSAVE_FAILED, INVALID_STRING_ID, WL_ERROR);
+		ShowErrorMessage(GetEncodedString(STR_ERROR_AUTOSAVE_FAILED), {}, WL_ERROR);
 	}
 }
 
@@ -4520,59 +4560,49 @@ std::string GenerateDefaultSaveName()
 		}
 	}
 
-	SetDParam(0, cid);
+	std::array<StringParameter, 4> params{};
+	auto it = params.begin();
+	*it++ = cid;
 
 	/* We show the current game time differently depending on the timekeeping units used by this game. */
 	if (EconTime::UsingWallclockUnits() && CalTime::IsCalendarFrozen()) {
 		/* Insert time played. */
 		const auto play_time = _scaled_tick_counter / TICKS_PER_SECOND;
-		SetDParam(1, STR_SAVEGAME_DURATION_REALTIME);
-		SetDParam(2, play_time / 60 / 60);
-		SetDParam(3, (play_time / 60) % 60);
+		*it++ = STR_SAVEGAME_DURATION_REALTIME;
+		*it++ = play_time / 60 / 60;
+		*it++ = (play_time / 60) % 60;
 	} else {
 		/* Insert current date */
 		switch (_settings_client.gui.date_format_in_default_names) {
-			case 0: SetDParam(1, STR_JUST_DATE_LONG); break;
-			case 1: SetDParam(1, STR_JUST_DATE_TINY); break;
-			case 2: SetDParam(1, STR_JUST_DATE_ISO); break;
+			case 0: *it++ = STR_JUST_DATE_LONG; break;
+			case 1: *it++ = STR_JUST_DATE_TINY; break;
+			case 2: *it++ = STR_JUST_DATE_ISO; break;
 			default: NOT_REACHED();
 		}
-		SetDParam(2, CalTime::CurDate());
+		*it++ = CalTime::CurDate();
 	}
 
 	/* Get the correct string (special string for when there's not company) */
-	std::string filename = GetString(!Company::IsValidID(cid) ? STR_SAVEGAME_NAME_SPECTATOR : STR_SAVEGAME_NAME_DEFAULT);
+	std::string filename = GetStringWithArgs(!Company::IsValidID(cid) ? STR_SAVEGAME_NAME_SPECTATOR : STR_SAVEGAME_NAME_DEFAULT, params);
 	SanitizeFilename(filename);
 	return filename;
 }
 
 /**
- * Set the mode and file type of the file to save or load based on the type of file entry at the file system.
- * @param ft Type of file entry of the file system.
- */
-void FileToSaveLoad::SetMode(FiosType ft)
-{
-	this->SetMode(SLO_LOAD, GetAbstractFileType(ft), GetDetailedFileType(ft));
-}
-
-/**
  * Set the mode and file type of the file to save or load.
+ * @param ft File type.
  * @param fop File operation being performed.
- * @param aft Abstract file type.
- * @param dft Detailed file type.
  */
-void FileToSaveLoad::SetMode(SaveLoadOperation fop, AbstractFileType aft, DetailedFileType dft)
+void FileToSaveLoad::SetMode(const FiosType &ft, SaveLoadOperation fop)
 {
-	if (aft == FT_INVALID || aft == FT_NONE) {
+	if (ft.abstract == FT_INVALID || ft.abstract == FT_NONE) {
 		this->file_op = SLO_INVALID;
-		this->detail_ftype = DFT_INVALID;
-		this->abstract_ftype = FT_INVALID;
+		this->ftype = FIOS_TYPE_INVALID;
 		return;
 	}
 
 	this->file_op = fop;
-	this->detail_ftype = dft;
-	this->abstract_ftype = aft;
+	this->ftype = ft;
 }
 
 /**
@@ -4588,7 +4618,7 @@ void FileToSaveLoad::Set(const FiosItem &item)
 
 bool SaveLoadFileTypeIsScenario()
 {
-	return _file_to_saveload.abstract_ftype == FT_SCENARIO;
+	return _file_to_saveload.ftype.abstract == FT_SCENARIO;
 }
 
 void SlUnreachablePlaceholder()

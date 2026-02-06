@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-typedef Pool<Plan, PlanID, 16, 64000> PlanPool;
+using PlanPool = Pool<Plan, PlanID, 16>;
 extern PlanPool _plan_pool;
 
 static constexpr size_t MAX_PLAN_PAYLOAD_SIZE = 32000;
@@ -142,28 +142,19 @@ struct PlanLine : public BasePlanLine {
 	}
 };
 
-struct Plan : PlanPool::PoolItem<&_plan_pool> {
+struct Plan : PlanPool::PoolItem<&_plan_pool> { // todo
 	Owner owner;
-	Colours colour;
+	Colours colour = COLOUR_WHITE;
 	CalTime::Date creation_date;
-	std::vector<PlanLine> lines;
+	std::vector<PlanLine> lines{};
 	BasePlanLine temp_line{};
-	std::string name;
-	TileIndex last_tile;
-	bool visible;
-	bool visible_by_all;
-	bool show_lines;
+	std::string name{};
+	TileIndex last_tile = INVALID_TILE;
+	bool visible = false;
+	bool visible_by_all = false;
+	bool show_lines = false;
 
-	Plan(Owner owner = INVALID_OWNER)
-	{
-		this->owner = owner;
-		this->creation_date = CalTime::CurDate();
-		this->visible = false;
-		this->visible_by_all = false;
-		this->show_lines = false;
-		this->colour = COLOUR_WHITE;
-		this->last_tile = INVALID_TILE;
-	}
+	Plan(Owner owner = INVALID_OWNER) : owner(owner), creation_date(CalTime::CurDate()) {}
 
 	void SetFocus(bool focused)
 	{

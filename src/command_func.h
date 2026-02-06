@@ -15,28 +15,28 @@
 
 /* DoCommand and variants */
 
-CommandCost DoCommandImplementation(Commands cmd, TileIndex tile, const CommandPayloadBase &payload, DoCommandFlag flags, DoCommandIntlFlag intl_flags);
+CommandCost DoCommandImplementation(Commands cmd, TileIndex tile, const CommandPayloadBase &payload, DoCommandFlags flags, DoCommandIntlFlag intl_flags);
 
 /* Note that output_no_tile is used here instead of input_no_tile, because a tile index used only for error messages is not useful */
 template <Commands cmd, typename = typename std::enable_if<!CommandTraits<cmd>::output_no_tile>>
-CommandCost DoCommand(TileIndex tile, const CmdPayload<cmd> &payload, DoCommandFlag flags, DoCommandIntlFlag intl_flags = DCIF_NONE)
+CommandCost DoCommand(TileIndex tile, const CmdPayload<cmd> &payload, DoCommandFlags flags, DoCommandIntlFlag intl_flags = DCIF_NONE)
 {
 	return DoCommandImplementation(cmd, tile, payload, flags, intl_flags | DCIF_TYPE_CHECKED);
 }
 
 template <Commands cmd, typename = typename std::enable_if<CommandTraits<cmd>::output_no_tile>>
-CommandCost DoCommand(const CmdPayload<cmd> &payload, DoCommandFlag flags, DoCommandIntlFlag intl_flags = DCIF_NONE)
+CommandCost DoCommand(const CmdPayload<cmd> &payload, DoCommandFlags flags, DoCommandIntlFlag intl_flags = DCIF_NONE)
 {
 	return DoCommandImplementation(cmd, TileIndex{0}, payload, flags, intl_flags | DCIF_TYPE_CHECKED);
 }
 
-inline CommandCost DoCommandContainer(const DynBaseCommandContainer &container, DoCommandFlag flags)
+inline CommandCost DoCommandContainer(const DynBaseCommandContainer &container, DoCommandFlags flags)
 {
 	return DoCommandImplementation(container.cmd, container.tile, *container.payload, flags, DCIF_NONE);
 }
 
 template <Commands cmd>
-inline CommandCost DoCommandContainer(const BaseCommandContainer<cmd> &container, DoCommandFlag flags)
+inline CommandCost DoCommandContainer(const BaseCommandContainer<cmd> &container, DoCommandFlags flags)
 {
 	return DoCommandImplementation(cmd, container.tile, container.payload, flags, DCIF_TYPE_CHECKED);
 }
@@ -73,7 +73,7 @@ template <Commands TCmd, typename T> struct DoCommandHelperNoTile;
 
 template <Commands Tcmd, typename... Targs>
 struct DoCommandHelper<Tcmd, std::tuple<Targs...>> {
-	static inline CommandCost Do(DoCommandFlag flags, TileIndex tile, Targs... args)
+	static inline CommandCost Do(DoCommandFlags flags, TileIndex tile, Targs... args)
 	{
 		return DoCommand<Tcmd>(tile, CmdPayload<Tcmd>::Make(std::forward<Targs>(args)...), flags);
 	}
@@ -81,7 +81,7 @@ struct DoCommandHelper<Tcmd, std::tuple<Targs...>> {
 
 template <Commands Tcmd, typename... Targs>
 struct DoCommandHelperNoTile<Tcmd, std::tuple<Targs...>> {
-	static inline CommandCost Do(DoCommandFlag flags, Targs... args)
+	static inline CommandCost Do(DoCommandFlags flags, Targs... args)
 	{
 		return DoCommand<Tcmd>(CmdPayload<Tcmd>::Make(std::forward<Targs>(args)...), flags);
 	}
@@ -163,7 +163,7 @@ void NetworkSendCommand(TileIndex tile, const CmdPayload<Tcmd> &payload, StringI
 
 inline bool IsValidCommand(Commands cmd) { return cmd < CMD_END; }
 CommandFlags GetCommandFlags(Commands cmd);
-const char *GetCommandName(Commands cmd);
+std::string_view GetCommandName(Commands cmd);
 bool IsCommandAllowedWhilePaused(Commands cmd);
 bool IsCorrectCommandPayloadType(Commands cmd, const CommandPayloadBase &payload);
 
@@ -178,12 +178,12 @@ constexpr CommandFlags GetCommandFlags()
  * @param cmd_flags Flags from GetCommandFlags
  * @return flags for DoCommand
  */
-inline DoCommandFlag CommandFlagsToDCFlags(CommandFlags cmd_flags)
+inline DoCommandFlags CommandFlagsToDCFlags(CommandFlags cmd_flags)
 {
-	DoCommandFlag flags = DC_NONE;
-	if (cmd_flags & CMD_NO_WATER) flags |= DC_NO_WATER;
-	if (cmd_flags & CMD_AUTO) flags |= DC_AUTO;
-	if (cmd_flags & CMD_ALL_TILES) flags |= DC_ALL_TILES;
+	DoCommandFlags flags = {};
+	if (cmd_flags.Test(CommandFlag::NoWater)) flags.Set(DoCommandFlag::NoWater);
+	if (cmd_flags.Test(CommandFlag::Auto)) flags.Set(DoCommandFlag::Auto);
+	if (cmd_flags.Test(CommandFlag::AllTiles)) flags.Set(DoCommandFlag::AllTiles);
 	return flags;
 }
 
@@ -194,7 +194,7 @@ template <Commands Tcmd>
 void EnqueueDoCommandP(TileIndex tile, const CmdPayload<Tcmd> &payload, StringID error_msg, CommandCallback callback = CommandCallback::None, CallbackParameter callback_param = 0, DoCommandIntlFlag intl_flags = DCIF_NONE)
 {
 	extern void EnqueueDoCommandPImplementation(Commands cmd, TileIndex tile, const CommandPayloadBase &payload, StringID error_msg, CommandCallback callback, CallbackParameter callback_param, DoCommandIntlFlag intl_flags);
-	return EnqueueDoCommandPImplementation(Tcmd, tile, payload, error_msg, callback, callback_param, intl_flags | DCIF_TYPE_CHECKED);
+	return EnqueueDoCommandPImplementation(Tcmd, tile, payload, error_msg, callback, callback_param, intl_flags | DCIF_TYPE_CHECKED | DCIF_NO_ESTIMATE);
 }
 
 #endif /* COMMAND_FUNC_H */

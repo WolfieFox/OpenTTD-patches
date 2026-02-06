@@ -74,7 +74,7 @@
 #endif
 
 #if defined(_MSC_VER)
-	// See https://learn.microsoft.com/en-us/cpp/cpp/empty-bases?view=msvc-170
+	/* See https://learn.microsoft.com/en-us/cpp/cpp/empty-bases?view=msvc-170 */
 #	define EMPTY_BASES __declspec(empty_bases)
 #else
 #	define EMPTY_BASES
@@ -168,8 +168,8 @@
 		using fs_string = std::string;
 		using fs_char = char;
 #	else
-		template <typename T> std::string FS2OTTD(T name) { return name; }
-		template <typename T> std::string OTTD2FS(T name) { return name; }
+		template <typename T> std::string FS2OTTD(T &&name) { return std::string{std::forward<T>(name)}; }
+		template <typename T> std::string OTTD2FS(T &&name) { return std::string{std::forward<T>(name)}; }
 		using fs_string = std::string;
 		using fs_char = char;
 #	endif /* _WIN32 or WITH_ICONV */
@@ -325,6 +325,25 @@ char (&ArraySizeHelper(T (&array)[N]))[N];
 #	define GNU_TARGET(x)
 #endif /* __GNUC__ || __clang__ */
 
+#if !defined(__has_builtin)
+#	define WITH_BUILTIN_ASSUME 0
+#elif __has_builtin(__builtin_assume)
+#	define WITH_BUILTIN_ASSUME 1
+#else
+#	define WITH_BUILTIN_ASSUME 0
+#endif
+
+inline void builtin_assume(bool condition)
+{
+#if WITH_BUILTIN_ASSUME
+	__builtin_assume(condition);
+#elif defined(_MSC_VER)
+	__assume(condition);
+#elif defined(__GNUC__) || defined(__clang__)
+	if (!condition) __builtin_unreachable();
+#endif
+}
+
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((aligned(1))) typedef uint16_t unaligned_uint16;
 __attribute__((aligned(1))) typedef uint32_t unaligned_uint32;
@@ -337,12 +356,6 @@ typedef uint64_t unaligned_uint64;
 
 /* Upstream: For the FMT library we only want to use the headers, not link to some library. */
 //#define FMT_HEADER_ONLY
-
-/* This is an inheritable tag, to enable looking for a fmt_format_value method, which takes a struct format_target & */
-struct fmt_formattable{};
-
-/* This is an inheritable tag, to enable formatting by calling base() */
-struct fmt_format_as_base{};
 
 /* JSON: Don't include IO stream headers/support */
 #define JSON_NO_IO
@@ -400,12 +413,6 @@ inline void free(const void *ptr)
 {
 	free(const_cast<void *>(ptr));
 }
-
-/**
- * The largest value that can be entered in a variable
- * @param type the type of the variable
- */
-#define MAX_UVALUE(type) (static_cast<type>(~static_cast<type>(0)))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #	define IGNORE_UNINITIALIZED_WARNING_START __pragma(warning(push)) __pragma(warning(disable:4700))

@@ -13,6 +13,7 @@
 #include "../../core/bitmath_func.hpp"
 #include "../../strings_func.h"
 #include "../../settings_type.h"
+
 #include "table/strings.h"
 
 #include "../../safeguards.h"
@@ -31,8 +32,7 @@
 {
 	if (!IsValidCargo(cargo_type)) return std::nullopt;
 
-	::SetDParam(0, 1ULL << cargo_type);
-	return GetString(STR_JUST_CARGO_LIST);
+	return ::StrMakeValid(::GetString(STR_JUST_CARGO_LIST, 1ULL << cargo_type), {});
 }
 
 /* static */ std::optional<std::string> ScriptCargo::GetCargoLabel(CargoType cargo_type)
@@ -59,7 +59,7 @@
 /* static */ bool ScriptCargo::HasCargoClass(CargoType cargo_type, CargoClass cargo_class)
 {
 	if (!IsValidCargo(cargo_type)) return false;
-	return ::IsCargoInClass(cargo_type, (::CargoClass)cargo_class);
+	return ::IsCargoInClass(cargo_type, ::CargoClasses(to_underlying(cargo_class)));
 }
 
 /* static */ ScriptCargo::TownEffect ScriptCargo::GetTownEffect(CargoType cargo_type)

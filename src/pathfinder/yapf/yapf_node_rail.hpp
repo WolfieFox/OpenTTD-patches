@@ -16,8 +16,7 @@
 #include "yapf_type.hpp"
 
 /** key for cached segment cost for rail YAPF */
-struct CYapfRailSegmentKey
-{
+struct CYapfRailSegmentKey {
 	using HashKey = uint32_t;
 
 	uint32_t value;
@@ -65,8 +64,7 @@ struct CYapfRailSegmentKey
 };
 
 /** cached segment cost for rail YAPF */
-struct CYapfRailSegment
-{
+struct CYapfRailSegment {
 	typedef CYapfRailSegmentKey Key;
 
 	CYapfRailSegmentKey key;
@@ -75,7 +73,7 @@ struct CYapfRailSegment
 	int cost = -1;
 	TileIndex last_signal_tile = INVALID_TILE;
 	Trackdir last_signal_td = INVALID_TRACKDIR;
-	EndSegmentReasonBits end_segment_reason = ESRB_NONE;
+	EndSegmentReasons end_segment_reason{};
 
 	inline CYapfRailSegment(const CYapfRailSegmentKey &key) : key(key) {}
 
@@ -102,16 +100,12 @@ struct CYapfRailSegment
 };
 
 /** Yapf Node for rail YAPF */
-template <class Tkey_>
-struct CYapfRailNodeT
-	: CYapfNodeT<Tkey_, CYapfRailNodeT<Tkey_> >
-{
-	typedef CYapfNodeT<Tkey_, CYapfRailNodeT<Tkey_> > base;
+struct CYapfRailNode : CYapfNodeT<CYapfNodeKeyTrackDir, CYapfRailNode> {
+	typedef CYapfNodeT<CYapfNodeKeyTrackDir, CYapfRailNode> base;
 	typedef CYapfRailSegment CachedData;
 
 	CYapfRailSegment  *segment;
 	uint16_t          num_signals_passed;
-	uint16_t          num_signals_res_through_passed;
 	union {
 		uint32_t        inherited_flags;
 		struct {
@@ -127,13 +121,12 @@ struct CYapfRailNodeT
 	Trackdir          last_non_reserve_through_signal_td;
 	TileIndex         last_non_reserve_through_signal_tile;
 
-	inline void Set(CYapfRailNodeT *parent, TileIndex tile, Trackdir td, bool is_choice)
+	inline void Set(CYapfRailNode *parent, TileIndex tile, Trackdir td, bool is_choice)
 	{
 		this->base::Set(parent, tile, td, is_choice);
 		this->segment = nullptr;
 		if (parent == nullptr) {
 			this->num_signals_passed                   = 0;
-			this->num_signals_res_through_passed       = 0;
 			this->last_non_reserve_through_signal_tile = INVALID_TILE;
 			this->last_non_reserve_through_signal_td   = INVALID_TRACKDIR;
 			this->flags_u.inherited_flags              = 0;
@@ -151,7 +144,6 @@ struct CYapfRailNodeT
 			this->last_signal_type = SIGTYPE_PBS;
 		} else {
 			this->num_signals_passed                   = parent->num_signals_passed;
-			this->num_signals_res_through_passed       = parent->num_signals_res_through_passed;
 			this->last_non_reserve_through_signal_tile = parent->last_non_reserve_through_signal_tile;
 			this->last_non_reserve_through_signal_td   = parent->last_non_reserve_through_signal_td;
 			this->flags_u.inherited_flags              = parent->flags_u.inherited_flags;
@@ -184,17 +176,17 @@ struct CYapfRailNodeT
 	template <class Tbase, class Tpf, class Tfunc>
 	bool IterateTiles(const Train *v, Tpf &yapf, Tfunc func) const
 	{
-		typename Tbase::TrackFollower ft(v, yapf.GetCompatibleRailTypes());
+		typename Tbase::TrackFollower follower{v, yapf.GetCompatibleRailTypes()};
 		TileIndex cur = this->base::GetTile();
 		Trackdir  cur_td = this->base::GetTrackdir();
 
 		while (cur != GetLastTile() || cur_td != GetLastTrackdir()) {
 			if (!(func(cur, cur_td))) return false;
 
-			if (!ft.Follow(cur, cur_td)) break;
-			cur = ft.new_tile;
-			dbg_assert(KillFirstBit(ft.new_td_bits) == TRACKDIR_BIT_NONE);
-			cur_td = FindFirstTrackdir(ft.new_td_bits);
+			if (!follower.Follow(cur, cur_td)) break;
+			cur = follower.new_tile;
+			dbg_assert(KillFirstBit(follower.new_td_bits) == TRACKDIR_BIT_NONE);
+			cur_td = FindFirstTrackdir(follower.new_td_bits);
 		}
 
 		return func(cur, cur_td);
@@ -226,8 +218,8 @@ struct CYapfRailNodeT
 			cur_td = FindFirstTrackdir(ft.new_td_bits);
 		}
 
-		EndSegmentReasonBits esrb = this->segment->end_segment_reason;
-		if (!(esrb & ESRB_DEAD_END) || (esrb & ESRB_DEAD_END_EOL)) {
+		EndSegmentReasons esr = this->segment->end_segment_reason;
+		if (!esr.Test(EndSegmentReason::DeadEnd) || esr.Test(EndSegmentReason::DeadEndEol)) {
 			length += IsDiagonalTrackdir(cur_td) ? TILE_SIZE : (TILE_SIZE / 2);
 			if (IsTileType(cur, MP_TUNNELBRIDGE) && IsTunnelBridgeSignalSimulationEntrance(cur) && TrackdirEntersTunnelBridge(cur, cur_td)) {
 				length += TILE_SIZE * GetTunnelBridgeLength(cur, GetOtherTunnelBridgeEnd(cur));
@@ -242,7 +234,6 @@ struct CYapfRailNodeT
 		base::Dump(dmp);
 		dmp.WriteStructT("segment", this->segment);
 		dmp.WriteValue("num_signals_passed", this->num_signals_passed);
-		dmp.WriteValue("num_signals_res_through_passed", this->num_signals_res_through_passed);
 		dmp.WriteValue("target_seen", this->flags_u.flags_s.target_seen ? "Yes" : "No");
 		dmp.WriteValue("choice_seen", this->flags_u.flags_s.choice_seen ? "Yes" : "No");
 		dmp.WriteValue("last_signal_was_red", this->flags_u.flags_s.last_signal_was_red ? "Yes" : "No");
@@ -252,12 +243,6 @@ struct CYapfRailNodeT
 	}
 };
 
-/* now define two major node types (that differ by key type) */
-typedef CYapfRailNodeT<CYapfNodeKeyExitDir>  CYapfRailNodeExitDir;
-typedef CYapfRailNodeT<CYapfNodeKeyTrackDir> CYapfRailNodeTrackDir;
-
-/* Default NodeList types */
-typedef NodeList<CYapfRailNodeExitDir> CRailNodeListExitDir;
-typedef NodeList<CYapfRailNodeTrackDir> CRailNodeListTrackDir;
+typedef NodeList<CYapfRailNode> CRailNodeList;
 
 #endif /* YAPF_NODE_RAIL_HPP */

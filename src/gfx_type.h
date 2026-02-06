@@ -22,8 +22,10 @@ typedef uint32_t CursorID;  ///< The number of the cursor (sprite)
 
 /** Combination of a palette sprite and a 'real' sprite */
 struct PalSpriteID {
-	SpriteID sprite;  ///< The 'real' sprite
-	PaletteID pal;    ///< The palette (use \c PAL_NONE) if not needed)
+	SpriteID sprite{};  ///< The 'real' sprite
+	PaletteID pal{};    ///< The palette (use \c PAL_NONE) if not needed)
+
+	auto operator<=>(const PalSpriteID&) const = default;
 };
 
 enum WindowKeyCodes : uint16_t {
@@ -109,8 +111,7 @@ enum WindowKeyCodes : uint16_t {
 
 /** A single sprite of a list of animated cursors */
 struct AnimCursor {
-	static const CursorID LAST = MAX_UVALUE(CursorID);
-	CursorID sprite;   ///< Must be set to LAST_ANIM when it is the last sprite of the loop
+	CursorID sprite; ///< Must be set to LAST_ANIM when it is the last sprite of the loop
 	uint8_t display_time; ///< Amount of ticks this sprite will be shown
 };
 
@@ -140,8 +141,8 @@ struct CursorVars {
 
 	Point draw_pos, draw_size;    ///< position and size bounding-box for drawing
 
-	const AnimCursor *animate_list; ///< in case of animated cursor, list of frames
-	const AnimCursor *animate_cur;  ///< in case of animated cursor, current frame
+	std::span<const AnimCursor> animate_list{}; ///< in case of animated cursor, list of frames
+	std::span<const AnimCursor>::iterator animate_cur = std::end(animate_list);  ///< in case of animated cursor, current frame
 	uint animate_timeout;           ///< in case of animated cursor, number of ticks to show the current cursor
 
 	bool visible;                 ///< cursor is visible
@@ -240,7 +241,6 @@ using Colour = std::conditional_t<std::endian::native == std::endian::little, Co
 
 static_assert(sizeof(Colour) == sizeof(uint32_t));
 
-
 /** Available font sizes */
 enum FontSize : uint8_t {
 	FS_NORMAL, ///< Index of the normal font in the font tables.
@@ -253,9 +253,16 @@ enum FontSize : uint8_t {
 };
 DECLARE_INCREMENT_DECREMENT_OPERATORS(FontSize)
 
-inline const char *FontSizeToName(FontSize fs)
+using FontSizes = EnumBitSet<FontSize, uint8_t>;
+
+/** Mask of all possible font sizes. */
+constexpr FontSizes FONTSIZES_ALL{FS_NORMAL, FS_SMALL, FS_LARGE, FS_MONO};
+/** Mask of font sizes required to be present. */
+constexpr FontSizes FONTSIZES_REQUIRED{FS_NORMAL, FS_SMALL, FS_LARGE};
+
+inline std::string_view FontSizeToName(FontSize fs)
 {
-	static const char *SIZE_TO_NAME[] = { "medium", "small", "large", "mono" };
+	static const std::string_view SIZE_TO_NAME[] = { "medium", "small", "large", "mono" };
 	assert(fs < FS_END);
 	return SIZE_TO_NAME[fs];
 }
@@ -360,7 +367,7 @@ enum class SpriteType : uint8_t {
  * The value 27 together with a day length of 74 ticks makes one day 1998 milliseconds, almost exactly 2 seconds.
  * With a 2 second day, one standard month is 1 minute, and one standard year is slightly over 12 minutes.
  */
-#define MILLISECONDS_PER_TICK ((uint)_milliseconds_per_tick)
+static const uint MILLISECONDS_PER_TICK = 27;
 
 /** Information about the currently used palette. */
 struct Palette {
@@ -393,5 +400,15 @@ enum StringAlignment : uint8_t {
 	SA_FORCE       = 1 << 4, ///< Force the alignment, i.e. don't swap for RTL languages.
 };
 DECLARE_ENUM_AS_BIT_SET(StringAlignment)
+
+/** Colour for pixel/line drawing. */
+struct PixelColour {
+	uint8_t p; ///< Palette index.
+
+	constexpr PixelColour() : p(0) {}
+	explicit constexpr PixelColour(uint8_t p) : p(p) {}
+
+	constexpr inline TextColour ToTextColour() const { return static_cast<TextColour>(this->p) | TC_IS_PALETTE_COLOUR; }
+};
 
 #endif /* GFX_TYPE_H */

@@ -9,13 +9,14 @@
 
 #include "../../stdafx.h"
 #include "script_sign.hpp"
-#include "table/strings.h"
 #include "../script_instance.hpp"
 #include "../../signs_base.h"
 #include "../../signs_cmd.h"
 #include "../../string_func.h"
 #include "../../strings_func.h"
 #include "../../tile_map.h"
+
+#include "table/strings.h"
 
 #include "../../safeguards.h"
 
@@ -44,15 +45,14 @@
 	EnforcePreconditionEncodedText(false, text);
 	EnforcePreconditionCustomError(false, ::Utf8StringLength(text) < MAX_LENGTH_SIGN_NAME_CHARS, ScriptError::ERR_PRECONDITION_STRING_TOO_LONG);
 
-	return ScriptObject::Command<CMD_RENAME_SIGN>::Do(sign_id, text);
+	return ScriptObject::Command<CMD_RENAME_SIGN>::Do(sign_id, text, INVALID_COLOUR);
 }
 
 /* static */ std::optional<std::string> ScriptSign::GetName(SignID sign_id)
 {
 	if (!IsValidSign(sign_id)) return std::nullopt;
 
-	::SetDParam(0, sign_id);
-	return GetString(STR_SIGN_NAME);
+	return ::StrMakeValid(::GetString(STR_SIGN_NAME, sign_id), {});
 }
 
 /* static */ TileIndex ScriptSign::GetLocation(SignID sign_id)
@@ -67,22 +67,22 @@
 {
 	EnforceDeityOrCompanyModeValid(false);
 	EnforcePrecondition(false, IsValidSign(sign_id));
-	return ScriptObject::Command<CMD_RENAME_SIGN>::Do(sign_id, "");
+	return ScriptObject::Command<CMD_RENAME_SIGN>::Do(sign_id, "", INVALID_COLOUR);
 }
 
 /* static */ SignID ScriptSign::BuildSign(TileIndex location, Text *name)
 {
 	ScriptObjectRef counter(name);
 
-	EnforceDeityOrCompanyModeValid(INVALID_SIGN);
-	EnforcePrecondition(INVALID_SIGN, ::IsValidTile(location));
-	EnforcePrecondition(INVALID_SIGN, name != nullptr);
+	EnforceDeityOrCompanyModeValid(SignID::Invalid());
+	EnforcePrecondition(SignID::Invalid(), ::IsValidTile(location));
+	EnforcePrecondition(SignID::Invalid(), name != nullptr);
 	const std::string &text = name->GetDecodedText();
-	EnforcePreconditionEncodedText(INVALID_SIGN, text);
-	EnforcePreconditionCustomError(INVALID_SIGN, ::Utf8StringLength(text) < MAX_LENGTH_SIGN_NAME_CHARS, ScriptError::ERR_PRECONDITION_STRING_TOO_LONG);
+	EnforcePreconditionEncodedText(SignID::Invalid(), text);
+	EnforcePreconditionCustomError(SignID::Invalid(), ::Utf8StringLength(text) < MAX_LENGTH_SIGN_NAME_CHARS, ScriptError::ERR_PRECONDITION_STRING_TOO_LONG);
 
-	if (!ScriptObject::Command<CMD_PLACE_SIGN>::Do(&ScriptInstance::DoCommandReturnSignID, location, text)) return INVALID_SIGN;
+	if (!ScriptObject::Command<CMD_PLACE_SIGN>::Do(&ScriptInstance::DoCommandReturnSignID, location, text)) return SignID::Invalid();
 
 	/* In case of test-mode, we return SignID 0 */
-	return 0;
+	return SignID::Begin();
 }

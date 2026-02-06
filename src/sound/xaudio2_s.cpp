@@ -12,11 +12,10 @@
 #include "../driver.h"
 #include "../mixer.h"
 #include "../debug.h"
-#include "../core/alloc_func.hpp"
 #include "../core/bitmath_func.hpp"
 #include "../core/math_func.hpp"
 
-// Windows 8 SDK required for XAudio2
+/* Windows 8 SDK required for XAudio2 */
 #undef NTDDI_VERSION
 #undef _WIN32_WINNT
 
@@ -39,7 +38,7 @@ using Microsoft::WRL::ComPtr;
 #include "../os/windows/win32.h"
 #include "../safeguards.h"
 
-// Definition of the "XAudio2Create" call used to initialise XAudio2
+/* Definition of the "XAudio2Create" call used to initialise XAudio2 */
 typedef HRESULT(__stdcall *API_XAudio2Create)(_Outptr_ IXAudio2 **ppXAudio2, UINT32 Flags, XAUDIO2_PROCESSOR XAudio2Processor);
 
 static FSoundDriver_XAudio2 iFSoundDriver_XAudio2;
@@ -61,9 +60,11 @@ public:
 		this->buffer.resize(buffer_length);
 	}
 
+	virtual ~StreamingVoiceContext() = default;
+
 	HRESULT SubmitBuffer()
 	{
-		// Ensure we do have a valid voice
+		/* Ensure we do have a valid voice */
 		if (this->source_voice == nullptr) {
 			return E_FAIL;
 		}
@@ -166,7 +167,7 @@ const char *SoundDriver_XAudio2::Start(const StringList &parm)
 		return "Failed to load XAudio2 DLL";
 	}
 
-	// Create the XAudio engine
+	/* Create the XAudio engine */
 	hr = CreateXAudio(xAudio2Create);
 
 	if (FAILED(hr)) {
@@ -174,10 +175,10 @@ const char *SoundDriver_XAudio2::Start(const StringList &parm)
 		CoUninitialize();
 
 		Debug(driver, 0, "xaudio2_s: XAudio2Create failed ({:08x})", (uint)hr);
-		return "Failed to inititialise the XAudio2 engine";
+		return "Failed to initialise the XAudio2 engine";
 	}
 
-	// Create a mastering voice
+	/* Create a mastering voice */
 	hr = _xaudio2->CreateMasteringVoice(&_mastering_voice);
 
 	if (FAILED(hr)) {
@@ -189,7 +190,7 @@ const char *SoundDriver_XAudio2::Start(const StringList &parm)
 		return "Failed to create a mastering voice";
 	}
 
-	// Create a source voice to stream our audio
+	/* Create a source voice to stream our audio */
 	WAVEFORMATEX wfex;
 
 	wfex.wFormatTag = WAVE_FORMAT_PCM;
@@ -199,7 +200,7 @@ const char *SoundDriver_XAudio2::Start(const StringList &parm)
 	wfex.nBlockAlign = (wfex.nChannels * wfex.wBitsPerSample) / 8;
 	wfex.nAvgBytesPerSec = wfex.nSamplesPerSec * wfex.nBlockAlign;
 
-	// Limit buffer size to prevent overflows
+	/* Limit buffer size to prevent overflows */
 	int bufsize = GetDriverParamInt(parm, "samples", 2048);
 	bufsize = std::min<int>(bufsize, UINT16_MAX);
 
@@ -238,7 +239,7 @@ const char *SoundDriver_XAudio2::Start(const StringList &parm)
 
 	MxInitialize(wfex.nSamplesPerSec);
 
-	// Submit the first buffer
+	/* Submit the first buffer */
 	hr = _voice_context->SubmitBuffer();
 
 	if (FAILED(hr)) {
@@ -256,7 +257,7 @@ const char *SoundDriver_XAudio2::Start(const StringList &parm)
  */
 void SoundDriver_XAudio2::Stop()
 {
-	// Clean up XAudio2
+	/* Clean up XAudio2 */
 	_source_voice->DestroyVoice();
 
 	_voice_context = nullptr;

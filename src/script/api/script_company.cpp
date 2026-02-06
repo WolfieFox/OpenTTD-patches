@@ -11,6 +11,7 @@
 #include "script_company.hpp"
 #include "script_error.hpp"
 #include "script_companymode.hpp"
+#include "../script_fatalerror.hpp"
 #include "../../company_func.h"
 #include "../../company_base.h"
 #include "../../company_cmd.h"
@@ -24,6 +25,7 @@
 #include "../../settings_cmd.h"
 #include "../../settings_func.h"
 #include "../../misc_cmd.h"
+
 #include "table/strings.h"
 
 #include "../../safeguards.h"
@@ -31,16 +33,18 @@
 /* static */ ::CompanyID ScriptCompany::FromScriptCompanyID(ScriptCompany::CompanyID company)
 {
 	/* If this assert gets triggered, then ScriptCompany::ResolveCompanyID needed to be called before. */
-	assert(company != ScriptCompany::COMPANY_SELF && company != ScriptCompany::COMPANY_SPECTATOR);
+	if (!(company != ScriptCompany::COMPANY_SELF && company != ScriptCompany::COMPANY_SPECTATOR)) {
+		throw Script_FatalError("ScriptCompany::FromScriptCompanyID: Invalid company ID");
+	}
 
-	if (company == ScriptCompany::COMPANY_INVALID) return ::INVALID_COMPANY;
+	if (company == ScriptCompany::COMPANY_INVALID) return ::CompanyID::Invalid();
 	return static_cast<::CompanyID>(company);
 }
 
 /* static */ ScriptCompany::CompanyID ScriptCompany::ToScriptCompanyID(::CompanyID company)
 {
-	if (company == ::INVALID_COMPANY) return ScriptCompany::COMPANY_INVALID;
-	return static_cast<::ScriptCompany::CompanyID>(company);
+	if (company == ::CompanyID::Invalid()) return ScriptCompany::COMPANY_INVALID;
+	return static_cast<::ScriptCompany::CompanyID>(company.base());
 }
 
 /* static */ ScriptCompany::CompanyID ScriptCompany::ResolveCompanyID(ScriptCompany::CompanyID company)
@@ -77,8 +81,7 @@
 	company = ResolveCompanyID(company);
 	if (company == ScriptCompany::COMPANY_INVALID) return std::nullopt;
 
-	::SetDParam(0, ScriptCompany::FromScriptCompanyID(company));
-	return GetString(STR_COMPANY_NAME);
+	return ::StrMakeValid(::GetString(STR_COMPANY_NAME, ScriptCompany::FromScriptCompanyID(company)), {});
 }
 
 /* static */ bool ScriptCompany::SetPresidentName(Text *name)
@@ -99,8 +102,7 @@
 	company = ResolveCompanyID(company);
 	if (company == ScriptCompany::COMPANY_INVALID) return std::nullopt;
 
-	::SetDParam(0, ScriptCompany::FromScriptCompanyID(company));
-	return GetString(STR_PRESIDENT_NAME);
+	return ::StrMakeValid(::GetString(STR_PRESIDENT_NAME, ScriptCompany::FromScriptCompanyID(company)), {});
 }
 
 /* static */ bool ScriptCompany::SetPresidentGender(Gender gender)
@@ -109,12 +111,18 @@
 	EnforcePrecondition(false, gender == GENDER_MALE || gender == GENDER_FEMALE);
 	EnforcePrecondition(false, GetPresidentGender(ScriptCompany::COMPANY_SELF) != gender);
 
-	Randomizer &randomizer = ScriptObject::GetRandomizer();
-	CompanyManagerFace cmf;
-	GenderEthnicity ge = (GenderEthnicity)((gender == GENDER_FEMALE ? (1 << ::GENDER_FEMALE) : 0) | (randomizer.Next() & (1 << ETHNICITY_BLACK)));
-	RandomCompanyManagerFaceBits(cmf, ge, false, randomizer);
+	assert(GetNumCompanyManagerFaceStyles() >= 2); /* At least two styles are needed to fake a gender. */
 
-	return ScriptObject::Command<CMD_SET_COMPANY_MANAGER_FACE>::Do(cmf);
+	/* Company faces no longer have a defined gender, so pick a random face style instead. */
+	Randomizer &randomizer = ScriptObject::GetRandomizer();
+	CompanyManagerFace cmf{};
+	do {
+		cmf.style = randomizer.Next(GetNumCompanyManagerFaceStyles());
+	} while ((HasBit(cmf.style, 0) ? GENDER_FEMALE : GENDER_MALE) != gender);
+
+	RandomiseCompanyManagerFaceBits(cmf, GetCompanyManagerFaceVars(cmf.style), randomizer);
+
+	return ScriptObject::Command<CMD_SET_COMPANY_MANAGER_FACE>::Do(cmf.style, cmf.bits);
 }
 
 /* static */ ScriptCompany::Gender ScriptCompany::GetPresidentGender(ScriptCompany::CompanyID company)
@@ -122,8 +130,10 @@
 	company = ResolveCompanyID(company);
 	if (company == ScriptCompany::COMPANY_INVALID) return GENDER_INVALID;
 
-	GenderEthnicity ge = (GenderEthnicity)GetCompanyManagerFaceBits(Company::Get(ScriptCompany::FromScriptCompanyID(company))->face, CMFV_GEN_ETHN, GE_WM);
-	return HasBit(ge, ::GENDER_FEMALE) ? GENDER_FEMALE : GENDER_MALE;
+	/* Company faces no longer have a defined gender, so fake one based on the style index. This might not match
+	 * the face appearance. */
+	const auto &cmf = ::Company::Get(ScriptCompany::FromScriptCompanyID(company))->face;
+	return HasBit(cmf.style, 0) ? GENDER_FEMALE : GENDER_MALE;
 }
 
 /* static */ Money ScriptCompany::GetQuarterlyIncome(ScriptCompany::CompanyID company, SQInteger quarter)

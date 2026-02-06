@@ -4,7 +4,6 @@
 #include "../core/math_func.hpp"
 #include "mcf.h"
 #include "../3rdparty/cpp-btree/btree_map.h"
-#include <set>
 
 #include "../safeguards.h"
 
@@ -82,7 +81,7 @@ static_assert(std::is_trivially_destructible_v<DistanceAnnotation>);
  * can only decrease or stay the same if you add more edges.
  */
 class CapacityAnnotation final : public Path {
-	int cached_annotation;
+	int cached_annotation = 0;
 
 public:
 	typedef int AnnotationValueType;
@@ -198,7 +197,7 @@ private:
 	LinkGraphJob &job; ///< Link graph job we're working with.
 
 	/** Lookup table for getting NodeIDs from StationIDs. */
-	std::vector<NodeID> station_to_node;
+	TypedIndexContainer<std::vector<NodeID>, StationID> station_to_node;
 
 	/** Current iterator in the shares map. */
 	FlowStat::const_iterator it;

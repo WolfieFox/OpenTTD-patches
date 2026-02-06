@@ -29,12 +29,6 @@ static const int MAX_GET_SETTING_OPS    = 100000;
 /** All static information from an Script like name, version, etc. */
 class ScriptInfo : public SimpleCountedObject {
 public:
-	ScriptInfo() :
-		engine(nullptr),
-		version(0),
-		scanner(nullptr)
-	{}
-
 	/**
 	 * Get the Author of the script.
 	 */
@@ -88,12 +82,12 @@ public:
 	/**
 	 * Check if a given method exists.
 	 */
-	bool CheckMethod(const char *name) const;
+	bool CheckMethod(std::string_view name) const;
 
 	/**
 	 * Process the creation of a FileInfo object.
 	 */
-	static SQInteger Constructor(HSQUIRRELVM vm, ScriptInfo *info);
+	static SQInteger Constructor(HSQUIRRELVM vm, ScriptInfo &info);
 
 	/**
 	 * Get the scanner which has found this ScriptInfo.
@@ -113,7 +107,7 @@ public:
 	/**
 	 * Get the description of a certain Script config option.
 	 */
-	const ScriptConfigItem *GetConfigItem(const std::string_view name) const;
+	const ScriptConfigItem *GetConfigItem(std::string_view name) const;
 
 	/**
 	 * Set a setting.
@@ -136,26 +130,26 @@ public:
 	virtual bool IsDeveloperOnly() const { return false; }
 
 protected:
-	class Squirrel *engine;           ///< Engine used to register for Squirrel.
-	HSQOBJECT SQ_instance;            ///< The Squirrel instance created for this info.
-	ScriptConfigItemList config_list; ///< List of settings from this Script.
+	class Squirrel *engine = nullptr; ///< Engine used to register for Squirrel.
+	HSQOBJECT SQ_instance{}; ///< The Squirrel instance created for this info.
+	ScriptConfigItemList config_list{}; ///< List of settings from this Script.
 
 private:
-	std::string main_script;      ///< The full path of the script.
-	std::string tar_file;         ///< If, which tar file the script was in.
-	std::string author;           ///< Author of the script.
-	std::string name;             ///< Full name of the script.
-	std::string short_name;       ///< Short name (4 chars) which uniquely identifies the script.
-	std::string description;      ///< Small description of the script.
-	std::string date;             ///< The date the script was written at.
-	std::string instance_name;    ///< Name of the main class in the script.
-	int version;                  ///< Version of the script.
-	std::string url;              ///< URL of the script.
+	std::string main_script{}; ///< The full path of the script.
+	std::string tar_file{}; ///< If, which tar file the script was in.
+	std::string author{}; ///< Author of the script.
+	std::string name{}; ///< Full name of the script.
+	std::string short_name{}; ///< Short name (4 chars) which uniquely identifies the script.
+	std::string description{}; ///< Small description of the script.
+	std::string date{}; ///< The date the script was written at.
+	std::string instance_name{}; ///< Name of the main class in the script.
+	int version = 0; ///< Version of the script.
+	std::string url{}; ///< URL of the script.
 
-	class ScriptScanner *scanner; ///< ScriptScanner object that was used to scan this script info.
+	class ScriptScanner *scanner = nullptr; ///< ScriptScanner object that was used to scan this script info.
 };
 
-void Script_CreateDummyInfo(HSQUIRRELVM vm, const char *type, const char *dir);
-void Script_CreateDummy(HSQUIRRELVM vm, StringID string, const char *type);
+void Script_CreateDummyInfo(HSQUIRRELVM vm, std::string_view type, std::string_view dir);
+void Script_CreateDummy(HSQUIRRELVM vm, StringID string, std::string_view type);
 
 #endif /* SCRIPT_INFO_HPP */

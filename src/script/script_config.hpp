@@ -11,7 +11,6 @@
 #define SCRIPT_CONFIG_HPP
 
 #include <map>
-#include <list>
 #include "../company_type.h"
 #include "../textfile_gui.h"
 #include "script_instance.hpp"
@@ -20,14 +19,15 @@
 /** Maximum of 10 digits for MIN / MAX_INT32, 1 for the sign and 1 for '\0'. */
 static const int INT32_DIGITS_WITH_SIGN_AND_TERMINATION = 10 + 1 + 1;
 
-/** Bitmask of flags for Script settings. */
-enum ScriptConfigFlags : uint8_t {
-	SCRIPTCONFIG_NONE      = 0x0, ///< No flags set.
-	// Unused flag 0x1.
-	SCRIPTCONFIG_BOOLEAN   = 0x2, ///< This value is a boolean (either 0 (false) or 1 (true) ).
-	SCRIPTCONFIG_INGAME    = 0x4, ///< This setting can be changed while the Script is running.
-	SCRIPTCONFIG_DEVELOPER = 0x8, ///< This setting will only be visible when the Script development tools are active.
+/** Flags for Script settings. */
+enum class ScriptConfigFlag : uint8_t {
+	/* Unused flag 0x1. */
+	Boolean   = 1, ///< This value is a boolean (either 0 (false) or 1 (true) ).
+	InGame    = 2, ///< This setting can be changed while the Script is running.
+	Developer = 3, ///< This setting will only be visible when the Script development tools are active.
 };
+
+using ScriptConfigFlags = EnumBitSet<ScriptConfigFlag, uint8_t>;
 
 typedef std::map<int, std::string> LabelMapping; ///< Map-type used to map the setting numbers to labels.
 
@@ -39,9 +39,12 @@ struct ScriptConfigItem {
 	int max_value = 1;            ///< The maximal value this configuration setting can have.
 	int default_value = 0;        ///< The default value of this configuration setting.
 	int step_size = 1;            ///< The step size in the gui.
-	ScriptConfigFlags flags = SCRIPTCONFIG_NONE; ///< Flags for the configuration setting.
+	ScriptConfigFlags flags{};    ///< Flags for the configuration setting.
 	LabelMapping labels;          ///< Text labels for the integer values.
 	bool complete_labels = false; ///< True if all values have a label.
+
+	std::string GetString(int value) const;
+	TextColour GetColour() const;
 };
 
 typedef std::vector<ScriptConfigItem> ScriptConfigItemList; ///< List of ScriptConfig items.
@@ -65,7 +68,7 @@ public:
 	 * Create a new Script config that is a copy of an existing config.
 	 * @param config The object to copy.
 	 */
-	ScriptConfig(const ScriptConfig *config);
+	ScriptConfig(const ScriptConfig &config);
 
 	/** Delete an Script configuration. */
 	virtual ~ScriptConfig();
@@ -77,7 +80,7 @@ public:
 	 * @param force_exact_match If true try to find the exact same version
 	 *   as specified. If false any compatible version is ok.
 	 */
-	void Change(std::optional<const std::string> name, int version = -1, bool force_exact_match = false);
+	void Change(std::optional<std::string_view> name, int version = -1, bool force_exact_match = false);
 
 	/**
 	 * Get the ScriptInfo linked to this ScriptConfig.
@@ -121,7 +124,7 @@ public:
 	/**
 	 * Set the value of a setting for this config.
 	 */
-	void SetSetting(const std::string_view name, int value);
+	void SetSetting(std::string_view name, int value);
 
 	/**
 	 * Reset all settings to their default value.
@@ -153,7 +156,7 @@ public:
 	 * Convert a string which is stored in the config file or savegames to
 	 *  custom settings of this Script.
 	 */
-	void StringToSettings(const std::string &value);
+	void StringToSettings(std::string_view value);
 
 	/**
 	 * Convert the custom settings to a string that can be stored in the config

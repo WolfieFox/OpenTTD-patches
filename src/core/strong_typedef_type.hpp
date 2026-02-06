@@ -11,7 +11,14 @@
 #define STRONG_TYPEDEF_TYPE_HPP
 
 /** Non-templated base for #StrongType::Typedef for use with type trait queries. */
-struct StrongTypedefBase {};
+struct StrongTypedefBase {
+	static inline constexpr bool serialisation_as_base = true;
+	static inline constexpr bool saveload_primitive_type = true;
+	static inline constexpr bool string_parameter_as_base = true;
+	static inline constexpr bool script_stack_value_as_base = true;
+	static inline constexpr bool integer_type_hint = true;
+	static inline constexpr bool hash_as_base = true;
+};
 
 namespace StrongType {
 	/**
@@ -22,21 +29,6 @@ namespace StrongType {
 		struct mixin {
 			friend constexpr bool operator ==(const TType &lhs, const TType &rhs) { return lhs.value == rhs.value; }
 			friend constexpr bool operator ==(const TType &lhs, const TBaseType &rhs) { return lhs.value == rhs; }
-
-			friend constexpr bool operator !=(const TType &lhs, const TType &rhs) { return lhs.value != rhs.value; }
-			friend constexpr bool operator !=(const TType &lhs, const TBaseType &rhs) { return lhs.value != rhs; }
-
-			friend constexpr bool operator <=(const TType &lhs, const TType &rhs) { return lhs.value <= rhs.value; }
-			friend constexpr bool operator <=(const TType &lhs, const TBaseType &rhs) { return lhs.value <= rhs; }
-
-			friend constexpr bool operator <(const TType &lhs, const TType &rhs) { return lhs.value < rhs.value; }
-			friend constexpr bool operator <(const TType &lhs, const TBaseType &rhs) { return lhs.value < rhs; }
-
-			friend constexpr bool operator >=(const TType &lhs, const TType &rhs) { return lhs.value >= rhs.value; }
-			friend constexpr bool operator >=(const TType &lhs, const TBaseType &rhs) { return lhs.value >= rhs; }
-
-			friend constexpr bool operator >(const TType &lhs, const TType &rhs) { return lhs.value > rhs.value; }
-			friend constexpr bool operator >(const TType &lhs, const TBaseType &rhs) { return lhs.value > rhs; }
 
 			friend constexpr auto operator <=>(const TType &lhs, const TType &rhs) { return lhs.value <=> rhs.value; }
 			friend constexpr auto operator <=>(const TType &lhs, const TBaseType &rhs) { return lhs.value <=> rhs; }
@@ -269,12 +261,7 @@ namespace StrongType {
 		template <typename TType, typename TBaseType>
 		struct mixin {
 			friend constexpr bool operator ==(const TType &lhs, TCompatibleType rhs) { return lhs.value == static_cast<TBaseType>(rhs); }
-			friend constexpr bool operator !=(const TType &lhs, TCompatibleType rhs) { return lhs.value != static_cast<TBaseType>(rhs); }
-
-			friend constexpr bool operator <=(const TType &lhs, TCompatibleType rhs) { return lhs.value <= static_cast<TBaseType>(rhs); }
-			friend constexpr bool operator <(const TType &lhs, TCompatibleType rhs) { return lhs.value < static_cast<TBaseType>(rhs); }
-			friend constexpr bool operator >=(const TType &lhs, TCompatibleType rhs) { return lhs.value >= static_cast<TBaseType>(rhs); }
-			friend constexpr bool operator >(const TType &lhs, TCompatibleType rhs) { return lhs.value > static_cast<TBaseType>(rhs); }
+			friend constexpr auto operator <=>(const TType &lhs, TCompatibleType rhs) { return lhs.value <=> static_cast<TBaseType>(rhs); }
 
 			friend constexpr TType operator +(const TType &lhs, TCompatibleType rhs) { return TType(lhs.value + rhs); }
 			friend constexpr TType operator -(const TType &lhs, TCompatibleType rhs) { return TType(lhs.value - rhs); }
@@ -306,6 +293,9 @@ namespace StrongType {
 		using Properties = detail::Properties<TProperties...>;
 
 		struct dummy{};
+		struct fmt_format_as_base {
+			static inline constexpr bool fmt_as_base = true;
+		};
 		using FmtTag = std::conditional_t<(std::is_same_v<TProperties, NoDefaultFormat> || ...), dummy, fmt_format_as_base>;
 	};
 
@@ -327,8 +317,8 @@ struct EMPTY_BASES ST : public StrongTypedefBase, public TTraits::FmtTag, public
 
 	explicit constexpr ST(const BaseType &value) : value(value) {}
 
-	constexpr ST &operator =(const ST &rhs) { this->value = rhs.value; return *this; }
-	constexpr ST &operator =(ST &&rhs) { this->value = std::move(rhs.value); return *this; }
+	constexpr ST &operator =(const ST &rhs) = default;
+	constexpr ST &operator =(ST &&rhs) = default;
 
 	/* Only allow conversion to BaseType via method. */
 	constexpr BaseType base() const { return this->value; }
@@ -361,7 +351,7 @@ struct EMPTY_BASES STRef : public StrongTypedefBase, public TTraits::FmtTag, pub
 
 	explicit constexpr STRef(BaseType &value) : value(value) {}
 
-	constexpr STRef &operator =(const STRef &rhs) { this->value = rhs.value; return *this; }
+	constexpr STRef &operator =(const STRef &rhs) = default;
 	constexpr STRef &operator =(STRef &&rhs) { this->value = std::move(rhs.value); return *this; }
 	constexpr STRef &operator =(const ValueType &rhs) { this->value = rhs.base(); return *this; }
 	constexpr STRef &operator =(ValueType &&rhs) { this->value = std::move(rhs.edit_base()); return *this; }

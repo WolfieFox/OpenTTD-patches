@@ -96,7 +96,7 @@ public:
 		VS_INVALID = 0xFF, ///< An invalid vehicle state.
 	};
 
-	static const VehicleID VEHICLE_INVALID = 0xFFFFF; ///< Invalid VehicleID.
+	static constexpr VehicleID VEHICLE_INVALID = ::VehicleID::Invalid(); ///< Invalid VehicleID.
 
 	/**
 	 * Checks whether the given vehicle is valid and owned by you.
@@ -371,7 +371,7 @@ public:
 	 *   is owned by you.
 	 * @pre ScriptEngine::IsBuildable(engine_id).
 	 * @pre ScriptCargo::IsValidCargo(cargo).
-	 * @return The capacity the vehicle will have when refited.
+	 * @return The capacity the vehicle will have when refitted.
 	 */
 	static SQInteger GetBuildWithRefitCapacity(TileIndex depot, EngineID engine_id, CargoType cargo);
 
@@ -432,7 +432,7 @@ public:
 	 * @pre ScriptCargo::IsValidCargo(cargo).
 	 * @pre You must own the vehicle.
 	 * @pre The vehicle must be stopped in the depot.
-	 * @return The capacity the vehicle will have when refited.
+	 * @return The capacity the vehicle will have when refitted.
 	 */
 	static SQInteger GetRefitCapacity(VehicleID vehicle_id, CargoType cargo);
 

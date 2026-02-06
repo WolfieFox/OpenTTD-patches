@@ -230,7 +230,7 @@ static std::initializer_list<SettingsCompat> _settings_compat{
 	SLCX_VAR("order.gradual_loading"),
 	SLCX_VAR("construction.road_stop_on_town_road"),
 	SLCX_VAR("construction.road_stop_on_competitor_road"),
-	SLCX_XREF("construction.road_custom_bridge_heads", SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_JOKERPP)),
+	SLCX_NULL_X(1, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_JOKERPP)), // construction.road_custom_bridge_heads
 	SLCX_NULL(1, SLV_62, SLV_TABLE_CHUNKS), // station.adjacent_stations
 	SLCX_VAR("economy.station_noise_level"),
 	SLCX_VAR("station.distant_join_stations"),
@@ -342,7 +342,7 @@ static std::initializer_list<SettingsCompat> _settings_compat{
 	SLCX_NULL_X(4, SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_CHILLPP, SL_CHILLPP_232)), // pf.npf.npf_road_trafficlight_penalty
 	SLCX_NULL(8, SLV_130, SLV_TABLE_CHUNKS), // pf.npf.npf_road_dt_occupied_penalty, pf.npf.npf_road_bay_occupied_penalty
 	SLCX_NULL(4, SLV_131, SLV_TABLE_CHUNKS), // pf.npf.maximum_go_to_depot_penalty
-	SLCX_VAR("pf.yapf.disable_node_optimization"),
+	SLCX_NULL(1, SLV_28, SLV_TABLE_CHUNKS), // pf.yapf.disable_node_optimization
 	SLCX_VAR("pf.yapf.max_search_nodes"),
 	SLCX_VAR("pf.yapf.rail_firstred_twoway_eol"),
 	SLCX_VAR("pf.yapf.rail_firstred_penalty"),

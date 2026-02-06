@@ -29,7 +29,7 @@
  */
 [[noreturn]] void FatalErrorI(const std::string &msg)
 {
-	fmt::print(stderr, "settingsgen: FATAL: {}\n", msg);
+	fmt_print_no_system_error(stderr, "settingsgen: FATAL: {}\n", msg);
 	exit(1);
 }
 
@@ -173,9 +173,9 @@ struct SettingsIniFile : IniLoadFile {
 		return in;
 	}
 
-	void ReportFileError(const char * const pre, const char * const buffer, const char * const post) override
+	void ReportFileError(std::string_view message) override
 	{
-		FatalError("{}{}{}", pre, buffer, post);
+		FatalError("{}", message);
 	}
 };
 

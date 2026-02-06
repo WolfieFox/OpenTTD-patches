@@ -15,12 +15,15 @@
 /** All static information from an Game like name, version, etc. */
 class GameInfo : public ScriptInfo {
 public:
+	/* All valid GameScript API versions, in order. */
+	static constexpr std::string_view ApiVersions[]{ "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "12", "13", "14", "15", "16" };
+
 	GameInfo();
 
 	/**
 	 * Register the functions of this class.
 	 */
-	static void RegisterAPI(Squirrel *engine);
+	static void RegisterAPI(Squirrel &engine);
 
 	/**
 	 * Create an Game, using this GameInfo as start-template.
@@ -53,7 +56,7 @@ public:
 	/**
 	 * Register the functions of this class.
 	 */
-	static void RegisterAPI(Squirrel *engine);
+	static void RegisterAPI(Squirrel &engine);
 
 	/**
 	 * Create an GSLibrary, using this GSInfo as start-template.

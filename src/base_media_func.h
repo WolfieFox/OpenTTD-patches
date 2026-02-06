@@ -7,7 +7,6 @@
 
 /**
  * @file base_media_func.h Generic function implementations for base data (graphics, sounds).
- * @note You should _never_ include this file due to the SET_TYPE define.
  */
 
 #include "base_media_base.h"
@@ -15,20 +14,38 @@
 #include "ini_type.h"
 #include "string_func.h"
 #include "error_func.h"
+#include <map>
 
 extern void CheckExternalFiles();
 
 /**
- * Try to read a single piece of metadata and return false if it doesn't exist.
+ * Log error from reading basesets.
+ * @param full_filename the full filename of the loaded file
+ * @param detail detail log message
+ * @param level debug level
+ */
+template <class T>
+void BaseSet<T>::LogError(std::string_view full_filename, std::string_view detail, int level) const
+{
+	Debug(misc, level, "Loading base {}set details failed: {}", BaseSet<T>::SET_TYPE, full_filename);
+	Debug(misc, level, "  {}", detail);
+}
+
+/**
+ * Try to read a single piece of metadata and return nullptr if it doesn't exist.
+ * Log error, if the data is missing.
+ * @param full_filename the full filename of the loaded file (for error reporting purposes)
+ * @param group ini group to read from
  * @param name the name of the item to fetch.
  */
-#define fetch_metadata(name) \
-	item = metadata->GetItem(name); \
-	if (item == nullptr || !item->value.has_value() || item->value->empty()) { \
-		Debug(grf, 0, "Base " SET_TYPE "set detail loading: {} field missing.", name); \
-		Debug(grf, 0, "  Is {} readable for the user running OpenTTD?", full_filename); \
-		return false; \
-	}
+template <class T>
+const IniItem *BaseSet<T>::GetMandatoryItem(std::string_view full_filename, const IniGroup &group, std::string_view name) const
+{
+	auto *item = group.GetItem(name);
+	if (item != nullptr && item->value.has_value() && !item->value->empty()) return item;
+	this->LogError(full_filename, fmt::format("{}.{} field missing.", group.name, name));
+	return nullptr;
+}
 
 /**
  * Read the set information from a loaded ini.
@@ -38,22 +55,25 @@ extern void CheckExternalFiles();
  * @param allow_empty_filename empty filenames are valid
  * @return true if loading was successful.
  */
-template <class T, size_t Tnum_files, bool Tsearch_in_tars>
-bool BaseSet<T, Tnum_files, Tsearch_in_tars>::FillSetDetails(const IniFile &ini, const std::string &path, const std::string &full_filename, bool allow_empty_filename)
+template <class T>
+bool BaseSet<T>::FillSetDetails(const IniFile &ini, const std::string &path, const std::string &full_filename, bool allow_empty_filename)
 {
 	const IniGroup *metadata = ini.GetGroup("metadata");
 	if (metadata == nullptr) {
-		Debug(grf, 0, "Base " SET_TYPE "set detail loading: metadata missing.");
-		Debug(grf, 0, "  Is {} readable for the user running OpenTTD?", full_filename);
+		this->LogError(full_filename, "Is the file readable for the user running OpenTTD?");
 		return false;
 	}
 	const IniItem *item;
 
-	fetch_metadata("name");
+	item = this->GetMandatoryItem(full_filename, *metadata, "name");
+	if (item == nullptr) return false;
 	this->name = *item->value;
 
-	fetch_metadata("description");
-	this->description[std::string{}] = *item->value;
+	std::map<std::string_view, std::string> descriptions;
+
+	item = this->GetMandatoryItem(full_filename, *metadata, "description");
+	if (item == nullptr) return false;
+	descriptions[std::string_view{}] = *item->value;
 
 	item = metadata->GetItem("url");
 	if (item != nullptr) this->url = *item->value;
@@ -62,16 +82,27 @@ bool BaseSet<T, Tnum_files, Tsearch_in_tars>::FillSetDetails(const IniFile &ini,
 	for (const IniItem &titem : metadata->items) {
 		if (titem.name.compare(0, 12, "description.") != 0) continue;
 
-		this->description[titem.name.substr(12)] = titem.value.value_or("");
+		descriptions[std::string_view(titem.name).substr(12)] = titem.value.value_or("");
 	}
+	this->description.reserve(descriptions.size());
+	for (auto &it : descriptions) {
+		/* Create description list pre-sorted and with duplicates removed due to std::map temporary. */
+		this->description.emplace_back(it.first, std::move(it.second));
+	}
+	descriptions.clear();
 
-	fetch_metadata("shortname");
+	item = this->GetMandatoryItem(full_filename, *metadata, "shortname");
+	if (item == nullptr) return false;
 	for (uint i = 0; (*item->value)[i] != '\0' && i < 4; i++) {
 		this->shortname |= ((uint8_t)(*item->value)[i]) << (i * 8);
 	}
 
-	fetch_metadata("version");
-	this->version = atoi(item->value->c_str());
+	item = this->GetMandatoryItem(full_filename, *metadata, "version");
+	if (item == nullptr) return false;
+	if (!this->ReadVersionString(*item->value)) {
+		this->LogError(full_filename, fmt::format("metadata.version field is invalid: {}", *item->value));
+		return false;
+	}
 
 	item = metadata->GetItem("fallback");
 	this->fallback = (item != nullptr && item->value && *item->value != "0" && *item->value != "false");
@@ -80,12 +111,19 @@ bool BaseSet<T, Tnum_files, Tsearch_in_tars>::FillSetDetails(const IniFile &ini,
 	const IniGroup *files  = ini.GetGroup("files");
 	const IniGroup *md5s   = ini.GetGroup("md5s");
 	const IniGroup *origin = ini.GetGroup("origin");
-	for (uint i = 0; i < Tnum_files; i++) {
+	auto file_names = BaseSet<T>::GetFilenames();
+	bool original_set =
+		std::byteswap(this->shortname) == 'TTDD' || // TTD DOS graphics, TTD DOS music
+		std::byteswap(this->shortname) == 'TTDW' || // TTD WIN graphics, TTD WIN music
+		std::byteswap(this->shortname) == 'TTDO' || // TTD sound
+		std::byteswap(this->shortname) == 'TTOD'; // TTO music
+
+	for (uint i = 0; i < BaseSet<T>::NUM_FILES; i++) {
 		MD5File *file = &this->files[i];
 		/* Find the filename first. */
-		item = files != nullptr ? files->GetItem(BaseSet<T, Tnum_files, Tsearch_in_tars>::file_names[i]) : nullptr;
+		item = files != nullptr ? files->GetItem(file_names[i]) : nullptr;
 		if (item == nullptr || (!item->value.has_value() && !allow_empty_filename)) {
-			Debug(grf, 0, "No " SET_TYPE " file for: {} (in {})", BaseSet<T, Tnum_files, Tsearch_in_tars>::file_names[i], full_filename);
+			this->LogError(full_filename, fmt::format("files.{} field missing", file_names[i]));
 			return false;
 		}
 
@@ -103,34 +141,19 @@ bool BaseSet<T, Tnum_files, Tsearch_in_tars>::FillSetDetails(const IniFile &ini,
 		/* Then find the MD5 checksum */
 		item = md5s != nullptr ? md5s->GetItem(filename) : nullptr;
 		if (item == nullptr || !item->value.has_value()) {
-			Debug(grf, 0, "No MD5 checksum specified for: {} (in {})", filename, full_filename);
+			this->LogError(full_filename, fmt::format("md5s.{} field missing", filename));
 			return false;
 		}
-		const char *c = item->value->c_str();
-		for (size_t i = 0; i < file->hash.size() * 2; i++, c++) {
-			uint j;
-			if ('0' <= *c && *c <= '9') {
-				j = *c - '0';
-			} else if ('a' <= *c && *c <= 'f') {
-				j = *c - 'a' + 10;
-			} else if ('A' <= *c && *c <= 'F') {
-				j = *c - 'A' + 10;
-			} else {
-				Debug(grf, 0, "Malformed MD5 checksum specified for: {} (in {})", filename, full_filename);
-				return false;
-			}
-			if (i % 2 == 0) {
-				file->hash[i / 2] = j << 4;
-			} else {
-				file->hash[i / 2] |= j;
-			}
+		if (!ConvertHexToBytes(*item->value, file->hash)) {
+			this->LogError(full_filename, fmt::format("md5s.{} is malformed: {}", filename, *item->value));
+			return false;
 		}
 
 		/* Then find the warning message when the file's missing */
 		item = origin != nullptr ? origin->GetItem(filename) : nullptr;
 		if (item == nullptr) item = origin != nullptr ? origin->GetItem("default") : nullptr;
 		if (item == nullptr || !item->value.has_value()) {
-			Debug(grf, 1, "No origin warning message specified for: {}", filename);
+			this->LogError(full_filename, fmt::format("origin.{} field missing", filename), 1);
 			file->missing_warning.clear();
 		} else {
 			file->missing_warning = item->value.value();
@@ -147,12 +170,14 @@ bool BaseSet<T, Tnum_files, Tsearch_in_tars>::FillSetDetails(const IniFile &ini,
 				break;
 
 			case MD5File::CR_MISMATCH:
-				Debug(grf, 1, "MD5 checksum mismatch for: {} (in {})", filename, full_filename);
+				/* This is normal for original sample.cat, which either matches with orig_dos or orig_win. */
+				this->LogError(full_filename, fmt::format("MD5 checksum mismatch for: {}", filename), original_set ? 1 : 0);
 				this->found_files++;
 				break;
 
 			case MD5File::CR_NO_FILE:
-				Debug(grf, 1, "The file {} specified in {} is missing", filename, full_filename);
+				/* Missing files is normal for the original basesets. Use lower debug level */
+				this->LogError(full_filename, fmt::format("File is missing: {}", filename), original_set ? 1 : 0);
 				break;
 		}
 	}
@@ -163,10 +188,9 @@ bool BaseSet<T, Tnum_files, Tsearch_in_tars>::FillSetDetails(const IniFile &ini,
 template <class Tbase_set>
 bool BaseMedia<Tbase_set>::AddFile(const std::string &filename, size_t basepath_length, const std::string &)
 {
-	bool ret = false;
-	Debug(grf, 1, "Checking {} for base " SET_TYPE " set", filename);
+	Debug(misc, 1, "Checking {} for base {} set", filename, BaseSet<Tbase_set>::SET_TYPE);
 
-	Tbase_set *set = new Tbase_set();
+	auto set = std::make_unique<Tbase_set>();
 	IniFile ini{};
 	std::string path{ filename, basepath_length };
 	ini.LoadFromDisk(path, BASESET_DIR);
@@ -178,58 +202,44 @@ bool BaseMedia<Tbase_set>::AddFile(const std::string &filename, size_t basepath_
 		path.clear();
 	}
 
-	if (set->FillSetDetails(ini, path, filename)) {
-		Tbase_set *duplicate = nullptr;
-		for (Tbase_set *c = BaseMedia<Tbase_set>::available_sets; c != nullptr; c = c->next) {
-			if (c->name == set->name || c->shortname == set->shortname) {
-				duplicate = c;
-				break;
-			}
+	if (!set->FillSetDetails(ini, path, filename)) return false;
+
+	auto existing = std::ranges::find_if(BaseMedia<Tbase_set>::available_sets, [&set](const auto &c) { return c->name == set->name || c->shortname == set->shortname; });
+	if (existing != std::end(BaseMedia<Tbase_set>::available_sets)) {
+		/* The more complete set takes precedence over the version number. */
+		if (((*existing)->valid_files == set->valid_files && (*existing)->version >= set->version) ||
+				(*existing)->valid_files > set->valid_files) {
+
+			Debug(misc, 1, "Not adding {} ({}) as base {} set (duplicate, {})", set->name, set->FormatVersion(),
+					BaseSet<Tbase_set>::SET_TYPE,
+					(*existing)->valid_files > set->valid_files ? "fewer valid files" : "lower version");
+
+			duplicate_sets.push_back(std::move(set));
+			return false;
 		}
-		if (duplicate != nullptr) {
-			/* The more complete set takes precedence over the version number. */
-			if ((duplicate->valid_files == set->valid_files && duplicate->version >= set->version) ||
-					duplicate->valid_files > set->valid_files) {
-				Debug(grf, 1, "Not adding {} ({}) as base " SET_TYPE " set (duplicate, {})", set->name, set->version,
-						duplicate->valid_files > set->valid_files ? "less valid files" : "lower version");
-				set->next = BaseMedia<Tbase_set>::duplicate_sets;
-				BaseMedia<Tbase_set>::duplicate_sets = set;
-			} else {
-				Tbase_set **prev = &BaseMedia<Tbase_set>::available_sets;
-				while (*prev != duplicate) prev = &(*prev)->next;
 
-				*prev = set;
-				set->next = duplicate->next;
+		/* If the duplicate set is currently used (due to rescanning this can happen)
+		 * update the currently used set to the new one. This will 'lie' about the
+		 * version number until a new game is started which isn't a big problem */
+		if (BaseMedia<Tbase_set>::used_set == existing->get()) BaseMedia<Tbase_set>::used_set = set.get();
 
-				/* Keep baseset configuration, if compatible */
-				set->CopyCompatibleConfig(*duplicate);
+		/* Keep baseset configuration, if compatible */
+		set->CopyCompatibleConfig(**existing);
 
-				/* If the duplicate set is currently used (due to rescanning this can happen)
-				 * update the currently used set to the new one. This will 'lie' about the
-				 * version number until a new game is started which isn't a big problem */
-				if (BaseMedia<Tbase_set>::used_set == duplicate) BaseMedia<Tbase_set>::used_set = set;
+		Debug(misc, 1, "Removing {} ({}) as base {} set (duplicate, {})", (*existing)->name, (*existing)->FormatVersion(), BaseSet<Tbase_set>::SET_TYPE,
+				(*existing)->valid_files < set->valid_files ? "fewer valid files" : "lower version");
 
-				Debug(grf, 1, "Removing {} ({}) as base " SET_TYPE " set (duplicate, {})", duplicate->name, duplicate->version,
-						duplicate->valid_files < set->valid_files ? "less valid files" : "lower version");
-				duplicate->next = BaseMedia<Tbase_set>::duplicate_sets;
-				BaseMedia<Tbase_set>::duplicate_sets = duplicate;
-				ret = true;
-			}
-		} else {
-			Tbase_set **last = &BaseMedia<Tbase_set>::available_sets;
-			while (*last != nullptr) last = &(*last)->next;
+		/* Existing set is worse, move it to duplicates and replace with the current set. */
+		duplicate_sets.push_back(std::move(*existing));
 
-			*last = set;
-			ret = true;
-		}
-		if (ret) {
-			Debug(grf, 1, "Adding {} ({}) as base " SET_TYPE " set", set->name, set->version);
-		}
+		Debug(misc, 1, "Adding {} ({}) as base {} set", set->name, set->FormatVersion(), BaseSet<Tbase_set>::SET_TYPE);
+		*existing = std::move(set);
 	} else {
-		delete set;
+		Debug(grf, 1, "Adding {} ({}) as base {} set", set->name, set->FormatVersion(), BaseSet<Tbase_set>::SET_TYPE);
+		available_sets.push_back(std::move(set));
 	}
 
-	return ret;
+	return true;
 }
 
 /**
@@ -261,9 +271,9 @@ template <class Tbase_set>
 		return SetSet(nullptr);
 	}
 
-	for (const Tbase_set *s = BaseMedia<Tbase_set>::available_sets; s != nullptr; s = s->next) {
+	for (const auto &s : BaseMedia<Tbase_set>::available_sets) {
 		if (name == s->name) {
-			return SetSet(s);
+			return SetSet(s.get());
 		}
 	}
 	return false;
@@ -281,9 +291,9 @@ template <class Tbase_set>
 		return SetSet(nullptr);
 	}
 
-	for (const Tbase_set *s = BaseMedia<Tbase_set>::available_sets; s != nullptr; s = s->next) {
+	for (const auto &s : BaseMedia<Tbase_set>::available_sets) {
 		if (shortname == s->shortname) {
-			return SetSet(s);
+			return SetSet(s.get());
 		}
 	}
 	return false;
@@ -296,8 +306,8 @@ template <class Tbase_set>
 template <class Tbase_set>
 /* static */ void BaseMedia<Tbase_set>::GetSetsList(struct format_target &output)
 {
-	output.append("List of " SET_TYPE " sets:\n");
-	for (const Tbase_set *s = BaseMedia<Tbase_set>::available_sets; s != nullptr; s = s->next) {
+	output.format("List of {} sets:\n", BaseSet<Tbase_set>::SET_TYPE);
+	for (const auto &s : BaseMedia<Tbase_set>::available_sets) {
 		output.format("{:>18}: {}", s->name, s->GetDescription({}));
 		int invalid = s->GetNumInvalid();
 		if (invalid != 0) {
@@ -316,28 +326,28 @@ template <class Tbase_set>
 
 #include "network/core/tcp_content_type.h"
 
-template <class Tbase_set> const char *TryGetBaseSetFile(const ContentInfo *ci, bool md5sum, const Tbase_set *s)
+template <class Tbase_set> std::optional<std::string_view> TryGetBaseSetFile(const ContentInfo &ci, bool md5sum, std::span<const std::unique_ptr<Tbase_set>> sets)
 {
-	for (; s != nullptr; s = s->next) {
+	for (const auto &s : sets) {
 		if (s->GetNumMissing() != 0) continue;
 
-		if (s->shortname != ci->unique_id) continue;
-		if (!md5sum) return s->files[0].filename.c_str();
+		if (s->shortname != ci.unique_id) continue;
+		if (!md5sum) return s->files[0].filename;
 
 		MD5Hash md5;
 		for (const auto &file : s->files) {
 			md5 ^= file.hash;
 		}
-		if (md5 == ci->md5sum) return s->files[0].filename.c_str();
+		if (md5 == ci.md5sum) return s->files[0].filename;
 	}
-	return nullptr;
+	return std::nullopt;
 }
 
 template <class Tbase_set>
-/* static */ bool BaseMedia<Tbase_set>::HasSet(const ContentInfo *ci, bool md5sum)
+/* static */ bool BaseMedia<Tbase_set>::HasSet(const ContentInfo &ci, bool md5sum)
 {
-	return (TryGetBaseSetFile(ci, md5sum, BaseMedia<Tbase_set>::available_sets) != nullptr) ||
-			(TryGetBaseSetFile(ci, md5sum, BaseMedia<Tbase_set>::duplicate_sets) != nullptr);
+	return TryGetBaseSetFile(ci, md5sum, BaseMedia<Tbase_set>::GetAvailableSets()).has_value() ||
+			TryGetBaseSetFile(ci, md5sum, BaseMedia<Tbase_set>::GetDuplicateSets()).has_value();
 }
 
 /**
@@ -347,12 +357,9 @@ template <class Tbase_set>
 template <class Tbase_set>
 /* static */ int BaseMedia<Tbase_set>::GetNumSets()
 {
-	int n = 0;
-	for (const Tbase_set *s = BaseMedia<Tbase_set>::available_sets; s != nullptr; s = s->next) {
-		if (s != BaseMedia<Tbase_set>::used_set && s->GetNumMissing() != 0) continue;
-		n++;
-	}
-	return n;
+	return std::ranges::count_if(BaseMedia<Tbase_set>::GetAvailableSets(), [](const auto &set) {
+		return set.get() == BaseMedia<Tbase_set>::used_set || set->GetNumMissing() == 0;
+	});
 }
 
 /**
@@ -363,8 +370,8 @@ template <class Tbase_set>
 /* static */ int BaseMedia<Tbase_set>::GetIndexOfUsedSet()
 {
 	int n = 0;
-	for (const Tbase_set *s = BaseMedia<Tbase_set>::available_sets; s != nullptr; s = s->next) {
-		if (s == BaseMedia<Tbase_set>::used_set) return n;
+	for (const auto &s : BaseMedia<Tbase_set>::available_sets) {
+		if (s.get() == BaseMedia<Tbase_set>::used_set) return n;
 		if (s->GetNumMissing() != 0) continue;
 		n++;
 	}
@@ -378,12 +385,12 @@ template <class Tbase_set>
 template <class Tbase_set>
 /* static */ const Tbase_set *BaseMedia<Tbase_set>::GetSet(int index)
 {
-	for (const Tbase_set *s = BaseMedia<Tbase_set>::available_sets; s != nullptr; s = s->next) {
-		if (s != BaseMedia<Tbase_set>::used_set && s->GetNumMissing() != 0) continue;
-		if (index == 0) return s;
+	for (const auto &s : BaseMedia<Tbase_set>::available_sets) {
+		if (s.get() != BaseMedia<Tbase_set>::used_set && s->GetNumMissing() != 0) continue;
+		if (index == 0) return s.get();
 		index--;
 	}
-	FatalError("Base" SET_TYPE "::GetSet(): index {} out of range", index);
+	FatalError("Base{}::GetSet(): index {} out of range", BaseSet<Tbase_set>::SET_TYPE, index);
 }
 
 /**
@@ -395,35 +402,3 @@ template <class Tbase_set>
 {
 	return BaseMedia<Tbase_set>::used_set;
 }
-
-/**
- * Return the available sets.
- * @return The available sets.
- */
-template <class Tbase_set>
-/* static */ Tbase_set *BaseMedia<Tbase_set>::GetAvailableSets()
-{
-	return BaseMedia<Tbase_set>::available_sets;
-}
-
-/**
- * Force instantiation of methods so we don't get linker errors.
- * @param repl_type the type of the BaseMedia to instantiate
- * @param set_type  the type of the BaseSet to instantiate
- */
-#define INSTANTIATE_BASE_MEDIA_METHODS(repl_type, set_type) \
-	template const char *repl_type::GetExtension(); \
-	template bool repl_type::AddFile(const std::string &filename, size_t pathlength, const std::string &tar_filename); \
-	template bool repl_type::HasSet(const struct ContentInfo *ci, bool md5sum); \
-	template bool repl_type::SetSet(const set_type *set); \
-	template bool repl_type::SetSetByName(const std::string &name); \
-	template bool repl_type::SetSetByShortname(uint32_t shortname); \
-	template void repl_type::GetSetsList(struct format_target &output); \
-	template int repl_type::GetNumSets(); \
-	template int repl_type::GetIndexOfUsedSet(); \
-	template const set_type *repl_type::GetSet(int index); \
-	template const set_type *repl_type::GetUsedSet(); \
-	template bool repl_type::DetermineBestSet(); \
-	template set_type *repl_type::GetAvailableSets(); \
-	template const char *TryGetBaseSetFile(const ContentInfo *ci, bool md5sum, const set_type *s);
-

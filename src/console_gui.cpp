@@ -21,8 +21,9 @@
 #include "settings_type.h"
 #include "console_func.h"
 #include "rev.h"
+#include "core/utf8.hpp"
 #include "video/video_driver.hpp"
-#include "core/ring_buffer.hpp"
+#include "3rdparty/cpp-ring-buffer/ring_buffer.hpp"
 #include <string>
 
 #include "widgets/console_widget.h"
@@ -66,14 +67,14 @@ struct IConsoleLine {
 };
 
 /** The console backlog buffer. Item index 0 is the newest line. */
-static ring_buffer<IConsoleLine> _iconsole_buffer;
+static jgr::ring_buffer<IConsoleLine> _iconsole_buffer;
 
 static bool TruncateBuffer();
 
 
 /* ** main console cmd buffer ** */
 static Textbuf _iconsole_cmdline(ICON_CMDLN_SIZE);
-static ring_buffer<std::string> _iconsole_history;
+static jgr::ring_buffer<std::string> _iconsole_history;
 static ptrdiff_t _iconsole_historypos;
 IConsoleModes _iconsole_mode;
 
@@ -93,7 +94,7 @@ static inline void IConsoleResetHistoryPos()
 }
 
 
-static const char *IConsoleHistoryAdd(const char *cmd);
+static std::optional<std::string_view> IConsoleHistoryAdd(std::string_view cmd);
 static void IConsoleHistoryNavigate(int direction);
 static void IConsoleTabCompletion();
 
@@ -111,14 +112,16 @@ static WindowDesc _console_window_desc(__FILE__, __LINE__,
 struct IConsoleWindow : Window
 {
 	static size_t scroll;
-	int line_height;   ///< Height of one line of text in the console.
-	int line_offset;
-	int cursor_width;
-	GUITimer truncate_timer;
+	int line_height = 0; ///< Height of one line of text in the console.
+	int line_offset = 0;
+	int cursor_width = 0;
+	GUITimer truncate_timer{};
 
 	IConsoleWindow() : Window(_console_window_desc)
 	{
 		_iconsole_mode = ICONSOLE_OPENED;
+
+		this->flags.Set(WindowFlag::NoTabFastForward);
 
 		this->InitNested(0);
 		this->truncate_timer.SetInterval(3000);
@@ -165,8 +168,7 @@ struct IConsoleWindow : Window
 		int ypos = this->height - this->line_height - WidgetDimensions::scaled.hsep_normal;
 		for (size_t line_index = IConsoleWindow::scroll; line_index < _iconsole_buffer.size(); line_index++) {
 			const IConsoleLine &print = _iconsole_buffer[line_index];
-			SetDParamStr(0, print.buffer);
-			ypos = DrawStringMultiLine(WidgetDimensions::scaled.frametext.left, right, -this->line_height, ypos, STR_JUST_RAW_STRING, print.colour, SA_LEFT | SA_BOTTOM | SA_FORCE) - WidgetDimensions::scaled.hsep_normal;
+			ypos = DrawStringMultiLine(WidgetDimensions::scaled.frametext.left, right, -this->line_height, ypos, GetString(STR_JUST_RAW_STRING, print.buffer), print.colour, SA_LEFT | SA_BOTTOM | SA_FORCE) - WidgetDimensions::scaled.hsep_normal;
 			if (ypos < 0) break;
 		}
 		/* If the text is longer than the window, don't show the starting ']' */
@@ -246,10 +248,10 @@ struct IConsoleWindow : Window
 				 * aligned anyway. So enforce this in all cases by adding a left-to-right marker,
 				 * otherwise it will be drawn at the wrong side with right-to-left texts. */
 				IConsolePrint(CC_COMMAND, LRM "] {}", _iconsole_cmdline.GetText());
-				const char *cmd = IConsoleHistoryAdd(_iconsole_cmdline.GetText());
+				auto cmd = IConsoleHistoryAdd(_iconsole_cmdline.GetText());
 				IConsoleClearCommand();
 
-				if (cmd != nullptr) IConsoleCmdExec(cmd);
+				if (cmd.has_value()) IConsoleCmdExec(*cmd);
 				break;
 			}
 
@@ -280,7 +282,7 @@ struct IConsoleWindow : Window
 		return ES_HANDLED;
 	}
 
-	void InsertTextString(WidgetID, const char *str, bool marked, const char *caret, const char *insert_location, const char *replacement_end) override
+	void InsertTextString(WidgetID, std::string_view str, bool marked, std::optional<size_t> caret, std::optional<size_t> insert_location, std::optional<size_t> replacement_end) override
 	{
 		if (_iconsole_cmdline.InsertString(str, marked, caret, insert_location, replacement_end)) {
 			IConsoleWindow::scroll = 0;
@@ -302,7 +304,7 @@ struct IConsoleWindow : Window
 		return pt;
 	}
 
-	Rect GetTextBoundingRect(const char *from, const char *to) const override
+	Rect GetTextBoundingRect(size_t from, size_t to) const override
 	{
 		int delta = std::min<int>(this->width - this->line_offset - _iconsole_cmdline.pixels - ICON_RIGHT_BORDERWIDTH, 0);
 
@@ -322,8 +324,9 @@ struct IConsoleWindow : Window
 		return GetCharAtPosition(_iconsole_cmdline.GetText(), pt.x - delta);
 	}
 
-	void OnMouseWheel(int wheel) override
+	void OnMouseWheel(int wheel, WidgetID widget) override
 	{
+		if (widget != WID_C_BACKGROUND) return;
 		this->Scroll(-wheel);
 	}
 
@@ -410,13 +413,13 @@ void IConsoleClose()
  * @param cmd Text to be entered into the 'history'
  * @return the command to execute
  */
-static const char *IConsoleHistoryAdd(const char *cmd)
+static std::optional<std::string_view> IConsoleHistoryAdd(std::string_view cmd)
 {
 	/* Strip all spaces at the begin */
-	while (IsWhitespace(*cmd)) cmd++;
+	while (!cmd.empty() && IsWhitespace(cmd[0])) cmd.remove_prefix(1);
 
 	/* Do not put empty command in history */
-	if (StrEmpty(cmd)) return nullptr;
+	if (cmd.empty()) return std::nullopt;
 
 	/* Do not put in history if command is same as previous */
 	if (_iconsole_history.empty() || _iconsole_history.front() != cmd) {
@@ -426,7 +429,7 @@ static const char *IConsoleHistoryAdd(const char *cmd)
 
 	/* Reset the history position */
 	IConsoleResetHistoryPos();
-	return _iconsole_history.front().c_str();
+	return _iconsole_history.front();
 }
 
 /**
@@ -447,17 +450,16 @@ static void IConsoleHistoryNavigate(int direction)
 
 static void IConsoleTabCompletion()
 {
-	const char *input = _iconsole_cmdline.GetText();
+	std::string_view input = _iconsole_cmdline.GetText();
 
 	/* Strip all spaces at the beginning */
-	while (IsWhitespace(*input)) input++;
+	while (!input.empty() && IsWhitespace(input[0])) input.remove_prefix(1);
 
 	/* Don't do tab completion for no input */
-	if (StrEmpty(input)) return;
+	if (input.empty()) return;
 
-	const char *cmdptr = input;
-	for (; *cmdptr != '\0'; cmdptr++) {
-		switch (*cmdptr) {
+	for (char c : input) {
+		switch (c) {
 		case ' ':
 		case '"':
 		case '\\':
@@ -475,29 +477,32 @@ static void IConsoleTabCompletion()
 	match_state match_input;
 	match_state match_input_no_underscores;
 
-	match_input.prefix = std::string(input, cmdptr - input);
+	match_input.prefix = input;
 	if (match_input.prefix.empty()) return;
 
 	extern std::string RemoveUnderscores(std::string_view name);
 	match_input_no_underscores.prefix = RemoveUnderscores(match_input.prefix);
 	if (match_input_no_underscores.prefix.empty()) return;
 
-	auto check_candidate = [&](const char *cmd_name, match_state &state) {
-		if (strncmp(cmd_name, state.prefix.c_str(), state.prefix.size()) != 0) return;
+	auto check_candidate = [&](std::string_view cmd_name, match_state &state) {
+		if (!cmd_name.starts_with(state.prefix)) return;
 
 		if (state.matches == 0) {
 			state.common_prefix = cmd_name;
 		} else {
-			const char *cp = state.common_prefix.c_str();
-			const char *cmdp = cmd_name;
+			std::string_view cp = state.common_prefix;
+			std::string_view cmdp = cmd_name;
 			while (true) {
-				const char *end = cmdp;
-				char32_t a = Utf8Consume(cp);
-				char32_t b = Utf8Consume(cmdp);
+				size_t a_bytes, b_bytes;
+				char32_t a, b;
+				std::tie(a_bytes, a) = DecodeUtf8(cp);
+				std::tie(b_bytes, b) = DecodeUtf8(cmdp);
 				if (a == 0 || b == 0 || a != b) {
-					state.common_prefix.resize(end - cmd_name);
+					state.common_prefix.resize(cmdp.data() - cmd_name.data());
 					break;
 				}
+				cp.remove_prefix(a_bytes);
+				cmdp.remove_prefix(b_bytes);
 			}
 		}
 		state.matches++;
@@ -507,13 +512,13 @@ static void IConsoleTabCompletion()
 	for (auto &it : IConsole::Commands()) {
 		const IConsoleCmd *cmd = &it.second;
 		if ((_settings_client.gui.console_show_unlisted || !cmd->unlisted) && (cmd->hook == nullptr || cmd->hook(false) != CHR_HIDE)) {
-			check_candidate(it.first.c_str(), match_input_no_underscores);
-			check_candidate(cmd->name.c_str(), match_input);
+			check_candidate(it.first, match_input_no_underscores);
+			check_candidate(cmd->name, match_input);
 		}
 	}
 	for (auto &it : IConsole::Aliases()) {
-		check_candidate(it.first.c_str(), match_input_no_underscores);
-		check_candidate(it.second.name.c_str(), match_input);
+		check_candidate(it.first, match_input_no_underscores);
+		check_candidate(it.second.name, match_input);
 	}
 	match_state &best = match_input_no_underscores.matches > match_input.matches ? match_input_no_underscores : match_input;
 	if (best.matches > 0) {
@@ -582,7 +587,7 @@ bool IsValidConsoleColour(TextColour c)
 	 * colour gradient, so it must be one of those. */
 	c &= ~TC_IS_PALETTE_COLOUR;
 	for (Colours i = COLOUR_BEGIN; i < COLOUR_END; i++) {
-		if (GetColourGradient(i, SHADE_NORMAL) == c) return true;
+		if (GetColourGradient(i, SHADE_NORMAL).p == c) return true;
 	}
 
 	return false;

@@ -10,6 +10,7 @@
 #ifndef COMMAND_TYPE_H
 #define COMMAND_TYPE_H
 
+#include "company_type.h"
 #include "economy_type.h"
 #include "string_type.h"
 #include "strings_type.h"
@@ -32,14 +33,76 @@ enum CommandCostIntlFlags : uint8_t {
 };
 DECLARE_ENUM_AS_BIT_SET(CommandCostIntlFlags)
 
+using CommandCostAllowedResultTypes = std::tuple<uint32_t, struct PlanIDTag, struct VehicleIDTag, struct SignIDTag, struct GroupIDTag, struct GoalIDTag, struct TownIDTag,
+		struct StoryPageIDTag, struct StoryPageElementIDTag, struct LeagueTableElementIDTag, struct LeagueTableIDTag,
+		struct TraceRestrictSlotIDTag, struct TraceRestrictSlotGroupIDTag, struct TraceRestrictCounterIDTag>;
+using CommandCostResultTypeIndex = uint8_t;
+
+template <typename T>
+constexpr CommandCostResultTypeIndex GetCommandCostResultDataTypeID()
+{
+	if constexpr (std::is_base_of_v<struct PoolIDBase, T>) {
+		return GetCommandCostResultDataTypeID<typename T::TagType>();
+	} else if constexpr (std::is_same_v<uint16_t, T>) {
+		return GetCommandCostResultDataTypeID<uint32_t>();
+	} else {
+		constexpr size_t idx = GetTupleIndexIgnoreCvRef<T, CommandCostAllowedResultTypes>();
+		static_assert(idx < std::tuple_size_v<CommandCostAllowedResultTypes>,
+				"Could not find CommandCost result type in CommandCostAllowedResultTypes");
+		static_assert(idx < std::numeric_limits<CommandCostResultTypeIndex>::max());
+		return static_cast<CommandCostResultTypeIndex>(idx) + 1;
+	}
+}
+
+struct CommandResultData {
+	uint32_t result = 0;
+	CommandCostResultTypeIndex result_type = 0;
+
+private:
+	template <typename T>
+	T GetUnchecked() const
+	{
+		if constexpr (std::is_base_of_v<struct PoolIDBase, T>) {
+			return T(static_cast<typename T::BaseType>(this->result));
+		} else {
+			return static_cast<T>(this->result);
+		}
+	}
+
+public:
+	template <typename T>
+	inline bool IsType() const
+	{
+		return this->result_type == GetCommandCostResultDataTypeID<T>();
+	}
+
+	template <typename T>
+	std::optional<T> Get() const
+	{
+		if (!this->IsType<T>()) return std::nullopt;
+		return this->GetUnchecked<T>();
+	}
+
+	template <typename T>
+	T GetOrDefault(T default_value) const
+	{
+		return this->IsType<T>() ? this->GetUnchecked<T>() : default_value;
+	}
+};
+
+struct CommandLargeResultBase {
+	virtual ~CommandLargeResultBase();
+};
+
 /**
  * Common return value for all commands. Wraps the cost and
  * a possible error message/state together.
  */
 class CommandCost {
 	Money cost;                                 ///< The cost of this action
-	ExpensesType expense_type;                  ///< the type of expence as shown on the finances view
+	ExpensesType expense_type;                  ///< The type of expense as shown on the finances view
 	CommandCostIntlFlags flags;                 ///< Flags: see CommandCostIntlFlags
+	Owner owner = CompanyID::Invalid();         ///< Originator owner of error.
 	StringID message;                           ///< Warning message for when success is unset
 
 	enum class CommandCostInlineType {
@@ -61,16 +124,15 @@ class CommandCost {
 
 	struct CommandCostAuxiliaryData {
 		Money additional_cash_required = 0;
-		uint32_t textref_stack[16] = {};
-		const GRFFile *textref_stack_grffile = nullptr; ///< NewGRF providing the #TextRefStack content.
-		uint textref_stack_size = 0;                    ///< Number of uint32_t values to put on the #TextRefStack for the error message.
+		EncodedString encoded_message;                  ///< Encoded error message, used if the error message includes parameters.
 		StringID extra_message = INVALID_STRING_ID;     ///< Additional warning message for when success is unset
 		TileIndex tile = INVALID_TILE;
-		uint32_t result = 0;
+		CommandResultData result{};
+		std::shared_ptr<const CommandLargeResultBase> large_result;
 	};
 
 	union {
-		uint32_t result = 0;
+		CommandResultData result{};
 		StringID extra_message;                 ///< Additional warning message for when success is unset
 		uint32_t tile;
 		int64_t additional_cash_required;
@@ -139,6 +201,25 @@ public:
 	 */
 	CommandCost(ExpensesType ex_t, const Money &cst) : cost(cst), expense_type(ex_t), flags(CCIF_SUCCESS), message(INVALID_STRING_ID) {}
 
+	/**
+	 * Set the 'owner' (the originator) of this error message. This is used to show a company owner's face if you
+	 * attempt an action on something owned by other company.
+	 */
+	inline void SetErrorOwner(Owner owner)
+	{
+		this->owner = owner;
+	}
+
+	void SetEncodedMessage(EncodedString &&message);
+	EncodedString &GetEncodedMessage();
+
+	/**
+	 * Get the originator owner for this error.
+	 */
+	inline CompanyID GetErrorOwner() const
+	{
+		return this->owner;
+	}
 
 	/**
 	 * Adds the given cost to the cost of the command.
@@ -149,7 +230,7 @@ public:
 		this->cost += cost;
 	}
 
-	void AddCost(const CommandCost &cmd_cost);
+	void AddCost(CommandCost &&cmd_cost);
 
 	/**
 	 * Multiplies the cost of the command by the given factor.
@@ -194,35 +275,6 @@ public:
 		} else if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
 			this->inl.aux_data->extra_message = INVALID_STRING_ID;
 		}
-	}
-
-	void UseTextRefStack(const GRFFile *grffile, uint num_registers);
-
-	/**
-	 * Returns the NewGRF providing the #TextRefStack of the error message.
-	 * @return the NewGRF.
-	 */
-	const GRFFile *GetTextRefStackGRF() const
-	{
-		return this->GetInlineType() == CommandCostInlineType::AuxiliaryData ? this->inl.aux_data->textref_stack_grffile : 0;
-	}
-
-	/**
-	 * Returns the number of uint32_t values for the #TextRefStack of the error message.
-	 * @return number of uint32_t values.
-	 */
-	uint GetTextRefStackSize() const
-	{
-		return this->GetInlineType() == CommandCostInlineType::AuxiliaryData ? this->inl.aux_data->textref_stack_size : 0;
-	}
-
-	/**
-	 * Returns a pointer to the values for the #TextRefStack of the error message.
-	 * @return uint32_t values for the #TextRefStack
-	 */
-	const uint32_t *GetTextRefStack() const
-	{
-		return this->GetInlineType() == CommandCostInlineType::AuxiliaryData ? this->inl.aux_data->textref_stack : nullptr;
 	}
 
 	/**
@@ -320,24 +372,65 @@ public:
 
 	void SetAdditionalCashRequired(Money cash);
 
-	bool HasResultData() const
+	bool HasAnyResultData() const
 	{
 		return (this->flags & CCIF_VALID_RESULT);
 	}
 
-	uint32_t GetResultData() const
+	CommandResultData GetResultDataWithType() const
 	{
+		if (!this->HasAnyResultData()) return {};
 		if (this->GetInlineType() == CommandCostInlineType::Result) {
 			return this->inl.result;
 		} else if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
 			return this->inl.aux_data->result;
 		} else {
-			return 0;
+			return {};
 		}
 	}
 
-	void SetResultData(uint32_t result);
+private:
+	void SetResultDataWithType(CommandResultData result);
+
+public:
+	uint32_t GetUntypedResultData() const
+	{
+		return this->GetResultDataWithType().result;
+	}
+
+	template <typename T>
+	std::optional<T> GetResultData() const
+	{
+		if (!this->HasAnyResultData()) return std::nullopt;
+
+		return this->GetResultDataWithType().Get<T>();
+	}
+
+	inline void SetResultData(uint32_t result)
+	{
+		this->SetResultDataWithType({ result, GetCommandCostResultDataTypeID<uint32_t>() });
+	}
+
+	template <typename T> requires std::is_base_of_v<struct PoolIDBase, T>
+	inline void SetResultData(T result)
+	{
+		this->SetResultDataWithType({ static_cast<uint32_t>(result.base()), GetCommandCostResultDataTypeID<T>() });
+	}
+
+	void SetLargeResult(std::shared_ptr<const CommandLargeResultBase> large_result);
+
+	template <typename T>
+	std::shared_ptr<const T> GetLargeResult() const
+	{
+		if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
+			return std::dynamic_pointer_cast<const T>(this->inl.aux_data->large_result);
+		}
+		return {};
+	}
 };
+
+CommandCost CommandCostWithParam(StringID str, uint64_t value);
+CommandCost CommandCostWithParam(StringID str, StringParameterAsBase auto value) { return CommandCostWithParam(str, value.base()); }
 
 /**
  * Define a default return value for a failed command.
@@ -405,6 +498,7 @@ enum Commands : uint8_t {
 	CMD_BUILD_BUOY,                   ///< build a buoy
 
 	CMD_PLANT_TREE,                   ///< plant a tree
+	CMD_BULK_TREE,                    ///< bulk tree planting
 
 	CMD_BUILD_VEHICLE,                ///< build a vehicle
 	CMD_SELL_VEHICLE,                 ///< sell a vehicle
@@ -423,7 +517,9 @@ enum Commands : uint8_t {
 	CMD_DELETE_ORDER,                 ///< delete an order
 	CMD_INSERT_ORDER,                 ///< insert a new order
 	CMD_DUPLICATE_ORDER,              ///< duplicate an order
+	CMD_SET_ROUTE_OVERLAY_COLOUR,     ///< set route overlay colour
 	CMD_MASS_CHANGE_ORDER,            ///< mass change the target of an order
+	CMD_BULK_ORDER,                   ///< bulk order operations
 
 	CMD_CHANGE_SERVICE_INT,           ///< change the service interval of a vehicle
 
@@ -477,9 +573,11 @@ enum Commands : uint8_t {
 	CMD_EXPAND_TOWN,                  ///< expand a town
 	CMD_DELETE_TOWN,                  ///< delete a town
 	CMD_PLACE_HOUSE,                  ///< place a house
+	CMD_PLACE_HOUSE_AREA,             ///< place an area of houses
 
 	CMD_ORDER_REFIT,                  ///< change the refit information of an order (for "goto depot" )
 	CMD_CLONE_ORDER,                  ///< clone (and share) an order
+	CMD_INSERT_ORDERS_FROM_VEH,       ///< insert orders from vehicle
 	CMD_CLEAR_AREA,                   ///< clear an area
 
 	CMD_MONEY_CHEAT,                  ///< do the money cheat
@@ -613,9 +711,12 @@ enum Commands : uint8_t {
 	CMD_SCH_DISPATCH_DUPLICATE_SCHEDULE,        ///< scheduled dispatch duplicate schedule
 	CMD_SCH_DISPATCH_APPEND_VEH_SCHEDULE,       ///< scheduled dispatch append schedules from another vehicle
 	CMD_SCH_DISPATCH_ADJUST,                    ///< scheduled dispatch adjust time offsets in schedule
+	CMD_SCH_DISPATCH_ADJUST_SLOT,               ///< scheduled dispatch adjust time offset of single slot in schedule
 	CMD_SCH_DISPATCH_SWAP_SCHEDULES,            ///< scheduled dispatch swap schedules in order
 	CMD_SCH_DISPATCH_SET_SLOT_FLAGS,            ///< scheduled dispatch set flags of dispatch slot
+	CMD_SCH_DISPATCH_SET_SLOT_ROUTE,            ///< scheduled dispatch set route ID of dispatch slot
 	CMD_SCH_DISPATCH_RENAME_TAG,                ///< scheduled dispatch rename departure tag
+	CMD_SCH_DISPATCH_EDIT_ROUTE,                ///< scheduled dispatch rename/create/delete departure route
 
 	CMD_ADD_PLAN,
 	CMD_ADD_PLAN_LINE,
@@ -659,14 +760,15 @@ enum class CommandCallback : uint8_t {
 	CreateGroup,
 	AddVehicleNewGroup,
 
-	/* industry_gui.cpp */
-	BuildIndustry,
-
 	/* main_gui.cpp */
 	PlaySound_EXPLOSION,
 	PlaceSign,
 	Terraform,
 	GiveMoney,
+
+	/* order_gui.cpp */
+	InsertOrder,
+	InsertOrdersFromVehicle,
 
 	/* plans_gui.cpp */
 	AddPlan,
@@ -706,6 +808,8 @@ enum class CommandCallback : uint8_t {
 	/* schdispatch_gui.cpp */
 	AddNewSchDispatchSchedule,
 	SwapSchDispatchSchedules,
+	AdjustSchDispatch,
+	AdjustSchDispatchSlot,
 
 	/* tracerestrict_gui.cpp */
 	CreateTraceRestrictSlot,
@@ -725,30 +829,29 @@ template <Commands Tcmd> struct CommandHandlerTraits;
  *
  * This enums defines some flags which can be used for the commands.
  */
-enum DoCommandFlag : uint16_t {
-	DC_NONE                  = 0x000, ///< no flag is set
-	DC_EXEC                  = 0x001, ///< execute the given command
-	DC_AUTO                  = 0x002, ///< don't allow building on structures
-	DC_QUERY_COST            = 0x004, ///< query cost only,  don't build.
-	DC_NO_WATER              = 0x008, ///< don't allow building on water
-	// 0x010 is unused
-	DC_NO_TEST_TOWN_RATING   = 0x020, ///< town rating does not disallow you from building
-	DC_BANKRUPT              = 0x040, ///< company bankrupts, skip money check, skip vehicle on tile check in some cases
-	DC_AUTOREPLACE           = 0x080, ///< autoreplace/autorenew is in progress, this shall disable vehicle limits when building, and ignore certain restrictions when undoing things (like vehicle attach callback)
-	DC_NO_CARGO_CAP_CHECK    = 0x100, ///< when autoreplace/autorenew is in progress, this shall prevent truncating the amount of cargo in the vehicle to prevent testing the command to remove cargo
-	DC_ALL_TILES             = 0x200, ///< allow this command also on MP_VOID tiles
-	DC_NO_MODIFY_TOWN_RATING = 0x400, ///< do not change town rating
-	DC_FORCE_CLEAR_TILE      = 0x800, ///< do not only remove the object on the tile, but also clear any water left on it
-	DC_ALLOW_REMOVE_WATER    = 0x1000,///< always allow removing water
-	DC_TOWN                  = 0x2000,///< town operation
+enum class DoCommandFlag : uint8_t {
+	Execute,              ///< execute the given command
+	Auto,                 ///< don't allow building on structures
+	QueryCost,            ///< query cost only,  don't build.
+	NoWater,              ///< don't allow building on water
+	NoTestTownRating,     ///< town rating does not disallow you from building
+	Bankrupt,             ///< company bankrupts, skip money check, skip vehicle on tile check in some cases
+	AutoReplace,          ///< autoreplace/autorenew is in progress, this shall disable vehicle limits when building, and ignore certain restrictions when undoing things (like vehicle attach callback)
+	NoCargoCapacityCheck, ///< when autoreplace/autorenew is in progress, this shall prevent truncating the amount of cargo in the vehicle to prevent testing the command to remove cargo
+	AllTiles,             ///< allow this command also on MP_VOID tiles
+	NoModifyTownRating,   ///< do not change town rating
+	ForceClearTile,       ///< do not only remove the object on the tile, but also clear any water left on it
+	AllowRemoveWater,     ///< always allow removing water
+	Town,                 ///< town operation
 };
-DECLARE_ENUM_AS_BIT_SET(DoCommandFlag)
+using DoCommandFlags = EnumBitSet<DoCommandFlag, uint16_t>;
 
 enum DoCommandIntlFlag : uint8_t {
 	DCIF_NONE                = 0x0, ///< no flag is set
 	DCIF_TYPE_CHECKED        = 0x1, ///< payload type has been checked
 	DCIF_NETWORK_COMMAND     = 0x2, ///< execute the command without sending it on the network
 	DCIF_NOT_MY_CMD          = 0x4, ///< not my own DoCommandP
+	DCIF_NO_ESTIMATE         = 0x8, ///< disable command estimation
 };
 DECLARE_ENUM_AS_BIT_SET(DoCommandIntlFlag)
 
@@ -768,22 +871,36 @@ DECLARE_ENUM_AS_BIT_SET(DoCommandIntlFlag)
  *
  * This enumeration defines flags for the _command_proc_table.
  */
-enum CommandFlags : uint16_t {
-	CMD_SERVER    =  0x001, ///< the command can only be initiated by the server
-	CMD_SPECTATOR =  0x002, ///< the command may be initiated by a spectator
-	CMD_OFFLINE   =  0x004, ///< the command cannot be executed in a multiplayer game; single-player only
-	CMD_AUTO      =  0x008, ///< set the DC_AUTO flag on this command
-	CMD_ALL_TILES =  0x010, ///< allow this command also on MP_VOID tiles
-	CMD_NO_TEST   =  0x020, ///< the command's output may differ between test and execute due to town rating changes etc.
-	CMD_NO_WATER  =  0x040, ///< set the DC_NO_WATER flag on this command
-	CMD_CLIENT_ID =  0x080, ///< set p2 with the ClientID of the sending client.
-	CMD_DEITY     =  0x100, ///< the command may be executed by COMPANY_DEITY
-	CMD_STR_CTRL  =  0x200, ///< the command's string may contain control strings
-	CMD_NO_EST    =  0x400, ///< the command is never estimated.
-	CMD_SERVER_NS = 0x1000, ///< the command can only be initiated by the server (this is not executed in spectator mode)
-	CMD_LOG_AUX   = 0x2000, ///< the command should be logged in the auxiliary log instead of the main log
+enum class CommandFlag : uint8_t {
+	Server,    ///< the command can only be initiated by the server
+	Spectator, ///< the command may be initiated by a spectator
+	Offline,   ///< the command cannot be executed in a multiplayer game; single-player only
+	Auto,      ///< set the DoCommandFlag::Auto flag on this command
+	AllTiles,  ///< allow this command also on MP_VOID tiles
+	NoTest,    ///< the command's output may differ between test and execute due to town rating changes etc.
+	NoWater,   ///< set the DoCommandFlag::NoWater flag on this command
+	ClientID,  ///< set p2 with the ClientID of the sending client.
+	Deity,     ///< the command may be executed by COMPANY_DEITY
+	StrCtrl,   ///< the command's string may contain control strings
+	NoEst,     ///< the command is never estimated.
+	ServerNS,  ///< the command can only be initiated by the server (this is not executed in spectator mode).
+	LogAux,    ///< the command should be logged in the auxiliary log instead of the main log.
 };
-DECLARE_ENUM_AS_BIT_SET(CommandFlags)
+using CommandFlags = EnumBitSet<CommandFlag, uint16_t>;
+
+static constexpr CommandFlags CMD_SERVER{CommandFlag::Server};
+static constexpr CommandFlags CMD_SPECTATOR{CommandFlag::Spectator};
+static constexpr CommandFlags CMD_OFFLINE{CommandFlag::Offline};
+static constexpr CommandFlags CMD_AUTO{CommandFlag::Auto};
+static constexpr CommandFlags CMD_ALL_TILES{CommandFlag::AllTiles};
+static constexpr CommandFlags CMD_NO_TEST{CommandFlag::NoTest};
+static constexpr CommandFlags CMD_NO_WATER{CommandFlag::NoWater};
+static constexpr CommandFlags CMD_CLIENT_ID{CommandFlag::ClientID};
+static constexpr CommandFlags CMD_DEITY{CommandFlag::Deity};
+static constexpr CommandFlags CMD_STR_CTRL{CommandFlag::StrCtrl};
+static constexpr CommandFlags CMD_NO_EST{CommandFlag::NoEst};
+static constexpr CommandFlags CMD_SERVER_NS{CommandFlag::ServerNS};
+static constexpr CommandFlags CMD_LOG_AUX{CommandFlag::LogAux};
 
 /** Types of commands we have. */
 enum CommandType : uint8_t {
@@ -816,9 +933,9 @@ enum CommandPauseLevel : uint8_t {
  * - Have a deserialisation function of the form below, which returns true on success:
  *   bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation);
  * - Have a FormatDebugSummary implementation where even remotely useful.
- * - Have a `ClientID &GetClientIDField()` function if used by commands with CMD_CLIENT_ID.
+ * - Have a `ClientID &GetClientIDField()` function if used by commands with CMD_CLIENT_ID/CommandFlag::ClientID.
  */
-struct CommandPayloadBase : public fmt_formattable {
+struct CommandPayloadBase {
 	virtual ~CommandPayloadBase() {}
 
 	virtual std::unique_ptr<CommandPayloadBase> Clone() const = 0;
@@ -830,7 +947,6 @@ struct CommandPayloadBase : public fmt_formattable {
 	/* FormatDebugSummary may be called when populating the crash log so should not allocate */
 	virtual void FormatDebugSummary(struct format_target &) const {}
 
-	/* To enable use as a format argument, see fmt_formattable */
 	inline void fmt_format_value(struct format_target &output) const
 	{
 		this->FormatDebugSummary(output);
@@ -870,9 +986,15 @@ void SetCommandPayloadClientID(T &payload, ClientID client_id)
 	}
 }
 
+template <typename T>
+concept CommandPayloadStringType = std::is_same_v<T, std::string> || std::is_same_v<T, EncodedString>;
+
+template <typename T>
+concept CommandPayloadAsRef = CommandPayloadStringType<T> || T::command_payload_as_ref || false;
+
 struct CommandProcTupleAdapter {
 	template <typename T>
-	using replace_string_t = std::conditional_t<std::is_same_v<std::string, T>, const std::string &, T>;
+	using with_ref_params = std::conditional_t<CommandPayloadAsRef<T>, const T &, T>;
 };
 
 struct BaseTupleCmdDataTag{};
@@ -883,8 +1005,8 @@ namespace TupleCmdDataDetail {
 	 */
 	template <typename... T>
 	struct EMPTY_BASES BaseTupleCmdData : public CommandPayloadBase, public BaseTupleCmdDataTag {
-		using CommandProc = CommandCost(DoCommandFlag, TileIndex, typename CommandProcTupleAdapter::replace_string_t<T>...);
-		using CommandProcNoTile = CommandCost(DoCommandFlag, typename CommandProcTupleAdapter::replace_string_t<T>...);
+		using CommandProc = CommandCost(DoCommandFlags, TileIndex, typename CommandProcTupleAdapter::with_ref_params<T>...);
+		using CommandProcNoTile = CommandCost(DoCommandFlags, typename CommandProcTupleAdapter::with_ref_params<T>...);
 		using Tuple = std::tuple<T...>;
 		Tuple values;
 
@@ -945,8 +1067,8 @@ private:
 
 	template <typename... Targs>
 	struct TupleHelper<std::tuple<Targs...>> {
-		using CommandProc = CommandCost(DoCommandFlag, TileIndex, typename CommandProcTupleAdapter::replace_string_t<std::remove_cvref_t<Targs>>...);
-		using CommandProcNoTile = CommandCost(DoCommandFlag, typename CommandProcTupleAdapter::replace_string_t<std::remove_cvref_t<Targs>>...);
+		using CommandProc = CommandCost(DoCommandFlags, TileIndex, typename CommandProcTupleAdapter::with_ref_params<std::remove_cvref_t<Targs>>...);
+		using CommandProcNoTile = CommandCost(DoCommandFlags, typename CommandProcTupleAdapter::with_ref_params<std::remove_cvref_t<Targs>>...);
 		using ValueTuple = std::tuple<std::remove_cvref_t<Targs>...>;
 		using ConstRefTuple = std::tuple<const std::remove_reference_t<Targs> &...>;
 
@@ -997,8 +1119,8 @@ struct EMPTY_BASES CmdDataT<std::string, std::string, std::string> final : publi
 
 template <>
 struct EMPTY_BASES CmdDataT<> final : public CommandPayloadSerialisable<CmdDataT<>>, public BaseTupleCmdDataTag {
-	using CommandProc = CommandCost(DoCommandFlag, TileIndex);
-	using CommandProcNoTile = CommandCost(DoCommandFlag);
+	using CommandProc = CommandCost(DoCommandFlags, TileIndex);
+	using CommandProcNoTile = CommandCost(DoCommandFlags);
 	using Tuple = std::tuple<>;
 
 	Tuple GetValues() const { return {}; }
@@ -1084,16 +1206,16 @@ struct DynCommandContainer {
 
 struct CommandExecData {
 	TileIndex tile;
-	DoCommandFlag flags;
+	DoCommandFlags flags;
 	const CommandPayloadBase &payload;
 };
 
 using CommandPayloadDeserialiser = std::unique_ptr<CommandPayloadBase>(DeserialisationBuffer &, StringValidationSettings default_string_validation);
 
 template <typename T>
-using CommandProcDirect = CommandCost(DoCommandFlag flags, TileIndex tile, const T &data);
+using CommandProcDirect = CommandCost(DoCommandFlags flags, TileIndex tile, const T &data);
 template <typename T>
-using CommandProcDirectNoTile = CommandCost(DoCommandFlag flags, const T &data);
+using CommandProcDirectNoTile = CommandCost(DoCommandFlags flags, const T &data);
 
 #ifdef CMD_DEFINE
 #define DEF_CMD_HANDLER(cmd_, proctype_, proc_, flags_, type_) \

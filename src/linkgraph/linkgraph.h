@@ -27,7 +27,7 @@ class LinkGraph;
  * Type of the pool for link graph components. Each station can be in at up to
  * 32 link graphs. So we allow for plenty of them to be created.
  */
-typedef Pool<LinkGraph, LinkGraphID, 32, 0xFFFF> LinkGraphPool;
+using LinkGraphPool = Pool<LinkGraph, LinkGraphID, 32>;
 /** The actual pool with link graphs. */
 extern LinkGraphPool _link_graph_pool;
 
@@ -53,12 +53,13 @@ public:
 	 * in a separate thread.
 	 */
 	struct BaseNode {
-		uint supply;             ///< Supply at the station.
-		uint demand;             ///< Acceptance at the station.
-		StationID station;       ///< Station ID.
-		TileIndex xy;            ///< Location of the station referred to by the node.
-		EconTime::Date last_update; ///< When the supply was last updated.
-		void Init(TileIndex xy = INVALID_TILE, StationID st = INVALID_STATION, uint demand = 0);
+		uint supply = 0;                          ///< Supply at the station.
+		uint demand = 0;                          ///< Acceptance at the station.
+		StationID station = StationID::Invalid(); ///< Station ID.
+		TileIndex xy = INVALID_TILE;              ///< Location of the station referred to by the node.
+		EconTime::Date last_update{};             ///< When the supply was last updated.
+
+		void Init(TileIndex xy = INVALID_TILE, StationID st = StationID::Invalid(), uint demand = 0);
 	};
 
 	/**
@@ -68,12 +69,12 @@ public:
 	 * the column as next_edge.
 	 */
 	struct BaseEdge {
-		uint capacity;                 ///< Capacity of the link.
-		uint usage;                    ///< Usage of the link.
-		uint64_t travel_time_sum;      ///< Sum of the travel times of the link, in ticks.
-		EconTime::Date last_unrestricted_update; ///< When the unrestricted part of the link was last updated.
-		EconTime::Date last_restricted_update;   ///< When the restricted part of the link was last updated.
-		EconTime::Date last_aircraft_update;     ///< When aircraft capacity of the link was last updated.
+		uint capacity = 0;                         ///< Capacity of the link.
+		uint usage = 0;                            ///< Usage of the link.
+		uint64_t travel_time_sum = 0;              ///< Sum of the travel times of the link, in ticks.
+		EconTime::Date last_unrestricted_update{}; ///< When the unrestricted part of the link was last updated.
+		EconTime::Date last_restricted_update{};   ///< When the restricted part of the link was last updated.
+		EconTime::Date last_aircraft_update{};     ///< When aircraft capacity of the link was last updated.
 
 		void Init()
 		{
@@ -218,7 +219,7 @@ public:
 		 * @param edge Edge to be wrapped.
 		 */
 		Edge(BaseEdge &edge) : EdgeWrapper<BaseEdge>(edge) {}
-		void Update(uint capacity, uint usage, uint32_t time, EdgeUpdateMode mode);
+		void Update(uint capacity, uint usage, uint32_t time, EdgeUpdateModes modes);
 		void Restrict() { this->edge->last_unrestricted_update = EconTime::INVALID_DATE; }
 		void Release() { this->edge->last_restricted_update = EconTime::INVALID_DATE; }
 		void ClearAircraft() { this->edge->last_aircraft_update = EconTime::INVALID_DATE; }
@@ -300,13 +301,13 @@ public:
 	 * @param orig_age Age of the original link graph.
 	 * @return scaled value.
 	 */
-	inline static uint Scale(uint val, uint target_age, uint orig_age)
+	static inline uint Scale(uint val, uint target_age, uint orig_age)
 	{
 		return val > 0 ? std::max(1U, val * target_age / orig_age) : 0;
 	}
 
 	/** Bare constructor, only for save/load. */
-	LinkGraph() : cargo(INVALID_CARGO), last_compression(0) {}
+	LinkGraph() {}
 	/**
 	 * Real constructor.
 	 * @param cargo Cargo the link graph is about.
@@ -371,7 +372,7 @@ public:
 	NodeID AddNode(const Station *st);
 	void RemoveNode(NodeID id);
 
-	void UpdateEdge(NodeID from, NodeID to, uint capacity, uint usage, uint32_t time, EdgeUpdateMode mode);
+	void UpdateEdge(NodeID from, NodeID to, uint capacity, uint usage, uint32_t time, EdgeUpdateModes modes);
 	void RemoveEdge(NodeID from, NodeID to);
 
 	inline uint32_t CalculateCostEstimate() const {
@@ -393,10 +394,10 @@ protected:
 
 	friend void LinkGraphFixupAfterLoad(bool compression_was_date);
 
-	CargoType cargo;         ///< Cargo of this component's link graph.
-	ScaledTickCounter last_compression; ///< Last time the capacities and supplies were compressed.
-	NodeVector nodes;      ///< Nodes in the component.
-	EdgeMatrix edges;      ///< Edges in the component.
+	CargoType cargo = INVALID_CARGO;      ///< Cargo of this component's link graph.
+	ScaledTickCounter last_compression{}; ///< Last time the capacities and supplies were compressed.
+	NodeVector nodes{};                   ///< Nodes in the component.
+	EdgeMatrix edges{};                   ///< Edges in the component.
 
 public:
 	const EdgeMatrix &GetEdges() const { return this->edges; }

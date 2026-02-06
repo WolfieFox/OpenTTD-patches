@@ -13,16 +13,26 @@
 #include "core/enum_type.hpp"
 #include "core/strong_typedef_type.hpp"
 
-struct BadgeIDTag : public StrongType::TypedefTraits<uint16_t, StrongType::Compare> {};
+struct BadgeIDTag : public StrongType::TypedefTraits<uint32_t, StrongType::Compare> {};
 using BadgeID = StrongType::Typedef<BadgeIDTag>;
-struct BadgeClassIDTag : public StrongType::TypedefTraits<uint16_t, StrongType::Compare> {};
+struct BadgeClassIDTag : public StrongType::TypedefTraits<uint32_t, StrongType::Compare> {};
 using BadgeClassID = StrongType::Typedef<BadgeClassIDTag>;
 
+template <> struct std::hash<BadgeClassID> {
+	std::size_t operator()(const BadgeClassID &badge_class_index) const noexcept
+	{
+		return std::hash<BadgeClassID::BaseType>{}(badge_class_index.base());
+	}
+};
+
 enum class BadgeFlag : uint8_t {
-	Copy              = 0, ///< Copy badge to related things.
-	NameListStop      = 1, ///< Stop adding names to the name list after this badge.
+	Copy = 0, ///< Copy badge to related things.
+	NameListStop = 1, ///< Stop adding names to the name list after this badge.
 	NameListFirstOnly = 2, ///< Don't add this name to the name list if not first.
-	UseCompanyColour  = 3, ///< Apply company colour palette to this badge.
+	UseCompanyColour = 3, ///< Apply company colour palette to this badge.
+	NameListSkip = 4, ///< Don't show name in name list at all.
+
+	HasText, ///< Internal flag set if the badge has text.
 };
 using BadgeFlags = EnumBitSet<BadgeFlag, uint8_t>;
 

@@ -13,18 +13,34 @@
  * functions may still be available if you return an older API version
  * in GetAPIVersion() in info.nut.
  *
- * \b 15.0
+ * \b 16.0
  *
  * This version is not yet released. The following changes are not set in stone yet.
  *
+ * \b 15.0
+ *
  * API additions:
  * \li AIEventVehicleCrashed::GetVictims
+ * \li AIEventVehicleCrashed::GetVehicleOwner
  * \li AIEventCompanyRenamed
  * \li AIEventPresidentRenamed
+ * \li AICargo::CC_OVERSIZED
+ * \li AICargo::CC_POWDERIZED
+ * \li AICargo::CC_NON_POURABLE
+ * \li AICargo::CC_POTABLE
+ * \li AICargo::CC_NON_POTABLE
+ * \li AIVehicleList_Waypoint
+ * \li AIError::ERR_BRIDGE_TOO_LOW
+ * \li AIEngine::GetAllRailTypes
+ * \li AITile::IsHouseTile
  *
  * Other changes:
  * \li AIBridge::GetBridgeID renamed to AIBridge::GetBridgeType
  * \li AIWaypoint::GetWaypointID now returns the StationID of any type of waypoint
+ * \li AIList instances can now be saved
+ * \li AIVehicleList_Station accepts an optional AIVehicle::VehicleType parameter
+ * \li AIList instances can now be cloned
+ * \li AIEngine::GetRailType will only return the first RailType of an engine, use AIEngine::GetAllRailTypes instead
  *
  * \b 14.0
  *

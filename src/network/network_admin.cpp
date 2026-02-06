@@ -23,6 +23,8 @@
 #include "../rev.h"
 #include "../game/game.hpp"
 
+#include "table/strings.h"
+
 #include <numeric>
 
 #include "../safeguards.h"
@@ -31,10 +33,7 @@
 /* This file handles all the admin network commands. */
 
 /** Redirection of the (remote) console to the admin. */
-AdminIndex _redirect_console_to_admin = INVALID_ADMIN_ID;
-
-/** The amount of admins connected. */
-uint8_t _network_admins_connected = 0;
+AdminID _redirect_console_to_admin = AdminID::Invalid();
 
 /** The pool with sockets/clients. */
 NetworkAdminSocketPool _networkadminsocket_pool("NetworkAdminSocket");
@@ -48,17 +47,17 @@ static const std::chrono::seconds ADMIN_AUTHORISATION_TIMEOUT(10);
 
 
 /** Frequencies, which may be registered for a certain update type. */
-static const AdminUpdateFrequency _admin_update_type_frequencies[] = {
-	ADMIN_FREQUENCY_POLL | ADMIN_FREQUENCY_DAILY | ADMIN_FREQUENCY_WEEKLY | ADMIN_FREQUENCY_MONTHLY | ADMIN_FREQUENCY_QUARTERLY | ADMIN_FREQUENCY_ANUALLY, ///< ADMIN_UPDATE_DATE
-	ADMIN_FREQUENCY_POLL | ADMIN_FREQUENCY_AUTOMATIC,                                                                                                      ///< ADMIN_UPDATE_CLIENT_INFO
-	ADMIN_FREQUENCY_POLL | ADMIN_FREQUENCY_AUTOMATIC,                                                                                                      ///< ADMIN_UPDATE_COMPANY_INFO
-	ADMIN_FREQUENCY_POLL |                         ADMIN_FREQUENCY_WEEKLY | ADMIN_FREQUENCY_MONTHLY | ADMIN_FREQUENCY_QUARTERLY | ADMIN_FREQUENCY_ANUALLY, ///< ADMIN_UPDATE_COMPANY_ECONOMY
-	ADMIN_FREQUENCY_POLL |                         ADMIN_FREQUENCY_WEEKLY | ADMIN_FREQUENCY_MONTHLY | ADMIN_FREQUENCY_QUARTERLY | ADMIN_FREQUENCY_ANUALLY, ///< ADMIN_UPDATE_COMPANY_STATS
-	                       ADMIN_FREQUENCY_AUTOMATIC,                                                                                                      ///< ADMIN_UPDATE_CHAT
-	                       ADMIN_FREQUENCY_AUTOMATIC,                                                                                                      ///< ADMIN_UPDATE_CONSOLE
-	ADMIN_FREQUENCY_POLL,                                                                                                                                  ///< ADMIN_UPDATE_CMD_NAMES
-	                       ADMIN_FREQUENCY_AUTOMATIC,                                                                                                      ///< ADMIN_UPDATE_CMD_LOGGING
-	                       ADMIN_FREQUENCY_AUTOMATIC,                                                                                                      ///< ADMIN_UPDATE_GAMESCRIPT
+static const AdminUpdateFrequencies _admin_update_type_frequencies[] = {
+	{AdminUpdateFrequency::Poll, AdminUpdateFrequency::Daily, AdminUpdateFrequency::Weekly, AdminUpdateFrequency::Monthly, AdminUpdateFrequency::Quarterly, AdminUpdateFrequency::Annually}, // ADMIN_UPDATE_DATE
+	{AdminUpdateFrequency::Poll, AdminUpdateFrequency::Automatic,                                                                                                                         }, // ADMIN_UPDATE_CLIENT_INFO
+	{AdminUpdateFrequency::Poll, AdminUpdateFrequency::Automatic,                                                                                                                         }, // ADMIN_UPDATE_COMPANY_INFO
+	{AdminUpdateFrequency::Poll,                              AdminUpdateFrequency::Weekly, AdminUpdateFrequency::Monthly, AdminUpdateFrequency::Quarterly, AdminUpdateFrequency::Annually}, // ADMIN_UPDATE_COMPANY_ECONOMY
+	{AdminUpdateFrequency::Poll,                              AdminUpdateFrequency::Weekly, AdminUpdateFrequency::Monthly, AdminUpdateFrequency::Quarterly, AdminUpdateFrequency::Annually}, // ADMIN_UPDATE_COMPANY_STATS
+	{                            AdminUpdateFrequency::Automatic,                                                                                                                         }, // ADMIN_UPDATE_CHAT
+	{                            AdminUpdateFrequency::Automatic,                                                                                                                         }, // ADMIN_UPDATE_CONSOLE
+	{AdminUpdateFrequency::Poll,                                                                                                                                                          }, // ADMIN_UPDATE_CMD_NAMES
+	{                            AdminUpdateFrequency::Automatic,                                                                                                                         }, // ADMIN_UPDATE_CMD_LOGGING
+	{                            AdminUpdateFrequency::Automatic,                                                                                                                         }, // ADMIN_UPDATE_GAMESCRIPT
 };
 /** Sanity check. */
 static_assert(lengthof(_admin_update_type_frequencies) == ADMIN_UPDATE_END);
@@ -69,7 +68,6 @@ static_assert(lengthof(_admin_update_type_frequencies) == ADMIN_UPDATE_END);
  */
 ServerNetworkAdminSocketHandler::ServerNetworkAdminSocketHandler(SOCKET s) : NetworkAdminSocketHandler(s)
 {
-	_network_admins_connected++;
 	this->status = ADMIN_STATUS_INACTIVE;
 	this->connect_time = std::chrono::steady_clock::now();
 }
@@ -79,12 +77,11 @@ ServerNetworkAdminSocketHandler::ServerNetworkAdminSocketHandler(SOCKET s) : Net
  */
 ServerNetworkAdminSocketHandler::~ServerNetworkAdminSocketHandler()
 {
-	_network_admins_connected--;
 	Debug(net, 3, "[admin] '{}' ({}) has disconnected", this->admin_name, this->admin_version);
-	if (_redirect_console_to_admin == this->index) _redirect_console_to_admin = INVALID_ADMIN_ID;
+	if (_redirect_console_to_admin == this->index) _redirect_console_to_admin = AdminID::Invalid();
 
-	if (this->update_frequency[ADMIN_UPDATE_CONSOLE] & ADMIN_FREQUENCY_AUTOMATIC) {
-		this->update_frequency[ADMIN_UPDATE_CONSOLE] = (AdminUpdateFrequency)0;
+	if (this->update_frequency[ADMIN_UPDATE_CONSOLE].Test(AdminUpdateFrequency::Automatic)) {
+		this->update_frequency[ADMIN_UPDATE_CONSOLE] = {};
 		DebugReconsiderSendRemoteMessages();
 	}
 }
@@ -95,12 +92,7 @@ ServerNetworkAdminSocketHandler::~ServerNetworkAdminSocketHandler()
  */
 /* static */ bool ServerNetworkAdminSocketHandler::AllowConnection()
 {
-	bool accept = _settings_client.network.AdminAuthenticationConfigured() && _network_admins_connected < MAX_ADMINS;
-	/* We can't go over the MAX_ADMINS limit here. However, if we accept
-	 * the connection, there has to be space in the pool. */
-	static_assert(NetworkAdminSocketPool::MAX_SIZE == MAX_ADMINS);
-	assert(!accept || ServerNetworkAdminSocketHandler::CanAllocateItem());
-	return accept;
+	return _settings_client.network.AdminAuthenticationConfigured() && ServerNetworkAdminSocketHandler::CanAllocateItem();
 }
 
 /** Send the packets for the server sockets. */
@@ -119,7 +111,7 @@ ServerNetworkAdminSocketHandler::~ServerNetworkAdminSocketHandler()
 }
 
 /**
- * Handle the acception of a connection.
+ * Handle the acceptance of a connection.
  * @param s The socket of the new connection.
  * @param address The address of the peer.
  */
@@ -167,7 +159,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendProtocol()
 	for (int i = 0; i < ADMIN_UPDATE_END; i++) {
 		p->Send_bool  (true);
 		p->Send_uint16(i);
-		p->Send_uint16(_admin_update_type_frequencies[i]);
+		p->Send_uint16(_admin_update_type_frequencies[i].base());
 	}
 
 	p->Send_bool(false);
@@ -187,7 +179,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendWelcome()
 
 	p->Send_string(""); // Used to be map-name.
 	p->Send_uint32(_settings_game.game_creation.generation_seed);
-	p->Send_uint8 (_settings_game.game_creation.landscape);
+	p->Send_uint8 (to_underlying(_settings_game.game_creation.landscape));
 	p->Send_uint32(CalTime::ConvertYMDToDate(_settings_game.game_creation.starting_year, 0, 1).base());
 	p->Send_uint16(Map::SizeX());
 	p->Send_uint16(Map::SizeY());
@@ -333,10 +325,8 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendCompanyInfo(const Company
 	auto p = std::make_unique<Packet>(this, ADMIN_PACKET_SERVER_COMPANY_INFO);
 
 	p->Send_uint8 (c->index);
-	SetDParam(0, c->index);
-	p->Send_string(GetString(STR_COMPANY_NAME));
-	SetDParam(0, c->index);
-	p->Send_string(GetString(STR_PRESIDENT_NAME));
+	p->Send_string(GetString(STR_COMPANY_NAME, c->index));
+	p->Send_string(GetString(STR_PRESIDENT_NAME, c->index));
 	p->Send_uint8 (c->colour);
 	p->Send_bool  (NetworkCompanyIsPassworded(c->index));
 	p->Send_uint32(c->InauguratedDisplayYear());
@@ -358,10 +348,8 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendCompanyUpdate(const Compa
 	auto p = std::make_unique<Packet>(this, ADMIN_PACKET_SERVER_COMPANY_UPDATE);
 
 	p->Send_uint8 (c->index);
-	SetDParam(0, c->index);
-	p->Send_string(GetString(STR_COMPANY_NAME));
-	SetDParam(0, c->index);
-	p->Send_string(GetString(STR_PRESIDENT_NAME));
+	p->Send_string(GetString(STR_COMPANY_NAME, c->index));
+	p->Send_string(GetString(STR_PRESIDENT_NAME, c->index));
 	p->Send_uint8 (c->colour);
 	p->Send_bool  (NetworkCompanyIsPassworded(c->index));
 	p->Send_uint8 (CeilDiv(c->months_of_bankruptcy, 3)); // send as quarters_of_bankruptcy
@@ -423,8 +411,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendCompanyEconomy()
 NetworkRecvStatus ServerNetworkAdminSocketHandler::SendCompanyStats()
 {
 	/* Fetch the latest version of the stats. */
-	NetworkCompanyStats company_stats[MAX_COMPANIES];
-	NetworkPopulateCompanyStats(company_stats);
+	NetworkCompanyStatsArray company_stats = NetworkGetCompanyStats();
 
 	/* Go through all the companies. */
 	for (const Company *company : Company::Iterate()) {
@@ -455,7 +442,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendCompanyStats()
  * @param msg The actual message.
  * @param data Arbitrary extra data.
  */
-NetworkRecvStatus ServerNetworkAdminSocketHandler::SendChat(NetworkAction action, DestType desttype, ClientID client_id, const std::string &msg, NetworkTextMessageData data)
+NetworkRecvStatus ServerNetworkAdminSocketHandler::SendChat(NetworkAction action, DestType desttype, ClientID client_id, std::string_view msg, NetworkTextMessageData data)
 {
 	auto p = std::make_unique<Packet>(this, ADMIN_PACKET_SERVER_CHAT);
 
@@ -473,7 +460,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendChat(NetworkAction action
  * Send a notification indicating the rcon command has completed.
  * @param command The original command sent.
  */
-NetworkRecvStatus ServerNetworkAdminSocketHandler::SendRconEnd(const std::string_view command)
+NetworkRecvStatus ServerNetworkAdminSocketHandler::SendRconEnd(std::string_view command)
 {
 	auto p = std::make_unique<Packet>(this, ADMIN_PACKET_SERVER_RCON_END);
 
@@ -488,7 +475,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendRconEnd(const std::string
  * @param colour The colour of the text.
  * @param result The result of the command.
  */
-NetworkRecvStatus ServerNetworkAdminSocketHandler::SendRcon(uint16_t colour, const std::string_view result)
+NetworkRecvStatus ServerNetworkAdminSocketHandler::SendRcon(uint16_t colour, std::string_view result)
 {
 	auto p = std::make_unique<Packet>(this, ADMIN_PACKET_SERVER_RCON);
 
@@ -509,7 +496,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::Receive_ADMIN_RCON(Packet &p)
 
 	_redirect_console_to_admin = this->index;
 	IConsoleCmdExec(command);
-	_redirect_console_to_admin = INVALID_ADMIN_ID;
+	_redirect_console_to_admin = AdminID::Invalid();
 	return this->SendRconEnd(command);
 }
 
@@ -541,7 +528,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::Receive_ADMIN_PING(Packet &p)
  * @param origin The origin of the string.
  * @param string The string that's put on the console.
  */
-NetworkRecvStatus ServerNetworkAdminSocketHandler::SendConsole(const std::string_view origin, const std::string_view string)
+NetworkRecvStatus ServerNetworkAdminSocketHandler::SendConsole(std::string_view origin, std::string_view string)
 {
 	/* If the length of both strings, plus the 2 '\0' terminations and 3 bytes of the packet
 	 * are bigger than the MTU, just ignore the message. Better safe than sorry. It should
@@ -562,7 +549,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendConsole(const std::string
  * Send GameScript JSON output.
  * @param json The JSON string.
  */
-NetworkRecvStatus ServerNetworkAdminSocketHandler::SendGameScript(const std::string_view json)
+NetworkRecvStatus ServerNetworkAdminSocketHandler::SendGameScript(std::string_view json)
 {
 	auto p = std::make_unique<Packet>(this, ADMIN_PACKET_SERVER_GAMESCRIPT);
 
@@ -589,12 +576,12 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::SendCmdNames()
 	auto p = std::make_unique<Packet>(this, ADMIN_PACKET_SERVER_CMD_NAMES);
 
 	for (uint i = 0; i < CMD_END; i++) {
-		const char *cmdname = GetCommandName(static_cast<Commands>(i));
+		std::string_view cmdname = GetCommandName(static_cast<Commands>(i));
 
 		/* Should COMPAT_MTU be exceeded, start a new packet
 		 * (magic 5: 1 bool "more data" and one uint16_t "command id", one
 		 * byte for string '\0' termination and 1 bool "no more data" */
-		if (!p->CanWriteToPacket(strlen(cmdname) + 5)) {
+		if (!p->CanWriteToPacket(cmdname.size() + 5)) {
 			p->Send_bool(false);
 			this->SendPacket(std::move(p));
 
@@ -684,9 +671,9 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::Receive_ADMIN_UPDATE_FREQUENC
 	if (this->status <= ADMIN_STATUS_AUTHENTICATE) return this->SendError(NETWORK_ERROR_NOT_EXPECTED);
 
 	AdminUpdateType type = (AdminUpdateType)p.Recv_uint16();
-	AdminUpdateFrequency freq = (AdminUpdateFrequency)p.Recv_uint16();
+	AdminUpdateFrequencies freq = static_cast<AdminUpdateFrequencies>(p.Recv_uint16());
 
-	if (type >= ADMIN_UPDATE_END || (_admin_update_type_frequencies[type] & freq) != freq) {
+	if (type >= ADMIN_UPDATE_END || !_admin_update_type_frequencies[type].All(freq)) {
 		/* The server does not know of this UpdateType. */
 		Debug(net, 1, "[admin] Not supported update frequency {} ({}) from '{}' ({})", type, freq, this->admin_name, this->admin_version);
 		return this->SendError(NETWORK_ERROR_ILLEGAL_PACKET);
@@ -820,10 +807,10 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::Receive_ADMIN_JOIN_SECURE(Pac
 
 	this->admin_name = p.Recv_string(NETWORK_CLIENT_NAME_LENGTH);
 	this->admin_version = p.Recv_string(NETWORK_REVISION_LENGTH);
-	NetworkAuthenticationMethodMask method_mask = p.Recv_uint16();
+	NetworkAuthenticationMethodMask method_mask{p.Recv_uint16()};
 
 	/* Always exclude key exchange only, as that provides no credential checking. */
-	ClrBit(method_mask, NETWORK_AUTH_METHOD_X25519_KEY_EXCHANGE_ONLY);
+	method_mask.Reset(NetworkAuthenticationMethod::X25519_KeyExchangeOnly);
 
 	if (this->admin_name.empty() || this->admin_version.empty()) {
 		/* No name or version supplied. */
@@ -869,7 +856,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::Receive_ADMIN_AUTH_RESPONSE(P
 	if (this->status != ADMIN_STATUS_AUTHENTICATE) return this->SendError(NETWORK_ERROR_NOT_EXPECTED);
 
 	switch (this->authentication_handler->ReceiveResponse(p)) {
-		case NetworkAuthenticationServerHandler::AUTHENTICATED:
+		case NetworkAuthenticationServerHandler::ResponseResult::Authenticated:
 			Debug(net, 3, "[admin] '{}' ({}) authenticated", this->admin_name, this->admin_version);
 
 			this->SendEnableEncryption();
@@ -879,11 +866,11 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::Receive_ADMIN_AUTH_RESPONSE(P
 			this->authentication_handler = nullptr;
 			return this->SendProtocol();
 
-		case NetworkAuthenticationServerHandler::RETRY_NEXT_METHOD:
+		case NetworkAuthenticationServerHandler::ResponseResult::RetryNextMethod:
 			Debug(net, 6, "[admin] '{}' ({}) authentication failed, trying next method", this->admin_name, this->admin_version);
 			return this->SendAuthRequest();
 
-		case NetworkAuthenticationServerHandler::NOT_AUTHENTICATED:
+		case NetworkAuthenticationServerHandler::ResponseResult::NotAuthenticated:
 		default:
 			Debug(net, 3, "[admin] '{}' ({}) authentication failed", this->admin_name, this->admin_version);
 			return this->SendError(NETWORK_ERROR_WRONG_PASSWORD);
@@ -902,7 +889,7 @@ NetworkRecvStatus ServerNetworkAdminSocketHandler::Receive_ADMIN_AUTH_RESPONSE(P
 void NetworkAdminClientInfo(const NetworkClientSocket *cs, bool new_client)
 {
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_CLIENT_INFO] & ADMIN_FREQUENCY_AUTOMATIC) {
+		if (as->update_frequency[ADMIN_UPDATE_CLIENT_INFO].Test(AdminUpdateFrequency::Automatic)) {
 			as->SendClientInfo(cs, cs->GetInfo());
 			if (new_client) {
 				as->SendClientJoin(cs->client_id);
@@ -918,7 +905,7 @@ void NetworkAdminClientInfo(const NetworkClientSocket *cs, bool new_client)
 void NetworkAdminClientUpdate(const NetworkClientInfo *ci)
 {
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_CLIENT_INFO] & ADMIN_FREQUENCY_AUTOMATIC) {
+		if (as->update_frequency[ADMIN_UPDATE_CLIENT_INFO].Test(AdminUpdateFrequency::Automatic)) {
 			as->SendClientUpdate(ci);
 		}
 	}
@@ -931,7 +918,7 @@ void NetworkAdminClientUpdate(const NetworkClientInfo *ci)
 void NetworkAdminClientQuit(ClientID client_id)
 {
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_CLIENT_INFO] & ADMIN_FREQUENCY_AUTOMATIC) {
+		if (as->update_frequency[ADMIN_UPDATE_CLIENT_INFO].Test(AdminUpdateFrequency::Automatic)) {
 			as->SendClientQuit(client_id);
 		}
 	}
@@ -945,7 +932,7 @@ void NetworkAdminClientQuit(ClientID client_id)
 void NetworkAdminClientError(ClientID client_id, NetworkErrorCode error_code)
 {
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_CLIENT_INFO] & ADMIN_FREQUENCY_AUTOMATIC) {
+		if (as->update_frequency[ADMIN_UPDATE_CLIENT_INFO].Test(AdminUpdateFrequency::Automatic)) {
 			as->SendClientError(client_id, error_code);
 		}
 	}
@@ -963,7 +950,7 @@ void NetworkAdminCompanyNew(const Company *company)
 	}
 
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_COMPANY_INFO] != ADMIN_FREQUENCY_AUTOMATIC) continue;
+		if (as->update_frequency[ADMIN_UPDATE_COMPANY_INFO] != AdminUpdateFrequency::Automatic) continue;
 
 		as->SendCompanyNew(company->index);
 		as->SendCompanyInfo(company);
@@ -979,7 +966,7 @@ void NetworkAdminCompanyUpdate(const Company *company)
 	if (company == nullptr) return;
 
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_COMPANY_INFO] != ADMIN_FREQUENCY_AUTOMATIC) continue;
+		if (as->update_frequency[ADMIN_UPDATE_COMPANY_INFO] != AdminUpdateFrequency::Automatic) continue;
 
 		as->SendCompanyUpdate(company);
 	}
@@ -1001,12 +988,12 @@ void NetworkAdminCompanyRemove(CompanyID company_id, AdminCompanyRemoveReason bc
 /**
  * Send chat to the admin network (if they did opt in for the respective update).
  */
-void NetworkAdminChat(NetworkAction action, DestType desttype, ClientID client_id, const std::string &msg, NetworkTextMessageData data, bool from_admin)
+void NetworkAdminChat(NetworkAction action, DestType desttype, ClientID client_id, std::string_view msg, NetworkTextMessageData data, bool from_admin)
 {
 	if (from_admin) return;
 
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_CHAT] & ADMIN_FREQUENCY_AUTOMATIC) {
+		if (as->update_frequency[ADMIN_UPDATE_CHAT].Test(AdminUpdateFrequency::Automatic)) {
 			as->SendChat(action, desttype, client_id, msg, data);
 		}
 	}
@@ -1018,7 +1005,7 @@ void NetworkAdminChat(NetworkAction action, DestType desttype, ClientID client_i
  * @param colour_code The colour of the string.
  * @param string      The string to show.
  */
-void NetworkServerSendAdminRcon(AdminIndex admin_index, TextColour colour_code, const std::string_view string)
+void NetworkServerSendAdminRcon(AdminID admin_index, TextColour colour_code, std::string_view string)
 {
 	ServerNetworkAdminSocketHandler::Get(admin_index)->SendRcon(colour_code, string);
 }
@@ -1028,10 +1015,10 @@ void NetworkServerSendAdminRcon(AdminIndex admin_index, TextColour colour_code, 
  * @param origin the origin of the message.
  * @param string the message as printed on the console.
  */
-void NetworkAdminConsole(const std::string_view origin, const std::string_view string)
+void NetworkAdminConsole(std::string_view origin, std::string_view string)
 {
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_CONSOLE] & ADMIN_FREQUENCY_AUTOMATIC) {
+		if (as->update_frequency[ADMIN_UPDATE_CONSOLE].Test(AdminUpdateFrequency::Automatic)) {
 			as->SendConsole(origin, string);
 		}
 	}
@@ -1041,10 +1028,10 @@ void NetworkAdminConsole(const std::string_view origin, const std::string_view s
  * Send GameScript JSON to the admin network (if they did opt in for the respective update).
  * @param json The JSON data as received from the GameScript.
  */
-void NetworkAdminGameScript(const std::string_view json)
+void NetworkAdminGameScript(std::string_view json)
 {
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_GAMESCRIPT] & ADMIN_FREQUENCY_AUTOMATIC) {
+		if (as->update_frequency[ADMIN_UPDATE_GAMESCRIPT].Test(AdminUpdateFrequency::Automatic)) {
 			as->SendGameScript(json);
 		}
 	}
@@ -1060,7 +1047,7 @@ void NetworkAdminCmdLogging(const NetworkClientSocket *owner, const CommandPacke
 	ClientID client_id = owner == nullptr ? _network_own_client_id : owner->client_id;
 
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
-		if (as->update_frequency[ADMIN_UPDATE_CMD_LOGGING] & ADMIN_FREQUENCY_AUTOMATIC) {
+		if (as->update_frequency[ADMIN_UPDATE_CMD_LOGGING].Test(AdminUpdateFrequency::Automatic)) {
 			as->SendCmdLogging(client_id, cp);
 		}
 	}
@@ -1084,7 +1071,7 @@ void NetworkAdminUpdate(AdminUpdateFrequency freq)
 {
 	for (ServerNetworkAdminSocketHandler *as : ServerNetworkAdminSocketHandler::IterateActive()) {
 		for (int i = 0; i < ADMIN_UPDATE_END; i++) {
-			if (as->update_frequency[i] & freq) {
+			if (as->update_frequency[i].Test(freq)) {
 				/* Update the admin for the required details */
 				switch (i) {
 					case ADMIN_UPDATE_DATE:

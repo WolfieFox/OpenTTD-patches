@@ -26,7 +26,7 @@ class Blitter_32bppSimple : public Blitter_32bppBase {
 public:
 	void Draw(Blitter::BlitterParams *bp, BlitterMode mode, ZoomLevel zoom) override;
 	void DrawColourMappingRect(void *dst, int width, int height, PaletteID pal) override;
-	Sprite *Encode(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator) override;
+	Sprite *Encode(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator) override;
 
 	const char *GetName() override { return "32bpp-simple"; }
 };
@@ -35,7 +35,7 @@ public:
 class FBlitter_32bppSimple : public BlitterFactory {
 public:
 	FBlitter_32bppSimple() : BlitterFactory("32bpp-simple", "32bpp Simple Blitter (no palette animation)") {}
-	Blitter *CreateInstance() override { return new Blitter_32bppSimple(); }
+	std::unique_ptr<Blitter> CreateInstance() override { return std::make_unique<Blitter_32bppSimple>(); }
 };
 
 #endif /* BLITTER_32BPP_SIMPLE_HPP */

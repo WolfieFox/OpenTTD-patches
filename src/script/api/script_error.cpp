@@ -25,7 +25,9 @@ ScriptError::ScriptErrorMapString ScriptError::error_map_string = ScriptError::S
 
 /* static */ std::optional<std::string> ScriptError::GetLastErrorString()
 {
-	return (*error_map_string.find(ScriptError::GetLastError())).second;
+	auto it = ScriptError::error_map_string.find(ScriptError::GetLastError());
+	assert(it != ScriptError::error_map_string.end());
+	return std::string{it->second};
 }
 
 /* static */ ScriptErrorType ScriptError::StringToError(StringID internal_string_id)
@@ -60,7 +62,7 @@ ScriptError::ScriptErrorMapString ScriptError::error_map_string = ScriptError::S
 	error_map[internal_string_id] = ai_error_msg;
 }
 
-/* static */ void ScriptError::RegisterErrorMapString(ScriptErrorType ai_error_msg, const char *message)
+/* static */ void ScriptError::RegisterErrorMapString(ScriptErrorType ai_error_msg, std::string_view message)
 {
 	error_map_string[ai_error_msg] = message;
 }

@@ -15,7 +15,7 @@
 #include "../fios.h"
 #include "../strings_type.h"
 #include "../scope.h"
-#include "../core/ring_buffer.hpp"
+#include "../3rdparty/cpp-ring-buffer/ring_buffer.hpp"
 #include "../core/tinystring_type.hpp"
 #include "../core/strong_typedef_type.hpp"
 
@@ -35,13 +35,11 @@ enum SaveOrLoadResult {
 /** Deals with the type of the savegame, independent of extension */
 struct FileToSaveLoad {
 	SaveLoadOperation file_op;       ///< File operation to perform.
-	DetailedFileType detail_ftype;   ///< Concrete file type (PNG, BMP, old save, etc).
-	AbstractFileType abstract_ftype; ///< Abstract type of file (scenario, heightmap, etc).
+	FiosType ftype;                  ///< File type.
 	std::string name;                ///< Name of the file.
-	std::string title;               ///< Internal name of the game.
+	EncodedString title;             ///< Internal name of the game.
 
-	void SetMode(FiosType ft);
-	void SetMode(SaveLoadOperation fop, AbstractFileType aft, DetailedFileType dft);
+	void SetMode(const FiosType &ft, SaveLoadOperation fop = SLO_LOAD);
 	void Set(const FiosItem &item);
 };
 
@@ -67,8 +65,8 @@ extern FileToSaveLoad _file_to_saveload;
 
 std::string GenerateDefaultSaveName();
 void SetSaveLoadError(StringID str);
-StringID GetSaveLoadErrorType();
-StringID GetSaveLoadErrorMessage();
+EncodedString GetSaveLoadErrorType();
+EncodedString GetSaveLoadErrorMessage();
 SaveOrLoadResult SaveOrLoad(const std::string &filename, SaveLoadOperation fop, DetailedFileType dft, Subdirectory sb, bool threaded = true, SaveModeFlags flags = SMF_NONE);
 void WaitTillSaved();
 void ProcessAsyncSaveFinish();
@@ -387,7 +385,7 @@ inline constexpr bool SlCheckPrimitiveTypeVar(VarType type)
 	if (GetVarMemType(type) == SLE_VAR_CNAME) {
 		return std::is_same_v<T, char *> || std::is_same_v<T, const char *> || std::is_same_v<T, TinyString>;
 	}
-	if (!std::is_integral_v<T> && !std::is_enum_v<T> && !sl_is_instance<T, OverflowSafeInt>{} && !std::is_base_of_v<StrongTypedefBase, T> && !std::is_base_of_v<BaseBitSetBase, T>) return false;
+	if (!std::is_integral_v<T> && !std::is_enum_v<T> && !SlIsPrimitiveType<T>) return false;
 	return sizeof(T) == SlVarSize(type);
 }
 
@@ -437,7 +435,7 @@ inline constexpr bool SlCheckVar(SaveLoadType cmd, VarType type, size_t length)
 
 		case SL_STDSTR:
 			/* These should be all pointers to std::string. */
-			return std::is_same_v<typename std::remove_reference<T>::type, std::string>;
+			return std::is_same_v<typename std::remove_reference<T>::type, std::string> || std::is_same_v<typename std::remove_reference<T>::type, class EncodedString>;
 
 		case SL_ARR:
 			/* Partial load of array is permitted. */
@@ -450,7 +448,7 @@ inline constexpr bool SlCheckVar(SaveLoadType cmd, VarType type, size_t length)
 			return false;
 
 		case SL_REFRING:
-			if constexpr (sl_is_instance<T, ring_buffer>{}) {
+			if constexpr (sl_is_instance<T, jgr::ring_buffer>{}) {
 				return std::is_pointer_v<typename T::value_type> || sl_is_instance<typename T::value_type, std::unique_ptr>{};
 			}
 			return false;
@@ -462,7 +460,7 @@ inline constexpr bool SlCheckVar(SaveLoadType cmd, VarType type, size_t length)
 			return false;
 
 		case SL_RING:
-			if constexpr (sl_is_instance<T, ring_buffer>{}) {
+			if constexpr (sl_is_instance<T, jgr::ring_buffer>{}) {
 				return SlCheckPrimitiveTypeVar<typename T::value_type>(type);
 			}
 			return false;
@@ -516,7 +514,11 @@ size_t SaveLoadCustomContainerHandler(void *list, SaveLoadCustomContainerOp op, 
 
 		case SaveLoadCustomContainerOp::Save:
 			for (const typename T::value_type &val : *l) {
-				SlSaveValue(val, conv);
+				if constexpr (SlIsPrimitiveType<typename T::value_type>) {
+					SlSaveValue(val.base(), conv);
+				} else {
+					SlSaveValue(val, conv);
+				}
 			}
 			return 0;
 
@@ -991,6 +993,19 @@ inline bool IsSavegameVersionBeforeOrAt(SaveLoadVersion major)
 }
 
 /**
+ * Checks whether the effective upstream savegame is below \a major.
+ * @param major Major number of the version to check against.
+ * @return eEfective upstream savegame version is earlier than the specified version.
+ */
+inline bool IsEffectiveUpstreamSavegameVersionBefore(SaveLoadVersion major)
+{
+	extern SaveLoadVersion _sl_version;
+	extern SaveLoadVersion _sl_xv_upstream_version;
+	if (_sl_xv_upstream_version != SL_MIN_VERSION) return _sl_xv_upstream_version < major;
+	return _sl_version < major;
+}
+
+/**
  * Checks if some version from/to combination falls within the range of the
  * active savegame version.
  * @param version_from Inclusive savegame version lower bound.
@@ -999,7 +1014,6 @@ inline bool IsSavegameVersionBeforeOrAt(SaveLoadVersion major)
  */
 inline bool SlIsObjectCurrentlyValid(SaveLoadVersion version_from, SaveLoadVersion version_to, SlXvFeatureTest ext_feature_test)
 {
-	extern const SaveLoadVersion SAVEGAME_VERSION;
 	if (!ext_feature_test.IsFeaturePresent(_sl_xv_feature_static_versions, SAVEGAME_VERSION, version_from, version_to)) return false;
 
 	return true;
@@ -1043,6 +1057,10 @@ int64_t ReadValue(const void *ptr, VarType conv);
 void WriteValue(void *ptr, VarType conv, int64_t val);
 
 void SlSetArrayIndex(uint index);
+
+template <typename T> requires std::is_base_of_v<struct PoolIDBase, T>
+static void SlSetArrayIndex(const T &index) { SlSetArrayIndex(index.base()); }
+
 int SlIterateArray();
 
 size_t SlGetFieldLength();
@@ -1127,6 +1145,7 @@ struct SlLoadFromBufferState {
 	size_t old_obj_len;
 	uint8_t *old_bufp;
 	uint8_t *old_bufe;
+	uint8_t old_flags;
 };
 
 /**
@@ -1174,6 +1193,7 @@ void SlLoadTableWithArrayLengthPrefixesMissing();
 
 void SlSetStructListLength(size_t length);
 size_t SlGetStructListLength(size_t limit);
+uint32_t SlReadUint32LengthField();
 
 void SlSkipChunkContents();
 

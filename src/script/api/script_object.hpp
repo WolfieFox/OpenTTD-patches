@@ -14,7 +14,9 @@
 #include "../../company_type.h"
 #include "../../road_type.h"
 #include "../../rail_type.h"
+#include "../../core/backup_type.hpp"
 #include "../../core/random_func.hpp"
+#include "../../core/typed_container.hpp"
 
 #include "script_types.hpp"
 #include "script_log_types.hpp"
@@ -55,7 +57,7 @@ private:
 };
 
 /**
- * Uper-parent object of all API classes. You should never use this class in
+ * Upper-parent object of all API classes. You should never use this class in
  *   your script, as it doesn't publish any public functions. It is used
  *   internally to have a common place to handle general things, like internal
  *   command processing, and command-validation checks.
@@ -75,7 +77,7 @@ protected:
 	class ActiveInstance {
 	friend class ScriptObject;
 	public:
-		ActiveInstance(ScriptInstance *instance);
+		ActiveInstance(ScriptInstance &instance);
 		~ActiveInstance();
 	private:
 		ScriptInstance *last_active;    ///< The active instance before we go instantiated.
@@ -83,6 +85,33 @@ protected:
 
 		static ScriptInstance *active;  ///< The global current active instance.
 	};
+
+	class DisableDoCommandScope : public AutoRestoreBackup<bool> {
+	public:
+		DisableDoCommandScope();
+	};
+
+	/**
+	 * Save this object.
+	 * Must push 2 elements on the stack:
+	 *  - the name (classname without "Script") of the object (OT_STRING)
+	 *  - the data for the object (any supported types)
+	 * @return True iff saving this type is supported.
+	 */
+	virtual bool SaveObject(HSQUIRRELVM) { return false; }
+
+	/**
+	 * Load this object.
+	 * The data for the object must be pushed on the stack before the call.
+	 * @return True iff loading this type is supported.
+	 */
+	virtual bool LoadObject(HSQUIRRELVM) { return false; }
+
+	/**
+	 * Clone an object.
+	 * @return The clone if cloning this type is supported, nullptr otherwise.
+	 */
+	virtual ScriptObject *CloneObject() { return nullptr; }
 
 public:
 	/**
@@ -95,7 +124,7 @@ public:
 	 * Get the currently active instance.
 	 * @return The instance.
 	 */
-	static class ScriptInstance *GetActiveInstance();
+	static class ScriptInstance &GetActiveInstance();
 
 	/**
 	 * Get a reference of the randomizer that brings this script random values.
@@ -109,6 +138,16 @@ public:
 	 */
 	static void InitializeRandomizers();
 
+	/**
+	 * Used when trying to instantiate ScriptObject from squirrel.
+	 */
+	static SQInteger Constructor(HSQUIRRELVM);
+
+	/**
+	 * Used for 'clone' from squirrel.
+	 */
+	static SQInteger _cloned(HSQUIRRELVM);
+
 private:
 	static bool DoCommandImplementation(Commands cmd, TileIndex tile, CommandPayloadBase &&payload, Script_SuspendCallbackProc *callback, DoCommandIntlFlag intl_flags);
 
@@ -116,7 +155,7 @@ protected:
 	template <Commands cmd>
 	static bool DoCommand(TileIndex tile, typename CommandTraits<cmd>::PayloadType &&payload, Script_SuspendCallbackProc *callback = nullptr)
 	{
-		if constexpr (CommandTraits<cmd>::flags & CMD_CLIENT_ID) {
+		if constexpr (CommandTraits<cmd>::flags.Test(CommandFlag::ClientID)) {
 			SetCommandPayloadClientID(payload, (ClientID)UINT32_MAX);
 		}
 		return ScriptObject::DoCommandImplementation(cmd, tile, std::move(payload), callback, DCIF_TYPE_CHECKED);
@@ -262,21 +301,6 @@ protected:
 	static bool GetLastCommandRes();
 
 	/**
-	 * Store a allow_do_command per company.
-	 * @param allow The new allow.
-	 */
-	static void SetAllowDoCommand(bool allow);
-
-	/**
-	 * Get the internal value of allow_do_command. This can differ
-	 * from CanSuspend() if the reason we are not allowed
-	 * to execute a DoCommand is in squirrel and not the API.
-	 * In that case use this function to restore the previous value.
-	 * @return True iff DoCommands are allowed in the current scope.
-	 */
-	static bool GetAllowDoCommand();
-
-	/**
 	 * Set the current company to execute commands for or request
 	 *  information about.
 	 * @param company The new company.
@@ -310,7 +334,7 @@ protected:
 	/**
 	 * Set the result data of the last command.
 	 */
-	static void SetLastCommandResultData(uint32_t last_result);
+	static void SetLastCommandResultData(CommandResultData last_result);
 
 	/**
 	 * Clear the result data of the last command.
@@ -323,8 +347,7 @@ protected:
 	template <typename T>
 	static T GetLastCommandResultData(T default_value)
 	{
-		auto res = ScriptObject::GetLastCommandResultDataRaw();
-		return res.second ? static_cast<T>(res.first) : default_value;
+		return ScriptObject::GetLastCommandResultDataRaw().GetOrDefault<T>(default_value);
 	}
 
 	/**
@@ -343,28 +366,24 @@ protected:
 	static bool CanSuspend();
 
 	/**
-	 * Get the pointer to store event data in.
+	 * Get the reference to the event queue.
 	 */
-	static void *&GetEventPointer();
+	static struct ScriptEventQueue &GetEventQueue();
 
 	/**
-	 * Get the pointer to store log message in.
+	 * Get the reference to the log message storage.
 	 */
 	static ScriptLogTypes::LogData &GetLogData();
-
-	/**
-	 * Get an allocated string with all control codes stripped off.
-	 */
-	static std::string GetString(StringID string);
 
 	static bool IsNewUniqueLogMessage(const std::string &msg);
 
 	static void RegisterUniqueLogMessage(std::string &&msg);
 
 private:
-	static std::pair<uint32_t, bool> GetLastCommandResultDataRaw();
+	static CommandResultData GetLastCommandResultDataRaw();
 
-	static Randomizer random_states[OWNER_END]; ///< Random states for each of the scripts (game script uses OWNER_DEITY)
+	using RandomizerArray = TypedIndexContainer<std::array<Randomizer, OWNER_END.base()>, Owner>;
+	static RandomizerArray random_states; ///< Random states for each of the scripts (game script uses OWNER_DEITY)
 };
 
 /**
@@ -412,6 +431,14 @@ public:
 	}
 
 	/**
+	 * Transfer ownership to the caller.
+	 */
+	[[nodiscard]] T *release()
+	{
+		return std::exchange(this->data, nullptr);
+	}
+
+	/**
 	 * Dereferencing this reference returns a reference to the reference
 	 * counted object
 	 * @return Reference to the underlying object.
@@ -439,5 +466,38 @@ public:
 		return this->data;
 	}
 };
+
+/**
+ * Allocator that uses script memory allocation accounting.
+ * @tparam T Type of allocator.
+ */
+template <typename T>
+struct ScriptStdAllocator
+{
+	using value_type = T;
+
+	ScriptStdAllocator() = default;
+
+	template <typename U>
+	constexpr ScriptStdAllocator(const ScriptStdAllocator<U> &) noexcept {}
+
+	T *allocate(std::size_t n)
+	{
+		Squirrel::IncreaseAllocatedSize(n * sizeof(T));
+		return std::allocator<T>{}.allocate(n);
+	}
+
+	void deallocate(T *mem, std::size_t n)
+	{
+		Squirrel::DecreaseAllocatedSize(n * sizeof(T));
+		std::allocator<T>{}.deallocate(mem, n);
+	}
+};
+
+template <typename T, typename U>
+bool operator==(const ScriptStdAllocator<T> &, const ScriptStdAllocator<U> &) { return true; }
+
+template <typename T, typename U>
+bool operator!=(const ScriptStdAllocator<T> &, const ScriptStdAllocator<U> &) { return false; }
 
 #endif /* SCRIPT_OBJECT_HPP */

@@ -1,11 +1,11 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.17)
 
 if(NOT BINARY_NAME)
     set(BINARY_NAME openttd)
 endif()
 
 project(${BINARY_NAME}
-    VERSION 15.0
+    VERSION 16.0
 )
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)

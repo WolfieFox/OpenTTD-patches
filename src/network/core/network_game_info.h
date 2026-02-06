@@ -16,8 +16,8 @@
 #include "core.h"
 #include "../../newgrf_config.h"
 #include "../../date_type.h"
-
-#include <unordered_map>
+#include "../../landscape_type.h"
+#include "../../3rdparty/robin_hood/robin_hood.h"
 
 /*
  * NetworkGameInfo has several revisions which we still need to support on the
@@ -108,7 +108,7 @@ struct NetworkServerGameInfo {
 	uint8_t companies_on;        ///< How many started companies do we have
 	uint8_t companies_max;       ///< Max companies allowed on server
 	uint8_t spectators_on;       ///< How many spectators do we have?
-	uint8_t landscape;           ///< The used landscape
+	LandscapeType landscape;     ///< The used landscape
 	int gamescript_version;      ///< Version of the gamescript.
 	std::string gamescript_name; ///< Name of the gamescript.
 };
@@ -131,7 +131,7 @@ struct NamedGRFIdentifier {
 	std::string name;    ///< The name of the NewGRF.
 };
 /** Lookup table for the GameInfo in case of #NST_LOOKUP_ID. */
-typedef std::unordered_map<uint32_t, NamedGRFIdentifier> GameInfoNewGRFLookupTable;
+typedef robin_hood::unordered_map<uint32_t, NamedGRFIdentifier> GameInfoNewGRFLookupTable;
 
 extern NetworkServerGameInfo _network_game_info;
 

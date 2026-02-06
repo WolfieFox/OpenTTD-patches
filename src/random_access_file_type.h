@@ -27,7 +27,7 @@ class RandomAccessFile {
 	static constexpr int BUFFER_SIZE = 4096;
 
 	std::string filename;            ///< Full name of the file; relative path to subdir plus the extension of the file.
-	std::string simplified_filename; ///< Simplified lowecase name of the file; only the name, no path or extension.
+	std::string simplified_filename; ///< Simplified lowercase name of the file; only the name, no path or extension.
 
 	std::optional<FileHandle> file_handle; ///< File handle of the open file.
 	size_t pos;                      ///< Position in the file of the end of the read buffer.
@@ -45,7 +45,7 @@ class RandomAccessFile {
 	void SeekToIntl(size_t pos, int mode);
 
 public:
-	RandomAccessFile(const std::string &filename, Subdirectory subdir);
+	RandomAccessFile(std::string_view filename, Subdirectory subdir);
 	RandomAccessFile(const RandomAccessFile&) = delete;
 	void operator=(const RandomAccessFile&) = delete;
 

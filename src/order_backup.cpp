@@ -20,6 +20,8 @@
 #include "vehicle_func.h"
 #include "group_cmd.h"
 
+#include "table/strings.h"
+
 #include "safeguards.h"
 
 OrderBackupPool _order_backup_pool("BackupOrder");
@@ -40,12 +42,8 @@ OrderBackup::~OrderBackup()
  * @param v    The vehicle to make a backup of.
  * @param user The user that is requesting the backup.
  */
-OrderBackup::OrderBackup(const Vehicle *v, uint32_t user)
+OrderBackup::OrderBackup(const Vehicle *v, uint32_t user) : user(user), tile(v->tile), group(v->group_id)
 {
-	this->user             = user;
-	this->tile             = v->tile;
-	this->group            = v->group_id;
-
 	this->CopyConsistPropertiesFrom(v);
 
 	/* If we have shared orders, store the vehicle we share the order with. */
@@ -73,7 +71,7 @@ void OrderBackup::DoRestore(Vehicle *v)
 {
 	/* If we had shared orders, recover that */
 	if (this->clone != nullptr) {
-		Command<CMD_CLONE_ORDER>::Do(DC_EXEC, CO_SHARE, v->index, this->clone->index);
+		Command<CMD_CLONE_ORDER>::Do(DoCommandFlag::Execute, CO_SHARE, v->index, this->clone->index);
 	} else if (!this->orders.empty() && OrderList::CanAllocateItem()) {
 		v->orders = new OrderList(std::move(this->orders), v);
 		this->orders.clear();
@@ -95,7 +93,7 @@ void OrderBackup::DoRestore(Vehicle *v)
 	if (v->cur_timetable_order_index >= v->GetNumOrders()) v->cur_timetable_order_index = INVALID_VEH_ORDER_ID;
 
 	/* Restore vehicle group */
-	Command<CMD_ADD_VEHICLE_GROUP>::Do(DC_EXEC, this->group, v->index, false);
+	Command<CMD_ADD_VEHICLE_GROUP>::Do(DoCommandFlag::Execute, this->group, v->index, false);
 }
 
 /**
@@ -152,10 +150,10 @@ void OrderBackup::DoRestore(Vehicle *v)
  * @param user_id User that had the OrderBackup.
  * @return The cost of this operation or an error.
  */
-CommandCost CmdClearOrderBackup(DoCommandFlag flags, TileIndex tile, ClientID user_id)
+CommandCost CmdClearOrderBackup(DoCommandFlags flags, TileIndex tile, ClientID user_id)
 {
 	/* No need to check anything. If the tile or user don't exist we just ignore it. */
-	if (flags & DC_EXEC) OrderBackup::ResetOfUser(tile == 0 ? INVALID_TILE : tile, user_id);
+	if (flags.Test(DoCommandFlag::Execute)) OrderBackup::ResetOfUser(tile == 0 ? INVALID_TILE : tile, user_id);
 
 	return CommandCost();
 }

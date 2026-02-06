@@ -11,6 +11,7 @@
 #include "core/container_func.hpp"
 #include "debug.h"
 #include "newgrf_roadtype.h"
+#include "newgrf_railtype.h"
 #include "date_func.h"
 #include "depot_base.h"
 #include "town.h"
@@ -18,6 +19,35 @@
 #include "newgrf_dump.h"
 
 #include "safeguards.h"
+
+/**
+ * Variable 0x45 of road-/tram-/rail-types to query track types on a tile (road/tram parts).
+ *
+ * Format: __RRttrr
+ * - rr: Translated roadtype.
+ * - tt: Translated tramtype.
+ * - RR: Translated railtype.
+ *
+ * Special values for rr, tt, RR:
+ * - 0xFF: Track not present on tile.
+ * - 0xFE: Track present, but no matching entry in translation table.
+ */
+uint32_t GetTrackTypesRoad(TileIndex tile, const GRFFile *grffile)
+{
+	uint8_t road = 0xFF;
+	uint8_t tram = 0xFF;
+	if (MayHaveRoad(tile)) {
+		if (auto tt = GetRoadTypeRoad(tile); tt != INVALID_ROADTYPE) {
+			road = GetReverseRoadTypeTranslation(tt, grffile);
+			if (road == 0xFF) road = 0xFE;
+		}
+		if (auto tt = GetRoadTypeTram(tile); tt != INVALID_ROADTYPE) {
+			tram = GetReverseRoadTypeTranslation(tt, grffile);
+			if (tram == 0xFF) tram = 0xFE;
+		}
+	}
+	return road | tram << 8;
+}
 
 /* virtual */ uint32_t RoadTypeScopeResolver::GetRandomBits() const
 {
@@ -33,7 +63,17 @@
 			case 0x41: return 0;
 			case 0x42: return 0;
 			case 0x43: return CalTime::CurDate().base();
-			case 0x44: return HZB_TOWN_EDGE;
+			case 0x44: return to_underlying(HouseZone::TownEdge);
+			case 0x45: {
+				auto rt = GetRoadTypeInfoIndex(this->rti);
+				uint8_t local = GetReverseRoadTypeTranslation(rt, this->ro.grffile);
+				if (local == 0xFF) local = 0xFE;
+				if (RoadTypeIsRoad(rt)) {
+					return 0xFFFF00 | local;
+				} else {
+					return 0xFF00FF | local << 8;
+				}
+			}
 		}
 	}
 
@@ -51,7 +91,12 @@
 			} else {
 				t = ClosestTownFromTile(this->tile, UINT_MAX);
 			}
-			return t != nullptr ? GetTownRadiusGroup(t, this->tile) : HZB_TOWN_EDGE;
+			return to_underlying(t != nullptr ? GetTownRadiusGroup(t, this->tile) : HouseZone::TownEdge);
+		}
+		case 0x45: {
+			uint32_t result = GetTrackTypesRoad(this->tile, this->ro.grffile);
+			if (extra.mask & 0xFF0000) result |= GetTrackTypesRail(GetTileRailType(this->tile), this->ro.grffile);
+			return result;
 		}
 	}
 
@@ -107,12 +152,12 @@ SpriteID GetCustomRoadSprite(const RoadTypeInfo *rti, TileIndex tile, RoadTypeSp
 	if (rti->group[rtsg] == nullptr) return 0;
 
 	RoadTypeResolverObject object(rti, tile, context, rtsg);
-	const SpriteGroup *group = object.Resolve();
-	if (group == nullptr || group->GetNumResults() == 0) return 0;
+	const ResultSpriteGroup *group = object.Resolve<ResultSpriteGroup>();
+	if (group == nullptr || group->num_sprites == 0) return 0;
 
-	if (num_results) *num_results = group->GetNumResults();
+	if (num_results) *num_results = group->num_sprites;
 
-	return group->GetResult();
+	return group->sprite;
 }
 
 /**
@@ -201,7 +246,7 @@ void ConvertRoadTypes()
 				break;
 
 			case MP_STATION:
-				if (IsStationRoadStop(t) || IsRoadWaypoint(t)) {
+				if (IsAnyRoadStop(t)) {
 					if (RoadType rt = GetRoadTypeRoad(t); rt != INVALID_ROADTYPE) SetRoadTypeRoad(t, roadtype_conversion_map[rt]);
 					if (RoadType rt = GetRoadTypeTram(t); rt != INVALID_ROADTYPE) SetRoadTypeTram(t, roadtype_conversion_map[rt]);
 				}
@@ -225,7 +270,7 @@ void SetCurrentRoadTypeLabelList()
 {
 	_roadtype_list.clear();
 	for (RoadType rt = ROADTYPE_BEGIN; rt != ROADTYPE_END; rt++) {
-		_roadtype_list.push_back({GetRoadTypeInfo(rt)->label, GetRoadTramType(rt)});
+		_roadtype_list.emplace_back(GetRoadTypeInfo(rt)->label, GetRoadTramType(rt));
 	}
 }
 

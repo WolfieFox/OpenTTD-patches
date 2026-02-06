@@ -13,7 +13,6 @@
 #include "debug.h"
 #include "genworld.h"
 #include "newgrf_badge.h"
-#include "newgrf_class_func.h"
 #include "newgrf_object.h"
 #include "newgrf_sound.h"
 #include "object_base.h"
@@ -25,6 +24,10 @@
 #include "newgrf_animation_base.h"
 #include "newgrf_extension.h"
 #include "newgrf_dump.h"
+
+#include "table/strings.h"
+
+#include "newgrf_class_func.h"
 
 #include "safeguards.h"
 
@@ -76,8 +79,8 @@ size_t ObjectSpec::Count()
  */
 bool ObjectSpec::IsEverAvailable() const
 {
-	return this->IsEnabled() && HasBit(this->climate, _settings_game.game_creation.landscape) &&
-			(this->flags & ((_game_mode != GM_EDITOR && !_generating_world) ? OBJECT_FLAG_ONLY_IN_SCENEDIT : OBJECT_FLAG_ONLY_IN_GAME)) == 0;
+	return this->IsEnabled() && this->climate.Test(_settings_game.game_creation.landscape) &&
+			!this->flags.Test((_game_mode != GM_EDITOR && !_generating_world) ? ObjectFlag::OnlyInScenedit : ObjectFlag::OnlyInGame);
 }
 
 /**
@@ -287,7 +290,7 @@ static uint32_t GetCountAndDistanceOfClosestInstance(uint32_t local_id, uint32_t
 			case 0x42: return CalTime::CurDate().base();
 
 			/* Object founder information */
-			case 0x44: return _current_company;
+			case 0x44: return _current_company.base();
 
 			/* Object view */
 			case 0x48: return this->view;
@@ -334,10 +337,10 @@ static uint32_t GetCountAndDistanceOfClosestInstance(uint32_t local_id, uint32_t
 		case 0x43: return GetAnimationFrame(this->tile);
 
 		/* Object founder information */
-		case 0x44: return GetTileOwner(this->tile);
+		case 0x44: return GetTileOwner(this->tile).base();
 
 		/* Get town zone and Manhattan distance of closest town */
-		case 0x45: return (t == nullptr) ? 0 : (GetTownRadiusGroup(t, this->tile) << 16 | ClampTo<uint16_t>(DistanceManhattan(this->tile, t->xy)));
+		case 0x45: return (t == nullptr) ? 0 : (to_underlying(GetTownRadiusGroup(t, this->tile)) << 16 | ClampTo<uint16_t>(DistanceManhattan(this->tile, t->xy)));
 
 		/* Get square of Euclidean distance of closest town */
 		case 0x46: return (t == nullptr) ? 0 : DistanceSquare(this->tile, t->xy);
@@ -358,7 +361,7 @@ static uint32_t GetCountAndDistanceOfClosestInstance(uint32_t local_id, uint32_t
 		}
 
 		/* Land info of nearby tiles */
-		case 0x62: return GetNearbyObjectTileInformation(parameter, this->tile, this->obj == nullptr ? INVALID_OBJECT : this->obj->index, this->ro.grffile->grf_version >= 8, extra.mask);
+		case 0x62: return GetNearbyObjectTileInformation(parameter, this->tile, this->obj == nullptr ? ObjectID::Invalid() : this->obj->index, this->ro.grffile->grf_version >= 8, extra.mask);
 
 		/* Animation counter of nearby tile */
 		case 0x63: {
@@ -407,8 +410,7 @@ ObjectResolverObject::ObjectResolverObject(const ObjectSpec *spec, Object *obj, 
 		CallbackID callback, uint32_t param1, uint32_t param2)
 	: ResolverObject(spec->grf_prop.grffile, callback, param1, param2), object_scope(*this, obj, spec, tile, view)
 {
-	this->root_spritegroup = (obj == nullptr) ? spec->grf_prop.GetSpriteGroup(OBJECT_SPRITE_GROUP_PURCHASE) : nullptr;
-	if (this->root_spritegroup == nullptr) this->root_spritegroup = spec->grf_prop.GetSpriteGroup(OBJECT_SPRITE_GROUP_DEFAULT);
+	this->root_spritegroup = spec->grf_prop.GetSpriteGroup(obj != nullptr);
 }
 
 /**
@@ -492,18 +494,19 @@ void DrawObjectLandscapeGround(TileInfo *ti)
  */
 static void DrawTileLayout(TileInfo *ti, const TileLayoutSpriteGroup *group, const ObjectSpec *spec, int building_z_offset)
 {
-	const DrawTileSprites *dts = group->ProcessRegisters(nullptr);
-	PaletteID palette = ((spec->flags & OBJECT_FLAG_2CC_COLOUR) ? SPR_2CCMAP_BASE : PALETTE_RECOLOUR_START) + Object::GetByTile(ti->tile)->colour;
+	auto processor = group->ProcessRegisters(nullptr);
+	auto dts = processor.GetLayout();
+	PaletteID palette = (spec->flags.Test(ObjectFlag::Uses2CC) ? SPR_2CCMAP_BASE : PALETTE_RECOLOUR_START) + Object::GetByTile(ti->tile)->colour;
 
-	SpriteID image = dts->ground.sprite;
-	PaletteID pal  = dts->ground.pal;
+	SpriteID image = dts.ground.sprite;
+	PaletteID pal = dts.ground.pal;
 
-	if (spec->ctrl_flags & OBJECT_CTRL_FLAG_USE_LAND_GROUND) {
+	if (spec->ctrl_flags.Test(ObjectCtrlFlag::UseLandGround)) {
 		DrawObjectLandscapeGround(ti);
 	} else if (GB(image, 0, SPRITE_WIDTH) != 0) {
 		/* If the ground sprite is the default flat water sprite, draw also canal/river borders
 		 * Do not do this if the tile's WaterClass is 'land'. */
-		if ((image == SPR_FLAT_WATER_TILE || spec->flags & OBJECT_FLAG_DRAW_WATER) && IsTileOnWater(ti->tile)) {
+		if ((image == SPR_FLAT_WATER_TILE || spec->flags.Test(ObjectFlag::DrawWater)) && IsTileOnWater(ti->tile)) {
 			DrawWaterClassGround(ti);
 		} else {
 			DrawGroundSprite(image, GroundSpritePaletteTransform(image, pal, palette));
@@ -511,7 +514,7 @@ static void DrawTileLayout(TileInfo *ti, const TileLayoutSpriteGroup *group, con
 	}
 
 	if (building_z_offset) ti->z += building_z_offset;
-	DrawNewGRFTileSeq(ti, dts, TO_STRUCTURES, 0, palette);
+	DrawNewGRFTileSeq(ti, &dts, TO_STRUCTURES, 0, palette);
 	if (building_z_offset) ti->z -= building_z_offset;
 }
 
@@ -525,10 +528,10 @@ void DrawNewObjectTile(TileInfo *ti, const ObjectSpec *spec, int building_z_offs
 	Object *o = Object::GetByTile(ti->tile);
 	ObjectResolverObject object(spec, o, ti->tile);
 
-	const SpriteGroup *group = object.Resolve();
-	if (group == nullptr || group->type != SGT_TILELAYOUT) return;
+	const TileLayoutSpriteGroup *group = object.Resolve<TileLayoutSpriteGroup>();
+	if (group == nullptr) return;
 
-	DrawTileLayout(ti, (const TileLayoutSpriteGroup *)group, spec, building_z_offset);
+	DrawTileLayout(ti, group, spec, building_z_offset);
 }
 
 /**
@@ -541,33 +544,34 @@ void DrawNewObjectTile(TileInfo *ti, const ObjectSpec *spec, int building_z_offs
 void DrawNewObjectTileInGUI(int x, int y, const ObjectSpec *spec, uint8_t view)
 {
 	ObjectResolverObject object(spec, nullptr, INVALID_TILE, view);
-	const SpriteGroup *group = object.Resolve();
-	if (group == nullptr || group->type != SGT_TILELAYOUT) return;
+	const TileLayoutSpriteGroup *group = object.Resolve<TileLayoutSpriteGroup>();
+	if (group == nullptr) return;
 
-	const DrawTileSprites *dts = ((const TileLayoutSpriteGroup *)group)->ProcessRegisters(nullptr);
+	auto processor = group->ProcessRegisters(nullptr);
+	auto dts = processor.GetLayout();
 
 	PaletteID palette;
 	if (Company::IsValidID(_local_company)) {
 		/* Get the colours of our company! */
-		if (spec->flags & OBJECT_FLAG_2CC_COLOUR) {
-			const Livery *l = Company::Get(_local_company)->livery;
-			palette = SPR_2CCMAP_BASE + l->colour1 + l->colour2 * 16;
+		if (spec->flags.Test(ObjectFlag::Uses2CC)) {
+			const Livery &l = Company::Get(_local_company)->livery[0];
+			palette = SPR_2CCMAP_BASE + l.colour1 + l.colour2 * 16;
 		} else {
-			palette = COMPANY_SPRITE_COLOUR(_local_company);
+			palette = GetCompanyPalette(_local_company);
 		}
 	} else {
 		/* There's no company, so just take the base palette. */
-		palette = (spec->flags & OBJECT_FLAG_2CC_COLOUR) ? SPR_2CCMAP_BASE : PALETTE_RECOLOUR_START;
+		palette = spec->flags.Test(ObjectFlag::Uses2CC) ? SPR_2CCMAP_BASE : PALETTE_RECOLOUR_START;
 	}
 
-	SpriteID image = dts->ground.sprite;
-	PaletteID pal  = dts->ground.pal;
+	SpriteID image = dts.ground.sprite;
+	PaletteID pal = dts.ground.pal;
 
 	if (GB(image, 0, SPRITE_WIDTH) != 0) {
 		DrawSprite(image, GroundSpritePaletteTransform(image, pal, palette), x, y);
 	}
 
-	DrawNewGRFTileSeqInGUI(x, y, dts, 0, palette);
+	DrawNewGRFTileSeqInGUI(x, y, &dts, 0, palette);
 }
 
 /**
@@ -590,8 +594,8 @@ struct ObjectAnimationBase : public AnimationBase<ObjectAnimationBase, ObjectSpe
 	static const CallbackID cb_animation_speed      = CBID_OBJECT_ANIMATION_SPEED;
 	static const CallbackID cb_animation_next_frame = CBID_OBJECT_ANIMATION_NEXT_FRAME;
 
-	static const ObjectCallbackMask cbm_animation_speed      = CBM_OBJ_ANIMATION_SPEED;
-	static const ObjectCallbackMask cbm_animation_next_frame = CBM_OBJ_ANIMATION_NEXT_FRAME;
+	static const ObjectCallbackMask cbm_animation_speed      = ObjectCallbackMask::AnimationSpeed;
+	static const ObjectCallbackMask cbm_animation_next_frame = ObjectCallbackMask::AnimationNextFrame;
 };
 
 /**
@@ -601,15 +605,23 @@ struct ObjectAnimationBase : public AnimationBase<ObjectAnimationBase, ObjectSpe
 void AnimateNewObjectTile(TileIndex tile)
 {
 	const ObjectSpec *spec = ObjectSpec::GetByTile(tile);
-	if (spec == nullptr || !(spec->flags & OBJECT_FLAG_ANIMATION)) return;
+	if (spec == nullptr || !spec->flags.Test(ObjectFlag::Animation)) return;
 
-	ObjectAnimationBase::AnimateTile(spec, Object::GetByTile(tile), tile, (spec->flags & OBJECT_FLAG_ANIM_RANDOM_BITS) != 0);
+	ObjectAnimationBase::AnimateTile(spec, Object::GetByTile(tile), tile, spec->flags.Test(ObjectFlag::AnimRandomBits));
+}
+
+static bool DoTriggerObjectTileAnimation(Object *o, TileIndex tile, ObjectAnimationTrigger trigger, const ObjectSpec *spec, uint32_t random, uint32_t var18_extra = 0)
+{
+	if (!spec->animation.triggers.Test(trigger)) return false;
+
+	ObjectAnimationBase::ChangeAnimationFrame(CBID_OBJECT_ANIMATION_TRIGGER, spec, o, tile, random, to_underlying(trigger) | var18_extra);
+	return true;
 }
 
 uint8_t GetNewObjectTileAnimationSpeed(TileIndex tile)
 {
 	const ObjectSpec *spec = ObjectSpec::GetByTile(tile);
-	if (spec == nullptr || !(spec->flags & OBJECT_FLAG_ANIMATION)) return 0;
+	if (spec == nullptr || !spec->flags.Test(ObjectFlag::Animation)) return 0;
 
 	return ObjectAnimationBase::GetAnimationSpeed(spec);
 }
@@ -621,11 +633,9 @@ uint8_t GetNewObjectTileAnimationSpeed(TileIndex tile)
  * @param trigger The trigger that is triggered.
  * @param spec    The spec associated with the object.
  */
-void TriggerObjectTileAnimation(Object *o, TileIndex tile, ObjectAnimationTrigger trigger, const ObjectSpec *spec)
+bool TriggerObjectTileAnimation(Object *o, TileIndex tile, ObjectAnimationTrigger trigger, const ObjectSpec *spec)
 {
-	if (!HasBit(spec->animation.triggers, trigger)) return;
-
-	ObjectAnimationBase::ChangeAnimationFrame(CBID_OBJECT_ANIMATION_START_STOP, spec, o, tile, Random(), trigger);
+	return DoTriggerObjectTileAnimation(o, tile, trigger, spec, Random());
 }
 
 /**
@@ -634,21 +644,29 @@ void TriggerObjectTileAnimation(Object *o, TileIndex tile, ObjectAnimationTrigge
  * @param trigger The trigger that is triggered.
  * @param spec    The spec associated with the object.
  */
-void TriggerObjectAnimation(Object *o, ObjectAnimationTrigger trigger, const ObjectSpec *spec)
+bool TriggerObjectAnimation(Object *o, ObjectAnimationTrigger trigger, const ObjectSpec *spec)
 {
-	if (!HasBit(spec->animation.triggers, trigger)) return;
+	if (!spec->animation.triggers.Test(trigger)) return false;
 
+	bool ret = true;
+	uint32_t random = Random();
 	for (TileIndex tile : o->location) {
-		TriggerObjectTileAnimation(o, tile, trigger, spec);
+		if (DoTriggerObjectTileAnimation(o, tile, trigger, spec, random)) {
+			SB(random, 0, 16, Random());
+		} else {
+			ret = false;
+		}
 	}
+
+	return ret;
 }
 
 void DumpObjectSpriteGroup(const ObjectSpec *spec, SpriteGroupDumper &dumper)
 {
-	const SpriteGroup *def = spec->grf_prop.GetSpriteGroup(OBJECT_SPRITE_GROUP_DEFAULT);
+	const SpriteGroup *def = spec->grf_prop.GetSpriteGroup(StandardSpriteGroup::Default);
 	dumper.DumpSpriteGroup(def, 0);
 
-	const SpriteGroup *purchase = spec->grf_prop.GetSpriteGroup(OBJECT_SPRITE_GROUP_PURCHASE);
+	const SpriteGroup *purchase = spec->grf_prop.GetSpriteGroup(StandardSpriteGroup::Purchase);
 	if (purchase != nullptr && purchase != def) {
 		dumper.Print("");
 		dumper.Print("PURCHASE:");

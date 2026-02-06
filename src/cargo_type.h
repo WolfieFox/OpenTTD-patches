@@ -106,7 +106,7 @@ namespace CargoFilterCriteria {
 };
 
 /** Test whether cargo type is not INVALID_CARGO */
-inline bool IsValidCargoType(CargoType t) { return t != INVALID_CARGO; }
+inline bool IsValidCargoType(CargoType cargo) { return cargo != INVALID_CARGO; }
 
 typedef uint64_t CargoTypes;
 
@@ -145,16 +145,5 @@ struct CargoArray : std::array<uint, NUM_CARGO> {
 		return std::ranges::count_if(*this, [](uint amount) { return amount != 0; });
 	}
 };
-
-
-/** Types of cargo source and destination */
-enum class SourceType : uint8_t {
-	Industry,     ///< Source/destination is an industry
-	Town,         ///< Source/destination is a town
-	Headquarters, ///< Source/destination are company headquarters
-};
-
-typedef uint16_t SourceID; ///< Contains either industry ID, town ID or company ID (or INVALID_SOURCE)
-static const SourceID INVALID_SOURCE = 0xFFFF; ///< Invalid/unknown index of source
 
 #endif /* CARGO_TYPE_H */

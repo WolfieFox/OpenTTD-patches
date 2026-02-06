@@ -9,14 +9,14 @@
 
 #include "stdafx.h"
 #include "debug.h"
-#include "core/alloc_func.hpp"
 #include "water_map.h"
 #include "error_func.h"
 #include "string_func.h"
 #include "rail_map.h"
 #include "tunnelbridge_map.h"
 #include "pathfinder/water_regions.h"
-#include "core/ring_buffer.hpp"
+#include "core/alloc_func.hpp"
+#include "3rdparty/cpp-ring-buffer/ring_buffer.hpp"
 #include "3rdparty/cpp-btree/btree_map.h"
 #include "3rdparty/robin_hood/robin_hood.h"
 #include <array>
@@ -64,6 +64,19 @@ bool ValidateMapSize(uint size_x, uint size_y)
 	return true;
 }
 
+static void DeallocateMapStorage()
+{
+#if defined(__linux__) && defined(MADV_HUGEPAGE)
+	if (_munmap_size != 0) {
+		munmap(_m.tile_data, _munmap_size);
+		_munmap_size = 0;
+		_m.tile_data = nullptr;
+	}
+#endif
+
+	free(_m.tile_data);
+}
+
 /**
  * (Re)allocates a map with the given dimension
  * @param size_x the width of the map along the NE/SW edge
@@ -87,15 +100,7 @@ void AllocateMap(uint size_x, uint size_y)
 	_map_digits_x = GetBase10DigitsRequired(_map_size_x);
 	_map_digits_y = GetBase10DigitsRequired(_map_size_y);
 
-#if defined(__linux__) && defined(MADV_HUGEPAGE)
-	if (_munmap_size != 0) {
-		munmap(_m.tile_data, _munmap_size);
-		_munmap_size = 0;
-		_m.tile_data = nullptr;
-	}
-#endif
-
-	free(_m.tile_data);
+	DeallocateMapStorage();
 
 	const size_t total_size = (sizeof(Tile) + sizeof(TileExtended)) * _map_size;
 
@@ -139,6 +144,24 @@ void AllocateMap(uint size_x, uint size_y)
 	InitializeWaterRegions();
 }
 
+/** For use in the tests */
+void DeallocateMap()
+{
+	DeallocateMapStorage();
+
+	_map_log_x = {};
+	_map_log_y = {};
+	_map_size_x = {};
+	_map_size_y = {};
+	_map_size = {};
+	_map_tile_mask = {};
+	_map_digits_x = {};
+	_map_digits_y = {};
+	_m.tile_data = nullptr;
+	_me.tile_data = nullptr;
+
+	InitializeWaterRegions();
+}
 
 #ifdef _DEBUG
 TileIndex TileAdd(TileIndex tile, TileIndexDiff offset)
@@ -329,95 +352,6 @@ uint DistanceFromEdgeDir(TileIndex tile, DiagDirection dir)
 }
 
 /**
- * Function performing a search around a center tile and going outward, thus in circle.
- * Although it really is a square search...
- * Every tile will be tested by means of the callback function proc,
- * which will determine if yes or no the given tile meets criteria of search.
- * @param tile to start the search from. Upon completion, it will return the tile matching the search
- * @param size: number of tiles per side of the desired search area
- * @param proc: callback testing function pointer.
- * @param user_data to be passed to the callback function. Depends on the implementation
- * @return result of the search
- * @pre proc != nullptr
- * @pre size > 0
- */
-bool CircularTileSearch(TileIndex *tile, uint size, TestTileOnSearchProc proc, void *user_data)
-{
-	dbg_assert(proc != nullptr);
-	dbg_assert(size > 0);
-
-	if (size % 2 == 1) {
-		/* If the length of the side is uneven, the center has to be checked
-		 * separately, as the pattern of uneven sides requires to go around the center */
-		if (proc(*tile, user_data)) return true;
-
-		/* If tile test is not successful, get one tile up,
-		 * ready for a test in first circle around center tile */
-		*tile = TileAddByDir(*tile, DIR_N);
-		return CircularTileSearch(tile, size / 2, 1, 1, proc, user_data);
-	} else {
-		return CircularTileSearch(tile, size / 2, 0, 0, proc, user_data);
-	}
-}
-
-/**
- * Generalized circular search allowing for rectangles and a hole.
- * Function performing a search around a center rectangle and going outward.
- * The center rectangle is left out from the search. To do a rectangular search
- * without a hole, set either h or w to zero.
- * Every tile will be tested by means of the callback function proc,
- * which will determine if yes or no the given tile meets criteria of search.
- * @param tile to start the search from. Upon completion, it will return the tile matching the search.
- *  This tile should be directly north of the hole (if any).
- * @param radius How many tiles to search outwards. Note: This is a radius and thus different
- *                from the size parameter of the other CircularTileSearch function, which is a diameter.
- * @param w the width of the inner rectangle
- * @param h the height of the inner rectangle
- * @param proc callback testing function pointer.
- * @param user_data to be passed to the callback function. Depends on the implementation
- * @return result of the search
- * @pre proc != nullptr
- * @pre radius > 0
- */
-bool CircularTileSearch(TileIndex *tile, uint radius, uint w, uint h, TestTileOnSearchProc proc, void *user_data)
-{
-	dbg_assert(proc != nullptr);
-	dbg_assert(radius > 0);
-
-	uint x = TileX(*tile) + w + 1;
-	uint y = TileY(*tile);
-
-	const uint extent[DIAGDIR_END] = { w, h, w, h };
-
-	for (uint n = 0; n < radius; n++) {
-		for (DiagDirection dir = DIAGDIR_BEGIN; dir < DIAGDIR_END; dir++) {
-			/* Is the tile within the map? */
-			for (uint j = extent[dir] + n * 2 + 1; j != 0; j--) {
-				if (x < Map::SizeX() && y < Map::SizeY()) {
-					TileIndex t = TileXY(x, y);
-					/* Is the callback successful? */
-					if (proc(t, user_data)) {
-						/* Stop the search */
-						*tile = t;
-						return true;
-					}
-				}
-
-				/* Step to the next 'neighbour' in the circular line */
-				x += _tileoffs_by_diagdir[dir].x;
-				y += _tileoffs_by_diagdir[dir].y;
-			}
-		}
-		/* Jump to next circle to test */
-		x += _tileoffs_by_dir[DIR_W].x;
-		y += _tileoffs_by_dir[DIR_W].y;
-	}
-
-	*tile = INVALID_TILE;
-	return false;
-}
-
-/**
  * Generalized contiguous matching tile area size threshold function.
  * Contiguous means directly adjacent by DiagDirection directions.
  *
@@ -436,7 +370,7 @@ bool EnoughContiguousTilesMatchingCondition(TileIndex tile, uint threshold, Test
 	static_assert(MAX_MAP_TILES_BITS <= 30);
 
 	robin_hood::unordered_flat_set<TileIndex> processed_tiles;
-	ring_buffer<uint32_t> candidates;
+	jgr::ring_buffer<uint32_t> candidates;
 	uint matching_count = 0;
 
 	auto process_tile = [&](TileIndex t, DiagDirection exclude_onward_dir) {
@@ -587,11 +521,17 @@ void DumpTileInfo(format_target &buffer, TileIndex tile)
 		if (tile >= Map::Size()) {
 			buffer.format(", TILE OUTSIDE MAP (map size: 0x{:X})", Map::Size());
 		} else {
-			buffer.format(", type: {:02X} ({}), height: {:02X}, data: {:02X} {:04X} {:02X} {:02X} {:02X} {:02X} {:02X} {:04X}",
-					_m[tile].type, tile_type_names[GB(_m[tile].type, 4, 4)], _m[tile].height,
-					_m[tile].m1, _m[tile].m2, _m[tile].m3, _m[tile].m4, _m[tile].m5, _me[tile].m6, _me[tile].m7, _me[tile].m8);
+			buffer.append(", ");
+			DumpTileFields(buffer, tile);
 		}
 	}
+}
+
+void DumpTileFields(format_target &buffer, TileIndex tile)
+{
+	buffer.format("type: {:02X} ({}), height: {:02X}, data: {:02X} {:04X} {:02X} {:02X} {:02X} {:02X} {:02X} {:04X}",
+			_m[tile].type, tile_type_names[GB(_m[tile].type, 4, 4)], _m[tile].height,
+			_m[tile].m1, _m[tile].m2, _m[tile].m3, _m[tile].m4, _m[tile].m5, _me[tile].m6, _me[tile].m7, _me[tile].m8);
 }
 
 void DumpMapStats(format_target &buffer)

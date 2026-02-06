@@ -10,15 +10,19 @@
 #include "stdafx.h"
 #include "dropdown_type.h"
 #include "dropdown_func.h"
-#include "dropdown_common_type.h"
 #include "string_func.h"
 #include "strings_func.h"
+#include "sound_func.h"
 #include "window_gui.h"
 #include "window_func.h"
 #include "guitimer_func.h"
 #include "zoom_func.h"
 
 #include "widgets/dropdown_widget.h"
+
+#include "table/strings.h"
+
+#include "dropdown_common_type.h"
 
 #include "safeguards.h"
 
@@ -29,32 +33,47 @@ std::unique_ptr<DropDownListItem> MakeDropDownListDividerItem()
 
 std::unique_ptr<DropDownListItem> MakeDropDownListStringItem(StringID str, int value, bool masked, bool shaded)
 {
-	return std::make_unique<DropDownListStringItem>(str, value, masked, shaded);
+	return MakeDropDownListStringItem(GetString(str), value, masked, shaded);
 }
 
-std::unique_ptr<DropDownListItem> MakeDropDownListStringItem(const std::string &str, int value, bool masked, bool shaded)
+std::unique_ptr<DropDownListItem> MakeDropDownListStringItem(std::string &&str, int value, bool masked, bool shaded)
 {
-	return std::make_unique<DropDownListStringItem>(str, value, masked, shaded);
+	return std::make_unique<DropDownListStringItem>(std::move(str), value, masked, shaded);
 }
 
 std::unique_ptr<DropDownListItem> MakeDropDownListIconItem(SpriteID sprite, PaletteID palette, StringID str, int value, bool masked, bool shaded)
 {
-	return std::make_unique<DropDownListIconItem>(sprite, palette, str, value, masked, shaded);
+	return std::make_unique<DropDownListIconItem>(sprite, palette, GetString(str), value, masked, shaded);
 }
 
 std::unique_ptr<DropDownListItem> MakeDropDownListIconItem(const Dimension &dim, SpriteID sprite, PaletteID palette, StringID str, int value, bool masked, bool shaded)
 {
-	return std::make_unique<DropDownListIconItem>(dim, sprite, palette, str, value, masked, shaded);
+	return std::make_unique<DropDownListIconItem>(dim, sprite, palette, GetString(str), value, masked, shaded);
+}
+
+std::unique_ptr<DropDownListItem> MakeDropDownListIconItem(const Dimension &dim, SpriteID sprite, PaletteID palette, std::string &&str, int value, bool masked, bool shaded)
+{
+	return std::make_unique<DropDownListIconItem>(dim, sprite, palette, std::move(str), value, masked, shaded);
 }
 
 std::unique_ptr<DropDownListItem> MakeDropDownListCheckedItem(bool checked, StringID str, int value, bool masked, bool shaded, uint indent)
 {
-	return std::make_unique<DropDownListCheckedItem>(indent, checked, str, value, masked, shaded);
+	return std::make_unique<DropDownListCheckedItem>(indent, checked, GetString(str), value, masked, shaded);
+}
+
+std::unique_ptr<DropDownListItem> MakeDropDownListCheckedItem(bool checked, std::string &&str, int value, bool masked, bool shaded, uint indent)
+{
+	return std::make_unique<DropDownListCheckedItem>(indent, checked, std::move(str), value, masked, shaded);
 }
 
 std::unique_ptr<DropDownListItem> MakeDropDownListIndentStringItem(uint indent, StringID str, int value, bool masked, bool shaded)
 {
-	return std::make_unique<DropDownListIndentStringItem>(indent, str, value, masked, shaded);
+	return std::make_unique<DropDownListIndentStringItem>(indent, GetString(str), value, masked, shaded);
+}
+
+std::unique_ptr<DropDownListItem> MakeDropDownListIndentStringItem(uint indent, std::string &&str, int value, bool masked, bool shaded)
+{
+	return std::make_unique<DropDownListIndentStringItem>(indent, std::move(str), value, masked, shaded);
 }
 
 static constexpr NWidgetPart _nested_dropdown_menu_widgets[] = {
@@ -75,21 +94,22 @@ static WindowDesc _dropdown_desc(__FILE__, __LINE__,
 
 /** Drop-down menu window */
 struct DropdownWindow : Window {
-	WindowToken parent_wnd_token; ///< Parent window token.
-	WidgetID parent_button;       ///< Parent widget number where the window is dropped from.
-	Rect wi_rect;                 ///< Rect of the button that opened the dropdown.
-	DropDownList list;            ///< List with dropdown menu items.
-	int selected_result;          ///< Result value of the selected item in the list.
-	uint8_t click_delay = 0;      ///< Timer to delay selection.
+	WindowToken parent_wnd_token{}; ///< Parent window token.
+	WidgetID parent_button{};       ///< Parent widget number where the window is dropped from.
+	Rect wi_rect{};                 ///< Rect of the button that opened the dropdown.
+	DropDownList list{};            ///< List with dropdown menu items.
+	int selected_result{};          ///< Result value of the selected item in the list.
+	int selected_click_result = -1; ///< Click result value, from the OnClick handler of the selected item.
+	uint8_t click_delay = 0;        ///< Timer to delay selection.
 	bool drag_mode = true;
-	DropDownModeFlags mode_flags; ///< Mode flags.
-	int scrolling = 0;            ///< If non-zero, auto-scroll the item list (one time).
-	GUITimer scrolling_timer;     ///< Timer for auto-scroll of the item list.
-	Point position;               ///< Position of the topleft corner of the window.
-	Scrollbar *vscroll;
-	DropDownSyncFocus sync_parent_focus; ///< Call parent window's OnFocus[Lost]().
+	DropDownModeFlags mode_flags{}; ///< Mode flags.
+	int scrolling = 0;              ///< If non-zero, auto-scroll the item list (one time).
+	GUITimer scrolling_timer{};     ///< Timer for auto-scroll of the item list.
+	Point position{};               ///< Position of the topleft corner of the window.
+	Scrollbar *vscroll = nullptr;
+	DropDownSyncFocus sync_parent_focus{}; ///< Call parent window's OnFocus[Lost]().
 
-	Dimension items_dim; ///< Calculated cropped and padded dimension for the items widget.
+	Dimension items_dim{}; ///< Calculated cropped and padded dimension for the items widget.
 
 	/**
 	 * Create a dropdown menu.
@@ -137,7 +157,7 @@ struct DropdownWindow : Window {
 			Point pt = _cursor.pos;
 			pt.x -= w2->left;
 			pt.y -= w2->top;
-			w2->OnDropdownClose(pt, this->parent_button, this->selected_result, (this->mode_flags & DDMF_INSTANT_CLOSE) != 0);
+			w2->OnDropdownClose(pt, this->parent_button, this->selected_result, this->selected_click_result, (this->mode_flags & DDMF_INSTANT_CLOSE) != 0);
 		}
 	}
 
@@ -220,14 +240,15 @@ struct DropdownWindow : Window {
 
 	/**
 	 * Find the dropdown item under the cursor.
-	 * @param[out] value Selected item, if function returns \c true.
+	 * @param[out] result Selected item, if function returns \c true.
+	 * @param[out] click_result Click result from OnClick of Selected item, if function returns \c true.
 	 * @return Cursor points to a dropdown item.
 	 */
-	bool GetDropDownItem(int &value)
+	bool GetDropDownItem(int &result, int &click_result)
 	{
 		if (GetWidgetFromPos(this, _cursor.pos.x - this->left, _cursor.pos.y - this->top) < 0) return false;
 
-		const Rect &r = this->GetWidget<NWidgetBase>(WID_DM_ITEMS)->GetCurrentRect().Shrink(WidgetDimensions::scaled.dropdownlist);
+		const Rect &r = this->GetWidget<NWidgetBase>(WID_DM_ITEMS)->GetCurrentRect().Shrink(WidgetDimensions::scaled.dropdownlist).Shrink(WidgetDimensions::scaled.dropdowntext, RectPadding::zero);
 		int y     = _cursor.pos.y - this->top - r.top;
 		int pos   = this->vscroll->GetPosition();
 
@@ -239,7 +260,8 @@ struct DropdownWindow : Window {
 
 			if (y < item_height) {
 				if (item->masked || !item->Selectable()) return false;
-				value = item->result;
+				result = item->result;
+				click_result = item->OnClick(r.WithY(0, item_height - 1), {_cursor.pos.x - this->left, y});
 				return true;
 			}
 
@@ -265,12 +287,12 @@ struct DropdownWindow : Window {
 			if (--pos >= 0) continue;
 
 			if (y + item_height - 1 <= ir.bottom) {
-				Rect full{ir.left, y, ir.right, y + item_height - 1};
+				Rect full = ir.WithY(y, y + item_height - 1);
 
 				bool selected = (this->selected_result == item->result) && item->Selectable();
 				if (selected) GfxFillRect(full, PC_BLACK);
 
-				item->Draw(full, full.Shrink(WidgetDimensions::scaled.dropdowntext, RectPadding::zero), selected, colour);
+				item->Draw(full, full.Shrink(WidgetDimensions::scaled.dropdowntext, RectPadding::zero), selected, selected ? this->selected_click_result : -1, colour);
 			}
 			y += item_height;
 		}
@@ -279,10 +301,11 @@ struct DropdownWindow : Window {
 	virtual void OnClick(Point pt, WidgetID widget, int click_count) override
 	{
 		if (widget != WID_DM_ITEMS) return;
-		int item;
-		if (this->GetDropDownItem(item)) {
+		int result, click_result;
+		if (this->GetDropDownItem(result, click_result)) {
 			this->click_delay = 4;
-			this->selected_result = item;
+			this->selected_result = result;
+			this->selected_click_result = click_result;
 			this->SetDirty();
 		}
 	}
@@ -317,16 +340,16 @@ struct DropdownWindow : Window {
 				this->Close();
 			}
 
-			w2->OnDropdownSelect(this->parent_button, this->selected_result);
+			w2->OnDropdownSelect(this->parent_button, this->selected_result, this->selected_click_result);
 			return;
 		}
 
 		if (this->drag_mode) {
-			int item;
+			int result, click_result;
 
 			if (!_left_button_clicked) {
 				this->drag_mode = false;
-				if (!this->GetDropDownItem(item)) {
+				if (!this->GetDropDownItem(result, click_result)) {
 					if ((this->mode_flags & DDMF_INSTANT_CLOSE) != 0) this->Close();
 					return;
 				}
@@ -342,11 +365,12 @@ struct DropdownWindow : Window {
 					return;
 				}
 
-				if (!this->GetDropDownItem(item)) return;
+				if (!this->GetDropDownItem(result, click_result)) return;
 			}
 
-			if (this->selected_result != item) {
-				this->selected_result = item;
+			if (this->selected_result != result || this->selected_click_result != click_result) {
+				this->selected_result = result;
+				this->selected_click_result = click_result;
 				this->SetDirty();
 			}
 		}
@@ -368,15 +392,17 @@ struct DropdownWindow : Window {
 		}
 	}
 
-	void ReplaceList(DropDownList &&list)
+	void ReplaceList(DropDownList &&list, std::optional<int> selected_result)
 	{
 		Window *parent = FindWindowByToken(this->parent_wnd_token);
 		if (parent == nullptr) return;
 
 		this->list = std::move(list);
+		if (selected_result.has_value()) this->selected_result = *selected_result;
 		this->UpdateSizeAndPosition(parent);
 		this->ReInit(0, 0);
 		this->InitializePositionSize(this->position.x, this->position.y, this->nested_root->smallest_x, this->nested_root->smallest_y);
+		this->FindWindowPlacementAndResize(this->window_desc.GetDefaultWidth(), this->window_desc.GetDefaultHeight(), true);
 		this->SetDirty();
 	}
 };
@@ -386,7 +412,7 @@ static DropdownWindow *GetDropDownWindowForParent(Window *parent)
 	for (Window *w : Window::IterateFromFront()) {
 		if (w->window_class != WC_DROPDOWN_MENU) continue;
 
-		DropdownWindow *dw = dynamic_cast<DropdownWindow*>(w);
+		DropdownWindow *dw = dynamic_cast<DropdownWindow *>(w);
 		assert(dw != nullptr);
 		if (parent->GetWindowToken() == dw->parent_wnd_token) {
 			return dw;
@@ -396,10 +422,10 @@ static DropdownWindow *GetDropDownWindowForParent(Window *parent)
 	return nullptr;
 }
 
-void ReplaceDropDownList(Window *parent, DropDownList &&list)
+void ReplaceDropDownList(Window *parent, DropDownList &&list, std::optional<int> selected_result)
 {
 	DropdownWindow *ddw = GetDropDownWindowForParent(parent);
-	if (ddw != nullptr) ddw->ReplaceList(std::move(list));
+	if (ddw != nullptr) ddw->ReplaceList(std::move(list), selected_result);
 }
 
 /**
@@ -446,6 +472,9 @@ void ShowDropDownListAt(Window *w, DropDownList &&list, int selected, WidgetID b
  */
 void ShowDropDownList(Window *w, DropDownList &&list, int selected, WidgetID button, uint width, DropDownModeFlags mode_flags, DropDownSyncFocus sync_parent_focus)
 {
+	/* Handle the beep of the player's click. */
+	SndClickBeep();
+
 	/* Our parent's button widget is used to determine where to place the drop
 	 * down list window. */
 	NWidgetCore *nwi = w->GetWidget<NWidgetCore>(button);
@@ -453,7 +482,7 @@ void ShowDropDownList(Window *w, DropDownList &&list, int selected, WidgetID but
 	Colours wi_colour = nwi->colour;
 
 	if ((nwi->type & WWT_MASK) == NWID_BUTTON_DROPDOWN) {
-		nwi->disp_flags |= ND_DROPDOWN_ACTIVE;
+		nwi->disp_flags.Set(NWidgetDisplayFlag::DropdownActive);
 	} else {
 		nwi->SetLowered(true);
 	}

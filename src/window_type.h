@@ -19,6 +19,9 @@
  */
 using WidgetID = int;
 
+/** An invalid widget index. */
+static constexpr WidgetID INVALID_WIDGET = -1;
+
 /** %Window numbers. */
 enum WindowNumberEnum : uint8_t {
 	WN_GAME_OPTIONS_AI = 0,          ///< AI settings.
@@ -230,6 +233,12 @@ enum WindowClass : uint16_t {
 	 *   - #VehicleID = #CargoTypeOrdersWidgets
 	 */
 	WC_VEHICLE_CARGO_TYPE_UNLOAD_ORDERS,
+
+	/**
+	 * Vehicle order import errors; %Window numbers:
+	 *   - #VehicleID = #OrderWidgets
+	 */
+	WC_VEHICLE_ORDER_IMPORT_ERRORS,
 
 	/**
 	 * Replace vehicle window; %Window numbers:
@@ -626,6 +635,12 @@ enum WindowClass : uint16_t {
 	WC_INDUSTRY_PRODUCTION,
 
 	/**
+	 * Town cargo history graph; %Window numbers:
+	 *   - #TownID = #GraphWidgets
+	 */
+	WC_TOWN_CARGO_GRAPH,
+
+	/**
 	 * Company infrastructure overview; %Window numbers:
 	 *   - #CompanyID = #CompanyInfrastructureWidgets
 	 */
@@ -825,14 +840,54 @@ enum GameOptionsInvalidationData : uint8_t {
 	GOID_NEWGRF_CURRENT_LOADED,  ///< The current list of active NewGRF has been loaded.
 	GOID_NEWGRF_LIST_EDITED,     ///< List of active NewGRFs is being edited.
 	GOID_NEWGRF_CHANGES_MADE,    ///< Changes have been made to a given NewGRF either through the palette or its parameters.
-	GOID_NEWGRF_CHANGES_APPLIED, ///< The active NewGRF list changes have been applied.
 };
 
 struct Window;
 struct WindowBase;
 
-/** Number to differentiate different windows of the same class */
-typedef int32_t WindowNumber;
+/**
+ * Number to differentiate different windows of the same class. This number generally
+ * implicitly passes some information, e.g. the TileIndex or Company associated with
+ * the window. To ease this use, the window number is lenient with what it accepts and
+ * broad with what it returns.
+ *
+ * Anything that converts into a number and ConvertibleThroughBase types will be accepted.
+ * When it's being used it returns int32_t or any other type when that's specifically
+ * requested, e.g. `VehicleType type = window_number` or `GetEngineListHeight(window_number)`
+ * in which the returned value will be a `VehicleType`.
+ */
+struct WindowNumber {
+	static inline constexpr bool fmt_as_base = true;
+	static inline constexpr bool string_parameter_as_base = true;
+	static inline constexpr bool integer_type_hint = true;
+
+	using BaseType = int32_t;
+
+private:
+	int32_t value = 0;
+public:
+	WindowNumber() = default;
+	WindowNumber(int32_t value) : value(value) {}
+
+	template <typename T> requires std::is_base_of_v<struct PoolIDBase, T>
+	WindowNumber(T value) : value(value.base()) {}
+
+	/* Automatically convert to int32_t. */
+	operator int32_t() const { return value; }
+
+	constexpr int32_t base() const noexcept { return this->value; }
+
+	/* Automatically convert to any other type that might be requested. */
+	template <typename T> requires (std::is_enum_v<T> || std::is_class_v<T>)
+	operator T() const { return static_cast<T>(value); };
+
+	constexpr bool operator==(const WindowNumber &rhs) const = default;
+
+	constexpr bool operator==(const std::integral auto &rhs) const { return this->value == static_cast<int32_t>(rhs); }
+
+	template <typename T> requires std::is_base_of_v<struct PoolIDBase, T>
+	constexpr bool operator==(const T &rhs) const { return this->value == static_cast<int32_t>(rhs.base()); }
+};
 
 /** State of handling an event. */
 enum EventState : uint8_t {

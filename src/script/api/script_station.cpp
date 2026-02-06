@@ -26,16 +26,9 @@
 	return st != nullptr && (st->owner == ScriptObject::GetCompany() || ScriptCompanyMode::IsDeity() || st->owner == OWNER_NONE);
 }
 
-/* static */ ScriptCompany::CompanyID ScriptStation::GetOwner(StationID station_id)
-{
-	if (!IsValidStation(station_id)) return ScriptCompany::COMPANY_INVALID;
-
-	return ScriptCompany::ToScriptCompanyID(::Station::Get(station_id)->owner);
-}
-
 /* static */ StationID ScriptStation::GetStationID(TileIndex tile)
 {
-	if (!::IsValidTile(tile) || !::IsTileType(tile, MP_STATION)) return INVALID_STATION;
+	if (!::IsValidTile(tile) || !::IsTileType(tile, MP_STATION)) return StationID::Invalid();
 	return ::GetStationIndex(tile);
 }
 
@@ -211,7 +204,7 @@ template <bool Tfrom, bool Tvia>
 	if (!IsValidStation(station_id)) return false;
 	if (!HasExactlyOneBit(station_type)) return false;
 
-	return (::Station::Get(station_id)->facilities & static_cast<StationFacility>(station_type)) != 0;
+	return ::Station::Get(station_id)->facilities.Any(static_cast<StationFacilities>(station_type));
 }
 
 /* static */ bool ScriptStation::HasRoadType(StationID station_id, ScriptRoad::RoadType road_type)
@@ -220,10 +213,10 @@ template <bool Tfrom, bool Tvia>
 	if (!ScriptRoad::IsRoadTypeAvailable(road_type)) return false;
 
 	for (const RoadStop *rs = ::Station::Get(station_id)->GetPrimaryRoadStop(RoadStopType::Bus); rs != nullptr; rs = rs->next) {
-		if (HasBit(::GetPresentRoadTypes(rs->xy), (::RoadType)road_type)) return true;
+		if (::GetPresentRoadTypes(rs->xy).Test(::RoadType(road_type))) return true;
 	}
 	for (const RoadStop *rs = ::Station::Get(station_id)->GetPrimaryRoadStop(RoadStopType::Truck); rs != nullptr; rs = rs->next) {
-		if (HasBit(::GetPresentRoadTypes(rs->xy), (::RoadType)road_type)) return true;
+		if (::GetPresentRoadTypes(rs->xy).Test(::RoadType(road_type))) return true;
 	}
 
 	return false;
@@ -231,7 +224,7 @@ template <bool Tfrom, bool Tvia>
 
 /* static */ TownID ScriptStation::GetNearestTown(StationID station_id)
 {
-	if (!IsValidStation(station_id)) return INVALID_TOWN;
+	if (!IsValidStation(station_id)) return TownID::Invalid();
 
 	return ::Station::Get(station_id)->town->index;
 }
@@ -241,7 +234,7 @@ template <bool Tfrom, bool Tvia>
 	EnforcePrecondition(false, IsValidStation(station_id));
 	EnforcePrecondition(false, HasStationType(station_id, STATION_AIRPORT));
 
-	return (::Station::Get(station_id)->airport.flags & AIRPORT_CLOSED_block) != 0;
+	return ::Station::Get(station_id)->airport.blocks.Test(AirportBlock::AirportClosed);
 }
 
 /* static */ bool ScriptStation::OpenCloseAirport(StationID station_id)

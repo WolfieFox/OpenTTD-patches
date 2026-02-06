@@ -10,7 +10,7 @@
 #ifndef NETWORK_SYNC_H
 #define NETWORK_SYNC_H
 
-#include "../core/ring_buffer.hpp"
+#include "../3rdparty/cpp-ring-buffer/ring_buffer.hpp"
 
 /* Sync debugging */
 struct NetworkSyncRecord {
@@ -18,13 +18,15 @@ struct NetworkSyncRecord {
 	uint32_t seed_1;
 	uint64_t state_checksum;
 };
-extern ring_buffer<NetworkSyncRecord> _network_sync_records;
-extern ring_buffer<uint> _network_sync_record_counts;
+extern jgr::ring_buffer<NetworkSyncRecord> _network_sync_records;
+extern jgr::ring_buffer<uint> _network_sync_record_counts;
 extern bool _record_sync_records;
 
 enum NetworkSyncRecordEvents : uint32_t {
 	NSRE_BEGIN,
 	NSRE_CMD,
+	NSRE_CALDATE_INC,
+	NSRE_ECONDATE_INC,
 	NSRE_AUX_TILE,
 	NSRE_TILE,
 	NSRE_TOWN,

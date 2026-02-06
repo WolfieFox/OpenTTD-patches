@@ -14,8 +14,10 @@
 
 #include "tcp.h"
 #include "../network.h"
-#include "../../core/pool_type.hpp"
+#include "../network_func.h"
+#include "../network_internal.h"
 #include "../../debug.h"
+
 #include "table/strings.h"
 
 /**
@@ -40,7 +42,7 @@ public:
 
 				Debug(net, 2, "[{}] Banned ip tried to join ({}), refused", Tsocket::GetName(), entry);
 
-				if (p.TransferOut<int>(send, s, 0) < 0) {
+				if (p.TransferOut(SocketSender{s}) < 0) {
 					Debug(net, 0, "[{}] send failed: {}", Tsocket::GetName(), NetworkError::GetLast().AsString());
 				}
 				closesocket(s);
@@ -55,7 +57,7 @@ public:
 			Packet p(nullptr, Tfull_packet);
 			p.PrepareToSend();
 
-			if (p.TransferOut<int>(send, s, 0) < 0) {
+			if (p.TransferOut(SocketSender{s}) < 0) {
 				Debug(net, 0, "[{}] send failed: {}", Tsocket::GetName(), NetworkError::GetLast().AsString());
 			}
 			closesocket(s);
@@ -73,8 +75,7 @@ public:
 	static void AcceptClient(SOCKET ls)
 	{
 		for (;;) {
-			struct sockaddr_storage sin;
-			memset(&sin, 0, sizeof(sin));
+			struct sockaddr_storage sin{};
 			socklen_t sin_len = sizeof(sin);
 			SOCKET s = accept(ls, (struct sockaddr*)&sin, &sin_len);
 			if (s == INVALID_SOCKET) return;

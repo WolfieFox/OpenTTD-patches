@@ -12,12 +12,13 @@
 
 #include "fontcache.h"
 #include "gfx_func.h"
+#include "core/hash_func.hpp"
 #include "core/math_func.hpp"
 
 #include "3rdparty/cpp-btree/btree_map.h"
+#include "3rdparty/robin_hood/robin_hood.h"
 #include "3rdparty/svector/svector.h"
 
-#include <map>
 #include <string>
 #include <stack>
 #include <string_view>
@@ -32,7 +33,13 @@ struct FontState {
 	FontSize fontsize;       ///< Current font size.
 	TextColour cur_colour;   ///< Current text colour.
 
-	std::stack<TextColour, ankerl::svector<TextColour, 3>> colour_stack; ///< Stack of colours to assist with colour switching.
+	struct ColourStack : public std::stack<TextColour, ankerl::svector<TextColour, 3>> {
+		typedef std::stack<TextColour, ankerl::svector<TextColour, 3>> Stack;
+		using Stack::Stack;
+		using Stack::operator=;
+		using Stack::c; // expose underlying container
+	};
+	ColourStack colour_stack; ///< Stack of colours to assist with colour switching.
 
 	FontState() : fontsize(FS_END), cur_colour(TC_INVALID) {}
 	FontState(TextColour colour, FontSize fontsize) : fontsize(fontsize), cur_colour(colour) {}
@@ -142,13 +149,16 @@ public:
  *
  * It also accounts for the memory allocations and frees.
  */
-class Layouter : public std::vector<std::unique_ptr<const ParagraphLayouter::Line>> {
+class Layouter : public std::vector<const ParagraphLayouter::Line *> {
 	std::string_view string; ///< Pointer to the original string.
 
 	/** Key into the linecache */
 	struct LineCacheKey {
 		FontState state_before;  ///< Font state at the beginning of the line.
 		std::string str;         ///< Source string of the line (including colour and font size codes).
+
+		LineCacheKey() = default;
+		LineCacheKey(const FontState &state_before, std::string_view str) : state_before(state_before), str(str) {}
 	};
 
 	struct LineCacheQuery {
@@ -156,38 +166,70 @@ class Layouter : public std::vector<std::unique_ptr<const ParagraphLayouter::Lin
 		std::string_view str;    ///< Source string of the line (including colour and font size codes).
 	};
 
-	/** Comparator for std::map */
-	struct LineCacheCompare {
+	/** Equality for robin_hood map */
+	struct LineCacheEqual {
 		using is_transparent = void; ///< Enable map queries with various key types
 
-		/** Comparison operator for LineCacheKey and LineCacheQuery */
+		/** Equality operator for LineCacheKey and LineCacheQuery */
 		template <typename Key1, typename Key2>
 		bool operator()(const Key1 &lhs, const Key2 &rhs) const
 		{
-			if (lhs.state_before.fontsize != rhs.state_before.fontsize) return lhs.state_before.fontsize < rhs.state_before.fontsize;
-			if (lhs.state_before.cur_colour != rhs.state_before.cur_colour) return lhs.state_before.cur_colour < rhs.state_before.cur_colour;
-			if (lhs.state_before.colour_stack != rhs.state_before.colour_stack) return lhs.state_before.colour_stack < rhs.state_before.colour_stack;
-			return lhs.str < rhs.str;
+			if (lhs.state_before.fontsize != rhs.state_before.fontsize) return false;
+			if (lhs.state_before.cur_colour != rhs.state_before.cur_colour) return false;
+			if (lhs.state_before.colour_stack != rhs.state_before.colour_stack) return false;
+			return lhs.str == rhs.str;
 		}
 	};
+
+	/** Hash for robin_hood map */
+	struct LineCacheHash {
+		using is_transparent = void; ///< Enable map queries with various key types
+
+		size_t hash_font_state(const FontState &fs) const noexcept
+		{
+			size_t result = 0;
+			HashCombine(result, robin_hood::hash_int(fs.fontsize << 16 | fs.cur_colour));
+			const auto &colour_stack = fs.colour_stack.c;
+			if (!colour_stack.empty()) {
+				HashCombine(result, robin_hood::hash_bytes(colour_stack.data(), colour_stack.size() * sizeof(colour_stack[0])));
+			}
+			return result;
+		}
+
+		/** Hash operator for LineCacheKey and LineCacheQuery */
+		template <typename Key>
+		size_t operator()(const Key &obj) const noexcept
+		{
+			size_t result = this->hash_font_state(obj.state_before);
+			HashCombine(result, robin_hood::hash_bytes(obj.str.data(), obj.str.size()));
+			return result;
+		}
+	};
+
 public:
 	/** Item in the linecache */
 	struct LineCacheItem {
+		/* Due to the type of data in the buffer differing depending on the Layouter, we need to pass our own deleter routine. */
+		using Buffer = std::unique_ptr<void, void(*)(void *)>;
 		/* Stuff that cannot be freed until the ParagraphLayout is freed */
-		void *buffer;              ///< Accessed by our ParagraphLayout::nextLine.
+		Buffer buffer{nullptr, [](void *){}}; ///< Accessed by our ParagraphLayout::nextLine.
 		FontMap runs;              ///< Accessed by our ParagraphLayout::nextLine.
 
 		FontState state_after;     ///< Font state after the line.
 		std::unique_ptr<ParagraphLayouter> layout = nullptr; ///< Layout of the line.
 
-		LineCacheItem() : buffer(nullptr) {}
-		~LineCacheItem() { free(buffer); }
+		std::vector<std::unique_ptr<const ParagraphLayouter::Line>> cached_layout{}; ///< Cached results of line layouting.
+		int cached_width = 0; ///< Width used for the cached layout.
+
+		uint64_t lru_counter;
 	};
 private:
-	typedef std::map<LineCacheKey, LineCacheItem, LineCacheCompare> LineCache;
+	typedef robin_hood::unordered_node_map<LineCacheKey, LineCacheItem, LineCacheHash, LineCacheEqual> LineCache;
 	static LineCache *linecache;
+	static uint64_t linecache_lru_counter;
 
 	static LineCacheItem &GetCachedParagraphLayout(std::string_view str, const FontState &state);
+	static void ReduceLineCache();
 
 	using FontColourMap = btree::btree_map<TextColour, std::unique_ptr<Font>>;
 	static FontColourMap fonts[FS_END];
@@ -202,10 +244,9 @@ public:
 	static void Initialize();
 	static void ResetFontCache(FontSize size);
 	static void ResetLineCache();
-	static void ReduceLineCache();
 };
 
-ParagraphLayouter::Position GetCharPosInString(std::string_view str, const char *ch, FontSize start_fontsize = FS_NORMAL);
+ParagraphLayouter::Position GetCharPosInString(std::string_view str, size_t pos, FontSize start_fontsize = FS_NORMAL);
 ptrdiff_t GetCharAtPosition(std::string_view str, int x, FontSize start_fontsize = FS_NORMAL);
 
 #endif /* GFX_LAYOUT_H */

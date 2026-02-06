@@ -58,6 +58,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
 	PerThreadSetupInit();
 	CrashLog::InitialiseCrashLog();
+	CrashLog::InitialiseExceptionTerminateHandler();
 
 	/* Convert the command line to UTF-8. */
 	std::string cmdline = FS2OTTD(GetCommandLine());
@@ -71,8 +72,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
 	_set_error_mode(_OUT_TO_MSGBOX); // force assertion output to messagebox
 
-	/* setup random seed to something quite random */
-	SetRandomSeed(GetTickCount());
+	InitialiseRandomSeeds();
 
 	auto arguments = ParseCommandLine(cmdline.data());
 

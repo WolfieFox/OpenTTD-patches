@@ -277,17 +277,10 @@ constexpr bool IsInsideMM(const T x, const size_t min, const size_t max) noexcep
 	}
 }
 
-/**
- * Type safe swap operation
- * @param a variable to swap with b
- * @param b variable to swap with a
- */
-template <typename T>
-constexpr void Swap(T &a, T &b)
+template <typename enum_type, std::enable_if_t<std::is_enum_v<enum_type>, bool> = true>
+constexpr bool IsInsideMM(enum_type x, enum_type min, enum_type max) noexcept
 {
-	T t = a;
-	a = b;
-	b = t;
+	return IsInsideMM(to_underlying(x), to_underlying(min), to_underlying(max));
 }
 
 /**
@@ -450,7 +443,7 @@ constexpr inline uint GetBase10DigitsRequired(T x)
 
 
 uint32_t IntSqrt(uint32_t num);
-uint32_t IntSqrt64(uint64_t num);
+uint64_t IntSqrt64(uint64_t num);
 uint32_t IntCbrt(uint64_t num);
 
 uint16_t RXCompressUint(uint32_t num);

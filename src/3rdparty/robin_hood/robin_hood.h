@@ -817,14 +817,37 @@ struct hash<Enum, typename std::enable_if<std::is_enum<Enum>::value>::type> {
 
 /* StrongType support */
 
+template<typename T>
+concept enable_hash_as_base = T::hash_as_base || false;
+
 template <typename T>
-struct hash<T, typename std::enable_if<std::is_base_of_v<struct StrongTypedefBase, T>>::type> {
+struct hash<T, typename std::enable_if<enable_hash_as_base<T>>::type> {
     size_t operator()(T value) const noexcept {
         return hash<typename T::BaseType>{}(value.base());
     }
 };
 
 /* StrongType support ends */
+
+/* Inline hash method support */
+
+struct hash_method_tag{};
+
+template <typename T>
+concept HasHashMethod = requires(const T &obj)
+{
+    { obj.hash(hash_method_tag{}) } -> std::same_as<size_t>;
+};
+
+template <typename T> requires HasHashMethod<T>
+struct hash<T> {
+    size_t operator()(const T &obj) const noexcept(noexcept(std::declval<T>().hash(hash_method_tag{})))
+    {
+        return obj.hash(hash_method_tag{});
+    }
+};
+
+/* Inline hash method support ends */
 
 #define ROBIN_HOOD_HASH_INT(T)                           \
     template <>                                          \
@@ -1858,6 +1881,34 @@ public:
         (void)hint;
         return try_emplace_impl(std::move(key), std::forward<Args>(args)...).first;
     }
+
+/* try_emplace_heterogenous */
+    template <typename OtherKey, typename... Args>
+    std::pair<iterator, bool> try_emplace_heterogenous(const OtherKey& key, Args&&... args) {
+        ROBIN_HOOD_TRACE(this)
+        auto idxAndState = insertKeyPrepareEmptySpot(key);
+        switch (idxAndState.second) {
+        case InsertionState::key_found:
+            break;
+
+        case InsertionState::new_node:
+            ::new (static_cast<void*>(&mKeyVals[idxAndState.first])) Node(
+                *this, std::forward<Args>(args)...);
+            break;
+
+        case InsertionState::overwrite_node:
+            mKeyVals[idxAndState.first] = Node(*this, std::forward<Args>(args)...);
+            break;
+
+        case InsertionState::overflow_error:
+            throwOverflowError();
+            break;
+        }
+
+        return std::make_pair(iterator(mKeyVals + idxAndState.first, mInfo + idxAndState.first),
+                              InsertionState::key_found != idxAndState.second);
+    }
+/* try_emplace_heterogenous ends */
 
     template <typename Mapped>
     std::pair<iterator, bool> insert_or_assign(const key_type& key, Mapped&& obj) {

@@ -33,6 +33,8 @@
 #include "saveload.h"
 #include "vehicle_sl.h"
 
+#include "table/strings.h"
+
 #include <map>
 
 #include "../safeguards.h"
@@ -179,7 +181,7 @@ void UpdateOldAircraft()
 {
 	/* set airport_flags to 0 for all airports just to be sure */
 	for (Station *st : Station::Iterate()) {
-		st->airport.flags = 0; // reset airport
+		st->airport.blocks = {}; // reset airport
 	}
 
 	for (Aircraft *a : Aircraft::Iterate()) {
@@ -187,13 +189,13 @@ void UpdateOldAircraft()
 		 * skip those */
 		if (a->IsNormalAircraft()) {
 			/* airplane in terminal stopped doesn't hurt anyone, so goto next */
-			if ((a->vehstatus & VS_STOPPED) && a->state == 0) {
+			if (a->vehstatus.Test(VehState::Stopped) && a->state == 0) {
 				a->state = HANGAR;
 				continue;
 			}
 
 			AircraftLeaveHangar(a, a->direction); // make airplane visible if it was in a depot for example
-			a->vehstatus &= ~VS_STOPPED; // make airplane moving
+			a->vehstatus.Reset(VehState::Stopped); // make airplane moving
 			UpdateAircraftCache(a);
 			a->cur_speed = a->vcache.cached_max_speed; // so aircraft don't have zero speed while in air
 			if (!a->current_order.IsType(OT_GOTO_STATION) && !a->current_order.IsType(OT_GOTO_DEPOT)) {
@@ -238,7 +240,7 @@ void UpdateOldAircraft()
 static void CheckValidVehicles()
 {
 	size_t total_engines = Engine::GetPoolSize();
-	EngineID first_engine[4] = { INVALID_ENGINE, INVALID_ENGINE, INVALID_ENGINE, INVALID_ENGINE };
+	EngineID first_engine[4] = { EngineID::Invalid(), EngineID::Invalid(), EngineID::Invalid(), EngineID::Invalid() };
 
 	for (const Engine *e : Engine::IterateType(VEH_TRAIN)) { first_engine[VEH_TRAIN] = e->index; break; }
 	for (const Engine *e : Engine::IterateType(VEH_ROAD)) { first_engine[VEH_ROAD] = e->index; break; }
@@ -292,7 +294,7 @@ void AfterLoadVehiclesPhase1(bool part_of_load)
 		if (v->Next() != nullptr) {
 			v->Next()->previous = v;
 #if OTTD_UPPER_TAGGED_PTR
-			VehiclePoolOps::SetIsNonFrontVehiclePtr(_vehicle_pool.GetRawRef(v->Next()->index), true);
+			VehiclePoolOps::SetIsNonFrontVehiclePtr(_vehicle_pool.GetRawRef(v->Next()->index.base()), true);
 #endif
 			if (v->type == VEH_TRAIN && (HasBit(v->subtype, GVSF_VIRTUAL) != HasBit(v->Next()->subtype, GVSF_VIRTUAL))) {
 				SlErrorCorrupt("Mixed virtual/non-virtual train consist");
@@ -302,7 +304,7 @@ void AfterLoadVehiclesPhase1(bool part_of_load)
 
 		if (part_of_load) v->fill_percent_te_id = INVALID_TE_ID;
 		v->first = nullptr;
-		if (v->IsGroundVehicle()) v->GetGroundVehicleCache()->first_engine = INVALID_ENGINE;
+		if (v->IsGroundVehicle()) v->GetGroundVehicleCache()->first_engine = EngineID::Invalid();
 	}
 
 	/* AfterLoadVehicles may also be called in case of NewGRF reload, in this
@@ -488,7 +490,7 @@ void AfterLoadVehiclesPhase2(bool part_of_load)
 				if (rv->IsFrontEngine()) {
 					rv->gcache.last_speed = rv->cur_speed; // update displayed road vehicle speed
 
-					rv->roadtype = Engine::Get(rv->engine_type)->u.road.roadtype;
+					rv->roadtype = Engine::Get(rv->engine_type)->VehInfo<RoadVehicleInfo>().roadtype;
 					rv->compatible_roadtypes = GetRoadTypeInfo(rv->roadtype)->powered_roadtypes;
 					bool is_invalid = false;
 					for (RoadVehicle *u = rv; u != nullptr; u = u->Next()) {
@@ -542,7 +544,7 @@ void AfterLoadVehiclesPhase2(bool part_of_load)
 			if (v->type == VEH_TRAIN) {
 				Train *t = Train::From(v);
 				if (!t->IsFrontEngine()) {
-					if (t->IsEngine()) t->vehstatus |= VS_STOPPED;
+					if (t->IsEngine()) t->vehstatus.Set(VehState::Stopped);
 					/* cur_speed is now relevant for non-front parts - nonzero breaks
 					 * moving-wagons-inside-depot- and autoreplace- code */
 					t->cur_speed = 0;
@@ -550,7 +552,7 @@ void AfterLoadVehiclesPhase2(bool part_of_load)
 			}
 			/* trains weren't stopping gradually in old OTTD versions (and TTO/TTD)
 			 * other vehicle types didn't have zero speed while stopped (even in 'recent' OTTD versions) */
-			if ((v->vehstatus & VS_STOPPED) && (v->type != VEH_TRAIN || IsSavegameVersionBefore(SLV_2, 1))) {
+			if (v->vehstatus.Test(VehState::Stopped) && (v->type != VEH_TRAIN || IsSavegameVersionBefore(SLV_2, 1))) {
 				v->cur_speed = 0;
 			}
 		}
@@ -620,7 +622,7 @@ void AfterLoadVehiclesPhase2(bool part_of_load)
 		v->UpdateDeltaXY();
 		v->coord.left = INVALID_COORD;
 		v->UpdatePosition();
-		v->UpdateViewport(false);
+		if (v->type != VEH_SHIP || v->Previous() == nullptr) v->UpdateViewport(false);
 		v->cargo.AssertCountConsistency();
 	}
 }
@@ -629,8 +631,7 @@ void AfterLoadVehiclesRemoveAnyFoundInvalid()
 {
 	if (!_load_invalid_vehicles_to_delete.empty()) {
 		Debug(sl, 0, "Removing {} vehicles found to be uncorrectably invalid during load", _load_invalid_vehicles_to_delete.size());
-		SetDParam(0, (uint)_load_invalid_vehicles_to_delete.size());
-		ShowErrorMessage(STR_WARNING_LOADGAME_REMOVED_UNCORRECTABLE_VEHICLES, INVALID_STRING_ID, WL_CRITICAL);
+		ShowErrorMessage(GetEncodedString(STR_WARNING_LOADGAME_REMOVED_UNCORRECTABLE_VEHICLES, _load_invalid_vehicles_to_delete.size()), {}, WL_CRITICAL);
 		GroupStatistics::UpdateAfterLoad();
 
 		RegisterGameEvents(GEF_RM_INVALID_RV);
@@ -657,7 +658,7 @@ void FixupTrainLengths()
 			 * so we need to move all vehicles forward to cover the difference to the
 			 * old center, otherwise wagon spacing in trains would be broken upon load. */
 			for (Train *u = v; u != nullptr; u = u->Next()) {
-				if (u->track == TRACK_BIT_DEPOT || (u->vehstatus & VS_CRASHED)) continue;
+				if (u->track == TRACK_BIT_DEPOT || u->vehstatus.Test(VehState::Crashed)) continue;
 
 				Train *next = u->Next();
 
@@ -718,7 +719,7 @@ void FixupTrainLengths()
 					int d = TicksToLeaveDepot(u);
 					if (d <= 0) {
 						/* Next vehicle should have left the depot already, show it and pull forward. */
-						next->vehstatus &= ~VS_HIDDEN;
+						next->vehstatus.Reset(VehState::Hidden);
 						next->track = TrackToTrackBits(GetRailDepotTrack(next->tile));
 						for (int i = 0; i >= d; i--) TrainController(next, nullptr);
 					}
@@ -975,6 +976,7 @@ NamedSaveLoadTable DispatchRecordsStructHandlerBase::GetDescription() const
 		NSL("dispatched",                   SLE_VAR(RecordPair, second.dispatched,     SLE_INT64)),
 		NSL("offset",                       SLE_VAR(RecordPair, second.offset,         SLE_UINT32)),
 		NSL("slot_flags",                   SLE_VAR(RecordPair, second.slot_flags,     SLE_UINT16)),
+		NSL("route_id",                     SLE_VAR(RecordPair, second.route_id,       SLE_UINT8)),
 		NSL("record_flags",                 SLE_VAR(RecordPair, second.record_flags,   SLE_UINT8)),
 	};
 
@@ -1157,7 +1159,7 @@ NamedSaveLoadTable GetVehicleDescription(VehicleType vt)
 
 		NSL("random_bits",              SLE_CONDVAR_X(Vehicle, random_bits,               SLE_FILE_U8 | SLE_VAR_U16,  SLV_2, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_EXTEND_VEHICLE_RANDOM, 0, 0))),
 		NSL("random_bits",              SLE_CONDVAR_X(Vehicle, random_bits,               SLE_UINT16,                 SLV_2, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_EXTEND_VEHICLE_RANDOM, 1))),
-		NSL("waiting_triggers",           SLE_CONDVAR(Vehicle, waiting_triggers,          SLE_UINT8,                  SLV_2, SL_MAX_VERSION)),
+		NSL("waiting_triggers",           SLE_CONDVAR(Vehicle, waiting_random_triggers,   SLE_UINT8,                  SLV_2, SL_MAX_VERSION)),
 
 		NSL("",                        SLEG_CONDVAR_X(_old_ahead_separation,              SLE_UINT32,                 SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_AUTO_TIMETABLE, 1, 4))),
 		NSL("",                        SLE_CONDNULL_X(4,                                                              SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_AUTO_TIMETABLE, 1, 4))),
@@ -1196,7 +1198,7 @@ NamedSaveLoadTable GetVehicleDescription(VehicleType vt)
 
 		NSL("crash_anim_pos",                 SLE_VAR(Train, crash_anim_pos,            SLE_UINT16)),
 		NSL("force_proceed",                  SLE_VAR(Train, force_proceed,             SLE_UINT8)),
-		NSL("railtype",                       SLE_VAR(Train, railtype,                  SLE_UINT8)),
+		NSL("",                        SLE_CONDNULL_X(1,                                                             SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_ENGINE_MULTI_RAILTYPE, 0, 0))),
 		NSL("track",                          SLE_VAR(Train, track,                     SLE_UINT8)),
 
 		NSL("flags",                      SLE_CONDVAR(Train, flags,                     SLE_FILE_U8  | SLE_VAR_U32,  SLV_2, SLV_100)),
@@ -1434,12 +1436,13 @@ void Load_VEHS()
 		}
 	}
 
-	int index;
-	while ((index = SlIterateArray()) != -1) {
+	int idx;
+	while ((idx = SlIterateArray()) != -1) {
 		_old_order_item_ref = 0;
 
 		Vehicle *v;
 		VehicleType vtype = (VehicleType)SlReadByte();
+		VehicleID index = static_cast<VehicleID>(idx);
 
 		switch (vtype) {
 			case VEH_TRAIN:    v = new (index) Train();           break;
@@ -1456,16 +1459,16 @@ void Load_VEHS()
 
 		if (_cargo_count != 0 && IsCompanyBuildableVehicleType(v) && CargoPacket::CanAllocateItem()) {
 			/* Don't construct the packet with station here, because that'll fail with old savegames */
-			CargoPacket *cp = new CargoPacket(_cargo_count, _cargo_periods, _cargo_source, TileIndex{_cargo_source_xy}, _cargo_feeder_share);
+			CargoPacket *cp = new CargoPacket(_cargo_count, _cargo_periods, StationID(_cargo_source), TileIndex{_cargo_source_xy}, _cargo_feeder_share);
 			v->cargo.Append(cp);
 		}
 
 		/* Old savegames used 'last_station_visited = 0xFF' */
 		if (IsSavegameVersionBefore(SLV_5) && v->last_station_visited == 0xFF) {
-			v->last_station_visited = INVALID_STATION;
+			v->last_station_visited = StationID::Invalid();
 		}
 
-		if (IsSavegameVersionBefore(SLV_182) && !SlXvIsFeaturePresent(XSLFI_CHILLPP)) v->last_loading_station = INVALID_STATION;
+		if (IsSavegameVersionBefore(SLV_182) && !SlXvIsFeaturePresent(XSLFI_CHILLPP)) v->last_loading_station = StationID::Invalid();
 
 		if (IsSavegameVersionBefore(SLV_5)) {
 			/* Convert the current_order.type (which is a mix of type and flags, because
@@ -1478,7 +1481,7 @@ void Load_VEHS()
 		if (IsSavegameVersionBefore(SLV_60)) v->group_id = DEFAULT_GROUP;
 
 		/* Handle pre-OrderList orders */
-		if (IsSavegameVersionBefore(SLV_105) && _old_order_item_ref != 0) RegisterVehicleOldOrderRef(index, _old_order_item_ref - 1); // -1 to go from saveload ref to index
+		if (IsSavegameVersionBefore(SLV_105) && _old_order_item_ref != 0) RegisterVehicleOldOrderRef(index, OrderID(_old_order_item_ref - 1)); // -1 to go from saveload ref to index
 
 		if (SlXvIsFeaturePresent(XSLFI_CHILLPP)) {
 			_veh_cpp_packets[index] = std::move(_cpp_packets);
@@ -1486,7 +1489,7 @@ void Load_VEHS()
 		}
 
 		if (SlXvIsFeaturePresent(XSLFI_AUTO_TIMETABLE, 1, 4)) {
-			AssignBit(v->vehicle_flags, VF_SEPARATION_ACTIVE, _old_ahead_separation);
+			v->vehicle_flags.Set(VehicleFlag::SeparationActive, _old_ahead_separation);
 		}
 
 		if (SlXvIsFeaturePresent(XSLFI_TIMETABLES_START_TICKS, 2, 2) && v->timetable_start != 0 && _old_timetable_start_subticks != 0) {
@@ -1684,9 +1687,9 @@ void Load_VENC()
 		return;
 	}
 
-	_vehicle_vencs.resize(SlReadUint32());
+	_vehicle_vencs.resize(SlReadUint32LengthField());
 	for (vehicle_venc &venc : _vehicle_vencs) {
-		venc.id = SlReadUint32();
+		venc.id = static_cast<VehicleID>(SlReadUint32());
 		venc.vcache.cached_max_speed = SlReadUint16();
 		venc.vcache.cached_cargo_age_period = SlReadUint16();
 		venc.vcache.cached_vis_effect = SlReadByte();
@@ -1702,13 +1705,13 @@ void Load_VENC()
 		cache.cached_power = SlReadUint32();
 		cache.cached_air_drag = SlReadUint32();
 		cache.cached_total_length = SlReadUint16();
-		cache.first_engine = SlReadUint16();
+		cache.first_engine = static_cast<EngineID>(SlReadUint16());
 		cache.cached_veh_length = SlReadByte();
 	};
 
-	_train_vencs.resize(SlReadUint32());
+	_train_vencs.resize(SlReadUint32LengthField());
 	for (train_venc &venc : _train_vencs) {
-		venc.id = SlReadUint32();
+		venc.id = static_cast<VehicleID>(SlReadUint32());
 		read_gv_cache(venc.gvcache);
 		venc.cached_tflags = SlReadByte();
 		venc.cached_num_engines = SlReadByte();
@@ -1722,15 +1725,15 @@ void Load_VENC()
 		venc.cached_max_curve_speed = SlReadUint16();
 	}
 
-	_roadvehicle_vencs.resize(SlReadUint32());
+	_roadvehicle_vencs.resize(SlReadUint32LengthField());
 	for (roadvehicle_venc &venc : _roadvehicle_vencs) {
-		venc.id = SlReadUint32();
+		venc.id = static_cast<VehicleID>(SlReadUint32());
 		read_gv_cache(venc.gvcache);
 	}
 
-	_aircraft_vencs.resize(SlReadUint32());
+	_aircraft_vencs.resize(SlReadUint32LengthField());
 	for (aircraft_venc &venc : _aircraft_vencs) {
-		venc.id = SlReadUint32();
+		venc.id = static_cast<VehicleID>(SlReadUint32());
 		venc.cached_max_range = SlReadUint16();
 	}
 }

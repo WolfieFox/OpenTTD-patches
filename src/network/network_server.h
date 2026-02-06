@@ -12,12 +12,13 @@
 
 #include "network_internal.h"
 #include "core/tcp_listen.h"
+#include "../core/pool_type.hpp"
 
 class ServerNetworkGameSocketHandler;
 /** Make the code look slightly nicer/simpler. */
 typedef ServerNetworkGameSocketHandler NetworkClientSocket;
 /** Pool with all client sockets. */
-typedef Pool<NetworkClientSocket, ClientIndex, 8, MAX_CLIENT_SLOTS, PT_NCLIENT> NetworkClientSocketPool;
+using NetworkClientSocketPool = Pool<NetworkClientSocket, ClientPoolID, 8, PoolType::NetworkClient>;
 extern NetworkClientSocketPool _networkclientsocket_pool;
 
 /** Class for handling the server side of the game connection. */
@@ -28,7 +29,7 @@ class ServerNetworkGameSocketHandler : public NetworkClientSocketPool::PoolItem<
 
 protected:
 	std::unique_ptr<class NetworkAuthenticationServerHandler> authentication_handler = nullptr; ///< The handler for the authentication.
-	std::string peer_public_key; ///< The public key of our client.
+	std::string peer_public_key{}; ///< The public key of our client.
 
 	NetworkRecvStatus Receive_CLIENT_JOIN(Packet &p) override;
 	NetworkRecvStatus Receive_CLIENT_IDENTIFY(Packet &p) override;
@@ -86,7 +87,7 @@ public:
 	uint8_t last_token = 0;                ///< The last random token we did send to verify the client is listening
 	uint32_t last_token_frame = 0;         ///< The last frame we received the right token
 	ClientStatus status = STATUS_INACTIVE; ///< Status of this client
-	OutgoingCommandQueue outgoing_queue;   ///< The command-queue awaiting delivery; conceptually more a bucket to gather commands in, after which the whole bucket is sent to the client.
+	OutgoingCommandQueue outgoing_queue{}; ///< The command-queue awaiting delivery; conceptually more a bucket to gather commands in, after which the whole bucket is sent to the client.
 	size_t receive_limit = 0;              ///< Amount of bytes that we can receive at this moment
 	bool settings_authed = false;          ///< Authorised to control all game settings
 	bool supports_zstd = false;            ///< Client supports zstd compression
@@ -115,15 +116,15 @@ public:
 	NetworkRecvStatus SendQuit(ClientID client_id);
 	NetworkRecvStatus SendShutdown();
 	NetworkRecvStatus SendNewGame();
-	NetworkRecvStatus SendRConResult(uint16_t colour, const std::string &command);
+	NetworkRecvStatus SendRConResult(uint16_t colour, std::string_view command);
 	NetworkRecvStatus SendRConDenied();
 	NetworkRecvStatus SendMove(ClientID client_id, CompanyID company_id);
 
 	NetworkRecvStatus SendClientInfo(NetworkClientInfo *ci);
-	NetworkRecvStatus SendError(NetworkErrorCode error, const std::string &reason = {});
-	NetworkRecvStatus SendDesyncLog(const std::string &log);
-	NetworkRecvStatus SendChat(NetworkAction action, ClientID client_id, bool self_send, const std::string &msg, NetworkTextMessageData data);
-	NetworkRecvStatus SendExternalChat(const std::string &source, TextColour colour, const std::string &user, const std::string &msg);
+	NetworkRecvStatus SendError(NetworkErrorCode error, std::string_view reason = {});
+	NetworkRecvStatus SendDesyncLog(std::string_view log);
+	NetworkRecvStatus SendChat(NetworkAction action, ClientID client_id, bool self_send, std::string_view msg, NetworkTextMessageData data);
+	NetworkRecvStatus SendExternalChat(std::string_view source, TextColour colour, std::string_view user, std::string_view msg);
 	NetworkRecvStatus SendJoin(ClientID client_id);
 	NetworkRecvStatus SendFrame();
 	NetworkRecvStatus SendSync();
@@ -150,12 +151,12 @@ public:
 	 * Get the name used by the listener.
 	 * @return the name to show in debug logs and the like.
 	 */
-	static const char *GetName()
+	static std::string_view GetName()
 	{
 		return "server";
 	}
 
-	const char *GetClientIP();
+	std::string_view GetClientIP();
 	std::string_view GetPeerPublicKey() const { return this->peer_public_key; }
 
 	static ServerNetworkGameSocketHandler *GetByClientID(ClientID client_id);
@@ -163,7 +164,7 @@ public:
 
 void NetworkServer_Tick(bool send_frame);
 void ChangeNetworkRestartTime(bool reset);
-void NetworkServerSetCompanyPassword(CompanyID company_id, const std::string &password, bool already_hashed = true);
+void NetworkServerSetCompanyPassword(CompanyID company_id, std::string_view password, bool already_hashed = true);
 void NetworkServerUpdateCompanyPassworded(CompanyID company_id, bool passworded);
 
 #endif /* NETWORK_SERVER_H */

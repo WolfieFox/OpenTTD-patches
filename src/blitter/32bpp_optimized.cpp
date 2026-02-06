@@ -33,11 +33,11 @@ inline void Blitter_32bppOptimized::Draw(const Blitter::BlitterParams *bp, ZoomL
 
 	/* src_px : each line begins with uint32_t n = 'number of bytes in this line',
 	 *          then n times is the Colour struct for this line */
-	const Colour *src_px = (const Colour *)(src->data + src->offset[zoom][0]);
+	const Colour *src_px = reinterpret_cast<const Colour *>(src->data + src->offset[zoom][0]);
 	/* src_n  : each line begins with uint32_t n = 'number of bytes in this line',
 	 *          then interleaved stream of 'm' and 'n' channels. 'm' is remap,
 	 *          'n' is number of bytes with the same alpha channel class */
-	const uint16_t *src_n  = (const uint16_t *)(src->data + src->offset[zoom][1]);
+	const uint16_t *src_n = reinterpret_cast<const uint16_t *>(src->data + src->offset[zoom][1]);
 
 	/* skip upper lines in src_px and src_n */
 	for (uint i = bp->skip_top; i != 0; i--) {
@@ -295,12 +295,13 @@ void Blitter_32bppOptimized::Draw(Blitter::BlitterParams *bp, BlitterMode mode, 
 	this->Draw<false>(bp, mode, zoom);
 }
 
-template <bool Tpal_to_rgb> Sprite *Blitter_32bppOptimized::EncodeInternal(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator)
+template <bool Tpal_to_rgb>
+Sprite *Blitter_32bppOptimized::EncodeInternal(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator)
 {
 	/* streams of pixels (a, r, g, b channels)
 	 *
 	 * stored in separated stream so data are always aligned on 4B boundary */
-	Colour *dst_px_orig[ZOOM_LVL_SPR_COUNT];
+	SpriteCollMap<Colour *> dst_px_orig;
 
 	/* interleaved stream of 'm' channel and 'n' channel
 	 * 'n' is number of following pixels with the same alpha channel class
@@ -308,22 +309,22 @@ template <bool Tpal_to_rgb> Sprite *Blitter_32bppOptimized::EncodeInternal(const
 	 *
 	 * it has to be stored in one stream so fewer registers are used -
 	 * x86 has problems with register allocation even with this solution */
-	uint16_t *dst_n_orig[ZOOM_LVL_SPR_COUNT];
+	SpriteCollMap<uint16_t *> dst_n_orig;
 
 	/* lengths of streams */
-	uint32_t lengths[ZOOM_LVL_SPR_COUNT][2];
+	SpriteCollMap<std::array<uint32_t, 2>> lengths;
 
 	ZoomLevel zoom_min;
 	ZoomLevel zoom_max;
-	uint8_t missing_zoom_levels = 0;
+	LowZoomLevels missing_zoom_levels = {};
 
-	if (sprite[ZOOM_LVL_MIN].type == SpriteType::Font) {
-		zoom_min = ZOOM_LVL_MIN;
-		zoom_max = ZOOM_LVL_MIN;
+	if (sprite_type == SpriteType::Font) {
+		zoom_min = ZoomLevel::Min;
+		zoom_max = ZoomLevel::Min;
 	} else {
 		zoom_min = _settings_client.gui.zoom_min;
-		zoom_max = (ZoomLevel) std::min(_settings_client.gui.zoom_max, ZOOM_LVL_DRAW_SPR);
-		if (zoom_max == zoom_min) zoom_max = ZOOM_LVL_DRAW_SPR;
+		zoom_max = std::min<ZoomLevel>(_settings_client.gui.zoom_max, ZoomLevel::SpriteMax);
+		if (zoom_max == zoom_min) zoom_max = ZoomLevel::SpriteMax;
 	}
 
 	BlitterSpriteFlags flags = BSF_NO_REMAP | BSF_NO_ANIM;
@@ -358,7 +359,7 @@ template <bool Tpal_to_rgb> Sprite *Blitter_32bppOptimized::EncodeInternal(const
 		if (src == nullptr) {
 			lengths[z][0] = 0;
 			lengths[z][1] = 0;
-			SetBit(missing_zoom_levels, z);
+			missing_zoom_levels.Set(z);
 			continue;
 		}
 
@@ -392,7 +393,7 @@ template <bool Tpal_to_rgb> Sprite *Blitter_32bppOptimized::EncodeInternal(const
 					dst_px->a = a;
 					if (a != 0 && a != 255) flags |= BSF_TRANSLUCENT;
 					*dst_n = src->m;
-					if (z >= _settings_client.gui.disable_water_animation && src->m >= 245 && src->m <= 254) {
+					if (to_underlying(z) >= _settings_client.gui.disable_water_animation && src->m >= 245 && src->m <= 254) {
 						*dst_n = 0;
 
 						/* Get brightest value */
@@ -475,13 +476,14 @@ template <bool Tpal_to_rgb> Sprite *Blitter_32bppOptimized::EncodeInternal(const
 
 	if (len == 0) {
 		/* Mark sprite as having no levels at all, and therefore replaceable */
-		missing_zoom_levels = UINT8_MAX;
+		missing_zoom_levels = LOW_ZOOM_ALL_BITS;
 	}
 
-	dest_sprite->height = sprite[ZOOM_LVL_MIN].height;
-	dest_sprite->width  = sprite[ZOOM_LVL_MIN].width;
-	dest_sprite->x_offs = sprite[ZOOM_LVL_MIN].x_offs;
-	dest_sprite->y_offs = sprite[ZOOM_LVL_MIN].y_offs;
+	const auto &root_sprite = sprite.Root();
+	dest_sprite->height = root_sprite.height;
+	dest_sprite->width = root_sprite.width;
+	dest_sprite->x_offs = root_sprite.x_offs;
+	dest_sprite->y_offs = root_sprite.y_offs;
 	dest_sprite->next = nullptr;
 	dest_sprite->missing_zoom_levels = missing_zoom_levels;
 
@@ -504,10 +506,10 @@ template <bool Tpal_to_rgb> Sprite *Blitter_32bppOptimized::EncodeInternal(const
 	return dest_sprite;
 }
 
-template Sprite *Blitter_32bppOptimized::EncodeInternal<true>(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator);
-template Sprite *Blitter_32bppOptimized::EncodeInternal<false>(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator);
+template Sprite *Blitter_32bppOptimized::EncodeInternal<true>(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator);
+template Sprite *Blitter_32bppOptimized::EncodeInternal<false>(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator);
 
-Sprite *Blitter_32bppOptimized::Encode(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator)
+Sprite *Blitter_32bppOptimized::Encode(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator)
 {
-	return this->EncodeInternal<true>(sprite, allocator);
+	return this->EncodeInternal<true>(sprite_type, sprite, allocator);
 }

@@ -12,7 +12,7 @@
 #include "company_func.h"
 #include "hotkeys.h"
 #include "newgrf.h"
-#include "newgrf_badge.h"
+#include "newgrf_badge_gui.h"
 #include "newgrf_object.h"
 #include "newgrf_text.h"
 #include "object.h"
@@ -49,6 +49,8 @@ public:
 
 	StringID GetClassTooltip() const override { return STR_PICKER_OBJECT_CLASS_TOOLTIP; }
 	StringID GetTypeTooltip() const override { return STR_PICKER_OBJECT_TYPE_TOOLTIP; }
+	StringID GetRandomTooltip() const override { return STR_PICKER_OBJECT_RANDOM_TOOLTIP; }
+	StringID GetCollectionTooltip() const override { return STR_PICKER_OBJECT_COLLECTION_TOOLTIP; }
 
 	bool IsActive() const override
 	{
@@ -96,13 +98,15 @@ public:
 	{
 		const auto *spec = this->GetSpec(cls_id, id);
 		if (!spec->grf_prop.HasGrfFile()) {
-			extern const DrawTileSprites _objects[];
+			extern const DrawTileSpriteSpan _objects[];
 			const DrawTileSprites *dts = &_objects[spec->grf_prop.local_id];
 			DrawOrigTileSeqInGUI(x, y, dts, PAL_NONE);
 		} else {
 			DrawNewObjectTileInGUI(x, y, spec, std::min<int>(_object_gui.sel_view, spec->views - 1));
 		}
 	}
+
+	void SetSelectedCollection([[maybe_unused]] const btree::btree_set<PickerItem> &items) const override { return; }
 
 	void FillUsedItems(btree::btree_set<PickerItem> &items) override
 	{
@@ -120,31 +124,28 @@ public:
 
 /** The window used for building objects. */
 class BuildObjectWindow : public PickerWindow {
-	int info_height; ///< The height of the info box.
+	int info_height = 1; ///< The height of the info box.
 
 public:
-	BuildObjectWindow(WindowDesc &desc, WindowNumber) : PickerWindow(desc, nullptr, 0, ObjectPickerCallbacks::instance), info_height(1)
+	BuildObjectWindow(WindowDesc &desc, WindowNumber) : PickerWindow(desc, nullptr, 0, ObjectPickerCallbacks::instance)
 	{
+		this->invalidation_policy = WindowInvalidationPolicy::QueueSingle;
 		ResetObjectToPlace();
 		this->ConstructWindow();
-		this->InvalidateData();
 	}
 
-	void SetStringParameters(WidgetID widget) const override
+	std::string GetWidgetString(WidgetID widget, StringID stringid) const override
 	{
 		switch (widget) {
 			case WID_BO_OBJECT_SIZE: {
 				ObjectClass *objclass = ObjectClass::Get(_object_gui.sel_class);
 				const ObjectSpec *spec = objclass->GetSpec(_object_gui.sel_type);
 				int size = spec == nullptr ? 0 : spec->size;
-				SetDParam(0, GB(size, HasBit(_object_gui.sel_view, 0) ? 4 : 0, 4));
-				SetDParam(1, GB(size, HasBit(_object_gui.sel_view, 0) ? 0 : 4, 4));
-				break;
+				return GetString(STR_OBJECT_BUILD_SIZE, GB(size, HasBit(_object_gui.sel_view, 0) ? 4 : 0, 4), GB(size, HasBit(_object_gui.sel_view, 0) ? 0 : 4, 4));
 			}
 
 			default:
-				this->PickerWindow::SetStringParameters(widget);
-				break;
+				return this->PickerWindow::GetWidgetString(widget, stringid);
 		}
 	}
 
@@ -190,6 +191,8 @@ public:
 
 			case WID_BO_INFO:
 				size.height = this->info_height;
+				fill.height = this->has_class_picker ? 0 : 1;
+				resize.height = this->has_class_picker ? 0 : 1;
 				break;
 
 			default:
@@ -217,7 +220,7 @@ public:
 					int y = (ir.Height() + ScaleSpriteTrad(PREVIEW_HEIGHT)) / 2 - ScaleSpriteTrad(PREVIEW_BOTTOM);
 
 					if (!spec->grf_prop.HasGrfFile()) {
-						extern const DrawTileSprites _objects[];
+						extern const DrawTileSpriteSpan _objects[];
 						const DrawTileSprites *dts = &_objects[spec->grf_prop.local_id];
 						DrawOrigTileSeqInGUI(x, y, dts, PAL_NONE);
 					} else {
@@ -234,25 +237,24 @@ public:
 
 				Rect tr = r;
 				const int bottom = tr.bottom;
+				/* Use all the available space past the rect, so that we can enlarge the window if needed. */
 				tr.bottom = INT16_MAX;
 				tr.top = DrawBadgeNameList(tr, spec->badges, GSF_OBJECTS);
 
 				/* Get the extra message for the GUI */
-				if (HasBit(spec->callback_mask, CBM_OBJ_FUND_MORE_TEXT)) {
+				if (spec->callback_mask.Test(ObjectCallbackMask::FundMoreText)) {
 					uint16_t callback_res = GetObjectCallback(CBID_OBJECT_FUND_MORE_TEXT, 0, 0, spec, nullptr, INVALID_TILE, _object_gui.sel_view);
 					if (callback_res != CALLBACK_FAILED && callback_res != 0x400) {
-						if (callback_res > 0x400) {
+						std::string str;
+						if (callback_res == 0x40F) {
+							str = GetGRFStringWithTextStack(spec->grf_prop.grffile, static_cast<GRFStringID>(GetRegister(0x100)), GetRegisterRange(0x101));
+						} else if (callback_res > 0x400) {
 							ErrorUnknownCallbackResult(spec->grf_prop.grfid, CBID_OBJECT_FUND_MORE_TEXT, callback_res);
 						} else {
-							StringID message = GetGRFStringID(spec->grf_prop.grffile, GRFSTR_MISC_GRF_TEXT + callback_res);
-							if (message != STR_NULL && message != STR_UNDEFINED) {
-								StartTextRefStackUsage(spec->grf_prop.grffile, 6);
-								/* Use all the available space left from where we stand up to the
-								 * end of the window. We ALSO enlarge the window if needed, so we
-								 * can 'go' wild with the bottom of the window. */
-								tr.top = DrawStringMultiLine(tr, message, TC_ORANGE);
-								StopTextRefStackUsage();
-							}
+							str = GetGRFStringWithTextStack(spec->grf_prop.grffile, GRFSTR_MISC_GRF_TEXT + callback_res, GetRegisterRange(0x100));
+						}
+						if (!str.empty()) {
+							tr.top = DrawStringMultiLine(tr, str, TC_ORANGE);
 						}
 					}
 				}
@@ -304,7 +306,8 @@ public:
 
 		if (!gui_scope) return;
 
-		if ((data & PickerWindow::PFI_POSITION) != 0) {
+		PickerInvalidations pi(data);
+		if (pi.Test(PickerInvalidation::Position)) {
 			const auto objclass = ObjectClass::Get(_object_gui.sel_class);
 			const auto spec = objclass->GetSpec(_object_gui.sel_type);
 			_object_gui.sel_view = std::min<int>(_object_gui.sel_view, spec->views - 1);
@@ -316,10 +319,10 @@ public:
 	{
 		switch (widget) {
 			case WID_BO_OBJECT_SPRITE:
-				if (_object_gui.sel_type != MAX_UVALUE(uint16_t)) {
+				if (_object_gui.sel_type != std::numeric_limits<uint16_t>::max()) {
 					_object_gui.sel_view = this->GetWidget<NWidgetBase>(widget)->GetParentWidget<NWidgetMatrix>()->GetCurrentElement();
-					this->InvalidateData(PickerWindow::PFI_POSITION);
-					if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+					this->InvalidateData(PickerInvalidation::Position);
+					SndClickBeep();
 				}
 				break;
 
@@ -403,7 +406,7 @@ static constexpr NWidgetPart _nested_build_object_widgets[] = {
 							NWidget(WWT_PANEL, COLOUR_GREY, WID_BO_OBJECT_SPRITE), SetToolTip(STR_OBJECT_BUILD_PREVIEW_TOOLTIP), EndContainer(),
 							EndContainer(),
 						EndContainer(),
-						NWidget(WWT_TEXT, INVALID_COLOUR, WID_BO_OBJECT_SIZE), SetStringTip(STR_OBJECT_BUILD_SIZE), SetAlignment(SA_CENTER),
+						NWidget(WWT_TEXT, INVALID_COLOUR, WID_BO_OBJECT_SIZE), SetAlignment(SA_CENTER),
 						NWidget(WWT_EMPTY, INVALID_COLOUR, WID_BO_INFO), SetFill(1, 0), SetResize(1, 0),
 					EndContainer(),
 				EndContainer(),

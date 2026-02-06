@@ -205,7 +205,7 @@ inline void SetTileOwner(TileIndex tile, Owner owner)
 	dbg_assert_tile(IsValidTile(tile), tile);
 	dbg_assert_tile(!IsTileType(tile, MP_HOUSE) && !IsTileType(tile, MP_INDUSTRY), tile);
 
-	SB(_m[tile].m1, 0, 5, owner);
+	SB(_m[tile].m1, 0, 5, owner.base());
 }
 
 /**
@@ -272,6 +272,49 @@ inline void SetAnimationFrame(TileIndex t, uint8_t frame)
 std::tuple<Slope, int> GetTileSlopeZ(TileIndex tile);
 int GetTileZ(TileIndex tile);
 int GetTileMaxZ(TileIndex tile);
+
+/**
+ * Check whether GetTileZ(tile) > above_height.
+ * Avoids accessing neighbouring 3 tile heights if not required.
+ * @param tile Tile to check
+ * @param above_height Height threshold
+ * @return GetTileZ(tile) > above_height
+ */
+inline bool IsTileZAbove(TileIndex tile, int above_height)
+{
+	int tile_z = TileHeight(tile);
+	if (tile_z - 2 <= above_height && tile_z > above_height) {
+		tile_z = GetTileZ(tile);
+	}
+	return tile_z > above_height;
+}
+
+inline bool IsTileZBelow(TileIndex tile, int below_height)
+{
+	return !IsTileZAbove(tile, below_height - 1);
+}
+
+/**
+ * Check whether GetTileMaxZ(tile) > above_height.
+ * Avoids accessing neighbouring 3 tile heights if not required.
+ * @param tile Tile to check
+ * @param above_height Height threshold
+ * @return GetTileMaxZ(tile) > above_height
+ */
+inline bool IsTileMaxZAbove(TileIndex tile, int above_height)
+{
+	int tile_z = TileHeight(tile);
+	if (tile_z <= above_height && tile_z + 2 > above_height) {
+		tile_z = GetTileMaxZ(tile);
+	}
+	return tile_z > above_height;
+}
+
+
+inline bool IsTileMaxZBelow(TileIndex tile, int below_height)
+{
+	return !IsTileMaxZAbove(tile, below_height - 1);
+}
 
 bool IsTileFlat(TileIndex tile, int *h = nullptr);
 

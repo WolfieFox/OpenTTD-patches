@@ -15,6 +15,7 @@
 #include "../../string_func.h"
 #include "../../strings_func.h"
 #include "../../waypoint_cmd.h"
+
 #include "table/strings.h"
 
 #include "../../safeguards.h"
@@ -26,12 +27,17 @@
 	return st != nullptr && (st->owner == ScriptObject::GetCompany() || ScriptCompanyMode::IsDeity() || st->owner == OWNER_NONE);
 }
 
+/* static */ ScriptCompany::CompanyID ScriptBaseStation::GetOwner(StationID station_id)
+{
+	if (!IsValidBaseStation(station_id)) return ScriptCompany::COMPANY_INVALID;
+	return ScriptCompany::ToScriptCompanyID(::BaseStation::Get(station_id)->owner);
+}
+
 /* static */ std::optional<std::string> ScriptBaseStation::GetName(StationID station_id)
 {
 	if (!IsValidBaseStation(station_id)) return std::nullopt;
 
-	::SetDParam(0, station_id);
-	return GetString(::Station::IsValidID(station_id) ? STR_STATION_NAME : STR_WAYPOINT_NAME);
+	return ::StrMakeValid(::GetString(::Station::IsValidID(station_id) ? STR_STATION_NAME : STR_WAYPOINT_NAME, station_id), {});
 }
 
 /* static */ bool ScriptBaseStation::SetName(StationID station_id, Text *name)

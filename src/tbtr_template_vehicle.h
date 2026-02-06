@@ -31,11 +31,15 @@
 
 #include "sl/saveload_common.h"
 
+#include "3rdparty/robin_hood/robin_hood.h"
+
 #include "zoom_func.h"
 
 /** A pool allowing to store up to ~64k templates */
-typedef Pool<TemplateVehicle, TemplateID, 512, 64000> TemplatePool;
+using TemplatePool = Pool<TemplateVehicle, TemplateID, 512>;
 extern TemplatePool _template_pool;
+
+extern robin_hood::unordered_flat_map<GroupID, TemplateID> _template_replacements;
 
 extern bool _template_vehicle_images_valid;
 
@@ -71,66 +75,56 @@ struct TemplateVehicleImageDimensions {
 
 /** Template vehicle control flags. */
 enum TemplateVehicleControlFlags {
-	TVCF_REVERSED                     = 0,      ///< Vehicle is reversed (VRF_REVERSE_DIRECTION)
+	TVCF_REVERSED                     = 0,      ///< Vehicle is reversed (VehicleRailFlag::Flipped)
 };
 
 struct TemplateVehicle : TemplatePool::PoolItem<&_template_pool>, BaseVehicle {
 private:
-	TemplateVehicle *next;                      ///< pointer to the next vehicle in the chain
-	TemplateVehicle *previous;                  ///< NOSAVE: pointer to the previous vehicle in the chain
-	TemplateVehicle *first;                     ///< NOSAVE: pointer to the first vehicle in the chain
+	TemplateVehicle *next = nullptr;           ///< pointer to the next vehicle in the chain
+	TemplateVehicle *previous = nullptr;       ///< NOSAVE: pointer to the previous vehicle in the chain
+	TemplateVehicle *first = nullptr;          ///< NOSAVE: pointer to the first vehicle in the chain
 
 public:
 	friend NamedSaveLoadTable GetTemplateVehicleDesc();
 	friend void AfterLoadTemplateVehicles();
 
-	// Template usage configuration
-	bool reuse_depot_vehicles;
-	bool keep_remaining_vehicles;
-	bool refit_as_template;
-	bool replace_old_only;
+	/* Template usage configuration. */
+	bool reuse_depot_vehicles = false;
+	bool keep_remaining_vehicles = false;
+	bool refit_as_template = true;
+	bool replace_old_only = false;
 
-	// Things derived from a virtual train
-	Owner owner;
+	/* Things derived from a virtual train. */
+	RailTypes railtypes{};
+	Owner owner = INVALID_OWNER;
 
-	EngineID engine_type;               ///< The type of engine used for this vehicle.
-	CargoType cargo_type;               ///< type of cargo this vehicle is carrying
-	uint16_t cargo_cap;                 ///< total capacity
-	uint8_t cargo_subtype;
+	EngineID engine_type;                 ///< The type of engine used for this vehicle.
+	CargoType cargo_type = INVALID_CARGO; ///< type of cargo this vehicle is carrying
+	uint16_t cargo_cap = 0;               ///< total capacity
+	uint8_t cargo_subtype = 0;
 
-	uint8_t subtype;
-	RailType railtype;
+	uint8_t subtype = 0;
 
-	VehicleID index;
+	uint16_t real_consist_length = 0;
 
-	uint16_t real_consist_length;
+	uint16_t max_speed = 0;
+	uint32_t power = 0;
+	uint32_t empty_weight = 0;
+	uint32_t full_weight = 0;
+	uint32_t max_te = 0;
+	uint32_t air_drag = 0;
 
-	uint16_t max_speed;
-	uint32_t power;
-	uint32_t empty_weight;
-	uint32_t full_weight;
-	uint32_t max_te;
-	uint32_t air_drag;
+	uint32_t ctrl_flags = 0;            ///< See: TemplateVehicleControlFlags
+	std::string name{};
 
-	uint32_t ctrl_flags;                ///< See: TemplateVehicleControlFlags
-	std::string name;
+	VehicleSpriteSeq sprite_seq{};                     ///< NOSAVE: Vehicle appearance.
+	TemplateVehicleImageDimensions image_dimensions{}; ///< NOSAVE: image dimensions
+	SpriteID colourmap{};                              ///< NOSAVE: cached colour mapping
 
-	VehicleSpriteSeq sprite_seq;                     ///< NOSAVE: Vehicle appearance.
-	TemplateVehicleImageDimensions image_dimensions; ///< NOSAVE: image dimensions
-	SpriteID colourmap;                              ///< NOSAVE: cached colour mapping
+	TemplateVehicle(VehicleType type = VEH_INVALID, EngineID e = EngineID::Invalid(), Owner = _local_company);
 
-	TemplateVehicle(VehicleType type = VEH_INVALID, EngineID e = INVALID_ENGINE, Owner = _local_company);
-
-	TemplateVehicle(EngineID eid)
+	TemplateVehicle(EngineID eid) : first(this), engine_type(eid)
 	{
-		next = nullptr;
-		previous = nullptr;
-		first = this;
-		engine_type = eid;
-		this->reuse_depot_vehicles = false;
-		this->keep_remaining_vehicles = false;
-		this->refit_as_template = true;
-		this->replace_old_only = false;
 		this->sprite_seq.count = 1;
 	}
 
@@ -184,48 +178,25 @@ public:
 	SpriteID GetSpriteID() const;
 
 	uint NumGroupsUsingTemplate() const;
-
 };
 
-// TemplateReplacement stuff
-
-typedef Pool<TemplateReplacement, uint16_t, 16, 1024> TemplateReplacementPool;
-extern TemplateReplacementPool _template_replacement_pool;
-
-struct TemplateReplacement : TemplateReplacementPool::PoolItem<&_template_replacement_pool> {
-	GroupID group;
-	TemplateID sel_template;
-
-	TemplateReplacement(GroupID gid, TemplateID tid) { this->group = gid; this->sel_template = tid; }
-	TemplateReplacement() {}
-	~TemplateReplacement();
-
-	inline GroupID Group() { return this->group; }
-	inline GroupID Template() { return this->sel_template; }
-
-	inline void SetGroup(GroupID gid) { this->group = gid; }
-	inline void SetTemplate(TemplateID tid) { this->sel_template = tid; }
-
-	inline TemplateID GetTemplateVehicleID() { return sel_template; }
-
-	static void PreCleanPool();
-};
-
-TemplateReplacement *GetTemplateReplacementByGroupID(GroupID gid);
 TemplateID GetTemplateIDByGroupID(GroupID gid);
 TemplateID GetTemplateIDByGroupIDRecursive(GroupID gid);
-bool IssueTemplateReplacement(GroupID gid, TemplateID tid);
+void RemoveTemplateReplacement(GroupID gid);
+void IssueTemplateReplacement(GroupID gid, TemplateID tid);
+void RemoveTemplateReplacementsReferencingTemplate(TemplateID tid);
 bool ShouldServiceTrainForTemplateReplacement(const Train *t, const TemplateVehicle *tv);
 void MarkTrainsUsingTemplateAsPendingTemplateReplacement(const TemplateVehicle *tv);
 
-uint DeleteTemplateReplacementsByGroupID(const Group *g);
+void RemoveTemplateReplacementsFromGroupToBeDeleted(const Group *g);
 
+void ClearTemplateReplacements();
+void ReindexTemplateReplacementsForGroup(GroupID gid);
 void ReindexTemplateReplacements();
-void ReindexTemplateReplacementsRecursive();
 
 /**
  * Guard to inhibit re-indexing of the recursive group to template replacement cache,
- * and to disable group-based VF_REPLACEMENT_PENDING changes.
+ * and to disable group-based VehicleFlag::ReplacementPending changes.
  * May be used recursively.
  */
 struct ReindexTemplateReplacementsRecursiveGuard {

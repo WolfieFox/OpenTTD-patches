@@ -11,6 +11,7 @@
 #define SCRIPT_BASESTATION_HPP
 
 #include "script_text.hpp"
+#include "script_company.hpp"
 #include "script_date.hpp"
 #include "../../station_type.h"
 
@@ -22,9 +23,9 @@
  */
 class ScriptBaseStation : public ScriptObject {
 public:
-	static const StationID STATION_NEW = ::NEW_STATION; ///< Build a new station
-	static const StationID STATION_JOIN_ADJACENT = ::ADJACENT_STATION; ///< Join an neighbouring station if one exists
-	static const StationID STATION_INVALID = ::INVALID_STATION; ///< Invalid station id.
+	static constexpr StationID STATION_NEW = ::NEW_STATION; ///< Build a new station
+	static constexpr StationID STATION_JOIN_ADJACENT = ::ADJACENT_STATION; ///< Join an neighbouring station if one exists
+	static constexpr StationID STATION_INVALID = ::StationID::Invalid(); ///< Invalid station id.
 
 	/**
 	 * Checks whether the given basestation is valid and owned by you.
@@ -33,6 +34,15 @@ public:
 	 * @note IsValidBaseStation == (IsValidStation || IsValidWaypoint).
 	 */
 	static bool IsValidBaseStation(StationID station_id);
+
+	/**
+	 * Get the owner of a basestation.
+	 * @param station_id The basestation to get the owner of.
+	 * @pre IsValidBaseStation(station_id).
+	 * @return The owner the basestation has.
+	 * @api -ai
+	 */
+	static ScriptCompany::CompanyID GetOwner(StationID station_id);
 
 	/**
 	 * Get the name of a basestation.

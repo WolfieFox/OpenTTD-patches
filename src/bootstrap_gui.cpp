@@ -9,6 +9,7 @@
 
 #include "stdafx.h"
 #include "base_media_base.h"
+#include "base_media_graphics.h"
 #include "blitter/factory.hpp"
 #include "error_func.h"
 
@@ -59,8 +60,8 @@ public:
 
 	void DrawWidget(const Rect &r, WidgetID) const override
 	{
-		GfxFillRect(r.left, r.top, r.right, r.bottom, 4, FILLRECT_OPAQUE);
-		GfxFillRect(r.left, r.top, r.right, r.bottom, 0, FILLRECT_CHECKER);
+		GfxFillRect(r, PixelColour{4}, FILLRECT_OPAQUE);
+		GfxFillRect(r, PixelColour{0}, FILLRECT_CHECKER);
 	}
 };
 
@@ -194,7 +195,7 @@ static WindowDesc _bootstrap_query_desc(__FILE__, __LINE__,
 
 /** The window for the query. It can't use the generic query window as that uses sprites that don't exist yet. */
 class BootstrapAskForDownloadWindow : public Window, ContentCallback {
-	Dimension button_size; ///< The dimension of the button
+	Dimension button_size{}; ///< The dimension of the button
 
 public:
 	/** Start listening to the content client events. */
@@ -272,10 +273,10 @@ public:
 		_network_content_client.RequestContentList(CONTENT_TYPE_BASE_GRAPHICS);
 	}
 
-	void OnReceiveContentInfo(const ContentInfo *ci) override
+	void OnReceiveContentInfo(const ContentInfo &ci) override
 	{
 		/* And once the meta data is received, start downloading it. */
-		_network_content_client.Select(ci->id);
+		_network_content_client.Select(ci.id);
 		new BootstrapContentDownloadStatusWindow();
 		this->Close();
 	}
@@ -319,19 +320,19 @@ public:
 		_network_content_client.RequestContentList(CONTENT_TYPE_BASE_GRAPHICS);
 	}
 
-	void OnReceiveContentInfo(const ContentInfo *ci) override
+	void OnReceiveContentInfo(const ContentInfo &ci) override
 	{
 		if (this->downloading) return;
 
 		/* And once the metadata is received, start downloading it. */
-		_network_content_client.Select(ci->id);
+		_network_content_client.Select(ci.id);
 		_network_content_client.DownloadSelectedContent(this->total_files, this->total_bytes);
 		this->downloading = true;
 
 		EM_ASM({ if (window["openttd_bootstrap"]) openttd_bootstrap($0, $1); }, this->downloaded_bytes, this->total_bytes);
 	}
 
-	void OnDownloadProgress(const ContentInfo *, int bytes) override
+	void OnDownloadProgress(const ContentInfo &, int bytes) override
 	{
 		/* A negative value means we are resetting; for example, when retrying or using a fallback. */
 		if (bytes < 0) {
@@ -379,15 +380,15 @@ bool HandleBootstrap()
 	/* Initialise the font cache. */
 	InitializeUnicodeGlyphMap();
 	/* Next "force" finding a suitable non-sprite font as the local font is missing. */
-	CheckForMissingGlyphs(false);
+	CheckForMissingGlyphs();
 
 	/* Initialise the palette. The biggest step is 'faking' some recolour sprites.
 	 * This way the mauve and gray colours work and we can show the user interface. */
 	GfxInitPalettes();
-	static const int offsets[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80, 0, 0, 0, 0x04, 0x08 };
+	static const uint8_t offsets[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80, 0, 0, 0, 0x04, 0x08 };
 	for (Colours i = COLOUR_BEGIN; i != COLOUR_END; i++) {
 		for (ColourShade j = SHADE_BEGIN; j < SHADE_END; j++) {
-			SetColourGradient(i, j, offsets[i] + j);
+			SetColourGradient(i, j, PixelColour(offsets[i] + j));
 		}
 	}
 
@@ -406,7 +407,7 @@ bool HandleBootstrap()
 	if (_exit_game) return false;
 
 	/* Try to probe the graphics. Should work this time. */
-	if (!BaseGraphics::SetSet({})) goto failure;
+	if (!BaseGraphics::SetSet(nullptr)) goto failure;
 
 	/* Finally we can continue heading for the menu. */
 	_game_mode = GM_MENU;

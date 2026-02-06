@@ -35,23 +35,12 @@ void DrawWaypointSprite(int x, int y, StationClassID station_class, uint16_t sta
 	}
 }
 
-void Waypoint::GetTileArea(TileArea *ta, StationType type) const
+TileArea Waypoint::GetTileArea(StationType type) const
 {
 	switch (type) {
-		case StationType::RailWaypoint:
-			*ta = this->train_station;
-			return;
-
-		case StationType::RoadWaypoint:
-			*ta = this->road_waypoint_area;
-			return;
-
-		case StationType::Buoy:
-			ta->tile = this->xy;
-			ta->w    = 1;
-			ta->h    = 1;
-			break;
-
+		case StationType::RailWaypoint: return this->train_station;
+		case StationType::RoadWaypoint: return this->road_waypoint_area;
+		case StationType::Buoy: return {this->xy, 1, 1};
 		default: NOT_REACHED();
 	}
 }
@@ -60,7 +49,7 @@ Waypoint::~Waypoint()
 {
 	if (CleaningPool()) return;
 	CloseWindowById(WC_WAYPOINT_VIEW, this->index);
-	DeleteNewGRFInspectWindow(GSF_FAKE_STATION_STRUCT, this->index);
+	DeleteNewGRFInspectWindow(GSF_FAKE_STATION_STRUCT, this->index.base());
 	RemoveOrderFromAllVehicles(OT_GOTO_WAYPOINT, this->index);
 	if (_viewport_sign_kdtree_valid && this->sign.kdtree_valid) _viewport_sign_kdtree.Remove(ViewportSignKdtreeItem::MakeWaypoint(this->index));
 	TraceRestrictRemoveDestinationID(TROCAF_WAYPOINT, this->index);
@@ -68,5 +57,5 @@ Waypoint::~Waypoint()
 	/* Remove all news items */
 	DeleteStationNews(this->index);
 
-	if (ShouldShowBaseStationViewportLabel(this)) this->sign.MarkDirty(ZOOM_LVL_DRAW_SPR);
+	if (ShouldShowBaseStationViewportLabel(this)) this->sign.MarkDirty(ZoomLevel::SpriteMax);
 }

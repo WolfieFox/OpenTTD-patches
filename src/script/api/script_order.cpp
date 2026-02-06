@@ -34,7 +34,7 @@ static OrderType GetOrderTypeByTile(TileIndex t)
 	switch (::GetTileType(t)) {
 		default: break;
 		case MP_STATION:
-			if (IsBuoy(t) || IsRailWaypoint(t)) return OT_GOTO_WAYPOINT;
+			if (IsBuoy(t) || IsRailWaypoint(t) || IsRoadWaypoint(t)) return OT_GOTO_WAYPOINT;
 			if (IsHangar(t)) return OT_GOTO_DEPOT;
 			return OT_GOTO_STATION;
 
@@ -102,6 +102,24 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 	}
 
 	return res;
+}
+
+/**
+ * Convert an order index from OpenTTD to a ScriptOrder::OrderPosition (which is the manual order index)
+ * @param order_position The OpenTTD-internal index to convert.
+ * @return An OrderPosition for the same order.
+ */
+static ScriptOrder::OrderPosition RealOrderPositionToScriptOrderPosition(VehicleID vehicle_id, int order_position)
+{
+	const Vehicle *v = ::Vehicle::Get(vehicle_id);
+	const Order *order = v->GetFirstOrder();
+	assert(order != nullptr);
+	int num_implicit_orders = 0;
+	for (int i = 0; i < order_position; i++) {
+		if (order->GetType() == OT_IMPLICIT) num_implicit_orders++;
+		order = v->orders->GetNextNoWrap(order);
+	}
+	return static_cast<ScriptOrder::OrderPosition>(order_position - num_implicit_orders);
 }
 
 /* static */ bool ScriptOrder::IsGotoStationOrder(VehicleID vehicle_id, OrderPosition order_position)
@@ -174,18 +192,10 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 	if (num_manual_orders == 0) return ORDER_INVALID;
 
 	if (order_position == ORDER_CURRENT) {
-		const Vehicle *v = ::Vehicle::Get(vehicle_id);
-		int cur_order_pos = v->cur_real_order_index;
-		const Order *order = v->GetFirstOrder();
-		assert(order != nullptr);
-		int num_implicit_orders = 0;
-		for (int i = 0; i < cur_order_pos; i++) {
-			if (order->GetType() == OT_IMPLICIT) num_implicit_orders++;
-			order = v->orders->GetNextNoWrap(order);
-		}
-		int real_order_pos = cur_order_pos - num_implicit_orders;
-		assert(real_order_pos < num_manual_orders);
-		return (ScriptOrder::OrderPosition)real_order_pos;
+		int cur_order_pos = ::Vehicle::Get(vehicle_id)->cur_real_order_index;
+		OrderPosition order_pos = ::RealOrderPositionToScriptOrderPosition(vehicle_id, cur_order_pos);
+		assert(order_pos < num_manual_orders);
+		return order_pos;
 	}
 	return (order_position >= 0 && order_position < num_manual_orders) ? order_position : ORDER_INVALID;
 }
@@ -198,12 +208,11 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 		case OT_GOTO_STATION:
 			return (order_flags & ~(OF_NON_STOP_FLAGS | OF_UNLOAD_FLAGS | OF_LOAD_FLAGS)) == 0 &&
 					/* Test the different mutual exclusive flags. */
-					((order_flags & OF_TRANSFER)      == 0 || (order_flags & OF_UNLOAD)    == 0) &&
-					((order_flags & OF_TRANSFER)      == 0 || (order_flags & OF_NO_UNLOAD) == 0) &&
-					((order_flags & OF_UNLOAD)        == 0 || (order_flags & OF_NO_UNLOAD) == 0) &&
-					((order_flags & OF_UNLOAD)        == 0 || (order_flags & OF_NO_UNLOAD) == 0) &&
-					((order_flags & OF_NO_UNLOAD)     == 0 || (order_flags & OF_NO_LOAD)   == 0) &&
-					((order_flags & OF_FULL_LOAD_ANY) == 0 || (order_flags & OF_NO_LOAD)   == 0);
+					HasAtMostOneBit(order_flags & (OF_TRANSFER | OF_UNLOAD | OF_NO_UNLOAD)) &&
+					HasAtMostOneBit(order_flags & (OF_NO_UNLOAD | OF_NO_LOAD)) &&
+					HasAtMostOneBit(order_flags & (OF_FULL_LOAD | OF_NO_LOAD)) &&
+					/* "Full load any" is "Full load" plus a bit. On its own that bit is invalid. */
+					((order_flags & OF_FULL_LOAD_ANY) != (OF_FULL_LOAD_ANY & ~OF_FULL_LOAD));
 
 		case OT_GOTO_DEPOT:
 			return (order_flags & ~(OF_NON_STOP_FLAGS | OF_DEPOT_FLAGS)) == 0 &&
@@ -253,15 +262,15 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 			/* We don't know where the nearest depot is... (yet) */
 			if (order->GetDepotActionType() & ODATFB_NEAREST_DEPOT) return INVALID_TILE;
 
-			if (v->type != VEH_AIRCRAFT) return ::Depot::Get(order->GetDestination())->xy;
+			if (v->type != VEH_AIRCRAFT) return ::Depot::Get(order->GetDestination().ToDepotID())->xy;
 			/* Aircraft's hangars are referenced by StationID, not DepotID */
-			const Station *st = ::Station::Get(order->GetDestination());
+			const Station *st = ::Station::Get(order->GetDestination().ToStationID());
 			if (!st->airport.HasHangar()) return INVALID_TILE;
 			return st->airport.GetHangarTile(0);
 		}
 
 		case OT_GOTO_STATION: {
-			const Station *st = ::Station::Get(order->GetDestination());
+			const Station *st = ::Station::Get(order->GetDestination().ToStationID());
 			if (st->train_station.tile != INVALID_TILE) {
 				for (TileIndex t : st->train_station) {
 					if (st->TileBelongsToRailStation(t)) return t;
@@ -283,13 +292,17 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 		}
 
 		case OT_GOTO_WAYPOINT: {
-			const Waypoint *wp = ::Waypoint::Get(order->GetDestination());
+			const Waypoint *wp = ::Waypoint::Get(order->GetDestination().ToStationID());
 			if (wp->train_station.tile != INVALID_TILE) {
 				for (TileIndex t : wp->train_station) {
 					if (wp->TileBelongsToRailStation(t)) return t;
 				}
+			} else if (wp->road_waypoint_area.tile != INVALID_TILE) {
+				for (TileIndex t : wp->road_waypoint_area) {
+					if (::IsRoadWaypointTile(t) && ::GetStationIndex(t) == wp->index) return t;
+				}
 			}
-			/* If the waypoint has no rail waypoint tiles, it must have a buoy */
+			/* If the waypoint has no rail or road waypoint tiles, it must have a buoy */
 			return wp->xy;
 		}
 		default:               return INVALID_TILE;
@@ -329,7 +342,7 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 	if (order_position == ORDER_CURRENT || !IsConditionalOrder(vehicle_id, order_position)) return ORDER_INVALID;
 
 	const Order *order = ::ResolveOrder(vehicle_id, order_position);
-	return (OrderPosition)order->GetConditionSkipToOrder();
+	return ::RealOrderPositionToScriptOrderPosition(vehicle_id, order->GetConditionSkipToOrder());
 }
 
 /* static */ ScriptOrder::OrderCondition ScriptOrder::GetOrderCondition(VehicleID vehicle_id, OrderPosition order_position)
@@ -487,7 +500,7 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 			if (order_flags & OF_GOTO_NEAREST_DEPOT) odaf |= ODATFB_NEAREST_DEPOT;
 			OrderNonStopFlags onsf = (OrderNonStopFlags)((order_flags & OF_NON_STOP_INTERMEDIATE) ? ONSF_NO_STOP_AT_INTERMEDIATE_STATIONS : ONSF_STOP_EVERYWHERE);
 			if (order_flags & OF_GOTO_NEAREST_DEPOT) {
-				order.MakeGoToDepot(INVALID_DEPOT, odtf, onsf, odaf);
+				order.MakeGoToDepot(DepotID::Invalid(), odtf, onsf, odaf);
 			} else {
 				/* Check explicitly if the order is to a station (for aircraft) or
 				 * to a depot (other vehicle types). */
@@ -533,7 +546,8 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
 	EnforcePrecondition(false, IsValidVehicleOrder(vehicle_id, jump_to) && jump_to != ORDER_CURRENT);
 
 	Order order;
-	order.MakeConditional(jump_to);
+	int jump_pos = ScriptOrderPositionToRealOrderPosition(vehicle_id, jump_to);
+	order.MakeConditional(jump_pos);
 
 	return ScriptObject::DoCommand<CMD_INSERT_ORDER>({}, InsertOrderCmdData(vehicle_id, ScriptOrderPositionToRealOrderPosition(vehicle_id, order_position), order));
 }
@@ -568,7 +582,7 @@ static int ScriptOrderPositionToRealOrderPosition(VehicleID vehicle_id, ScriptOr
  * between the wanted and the current order.
  * @param instance The script instance we are doing the callback for.
  */
-static void _DoCommandReturnSetOrderFlags(class ScriptInstance *instance)
+static void _DoCommandReturnSetOrderFlags(class ScriptInstance &instance)
 {
 	ScriptObject::SetLastCommandRes(ScriptOrder::_SetOrderFlags());
 	ScriptInstance::DoCommandReturn(instance);
@@ -637,7 +651,7 @@ static void _DoCommandReturnSetOrderFlags(class ScriptInstance *instance)
 
 /* static */ bool ScriptOrder::SetOrderFlags(VehicleID vehicle_id, OrderPosition order_position, ScriptOrder::ScriptOrderFlags order_flags)
 {
-	ScriptObject::SetCallbackVariable(0, vehicle_id);
+	ScriptObject::SetCallbackVariable(0, vehicle_id.base());
 	ScriptObject::SetCallbackVariable(1, order_position);
 	ScriptObject::SetCallbackVariable(2, order_flags);
 	/* In case another client(s) change orders at the same time we could
@@ -658,7 +672,7 @@ static void _DoCommandReturnSetOrderFlags(class ScriptInstance *instance)
 
 	int order_pos_move = ScriptOrderPositionToRealOrderPosition(vehicle_id, order_position_move);
 	int order_pos_target = ScriptOrderPositionToRealOrderPosition(vehicle_id, order_position_target);
-	return ScriptObject::Command<CMD_MOVE_ORDER>::Do(0, vehicle_id, order_pos_move, order_pos_target);
+	return ScriptObject::Command<CMD_MOVE_ORDER>::Do(0, vehicle_id, order_pos_move, order_pos_target, 1);
 }
 
 /* static */ bool ScriptOrder::CopyOrders(VehicleID vehicle_id, VehicleID main_vehicle_id)
@@ -684,7 +698,7 @@ static void _DoCommandReturnSetOrderFlags(class ScriptInstance *instance)
 	EnforceCompanyModeValid(false);
 	EnforcePrecondition(false, ScriptVehicle::IsPrimaryVehicle(vehicle_id));
 
-	return ScriptObject::Command<CMD_CLONE_ORDER>::Do(0, CO_UNSHARE, vehicle_id, ::INVALID_VEHICLE);
+	return ScriptObject::Command<CMD_CLONE_ORDER>::Do(0, CO_UNSHARE, vehicle_id, VehicleID::Invalid());
 }
 
 /* static */ SQInteger ScriptOrder::GetOrderDistance(ScriptVehicle::VehicleType vehicle_type, TileIndex origin_tile, TileIndex dest_tile)

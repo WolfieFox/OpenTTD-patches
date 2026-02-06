@@ -35,6 +35,7 @@
 #include "vehicle_base.h"
 #include "currency.h"
 #include "core/geometry_func.hpp"
+#include "core/string_consumer.hpp"
 #include "settings_type.h"
 #include "settings_internal.h"
 #include "misc_cmd.h"
@@ -42,6 +43,7 @@
 #include "widgets/cheat_widget.h"
 
 #include "table/sprites.h"
+#include "table/strings.h"
 
 #include "safeguards.h"
 
@@ -84,12 +86,12 @@ static int32_t ClickChangeCompanyCheat(int32_t new_value, int32_t change_directi
 		if (Company::IsValidID((CompanyID)new_value)) {
 			OrderBackup::Reset();
 			SetLocalCompany((CompanyID)new_value);
-			return _local_company;
+			return _local_company.base();
 		}
 		new_value += change_direction;
 	}
 
-	return _local_company;
+	return _local_company.base();
 }
 
 /**
@@ -162,7 +164,7 @@ static int32_t ClickChangeMaxHlCheat(int32_t new_value, int32_t change_direction
 	 * If yes, disallow the change. */
 	for (TileIndex t(0); t < Map::Size(); t++) {
 		if ((int32_t)TileHeight(t) > new_value) {
-			ShowErrorMessage(STR_CONFIG_SETTING_TOO_HIGH_MOUNTAIN, INVALID_STRING_ID, WL_ERROR);
+			ShowErrorMessage(GetEncodedString(STR_CONFIG_SETTING_TOO_HIGH_MOUNTAIN), {}, WL_ERROR);
 			/* Return old, unchanged value */
 			return _settings_game.construction.map_height_limit;
 		}
@@ -255,20 +257,20 @@ static constexpr NWidgetPart _nested_cheat_widgets[] = {
 
 /** GUI for the cheats. */
 struct CheatWindow : Window {
-	int clicked;
-	CheatNumbers clicked_cheat;
-	uint line_height;
-	Dimension box;      ///< Dimension of box sprite
-	Dimension icon;     ///< Dimension of company icon sprite
+	int clicked = 0;
+	CheatNumbers clicked_cheat{};
+	uint line_height = 0;
+	Dimension box{};      ///< Dimension of box sprite
+	Dimension icon{};     ///< Dimension of company icon sprite
 
-	std::vector<const SettingDesc *> sandbox_settings;
-	const SettingDesc *clicked_setting;
-	const SettingDesc *last_clicked_setting;
-	const SettingDesc *valuewindow_entry;
+	std::vector<const SettingDesc *> sandbox_settings{};
+	const SettingDesc *clicked_setting = nullptr;
+	const SettingDesc *last_clicked_setting = nullptr;
+	const SettingDesc *valuewindow_entry = nullptr;
 
 	CheatWindow(WindowDesc &desc) : Window(desc)
 	{
-		this->sandbox_settings = GetFilteredSettingCollection([](const SettingDesc &sd) { return HasFlag(sd.flags, SF_SANDBOX); });
+		this->sandbox_settings = GetFilteredSettingCollection([](const SettingDesc &sd) { return sd.flags.Test(SettingFlag::Sandbox); });
 		this->InitNested();
 	}
 
@@ -308,6 +310,7 @@ struct CheatWindow : Window {
 
 			DrawSprite((*ce->been_used) ? SPR_BOX_CHECKED : SPR_BOX_EMPTY, PAL_NONE, box_left, y + box_y_offset);
 
+			std::string str;
 			switch (ce->type) {
 				case SLF_ALLOW_CONTROL: {
 					/* Change inflation factors */
@@ -316,16 +319,15 @@ struct CheatWindow : Window {
 					DrawArrowButtons(button_left, y + button_y_offset, COLOUR_YELLOW, clicked - (i * 2), true, true);
 
 					uint64_t val = (uint64_t)ReadValue(ce->variable, SLE_UINT64);
-					SetDParam(0, val * 1000 >> 16);
-					SetDParam(1, 3);
+					str = GetString(ce->str, val * 1000 >> 16, 3);
 					break;
 				}
 
 				case SLE_BOOL: {
 					bool on = (*(bool*)ce->variable);
 
-					DrawBoolButton(button_left, y + button_y_offset, on, true);
-					SetDParam(0, on ? STR_CONFIG_SETTING_ON : STR_CONFIG_SETTING_OFF);
+					DrawBoolButton(button_left, y + button_y_offset, COLOUR_YELLOW, COLOUR_GREY, on, true);
+					str = GetString(ce->str, on ? STR_CONFIG_SETTING_ON : STR_CONFIG_SETTING_OFF);
 					break;
 				}
 
@@ -337,23 +339,27 @@ struct CheatWindow : Window {
 
 					switch (ce->str) {
 						/* Display date for change date cheat */
-						case STR_CHEAT_CHANGE_DATE: SetDParam(0, CalTime::CurDate()); break;
+						case STR_CHEAT_CHANGE_DATE:
+							str = GetString(ce->str, CalTime::CurDate());
+							break;
 
 						/* Draw coloured flag for change company cheat */
 						case STR_CHEAT_CHANGE_COMPANY: {
-							SetDParam(0, val + 1);
-							uint offset = WidgetDimensions::scaled.hsep_indent + GetStringBoundingBox(ce->str).width;
+							str = GetString(ce->str, val + 1);
+							uint offset = WidgetDimensions::scaled.hsep_indent + GetStringBoundingBox(str).width;
 							DrawCompanyIcon(_local_company, rtl ? text_right - offset - WidgetDimensions::scaled.hsep_indent : text_left + offset, y + icon_y_offset);
 							break;
 						}
 
-						default: SetDParam(0, val);
+						default:
+							str = GetString(ce->str, val);
+							break;
 					}
 					break;
 				}
 			}
 
-			DrawString(text_left, text_right, y + text_y_offset, ce->str);
+			DrawString(text_left, text_right, y + text_y_offset, str);
 
 			y += this->line_height;
 		}
@@ -385,21 +391,21 @@ struct CheatWindow : Window {
 		/* We do not allow changes of some items when we are a client in a network game */
 		bool editable = sd->IsEditable();
 
-		SetDParam(0, STR_CONFIG_SETTING_VALUE);
 		int32_t value = sd->Read(&GetGameSettings());
 		if (sd->IsBoolSetting()) {
 			/* Draw checkbox for boolean-value either on/off */
-			DrawBoolButton(buttons.left, buttons.top, value != 0, editable);
-		} else if (HasFlag(sd->flags, SF_GUI_DROPDOWN)) {
+			DrawBoolButton(buttons.left, buttons.top, COLOUR_YELLOW, COLOUR_GREY, value != 0, editable);
+		} else if (sd->flags.Test(SettingFlag::GuiDropdown)) {
 			/* Draw [v] button for settings of an enum-type */
 			DrawDropDownButton(buttons.left, buttons.top, COLOUR_YELLOW, state != 0, editable);
 		} else {
 			/* Draw [<][>] boxes for settings of an integer-type */
+			auto [min_val, max_val] = sd->GetRange();
 			DrawArrowButtons(buttons.left, buttons.top, COLOUR_YELLOW, state,
-					editable && value != (HasFlag(sd->flags, SF_GUI_0_IS_SPECIAL) ? 0 : sd->min), editable && static_cast<uint32_t>(value) != sd->max);
+					editable && value != (sd->flags.Test(SettingFlag::GuiZeroIsSpecial) ? 0 : min_val), editable && static_cast<uint32_t>(value) != max_val);
 		}
-		sd->SetValueDParams(1, value);
-		DrawString(text.left, text.right, text.top, sd->GetTitle(), TC_LIGHT_BLUE);
+		auto [param1, param2] = sd->GetValueParams(value);
+		DrawString(text.left, text.right, text.top, GetString(sd->GetTitle(), STR_CONFIG_SETTING_VALUE, param1, param2), TC_LIGHT_BLUE);
 	}
 
 	void UpdateWidgetSize(WidgetID widget, Dimension &size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
@@ -423,29 +429,24 @@ struct CheatWindow : Window {
 					break;
 
 				case SLE_BOOL:
-					SetDParam(0, STR_CONFIG_SETTING_ON);
-					width = std::max(width, GetStringBoundingBox(ce.str).width);
-					SetDParam(0, STR_CONFIG_SETTING_OFF);
-					width = std::max(width, GetStringBoundingBox(ce.str).width);
+					width = std::max(width, GetStringBoundingBox(GetString(ce.str, STR_CONFIG_SETTING_ON)).width);
+					width = std::max(width, GetStringBoundingBox(GetString(ce.str, STR_CONFIG_SETTING_OFF)).width);
 					break;
 
 				default:
 					switch (ce.str) {
 						/* Display date for change date cheat */
 						case STR_CHEAT_CHANGE_DATE:
-							SetDParam(0, CalTime::ConvertYMDToDate(CalTime::MAX_YEAR, 11, 31));
-							width = std::max(width, GetStringBoundingBox(ce.str).width);
+							width = std::max(width, GetStringBoundingBox(GetString(ce.str, CalTime::ConvertYMDToDate(CalTime::MAX_YEAR, 11, 31))).width);
 							break;
 
 						/* Draw coloured flag for change company cheat */
 						case STR_CHEAT_CHANGE_COMPANY:
-							SetDParamMaxValue(0, MAX_COMPANIES);
-							width = std::max(width, GetStringBoundingBox(ce.str).width + WidgetDimensions::scaled.hsep_wide * 4);
+							width = std::max(width, GetStringBoundingBox(GetString(ce.str, MAX_COMPANIES)).width + WidgetDimensions::scaled.hsep_wide * 4);
 							break;
 
 						default:
-							SetDParam(0, INT64_MAX);
-							width = std::max(width, GetStringBoundingBox(ce.str).width);
+							width = std::max(width, GetStringBoundingBox(GetString(ce.str, INT64_MAX)).width);
 							break;
 					}
 					break;
@@ -466,9 +467,8 @@ struct CheatWindow : Window {
 		for (const auto &desc : this->sandbox_settings) {
 			const IntSettingDesc *sd = desc->AsIntSetting();
 
-			SetDParam(0, STR_CONFIG_SETTING_VALUE);
-			sd->SetValueDParams(1, sd->max);
-			width = std::max(width, GetStringBoundingBox(sd->GetTitle()).width);
+			auto [param1, param2] = sd->GetValueParams(sd->GetDefaultValue());
+			width = std::max(width, GetStringBoundingBox(GetString(sd->GetTitle(), STR_CONFIG_SETTING_VALUE, param1, param2)).width);
 		}
 
 		size.width = width + WidgetDimensions::scaled.hsep_wide * 2 + SETTING_BUTTON_WIDTH;
@@ -506,28 +506,24 @@ struct CheatWindow : Window {
 		if (cheat == CHT_CHANGE_DATE && x >= WidgetDimensions::scaled.hsep_wide * 2 + this->box.width + SETTING_BUTTON_WIDTH) {
 			/* Click at the date text directly. */
 			clicked_cheat = CHT_CHANGE_DATE;
-			SetDParam(0, value);
-			ShowQueryString(STR_JUST_INT, STR_CHEAT_CHANGE_DATE_QUERY_CAPT, 8, this, CS_NUMERAL, QSF_ACCEPT_UNCHANGED);
+			ShowQueryString(GetString(STR_JUST_INT, value), STR_CHEAT_CHANGE_DATE_QUERY_CAPT, 8, this, CS_NUMERAL, QueryStringFlag::AcceptUnchanged);
 			return;
 		} else if (cheat == CHT_EDIT_MAX_HL && x >= WidgetDimensions::scaled.hsep_wide * 2 + this->box.width + SETTING_BUTTON_WIDTH) {
 			clicked_cheat = CHT_EDIT_MAX_HL;
-			SetDParam(0, value);
-			ShowQueryString(STR_JUST_INT, STR_CHEAT_EDIT_MAX_HL_QUERY_CAPT, 8, this, CS_NUMERAL, QSF_ACCEPT_UNCHANGED);
+			ShowQueryString(GetString(STR_JUST_INT, value), STR_CHEAT_EDIT_MAX_HL_QUERY_CAPT, 8, this, CS_NUMERAL, QueryStringFlag::AcceptUnchanged);
 			return;
 		} else if (cheat == CHT_MONEY && x >= 20 + this->box.width + SETTING_BUTTON_WIDTH) {
 			clicked_cheat = CHT_MONEY;
-			SetDParam(0, value);
-			ShowQueryString(STR_JUST_INT, STR_CHEAT_EDIT_MONEY_QUERY_CAPT, 20, this, CS_NUMERAL_SIGNED, QSF_ACCEPT_UNCHANGED);
+			ShowQueryString(GetString(STR_JUST_INT, value), STR_CHEAT_EDIT_MONEY_QUERY_CAPT, 20, this, CS_NUMERAL_SIGNED, QueryStringFlag::AcceptUnchanged);
 			return;
 		} else if (ce->type == SLF_ALLOW_CONTROL && x >= 20 + this->box.width + SETTING_BUTTON_WIDTH) {
 			clicked_cheat = cheat;
 			uint64_t val = (uint64_t)ReadValue(ce->variable, SLE_UINT64);
-			SetDParam(0, val * 1000 >> 16);
-			SetDParam(1, 3);
-			StringID str = (cheat == CHT_INFLATION_COST) ? STR_CHEAT_INFLATION_COST_QUERY_CAPT : STR_CHEAT_INFLATION_INCOME_QUERY_CAPT;
+			std::string str = GetString(STR_JUST_DECIMAL, val * 1000 >> 16, 3);
+			StringID caption = (cheat == CHT_INFLATION_COST) ? STR_CHEAT_INFLATION_COST_QUERY_CAPT : STR_CHEAT_INFLATION_INCOME_QUERY_CAPT;
 			std::string saved = std::move(_settings_game.locale.digit_group_separator);
 			_settings_game.locale.digit_group_separator = "";
-			ShowQueryString(STR_JUST_DECIMAL, str, 12, this, CS_NUMERAL_DECIMAL, QSF_ACCEPT_UNCHANGED);
+			ShowQueryString(str, caption, 12, this, CS_NUMERAL_DECIMAL, QueryStringFlag::AcceptUnchanged);
 			_settings_game.locale.digit_group_separator = std::move(saved);
 			return;
 		}
@@ -607,20 +603,19 @@ struct CheatWindow : Window {
 			ChangeSettingValue(sd, x);
 		} else {
 			/* Only open editbox if clicked for the second time, and only for types where it is sensible for. */
-			if (this->last_clicked_setting == sd && !sd->IsBoolSetting() && !HasFlag(sd->flags, SF_GUI_DROPDOWN)) {
+			if (this->last_clicked_setting == sd && !sd->IsBoolSetting() && !sd->flags.Test(SettingFlag::GuiDropdown)) {
 				int64_t value64 = sd->Read(&GetGameSettings());
 
 				/* Show the correct currency-translated value */
-				if (HasFlag(sd->flags, SF_GUI_CURRENCY)) value64 *= GetCurrency().rate;
+				if (sd->flags.Test(SettingFlag::GuiCurrency)) value64 *= GetCurrency().rate;
 
 				CharSetFilter charset_filter = CS_NUMERAL; //default, only numeric input allowed
 				if (sd->min < 0) charset_filter = CS_NUMERAL_SIGNED; // special case, also allow '-' sign for negative input
 
 				this->valuewindow_entry = sd;
-				SetDParam(0, value64);
 
 				/* Limit string length to 14 so that MAX_INT32 * max currency rate doesn't exceed MAX_INT64. */
-				ShowQueryString(STR_JUST_INT, STR_CONFIG_SETTING_QUERY_CAPTION, 15, this, charset_filter, QSF_ENABLE_DEFAULT);
+				ShowQueryString(GetString(STR_JUST_INT, value64), STR_CONFIG_SETTING_QUERY_CAPTION, 15, this, charset_filter, QueryStringFlag::EnableDefault);
 			}
 
 			this->clicked_setting = sd;
@@ -659,7 +654,7 @@ struct CheatWindow : Window {
 				if (value < sd->min) value = sd->min; // skip between "disabled" and minimum
 			} else {
 				value -= step;
-				if (value < sd->min) value = HasFlag(sd->flags, SF_GUI_0_IS_SPECIAL) ? 0 : sd->min;
+				if (value < sd->min) value = sd->flags.Test(SettingFlag::GuiZeroIsSpecial) ? 0 : sd->min;
 			}
 
 			/* Set up scroller timeout for numeric values */
@@ -687,7 +682,7 @@ struct CheatWindow : Window {
 
 		const SettingDesc *desc = this->sandbox_settings[row];
 		const IntSettingDesc *sd = desc->AsIntSetting();
-		GuiShowTooltips(this, sd->GetHelp(), close_cond);
+		GuiShowTooltips(this, GetEncodedString(sd->GetHelp()), close_cond);
 
 		return true;
 	}
@@ -709,12 +704,13 @@ struct CheatWindow : Window {
 
 			int32_t value;
 			if (!str->empty()) {
-				long long llvalue = atoll(str->c_str());
+				auto llvalue = ParseInteger<int64_t>(*str, 10, true);
+				if (!llvalue.has_value()) return;
 
 				/* Save the correct currency-translated value */
-				if (HasFlag(sd->flags, SF_GUI_CURRENCY)) llvalue /= GetCurrency().rate;
+				if (sd->flags.Test(SettingFlag::GuiCurrency)) llvalue = *llvalue / GetCurrency().rate;
 
-				value = ClampTo<int32_t>(llvalue);
+				value = ClampTo<int32_t>(*llvalue);
 			} else {
 				value = sd->GetDefaultValue();
 			}
@@ -728,15 +724,17 @@ struct CheatWindow : Window {
 		const CheatEntry *ce = &_cheats_ui[clicked_cheat];
 
 		if (ce->type == SLF_ALLOW_CONTROL) {
-			char tmp_buffer[32];
-			strecpy(tmp_buffer, str->c_str(), lastof(tmp_buffer));
-			str_replace_wchar(tmp_buffer, lastof(tmp_buffer), GetDecimalSeparatorChar(), '.');
-			Command<CMD_CHEAT_SETTING>::Post(clicked_cheat, (uint32_t)Clamp<uint64_t>(atof(tmp_buffer) * 65536.0, 1 << 16, MAX_INFLATION));
+			format_buffer_sized<64> tmp_buffer;
+			str_replace_wchar(tmp_buffer, *str, GetDecimalSeparatorChar(), '.');
+			Command<CMD_CHEAT_SETTING>::Post(clicked_cheat, (uint32_t)Clamp<uint64_t>(atof(tmp_buffer.c_str()) * 65536.0, 1 << 16, MAX_INFLATION));
 			return;
 		}
 		if (ce->mode == CNM_MONEY) {
+			auto llvalue = ParseInteger<int64_t>(*str, 10, true);
+			if (!llvalue.has_value()) return;
+
 			if (!_networking) *ce->been_used = true;
-			Money money = std::strtoll(str->c_str(), nullptr, 10) / GetCurrency().rate;
+			Money money = *llvalue / GetCurrency().rate;
 			if (IsNetworkSettingsAdmin()) {
 				Command<CMD_MONEY_CHEAT_ADMIN>::Post(money);
 			} else {
@@ -747,7 +745,9 @@ struct CheatWindow : Window {
 
 		if (_networking) return;
 		int oldvalue = (int32_t)ReadValue(ce->variable, ce->type);
-		int value = atoi(str->c_str());
+		auto try_value = ParseInteger<int>(*str, 10, true);
+		if (!try_value.has_value()) return;
+		int value = *try_value;
 		*ce->been_used = true;
 		value = ce->proc(value, value - oldvalue);
 

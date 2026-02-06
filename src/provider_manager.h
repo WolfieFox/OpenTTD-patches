@@ -10,6 +10,9 @@
 #ifndef PROVIDER_MANAGER_H
 #define PROVIDER_MANAGER_H
 
+#include <ranges>
+#include <vector>
+
 /**
  * The ProviderManager manages a single Provider-type.
  *
@@ -40,9 +43,9 @@ public:
 	}
 
 	/**
-	* Get the currently known sound loaders.
-	* @return The known sound loaders.
-	*/
+	 * Get the currently known providers.
+	 * @return The known providers.
+	 */
 	static std::vector<TProviderType *> &GetProviders()
 	{
 		static std::vector<TProviderType *> providers{};

@@ -12,7 +12,9 @@
 #include "script_group.hpp"
 #include "script_map.hpp"
 #include "script_station.hpp"
+#include "script_waypoint.hpp"
 #include "../../depot_map.h"
+#include "../../group.h"
 #include "../../vehicle_base.h"
 #include "../../vehiclelist_func.h"
 #include "../../train.h"
@@ -63,18 +65,53 @@ ScriptVehicleList::ScriptVehicleList(HSQUIRRELVM vm)
 	);
 }
 
-ScriptVehicleList_Station::ScriptVehicleList_Station(StationID station_id)
+ScriptVehicleList_Station::ScriptVehicleList_Station(HSQUIRRELVM vm)
 {
 	EnforceDeityOrCompanyModeValid_Void();
+
+	int nparam = sq_gettop(vm) - 1;
+
+	if (nparam < 1 || nparam > 2) throw sq_throwerror(vm, "wrong number of parameters");
+
+	SQInteger sqstationid;
+	if (SQ_FAILED(sq_getinteger(vm, 2, &sqstationid))) {
+		throw sq_throwerror(vm, "parameter 1 must be an integer");
+	}
+	StationID station_id = static_cast<StationID>(sqstationid);
 	if (!ScriptBaseStation::IsValidBaseStation(station_id)) return;
+
+	bool is_deity = ScriptCompanyMode::IsDeity();
+	::CompanyID owner = ScriptObject::GetCompany();
+	::VehicleType type = VEH_INVALID;
+
+	if (nparam == 2) {
+		SQInteger sqtype;
+		if (SQ_FAILED(sq_getinteger(vm, 3, &sqtype))) {
+			throw sq_throwerror(vm, "parameter 2 must be an integer");
+		}
+		if (sqtype < ScriptVehicle::VT_RAIL || sqtype > ScriptVehicle::VT_AIR) return;
+		type = static_cast<::VehicleType>(sqtype);
+	}
+
+	FindVehiclesWithOrder(
+		[is_deity, owner, type](const Vehicle *v) { return (is_deity || v->owner == owner) && (type == VEH_INVALID || v->type == type); },
+		[station_id](const Order *order) { return (order->IsType(OT_GOTO_STATION) || order->IsType(OT_GOTO_WAYPOINT)) && order->GetDestination() == station_id; },
+		[this](const Vehicle *v) { this->AddItem(v->index.base()); }
+	);
+}
+
+ScriptVehicleList_Waypoint::ScriptVehicleList_Waypoint(StationID waypoint_id)
+{
+	EnforceDeityOrCompanyModeValid_Void();
+	if (!ScriptWaypoint::IsValidWaypoint(waypoint_id)) return;
 
 	bool is_deity = ScriptCompanyMode::IsDeity();
 	::CompanyID owner = ScriptObject::GetCompany();
 
 	FindVehiclesWithOrder(
 		[is_deity, owner](const Vehicle *v) { return is_deity || v->owner == owner; },
-		[station_id](const Order *order) { return (order->IsType(OT_GOTO_STATION) || order->IsType(OT_GOTO_WAYPOINT)) && order->GetDestination() == station_id; },
-		[this](const Vehicle *v) { this->AddItem(v->index); }
+		[waypoint_id](const Order *order) { return order->IsType(OT_GOTO_WAYPOINT) && order->GetDestination() == waypoint_id; },
+		[this](const Vehicle *v) { this->AddItem(v->index.base()); }
 	);
 }
 
@@ -121,7 +158,7 @@ ScriptVehicleList_Depot::ScriptVehicleList_Depot(TileIndex tile)
 	FindVehiclesWithOrder(
 		[is_deity, owner, type](const Vehicle *v) { return (is_deity || v->owner == owner) && v->type == type; },
 		[dest](const Order *order) { return order->IsType(OT_GOTO_DEPOT) && order->GetDestination() == dest; },
-		[this](const Vehicle *v) { this->AddItem(v->index); }
+		[this](const Vehicle *v) { this->AddItem(v->index.base()); }
 	);
 }
 
@@ -130,18 +167,19 @@ ScriptVehicleList_SharedOrders::ScriptVehicleList_SharedOrders(VehicleID vehicle
 	if (!ScriptVehicle::IsPrimaryVehicle(vehicle_id)) return;
 
 	for (const Vehicle *v = Vehicle::Get(vehicle_id)->FirstShared(); v != nullptr; v = v->NextShared()) {
-		this->AddItem(v->index);
+		this->AddItem(v->index.base());
 	}
 }
 
 ScriptVehicleList_Group::ScriptVehicleList_Group(GroupID group_id)
 {
 	EnforceCompanyModeValid_Void();
-	if (!ScriptGroup::IsValidGroup((ScriptGroup::GroupID)group_id)) return;
+	if (!ScriptGroup::IsValidGroup(group_id)) return;
 
 	::CompanyID owner = ScriptObject::GetCompany();
+	VehicleType veh_type = ::Group::Get(group_id)->vehicle_type;
 
-	ScriptList::FillListT<FrontVehicleOnlyFillListHelper>({}, this,
+	ScriptList::FillListT<VehicleTypeFrontVehicleOnlyFillListHelper>({ veh_type }, this,
 		[owner](const Vehicle *v) { return v->owner == owner && v->IsPrimaryVehicle(); },
 		[group_id](const Vehicle *v) { return v->group_id == group_id; }
 	);

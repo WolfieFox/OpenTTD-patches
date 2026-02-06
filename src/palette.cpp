@@ -25,23 +25,23 @@
 Palette _cur_palette;
 std::mutex _cur_palette_mutex;
 
-uint8_t _colour_value[COLOUR_END] = {
-	133, // COLOUR_DARK_BLUE
-	 99, // COLOUR_PALE_GREEN,
-	 48, // COLOUR_PINK,
-	 68, // COLOUR_YELLOW,
-	184, // COLOUR_RED,
-	152, // COLOUR_LIGHT_BLUE,
-	209, // COLOUR_GREEN,
-	 95, // COLOUR_DARK_GREEN,
-	150, // COLOUR_BLUE,
-	 79, // COLOUR_CREAM,
-	134, // COLOUR_MAUVE,
-	174, // COLOUR_PURPLE,
-	195, // COLOUR_ORANGE,
-	116, // COLOUR_BROWN,
-	  6, // COLOUR_GREY,
-	 15, // COLOUR_WHITE,
+PixelColour _colour_value[COLOUR_END] = {
+	PixelColour{133}, // COLOUR_DARK_BLUE
+	PixelColour{ 99}, // COLOUR_PALE_GREEN,
+	PixelColour{ 48}, // COLOUR_PINK,
+	PixelColour{ 68}, // COLOUR_YELLOW,
+	PixelColour{184}, // COLOUR_RED,
+	PixelColour{152}, // COLOUR_LIGHT_BLUE,
+	PixelColour{209}, // COLOUR_GREEN,
+	PixelColour{ 95}, // COLOUR_DARK_GREEN,
+	PixelColour{150}, // COLOUR_BLUE,
+	PixelColour{ 79}, // COLOUR_CREAM,
+	PixelColour{134}, // COLOUR_MAUVE,
+	PixelColour{174}, // COLOUR_PURPLE,
+	PixelColour{195}, // COLOUR_ORANGE,
+	PixelColour{116}, // COLOUR_BROWN,
+	PixelColour{  6}, // COLOUR_GREY,
+	PixelColour{ 15}, // COLOUR_WHITE,
 };
 
 Colour _water_palette[10];
@@ -50,7 +50,7 @@ Colour _water_palette[10];
  * PALETTE_BITS reduces the bits-per-channel of 32bpp graphics data to allow faster palette lookups from
  * a smaller lookup table.
  *
- * 6 bpc is chosen as this results in a palette lookup table of 256KiB with adequate fidelty.
+ * 6 bpc is chosen as this results in a palette lookup table of 256KiB with adequate fidelity.
  * In contrast, a 5 bpc lookup table would be 32KiB, and 7 bpc would be 2MiB.
  *
  * Values in the table are filled as they are first encountered -- larger lookup table means more colour
@@ -229,8 +229,8 @@ void DoPaletteAnimations();
 
 void GfxInitPalettes()
 {
-	MemCpyT<Colour>(_water_palette, (_settings_game.game_creation.landscape == LT_TOYLAND) ? _extra_palette_values.dark_water_toyland : _extra_palette_values.dark_water, 5);
-	const Colour *s = (_settings_game.game_creation.landscape == LT_TOYLAND) ? _extra_palette_values.glitter_water_toyland : _extra_palette_values.glitter_water;
+	MemCpyT<Colour>(_water_palette, (_settings_game.game_creation.landscape == LandscapeType::Toyland) ? _extra_palette_values.dark_water_toyland : _extra_palette_values.dark_water, 5);
+	const Colour *s = (_settings_game.game_creation.landscape == LandscapeType::Toyland) ? _extra_palette_values.glitter_water_toyland : _extra_palette_values.glitter_water;
 	for (int i = 0; i < 5; i++) {
 		_water_palette[i + 5] = s[i * 3];
 	}
@@ -324,7 +324,7 @@ void DoPaletteAnimations()
 	}
 
 	/* Dark blue water */
-	s = (_settings_game.game_creation.landscape == LT_TOYLAND) ? ev->dark_water_toyland : ev->dark_water;
+	s = (_settings_game.game_creation.landscape == LandscapeType::Toyland) ? ev->dark_water_toyland : ev->dark_water;
 	j = EXTR(320, EPV_CYCLES_DARK_WATER);
 	for (uint i = 0; i != EPV_CYCLES_DARK_WATER; i++) {
 		*palette_pos++ = s[j];
@@ -333,7 +333,7 @@ void DoPaletteAnimations()
 	}
 
 	/* Glittery water */
-	s = (_settings_game.game_creation.landscape == LT_TOYLAND) ? ev->glitter_water_toyland : ev->glitter_water;
+	s = (_settings_game.game_creation.landscape == LandscapeType::Toyland) ? ev->glitter_water_toyland : ev->glitter_water;
 	j = EXTR(128, EPV_CYCLES_GLITTER_WATER);
 	for (uint i = 0; i != EPV_CYCLES_GLITTER_WATER / 3; i++) {
 		*palette_pos++ = s[j];
@@ -356,9 +356,9 @@ void DoPaletteAnimations()
  * @param threshold Background colour brightness threshold below which the background is considered dark and TC_WHITE is returned, range: 0 - 255, default 128.
  * @return TC_BLACK or TC_WHITE depending on what gives a better contrast.
  */
-TextColour GetContrastColour(uint8_t background, uint8_t threshold)
+TextColour GetContrastColour(PixelColour background, uint8_t threshold)
 {
-	Colour c = _cur_palette.palette[background];
+	Colour c = _cur_palette.palette[background.p];
 	/* Compute brightness according to http://www.w3.org/TR/AERT#color-contrast.
 	 * The following formula computes 1000 * brightness^2, with brightness being in range 0 to 255. */
 	uint sq1000_brightness = c.r * c.r * 299 + c.g * c.g * 587 + c.b * c.b * 114;
@@ -372,7 +372,7 @@ TextColour GetContrastColour(uint8_t background, uint8_t threshold)
  */
 struct ColourGradients
 {
-	using ColourGradient = std::array<uint8_t, SHADE_END>;
+	using ColourGradient = std::array<PixelColour, SHADE_END>;
 
 	static inline std::array<ColourGradient, COLOUR_END> gradient{};
 };
@@ -383,7 +383,7 @@ struct ColourGradients
  * @param shade Shade level from 1 to 7.
  * @returns palette index of colour.
  */
-uint8_t GetColourGradient(Colours colour, ColourShade shade)
+PixelColour GetColourGradient(Colours colour, ColourShade shade)
 {
 	return ColourGradients::gradient[colour % COLOUR_END][shade % SHADE_END];
 }
@@ -394,7 +394,7 @@ uint8_t GetColourGradient(Colours colour, ColourShade shade)
  * @param shade Shade level from 1 to 7.
  * @param palette_index Palette index to set.
  */
-void SetColourGradient(Colours colour, ColourShade shade, uint8_t palette_index)
+void SetColourGradient(Colours colour, ColourShade shade, PixelColour palette_index)
 {
 	assert(colour < COLOUR_END);
 	assert(shade < SHADE_END);

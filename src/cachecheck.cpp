@@ -23,6 +23,7 @@
 #include "settings_cmd.h"
 #include "ship.h"
 #include "station_base.h"
+#include "station_container.h"
 #include "station_map.h"
 #include "string_func_extra.h"
 #include "subsidy_func.h"
@@ -42,12 +43,12 @@ extern void WriteVehicleInfo(format_target &buffer, const Vehicle *u, const Vehi
 
 static bool SignalInfraTotalMatches()
 {
-	std::array<int, MAX_COMPANIES> old_signal_totals = {};
+	TypedIndexContainer<std::array<uint, MAX_COMPANIES>, CompanyID> old_signal_totals = {};
 	for (const Company *c : Company::Iterate()) {
 		old_signal_totals[c->index] = c->infrastructure.signal;
 	}
 
-	std::array<int, MAX_COMPANIES> new_signal_totals = {};
+	TypedIndexContainer<std::array<uint, MAX_COMPANIES>, CompanyID> new_signal_totals = {};
 	for (TileIndex tile(0); tile < Map::Size(); ++tile) {
 		switch (GetTileType(tile)) {
 			case MP_RAILWAY:
@@ -75,6 +76,13 @@ static bool SignalInfraTotalMatches()
 	}
 
 	return old_signal_totals == new_signal_totals;
+}
+
+static void SortIndustryCacheEntries(std::vector<IndustryLocationCacheEntry> &entries)
+{
+	std::sort(entries.begin(), entries.end(), [&](const IndustryLocationCacheEntry &a, const IndustryLocationCacheEntry &b) -> bool {
+		return a.id < b.id;
+	});
 }
 
 /**
@@ -163,9 +171,14 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 		/* Check the town caches. */
 		std::vector<TownCache> old_town_caches;
 		std::vector<StationList> old_town_stations_nears;
-		for (const Town *t : Town::Iterate()) {
+		std::vector<std::vector<IndustryLocationCacheEntry>> old_town_industry_caches;
+		for (Town *t : Town::Iterate()) {
 			old_town_caches.push_back(t->cache);
 			old_town_stations_nears.push_back(t->stations_near);
+
+			SortIndustryCacheEntries(t->industry_cache);
+			old_town_industry_caches.emplace_back(std::move(t->industry_cache));
+			t->industry_cache.clear();
 		}
 
 		std::vector<IndustryList> old_station_industries_nears;
@@ -178,14 +191,35 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 		}
 
 		std::vector<StationList> old_industry_stations_nears;
+		struct IndustryInfo {
+			PartsOfSubsidy part_of_subsidy{};
+		};
+		std::vector<IndustryInfo> old_industry_infos;
 		for (Industry *ind : Industry::Iterate()) {
 			old_industry_stations_nears.push_back(ind->stations_near);
+			old_industry_infos.push_back({ ind->part_of_subsidy });
 		}
 
+		std::array<std::vector<IndustryLocationCacheEntry>, NUM_INDUSTRYTYPES> old_industries;
+		static_assert(std::tuple_size<decltype(Industry::industries)>::value == NUM_INDUSTRYTYPES);
+		for (size_t i = 0; i < NUM_INDUSTRYTYPES; i++) {
+			old_industries[i] = std::move(Industry::industries[i]);
+			SortIndustryCacheEntries(old_industries[i]);
+			Industry::industries[i].clear();
+		}
+
+		AddIndustriesToLocationCaches();
 		RebuildTownCaches(false);
 		RebuildSubsidisedSourceAndDestinationCache();
 
 		Station::RecomputeCatchmentForAll();
+
+		std::vector<IndustryLocationCacheEntry> temp_industry_cache_entries;
+		auto check_industry_cache = [&](const std::vector<IndustryLocationCacheEntry> &expected, const std::vector<IndustryLocationCacheEntry> &current_unsorted) -> bool {
+			temp_industry_cache_entries = current_unsorted;
+			SortIndustryCacheEntries(temp_industry_cache_entries);
+			return temp_industry_cache_entries == expected;
+		};
 
 		uint i = 0;
 		for (Town *t : Town::Iterate()) {
@@ -196,7 +230,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 				cclog("town cache population mismatch: town {}i, (old size: {}, new size: {})", t->index, old_town_caches[i].population, t->cache.population);
 			}
 			if (old_town_caches[i].part_of_subsidy != t->cache.part_of_subsidy) {
-				cclog("town cache population mismatch: town {}, (old size: {}, new size: {})", t->index, old_town_caches[i].part_of_subsidy, t->cache.part_of_subsidy);
+				cclog("town cache subsidy mismatch: town {}, (old: {}, new: {})", t->index, old_town_caches[i].part_of_subsidy, t->cache.part_of_subsidy);
 			}
 			if (old_town_caches[i].squared_town_zone_radius != t->cache.squared_town_zone_radius) {
 				cclog("town cache squared_town_zone_radius mismatch: town {}", t->index);
@@ -207,31 +241,37 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 			if (old_town_stations_nears[i] != t->stations_near) {
 				cclog("town stations_near mismatch: town {}, (old size: {}, new size: {})", t->index, old_town_stations_nears[i].size(), t->stations_near.size());
 			}
+			if (!check_industry_cache(old_town_industry_caches[i], t->industry_cache)) {
+				cclog("town industry_cache mismatch: town {}, (old size: {}, new size: {})", t->index, old_town_industry_caches[i].size(), t->industry_cache.size());
+			}
 			i++;
 		}
 		i = 0;
 		for (Station *st : Station::Iterate()) {
 			if (old_station_industries_nears[i] != st->industries_near) {
-				cclog("station industries_near mismatch: st {}, (old size: {}, new size: {})", (int)st->index, (uint)old_station_industries_nears[i].size(), (uint)st->industries_near.size());
+				cclog("station industries_near mismatch: st {}, (old size: {}, new size: {})", st->index, (uint)old_station_industries_nears[i].size(), (uint)st->industries_near.size());
 			}
 			if (!(old_station_catchment_tiles[i] == st->catchment_tiles)) {
-				cclog("station catchment_tiles mismatch: st {}", (int)st->index);
+				cclog("station catchment_tiles mismatch: st {}", st->index);
 			}
 			if (!(old_station_tiles[i] == st->station_tiles)) {
-				cclog("station station_tiles mismatch: st {}, (old: {}, new: {})", (int)st->index, old_station_tiles[i], st->station_tiles);
+				cclog("station station_tiles mismatch: st {}, (old: {}, new: {})", st->index, old_station_tiles[i], st->station_tiles);
 			}
 			i++;
 		}
 		i = 0;
 		for (Industry *ind : Industry::Iterate()) {
 			if (old_industry_stations_nears[i] != ind->stations_near) {
-				cclog("industry stations_near mismatch: ind {}, (old size: {}, new size: {})", (int)ind->index, (uint)old_industry_stations_nears[i].size(), (uint)ind->stations_near.size());
+				cclog("industry stations_near mismatch: ind {}, (old size: {}, new size: {})", ind->index, (uint)old_industry_stations_nears[i].size(), (uint)ind->stations_near.size());
+			}
+			if (old_industry_infos[i].part_of_subsidy != ind->part_of_subsidy) {
+				cclog("industry subsidy mismatch: ind {}, (old: {}, new: {})", ind->index, old_industry_infos[i].part_of_subsidy, ind->part_of_subsidy);
 			}
 			StationList stlist;
 			if (ind->neutral_station != nullptr && !_settings_game.station.serve_neutral_industries) {
 				stlist.insert(ind->neutral_station);
 				if (ind->stations_near != stlist) {
-					cclog("industry neutral station stations_near mismatch: ind {}, (recalc size: {}, neutral size: {})", (int)ind->index, (uint)ind->stations_near.size(), (uint)stlist.size());
+					cclog("industry neutral station stations_near mismatch: ind {}, (recalc size: {}, neutral size: {})", ind->index, (uint)ind->stations_near.size(), (uint)stlist.size());
 				}
 			} else {
 				ForAllStationsAroundTiles(ind->location, [ind, &stlist](Station *st, TileIndex tile) {
@@ -240,10 +280,25 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 					return true;
 				});
 				if (ind->stations_near != stlist) {
-					cclog("industry FindStationsAroundTiles mismatch: ind {}, (recalc size: {}, find size: {})", (int)ind->index, (uint)ind->stations_near.size(), (uint)stlist.size());
+					cclog("industry FindStationsAroundTiles mismatch: ind {}, (recalc size: {}, find size: {})", ind->index, (uint)ind->stations_near.size(), (uint)stlist.size());
 				}
 			}
+			size_t j = 0;
+			for (const auto &p : ind->Produced()) {
+				if (!IsValidCargoType(p.cargo)) {
+					/* Check unused cargo slots. */
+					if (std::find_if(p.history.begin(), p.history.end(), [&](const auto &it) { return it.production != 0 || it.transported != 0; }) != p.history.end()) {
+						cclog("industry unused production slot history incorrect: ind {}, slot {}", ind->index, j);
+					}
+				}
+				j++;
+			}
 			i++;
+		}
+		for (i = 0; i < NUM_INDUSTRYTYPES; i++) {
+			if (!check_industry_cache(old_industries[i], Industry::industries[i])) {
+				cclog("industry type cache mismatch: type {}, (old size: {}, new size: {})", i, old_industries[i].size(), Industry::industries[i].size());
+			}
 		}
 	}
 
@@ -257,7 +312,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 		uint i = 0;
 		for (const Company *c : Company::Iterate()) {
 			if (old_infrastructure[i] != c->infrastructure) {
-				cclog("infrastructure cache mismatch: company {}", (int)c->index);
+				cclog("infrastructure cache mismatch: company {}", c->index);
 				format_buffer infra_buffer;
 				old_infrastructure[i].Dump(infra_buffer);
 				cclog("Previous:");
@@ -283,9 +338,8 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 		for (const RoadStop *rs : RoadStop::Iterate()) {
 			if (IsBayRoadStopTile(rs->xy)) continue;
 
-			assert(rs->GetEntry(DIAGDIR_NE) != rs->GetEntry(DIAGDIR_NW));
-			rs->GetEntry(DIAGDIR_NE)->CheckIntegrity(rs);
-			rs->GetEntry(DIAGDIR_NW)->CheckIntegrity(rs);
+			rs->GetEntry(DIAGDIR_NE).CheckIntegrity(rs);
+			rs->GetEntry(DIAGDIR_NW).CheckIntegrity(rs);
 		}
 
 		struct SavedVehicleInfo {
@@ -298,7 +352,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 			uint8_t breakdown_chance;
 			uint8_t breakdown_severity;
 			uint8_t breakdown_type;
-			uint32_t vehicle_flags;
+			VehicleFlags vehicle_flags;
 
 			SavedVehicleInfo(const Vehicle *v) :
 					grf_cache(v->grf_cache), vcache(v->vcache), acceleration(v->acceleration), breakdown_ctr(v->breakdown_ctr),
@@ -310,10 +364,10 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 
 		struct SavedTrainInfo {
 			TrainCache tcache;
-			RailType railtype;
+			RailTypes railtypes;
 			RailTypes compatible_railtypes;
-			uint32_t flags;
-			SavedTrainInfo(const Train *t) : tcache(t->tcache), railtype(t->railtype), compatible_railtypes(t->compatible_railtypes), flags(t->flags) {}
+			VehicleRailFlags flags;
+			SavedTrainInfo(const Train *t) : tcache(t->tcache), railtypes(t->railtypes), compatible_railtypes(t->compatible_railtypes), flags(t->flags) {}
 		};
 		std::vector<SavedTrainInfo> train_old;
 
@@ -323,22 +377,22 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 		for (Vehicle *v : Vehicle::Iterate()) {
 			extern bool ValidateVehicleTileHash(const Vehicle *v);
 			if (!ValidateVehicleTileHash(v)) {
-				cclog("vehicle tile hash mismatch: type {}, vehicle {}, company {}, unit number {}", (int)v->type, v->index, (int)v->owner, v->unitnumber);
+				cclog("vehicle tile hash mismatch: type {}, vehicle {}, company {}, unit number {}", v->type, v->index, v->owner, v->unitnumber);
 			}
 
 			extern void FillNewGRFVehicleCache(const Vehicle *v);
-			if (v != v->First() || v->vehstatus & VS_CRASHED || !v->IsPrimaryVehicle()) continue;
+			if (v != v->First() || v->vehstatus.Test(VehState::Crashed) || !v->IsPrimaryVehicle()) continue;
 
 			uint length = 0;
 			for (const Vehicle *u = v; u != nullptr; u = u->Next(), length++) {
 				if (u->IsGroundVehicle() && (HasBit(u->GetGroundVehicleFlags(), GVF_GOINGUP_BIT) || HasBit(u->GetGroundVehicleFlags(), GVF_GOINGDOWN_BIT)) && u->GetGroundVehicleCache()->cached_slope_resistance && HasBit(v->vcache.cached_veh_flags, VCF_GV_ZERO_SLOPE_RESIST)) {
 					CCLOGV("VCF_GV_ZERO_SLOPE_RESIST set incorrectly (1)");
 				}
-				if (u->type == VEH_TRAIN && u->breakdown_ctr != 0 && !HasBit(Train::From(v)->flags, VRF_CONSIST_BREAKDOWN) && (Train::From(u)->IsEngine() || Train::From(u)->IsMultiheaded())) {
-					CCLOGV("VRF_CONSIST_BREAKDOWN incorrectly not set");
+				if (u->type == VEH_TRAIN && u->breakdown_ctr != 0 && !Train::From(v)->flags.Test(VehicleRailFlag::ConsistBreakdown) && (Train::From(u)->IsEngine() || Train::From(u)->IsMultiheaded())) {
+					CCLOGV("VehicleRailFlag::ConsistBreakdown incorrectly not set");
 				}
-				if (u->type == VEH_TRAIN && ((Train::From(u)->track & TRACK_BIT_WORMHOLE && !(Train::From(u)->vehstatus & VS_HIDDEN)) || Train::From(u)->track == TRACK_BIT_DEPOT) && !HasBit(Train::From(v)->flags, VRF_CONSIST_SPEED_REDUCTION)) {
-					CCLOGV("VRF_CONSIST_SPEED_REDUCTION incorrectly not set");
+				if (u->type == VEH_TRAIN && ((Train::From(u)->track & TRACK_BIT_WORMHOLE && !Train::From(u)->vehstatus.Test(VehState::Hidden)) || Train::From(u)->track == TRACK_BIT_DEPOT) && !Train::From(v)->flags.Test(VehicleRailFlag::ConsistSpeedReduction)) {
+					CCLOGV("VehicleRailFlag::ConsistSpeedReduction incorrectly not set");
 				}
 			}
 
@@ -445,7 +499,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 									oldt.tcache.user_def_data != Train::From(u)->tcache.user_def_data ? 'u' : '-',
 									oldt.tcache.cached_max_curve_speed != Train::From(u)->tcache.cached_max_curve_speed ? 'c' : '-');
 						}
-						if (oldt.railtype != Train::From(u)->railtype) {
+						if (oldt.railtypes != Train::From(u)->railtypes) {
 							CCLOGV("railtype mismatch");
 						}
 						if (oldt.compatible_railtypes != Train::From(u)->compatible_railtypes) {
@@ -518,7 +572,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 				if (st->goods[c].data->cargo.CargoPeriodsInTransit() != old_cargo_periods_in_transit) SetBit(changed, 1);
 				if (changed != 0) {
 					cclog("station cargo cache mismatch: station {}, company {}, cargo {}: {}{}",
-							st->index, (int)st->owner, c,
+							st->index, st->owner, c,
 							HasBit(changed, 0) ? 't' : '-',
 							HasBit(changed, 1) ? 'd' : '-');
 				}
@@ -534,7 +588,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 			UpdateStationDockingTiles(st);
 			if (ta.tile != st->docking_station.tile || ta.w != st->docking_station.w || ta.h != st->docking_station.h) {
 				cclog("station docking mismatch: station {}, company {}, prev: ({:X}, {}, {}), recalc: ({:X}, {}, {})",
-						st->index, (int)st->owner, ta.tile, ta.w, ta.h, st->docking_station.tile, st->docking_station.w, st->docking_station.h);
+						st->index, st->owner, ta.tile, ta.w, ta.h, st->docking_station.tile, st->docking_station.w, st->docking_station.h);
 			}
 			for (TileIndex tile : ta) {
 				if ((docking_tiles.find(tile) != docking_tiles.end()) != IsDockingTile(tile)) {
@@ -549,8 +603,8 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 		}
 #endif
 
-		extern void ValidateVehicleTickCaches();
-		ValidateVehicleTickCaches();
+		extern void ValidateVehicleTickCaches(std::function<void(std::string_view)> log);
+		ValidateVehicleTickCaches(cclog_output);
 
 		for (Vehicle *v : Vehicle::Iterate()) {
 			if (v->Previous()) assert_msg(v->Previous()->Next() == v, "{}", v->index);
@@ -615,9 +669,9 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
  * @param flags operation to perform
  * @return the cost of this operation or an error
  */
-CommandCost CmdDesyncCheck(DoCommandFlag flags)
+CommandCost CmdDesyncCheck(DoCommandFlags flags)
 {
-	if (flags & DC_EXEC) {
+	if (flags.Test(DoCommandFlag::Execute)) {
 		CheckCaches(true, nullptr, CHECK_CACHE_ALL | CHECK_CACHE_EMIT_LOG);
 	}
 

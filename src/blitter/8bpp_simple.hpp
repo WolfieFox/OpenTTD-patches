@@ -18,7 +18,7 @@ class Blitter_8bppSimple final : public Blitter_8bppBase {
 public:
 	using Blitter_8bppBase::Blitter_8bppBase;
 	void Draw(Blitter::BlitterParams *bp, BlitterMode mode, ZoomLevel zoom) override;
-	Sprite *Encode(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator) override;
+	Sprite *Encode(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator) override;
 
 	const char *GetName() override { return "8bpp-simple"; }
 };
@@ -27,7 +27,7 @@ public:
 class FBlitter_8bppSimple : public BlitterFactory {
 public:
 	FBlitter_8bppSimple() : BlitterFactory("8bpp-simple", "8bpp Simple Blitter (relative slow, but never wrong)") {}
-	Blitter *CreateInstance() override { return new Blitter_8bppSimple(); }
+	std::unique_ptr<Blitter> CreateInstance() override { return std::make_unique<Blitter_8bppSimple>(); }
 };
 
 #endif /* BLITTER_8BPP_SIMPLE_HPP */

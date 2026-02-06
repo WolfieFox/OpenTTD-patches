@@ -20,17 +20,59 @@
 extern OldIndustryAccepted _old_industry_accepted;
 extern OldIndustryProduced _old_industry_produced;
 extern void LoadMoveOldAcceptsProduced(Industry *i);
+extern void LoadSetIndustryHistoryValidMask(Industry *i, bool extended_history);
 
 namespace upstream_sl {
 
+class SlIndustryAcceptedHistory : public DefaultSaveLoadHandler<SlIndustryAcceptedHistory, Industry::AcceptedCargo> {
+public:
+	static inline const SaveLoad description[] = {
+		 SLE_VAR(Industry::AcceptedHistory, accepted, SLE_FILE_U16 | SLE_VAR_U32),
+		 SLE_VAR(Industry::AcceptedHistory, waiting, SLE_UINT16),
+	};
+	static inline const SaveLoadCompatTable compat_description = {};
+
+	void Save(Industry::AcceptedCargo *a) const override
+	{
+		NOT_REACHED();
+	}
+
+	void Load(Industry::AcceptedCargo *a) const override
+	{
+		size_t len = SlGetStructListLength(UINT32_MAX);
+		if (len == 0) return;
+
+		auto &history = a->GetOrCreateHistory();
+
+		if (len > history.size()) {
+			/* Truncate larger history */
+			for (auto &h : history) {
+				SlObject(&h, this->GetLoadDescription());
+			}
+			Industry::AcceptedHistory tmp{};
+			for (size_t i = 0; i < len - history.size(); i++) {
+				SlObject(&tmp, this->GetDescription());
+			}
+			return;
+		}
+
+		for (auto &h : history) {
+			if (--len > history.size()) break; // unsigned so wraps after hitting zero.
+			SlObject(&h, this->GetLoadDescription());
+		}
+	}
+};
+
 class SlIndustryAccepted : public DefaultSaveLoadHandler<SlIndustryAccepted, Industry> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		 SLE_VAR(Industry::AcceptedCargo, cargo, SLE_UINT8),
 		 SLE_VAR(Industry::AcceptedCargo, waiting, SLE_UINT16),
 		 SLE_VAR(Industry::AcceptedCargo, last_accepted, SLE_INT32),
+		SLE_CONDVAR(Industry::AcceptedCargo, accumulated_waiting, SLE_UINT32, SLV_INDUSTRY_ACCEPTED_HISTORY, SL_MAX_VERSION),
+		SLEG_CONDSTRUCTLIST("history", SlIndustryAcceptedHistory, SLV_INDUSTRY_ACCEPTED_HISTORY, SL_MAX_VERSION),
 	};
-	inline const static SaveLoadCompatTable compat_description = {};
+	static inline const SaveLoadCompatTable compat_description = {};
 
 	void Save(Industry *i) const override
 	{
@@ -46,18 +88,18 @@ public:
 
 		for (size_t j = 0; j < len; j++) {
 			Industry::AcceptedCargo &a = i->accepted[j];
-			SlObject(&a, this->GetDescription());
+			SlObject(&a, this->GetLoadDescription());
 		}
 	}
 };
 
 class SlIndustryProducedHistory : public DefaultSaveLoadHandler<SlIndustryProducedHistory, Industry::ProducedCargo> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		 SLE_VAR(Industry::ProducedHistory, production, SLE_FILE_U16 | SLE_VAR_U32),
 		 SLE_VAR(Industry::ProducedHistory, transported, SLE_FILE_U16 | SLE_VAR_U32),
 	};
-	inline const static SaveLoadCompatTable compat_description = {};
+	static inline const SaveLoadCompatTable compat_description = {};
 
 	void Save(Industry::ProducedCargo *p) const override
 	{
@@ -66,24 +108,35 @@ public:
 
 	void Load(Industry::ProducedCargo *p) const override
 	{
-		size_t len = SlGetStructListLength(p->history.size());
+		size_t len = SlGetStructListLength(UINT32_MAX);
+		if (len > p->history.size()) {
+			/* Truncate larger history */
+			for (auto &h : p->history) {
+				SlObject(&h, this->GetLoadDescription());
+			}
+			Industry::ProducedHistory tmp{};
+			for (size_t i = 0; i < len - p->history.size(); i++) {
+				SlObject(&tmp, this->GetDescription());
+			}
+			return;
+		}
 
 		for (auto &h : p->history) {
 			if (--len > p->history.size()) break; // unsigned so wraps after hitting zero.
-			SlObject(&h, this->GetDescription());
+			SlObject(&h, this->GetLoadDescription());
 		}
 	}
 };
 
 class SlIndustryProduced : public DefaultSaveLoadHandler<SlIndustryProduced, Industry> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		 SLE_VAR(Industry::ProducedCargo, cargo, SLE_UINT8),
 		 SLE_VAR(Industry::ProducedCargo, waiting, SLE_UINT16),
 		 SLE_VAR(Industry::ProducedCargo, rate, SLE_UINT8),
 		SLEG_STRUCTLIST("history", SlIndustryProducedHistory),
 	};
-	inline const static SaveLoadCompatTable compat_description = {};
+	static inline const SaveLoadCompatTable compat_description = {};
 
 	void Save(Industry *i) const override
 	{
@@ -99,7 +152,7 @@ public:
 
 		for (size_t j = 0; j < len; j++) {
 			Industry::ProducedCargo &p = i->produced[j];
-			SlObject(&p, this->GetDescription());
+			SlObject(&p, this->GetLoadDescription());
 		}
 	}
 };
@@ -158,6 +211,8 @@ static const SaveLoad _industry_desc[] = {
 	SLE_CONDVAR(Industry, random,                     SLE_UINT16,                SLV_82, SL_MAX_VERSION),
 	SLE_CONDSSTR(Industry, text,     SLE_STR | SLF_ALLOW_CONTROL,     SLV_INDUSTRY_TEXT, SL_MAX_VERSION),
 
+	SLE_CONDVAR(Industry, valid_history, SLE_UINT64, SLV_INDUSTRY_NUM_VALID_HISTORY, SL_MAX_VERSION),
+
 	SLEG_CONDSTRUCTLIST("accepted", SlIndustryAccepted,                          SLV_INDUSTRY_CARGO_REORGANISE, SL_MAX_VERSION),
 	SLEG_CONDSTRUCTLIST("produced", SlIndustryProduced,                          SLV_INDUSTRY_CARGO_REORGANISE, SL_MAX_VERSION),
 };
@@ -186,18 +241,22 @@ struct INDYChunkHandler : ChunkHandler {
 		_old_industry_produced.Reset();
 
 		while ((index = SlIterateArray()) != -1) {
-			Industry *i = new (index) Industry();
+			Industry *i = new (IndustryID(index)) Industry();
 			SlObject(i, slt);
 
 			/* Before savegame version 161, persistent storages were not stored in a pool. */
 			if (IsSavegameVersionBefore(SLV_161) && !IsSavegameVersionBefore(SLV_76)) {
 				/* Store the old persistent storage. The GRFID will be added later. */
 				assert(PersistentStorage::CanAllocateItem());
-				i->psa = new PersistentStorage(0, 0, {});
+				i->psa = new PersistentStorage(0, GSF_INVALID, TileIndex{});
 				std::copy(std::begin(_old_ind_persistent_storage.storage), std::end(_old_ind_persistent_storage.storage), std::begin(i->psa->storage));
 			}
 			if (IsSavegameVersionBefore(SLV_INDUSTRY_CARGO_REORGANISE)) {
 				LoadMoveOldAcceptsProduced(i);
+			}
+
+			if (IsSavegameVersionBefore(SLV_INDUSTRY_NUM_VALID_HISTORY)) {
+				LoadSetIndustryHistoryValidMask(i, !IsSavegameVersionBefore(SLV_PRODUCTION_HISTORY));
 			}
 		}
 	}

@@ -11,6 +11,7 @@
 #include "core/container_func.hpp"
 #include "debug.h"
 #include "newgrf_railtype.h"
+#include "newgrf_roadtype.h"
 #include "newgrf_newsignals.h"
 #include "newgrf_extension.h"
 #include "date_func.h"
@@ -22,6 +23,28 @@
 #include "newgrf_dump.h"
 
 #include "safeguards.h"
+
+/**
+ * Variable 0x45 of road-/tram-/rail-types to query track types on a tile (rail part).
+ *
+ * Format: __RRttrr
+ * - rr: Translated roadtype.
+ * - tt: Translated tramtype.
+ * - RR: Translated railtype.
+ *
+ * Special values for rr, tt, RR:
+ * - 0xFF: Track not present on tile.
+ * - 0xFE: Track present, but no matching entry in translation table.
+ */
+uint32_t GetTrackTypesRail(RailType railtype, const GRFFile *grffile)
+{
+	uint8_t rail = 0xFF;
+	if (railtype != INVALID_RAILTYPE) {
+		rail = GetReverseRailTypeTranslation(railtype, grffile);
+		if (rail == 0xFF) rail = 0xFE;
+	}
+	return rail << 16;
+}
 
 /* virtual */ uint32_t RailTypeScopeResolver::GetRandomBits() const
 {
@@ -37,7 +60,8 @@
 			case 0x41: return 0;
 			case 0x42: return 0;
 			case 0x43: return CalTime::CurDate().base();
-			case 0x44: return HZB_TOWN_EDGE;
+			case 0x44: return to_underlying(HouseZone::TownEdge);
+			case 0x45: return 0xFFFF | GetTrackTypesRail(GetRailTypeInfoIndex(this->rti), this->ro.grffile);
 			case A2VRI_RAILTYPE_SIGNAL_RESTRICTION_INFO: return 0;
 			case A2VRI_RAILTYPE_SIGNAL_CONTEXT: return GetNewSignalsSignalContext(this->signal_context);
 			case A2VRI_RAILTYPE_SIGNAL_SIDE: return GetNewSignalsSideVariable();
@@ -60,7 +84,12 @@
 			} else if (IsLevelCrossingTile(this->tile)) {
 				t = ClosestTownFromTile(this->tile, UINT_MAX);
 			}
-			return t != nullptr ? GetTownRadiusGroup(t, this->tile) : HZB_TOWN_EDGE;
+			return to_underlying(t != nullptr ? GetTownRadiusGroup(t, this->tile) : HouseZone::TownEdge);
+		}
+		case 0x45: {
+			uint32_t result = GetTrackTypesRail((this->rti != nullptr) ? GetRailTypeInfoIndex(this->rti) : GetTileRailType(this->tile), this->ro.grffile);
+			if (extra.mask & 0xFFFF) result |= GetTrackTypesRoad(this->tile, this->ro.grffile);
+			return result;
 		}
 		case A2VRI_RAILTYPE_SIGNAL_RESTRICTION_INFO:
 			return GetNewSignalsRestrictedSignalsInfo(this->prog, this->tile, 0);
@@ -74,8 +103,8 @@
 			if (!IsLevelCrossingTile(this->tile) || !_settings_game.vehicle.adjacent_crossings) return 0;
 
 			auto is_usable_crossing = [&](TileIndex t) -> bool {
-				if (HasRoadTypeRoad(t) && !HasBit(_roadtypes_non_train_colliding, GetRoadTypeRoad(t))) return true;
-				if (HasRoadTypeTram(t) && !HasBit(_roadtypes_non_train_colliding, GetRoadTypeTram(t))) return true;
+				if (HasRoadTypeRoad(t) && !_roadtypes_non_train_colliding.Test(GetRoadTypeRoad(t))) return true;
+				if (HasRoadTypeTram(t) && !_roadtypes_non_train_colliding.Test(GetRoadTypeTram(t))) return true;
 				return false;
 			};
 			if (!is_usable_crossing(this->tile)) return 0;
@@ -148,12 +177,12 @@ SpriteID GetCustomRailSprite(const RailTypeInfo *rti, TileIndex tile, RailTypeSp
 	if (rti->group[rtsg] == nullptr) return 0;
 
 	RailTypeResolverObject object(rti, tile, context, rtsg);
-	const SpriteGroup *group = object.Resolve();
-	if (group == nullptr || group->GetNumResults() == 0) return 0;
+	const ResultSpriteGroup *group = object.Resolve<ResultSpriteGroup>();
+	if (group == nullptr || group->num_sprites == 0) return 0;
 
-	if (num_results) *num_results = group->GetNumResults();
+	if (num_results) *num_results = group->num_sprites;
 
-	return group->GetResult();
+	return group->sprite;
 }
 
 inline uint8_t RemapAspect(uint8_t aspect, uint8_t extra_aspects, uint8_t style)
@@ -174,19 +203,19 @@ static PalSpriteID GetRailTypeCustomSignalSprite(const RailTypeInfo *rti, TileIn
 		CustomSignalSpriteContext context, const TraceRestrictProgram *prog, uint z)
 {
 	if (rti->group[RTSG_SIGNALS] == nullptr) return { 0, PAL_NONE };
-	if (type == SIGTYPE_PROG && !HasBit(rti->ctrl_flags, RTCF_PROGSIG)) return { 0, PAL_NONE };
-	if (type == SIGTYPE_NO_ENTRY && !HasBit(rti->ctrl_flags, RTCF_NOENTRYSIG)) return { 0, PAL_NONE };
+	if (type == SIGTYPE_PROG && !rti->ctrl_flags.Test(RailTypeCtrlFlag::SigSpriteProgSig)) return { 0, PAL_NONE };
+	if (type == SIGTYPE_NO_ENTRY && !rti->ctrl_flags.Test(RailTypeCtrlFlag::SigSpriteNoEntry)) return { 0, PAL_NONE };
 
 	uint32_t param1 = (context.ctx_mode == CSSC_GUI) ? 0x10 : 0x00;
 	uint32_t param2 = (type << 16) | (var << 8) | RemapAspect(aspect, rti->signal_extra_aspects, 0);
-	if ((prog != nullptr) && HasBit(rti->ctrl_flags, RTCF_RESTRICTEDSIG)) SetBit(param2, 24);
+	if ((prog != nullptr) && rti->ctrl_flags.Test(RailTypeCtrlFlag::SigSpriteRestrictedSig)) SetBit(param2, 24);
 	RailTypeResolverObject object(rti, tile, TCX_NORMAL, RTSG_SIGNALS, param1, param2, context, prog, z);
 
-	const SpriteGroup *group = object.Resolve();
-	if (group == nullptr || group->GetNumResults() == 0) return { 0, PAL_NONE };
+	const ResultSpriteGroup *group = object.Resolve<ResultSpriteGroup>();
+	if (group == nullptr || group->num_sprites == 0) return { 0, PAL_NONE };
 
-	PaletteID pal = HasBit(rti->ctrl_flags, RTCF_RECOLOUR_ENABLED) ? GB(GetRegister(0x100), 0, 24) : PAL_NONE;
-	return { group->GetResult(), pal };
+	PaletteID pal = rti->ctrl_flags.Test(RailTypeCtrlFlag::SigSpriteRecolourEnabled) ? GB(GetRegister(0x100), 0, 24) : PAL_NONE;
+	return { group->sprite, pal };
 }
 
 /**
@@ -206,7 +235,7 @@ CustomSignalSpriteResult GetCustomSignalSprite(const RailTypeInfo *rti, TileInde
 
 	if (style == 0) {
 		PalSpriteID spr = GetRailTypeCustomSignalSprite(rti, tile, type, var, aspect, context, prog, z);
-		if (spr.sprite != 0) return { spr, HasBit(rti->ctrl_flags, RTCF_RESTRICTEDSIG) };
+		if (spr.sprite != 0) return { spr, rti->ctrl_flags.Test(RailTypeCtrlFlag::SigSpriteRestrictedSig) };
 	}
 
 	for (const GRFFile *grf : _new_signals_grfs) {
@@ -221,10 +250,10 @@ CustomSignalSpriteResult GetCustomSignalSprite(const RailTypeInfo *rti, TileInde
 		if ((prog != nullptr) && HasBit(grf->new_signal_ctrl_flags, NSCF_RESTRICTEDSIG)) SetBit(param2, 24);
 		NewSignalsResolverObject object(grf, tile, TCX_NORMAL, param1, param2, context, style, prog, z);
 
-		const SpriteGroup *group = object.Resolve();
-		if (group != nullptr && group->GetNumResults() != 0) {
+		const ResultSpriteGroup *group = object.Resolve<ResultSpriteGroup>();
+		if (group != nullptr && group->num_sprites != 0) {
 			PaletteID pal = HasBit(grf->new_signal_ctrl_flags, NSCF_RECOLOUR_ENABLED) ? GB(GetRegister(0x100), 0, 24) : PAL_NONE;
-			return { { group->GetResult(), pal }, HasBit(grf->new_signal_ctrl_flags, NSCF_RESTRICTEDSIG) };
+			return { { group->sprite, pal }, HasBit(grf->new_signal_ctrl_flags, NSCF_RESTRICTEDSIG) };
 		}
 	}
 
@@ -341,7 +370,7 @@ void SetCurrentRailTypeLabelList()
 	_railtype_list.clear();
 
 	for (RailType rt = RAILTYPE_BEGIN; rt != RAILTYPE_END; rt++) {
-		_railtype_list.push_back({GetRailTypeInfo(rt)->label, 0});
+		_railtype_list.emplace_back(GetRailTypeInfo(rt)->label, 0);
 	}
 }
 

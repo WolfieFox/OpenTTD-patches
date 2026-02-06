@@ -34,7 +34,11 @@
 #include "../town.h"
 #include "../roadstop_base.h"
 #include "../autoreplace_base.h"
-#include "../core/ring_buffer.hpp"
+#include "../core/string_builder.hpp"
+#include "../core/string_consumer.hpp"
+#include "../3rdparty/cpp-ring-buffer/ring_buffer.hpp"
+
+#include "table/strings.h"
 
 #include <atomic>
 #include <vector>
@@ -49,8 +53,6 @@ std::string CopyFromOldName(StringID id);
 
 extern uint8_t SlSaveToTempBufferSetup();
 extern std::span<uint8_t> SlSaveToTempBufferRestore(uint8_t state);
-extern void SlCopyBytesRead(void *ptr, size_t length);
-extern void SlCopyBytesWrite(void *ptr, size_t length);
 
 namespace upstream_sl {
 
@@ -709,24 +711,25 @@ void FixSCCEncoded(std::string &str, bool fix_code)
 	 * `:<HEX>`                   becomes `<RS><SCC_ENCODED_NUMERIC><HEX>`
 	 * `:"<STRING>"`              becomes `<RS><SCC_ENCODED_STRING><STRING>`
 	 */
-	std::string result;
-	auto output = std::back_inserter(result);
+	format_buffer result;
+	StringBuilder builder(result);
 
 	bool is_encoded = false; // Set if we determine by the presence of SCC_ENCODED that the string is an encoded string.
 	bool in_string = false; // Set if we in a string, between double-quotes.
 	bool need_type = true; // Set if a parameter type needs to be emitted.
 
-	for (auto it = std::begin(str); it != std::end(str); /* nothing */) {
-		size_t len = Utf8EncodedCharLen(*it);
-		if (len == 0 || it + len > std::end(str)) break;
-
+	StringConsumer consumer(str);
+	while (consumer.AnyBytesLeft()) {
 		char32_t c;
-		Utf8Decode(&c, &*it);
+		if (auto r = consumer.TryReadUtf8(); r.has_value()) {
+			c = *r;
+		} else {
+			break;
+		}
 		if (c == SCC_ENCODED || (fix_code && (c == 0xE028 || c == 0xE02A))) {
-			Utf8Encode(output, SCC_ENCODED);
+			builder.PutUtf8(SCC_ENCODED);
 			need_type = false;
 			is_encoded = true;
-			it += len;
 			continue;
 		}
 
@@ -737,30 +740,64 @@ void FixSCCEncoded(std::string &str, bool fix_code)
 			in_string = !in_string;
 			if (in_string && need_type) {
 				/* Started a new string parameter. */
-				Utf8Encode(output, SCC_ENCODED_STRING);
+				builder.PutUtf8(SCC_ENCODED_STRING);
 				need_type = false;
 			}
-			it += len;
 			continue;
 		}
 
 		if (!in_string && c == ':') {
-			*output = SCC_RECORD_SEPARATOR;
+			builder.PutUtf8(SCC_RECORD_SEPARATOR);
 			need_type = true;
-			it += len;
 			continue;
 		}
 		if (need_type) {
 			/* Started a new numeric parameter. */
-			Utf8Encode(output, SCC_ENCODED_NUMERIC);
+			builder.PutUtf8(SCC_ENCODED_NUMERIC);
 			need_type = false;
 		}
 
-		Utf8Encode(output, c);
-		it += len;
+		builder.PutUtf8(c);
 	}
 
-	str = result;
+	str.assign((std::string_view)result);
+}
+
+/**
+ * Scan the string for SCC_ENCODED_NUMERIC with negative values, and reencode them as uint64_t.
+ * @param str the string to fix.
+ */
+void FixSCCEncodedNegative(std::string &str)
+{
+	if (str.empty()) return;
+
+	StringConsumer consumer(str);
+
+	/* Check whether this is an encoded string */
+	if (!consumer.ReadUtf8If(SCC_ENCODED)) return;
+
+	format_buffer result;
+	StringBuilder builder(result);
+	builder.PutUtf8(SCC_ENCODED);
+	while (consumer.AnyBytesLeft()) {
+		/* Copy until next record */
+		builder.Put(consumer.ReadUntilUtf8(SCC_RECORD_SEPARATOR, StringConsumer::READ_ONE_SEPARATOR));
+
+		/* Check whether this is a numeric parameter */
+		if (!consumer.ReadUtf8If(SCC_ENCODED_NUMERIC)) continue;
+		builder.PutUtf8(SCC_ENCODED_NUMERIC);
+
+		/* First try unsigned */
+		if (auto u = consumer.TryReadIntegerBase<uint64_t>(16); u.has_value()) {
+			builder.PutIntegerBase<uint64_t>(*u, 16);
+		} else {
+			/* Read as signed, store as unsigned */
+			auto s = consumer.ReadIntegerBase<int64_t>(16);
+			builder.PutIntegerBase<uint64_t>(static_cast<uint64_t>(s), 16);
+		}
+	}
+
+	str.assign(result);
 }
 
 /**
@@ -776,7 +813,7 @@ static void SlStdString(void *ptr, VarType conv)
 		case SLA_SAVE: {
 			size_t len = str->length();
 			SlWriteArrayLength(len);
-			SlCopyBytes(const_cast<void *>(static_cast<const void *>(str->c_str())), len);
+			SlCopyBytes(const_cast<void *>(static_cast<const void *>(str->data())), len);
 			break;
 		}
 
@@ -788,18 +825,20 @@ static void SlStdString(void *ptr, VarType conv)
 				return;
 			}
 
-			str->resize(len);
-			SlCopyBytes(str->data(), len);
+			SlReadString(*str, len);
 
-			StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK;
+			StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark;
 			if ((conv & SLF_ALLOW_CONTROL) != 0) {
-				settings = settings | SVS_ALLOW_CONTROL_CODE;
+				settings.Set(StringValidationSetting::AllowControlCode);
 				if (IsSavegameVersionBefore(SLV_ENCODED_STRING_FORMAT)) FixSCCEncoded(*str, IsSavegameVersionBefore(SLV_169));
+				if (IsSavegameVersionBefore(SLV_FIX_SCC_ENCODED_NEGATIVE)) FixSCCEncodedNegative(*str);
 			}
 			if ((conv & SLF_ALLOW_NEWLINE) != 0) {
-				settings = settings | SVS_ALLOW_NEWLINE;
+				settings.Set(StringValidationSetting::AllowNewline);
 			}
-
+			if ((conv & SLF_REPLACE_TABCRLF) != 0) {
+				settings.Set(StringValidationSetting::ReplaceTabCrNlWithSpace);
+			}
 			StrMakeValidInPlace(*str, settings);
 		}
 
@@ -870,12 +909,15 @@ static void SlString(void *ptr, size_t length, VarType conv)
 			}
 
 			((char *)ptr)[len] = '\0'; // properly terminate the string
-			StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK;
+			StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark;
 			if ((conv & SLF_ALLOW_CONTROL) != 0) {
-				settings = settings | SVS_ALLOW_CONTROL_CODE;
+				settings.Set(StringValidationSetting::AllowControlCode);
 			}
 			if ((conv & SLF_ALLOW_NEWLINE) != 0) {
-				settings = settings | SVS_ALLOW_NEWLINE;
+				settings.Set(StringValidationSetting::AllowNewline);
+			}
+			if ((conv & SLF_REPLACE_TABCRLF) != 0) {
+				settings.Set(StringValidationSetting::ReplaceTabCrNlWithSpace);
 			}
 			StrMakeValidInPlace((char *)ptr, (char *)ptr + len, settings);
 			break;
@@ -1148,9 +1190,6 @@ void SlSaveLoadRef(void *ptr, VarType conv)
 	}
 }
 
-template <typename T, typename U>
-using ring_buffer_sl = ring_buffer<T>;
-
 /**
  * Template class to help with list-like types.
  */
@@ -1307,7 +1346,7 @@ static void SlRefVector(void *vector, VarType conv)
  */
 static inline size_t SlCalcRefRingLen(const void *list, VarType conv)
 {
-	return SlStorageHelper<ring_buffer_sl, void *>::SlCalcLen(list, conv, SL_REF);
+	return SlStorageHelper<jgr::ring_buffer, void *>::SlCalcLen(list, conv, SL_REF);
 }
 
 /**
@@ -1324,7 +1363,7 @@ static void SlRefRing(void *list, VarType conv)
 		if (_sl.need_length == NL_CALCLENGTH) return;
 	}
 
-	SlStorageHelper<ring_buffer_sl, void *>::SlSaveLoad(list, conv, SL_REF);
+	SlStorageHelper<jgr::ring_buffer, void *>::SlSaveLoad(list, conv, SL_REF);
 }
 
 /**
@@ -1335,15 +1374,15 @@ static void SlRefRing(void *list, VarType conv)
 static inline size_t SlCalcRingLen(const void *ring, VarType conv)
 {
 	switch (GetVarMemType(conv)) {
-		case SLE_VAR_BL: return SlStorageHelper<ring_buffer_sl, bool>::SlCalcLen(ring, conv);
-		case SLE_VAR_I8: return SlStorageHelper<ring_buffer_sl, int8_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_U8: return SlStorageHelper<ring_buffer_sl, uint8_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_I16: return SlStorageHelper<ring_buffer_sl, int16_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_U16: return SlStorageHelper<ring_buffer_sl, uint16_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_I32: return SlStorageHelper<ring_buffer_sl, int32_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_U32: return SlStorageHelper<ring_buffer_sl, uint32_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_I64: return SlStorageHelper<ring_buffer_sl, int64_t>::SlCalcLen(ring, conv);
-		case SLE_VAR_U64: return SlStorageHelper<ring_buffer_sl, uint64_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_BL: return SlStorageHelper<jgr::ring_buffer, bool>::SlCalcLen(ring, conv);
+		case SLE_VAR_I8: return SlStorageHelper<jgr::ring_buffer, int8_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_U8: return SlStorageHelper<jgr::ring_buffer, uint8_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_I16: return SlStorageHelper<jgr::ring_buffer, int16_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_U16: return SlStorageHelper<jgr::ring_buffer, uint16_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_I32: return SlStorageHelper<jgr::ring_buffer, int32_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_U32: return SlStorageHelper<jgr::ring_buffer, uint32_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_I64: return SlStorageHelper<jgr::ring_buffer, int64_t>::SlCalcLen(ring, conv);
+		case SLE_VAR_U64: return SlStorageHelper<jgr::ring_buffer, uint64_t>::SlCalcLen(ring, conv);
 
 		case SLE_VAR_STR:
 			/* Strings are a length-prefixed field type in the savegame table format,
@@ -1362,15 +1401,15 @@ static inline size_t SlCalcRingLen(const void *ring, VarType conv)
 static void SlRing(void *ring, VarType conv)
 {
 	switch (GetVarMemType(conv)) {
-		case SLE_VAR_BL: SlStorageHelper<ring_buffer_sl, bool>::SlSaveLoad(ring, conv); break;
-		case SLE_VAR_I8: SlStorageHelper<ring_buffer_sl, int8_t>::SlSaveLoad(ring, conv); break;
-		case SLE_VAR_U8: SlStorageHelper<ring_buffer_sl, uint8_t>::SlSaveLoad(ring, conv); break;
-		case SLE_VAR_I16: SlStorageHelper<ring_buffer_sl, int16_t>::SlSaveLoad(ring, conv); break;
-		case SLE_VAR_U16: SlStorageHelper<ring_buffer_sl, uint16_t>::SlSaveLoad(ring, conv); break;
-		case SLE_VAR_I32: SlStorageHelper<ring_buffer_sl, int32_t>::SlSaveLoad(ring, conv); break;
-		case SLE_VAR_U32: SlStorageHelper<ring_buffer_sl, uint32_t>::SlSaveLoad(ring, conv); break;
-		case SLE_VAR_I64: SlStorageHelper<ring_buffer_sl, int64_t>::SlSaveLoad(ring, conv); break;
-		case SLE_VAR_U64: SlStorageHelper<ring_buffer_sl, uint64_t>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_BL: SlStorageHelper<jgr::ring_buffer, bool>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_I8: SlStorageHelper<jgr::ring_buffer, int8_t>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_U8: SlStorageHelper<jgr::ring_buffer, uint8_t>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_I16: SlStorageHelper<jgr::ring_buffer, int16_t>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_U16: SlStorageHelper<jgr::ring_buffer, uint16_t>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_I32: SlStorageHelper<jgr::ring_buffer, int32_t>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_U32: SlStorageHelper<jgr::ring_buffer, uint32_t>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_I64: SlStorageHelper<jgr::ring_buffer, int64_t>::SlSaveLoad(ring, conv); break;
+		case SLE_VAR_U64: SlStorageHelper<jgr::ring_buffer, uint64_t>::SlSaveLoad(ring, conv); break;
 
 		case SLE_VAR_STR:
 			/* Strings are a length-prefixed field type in the savegame table format,
@@ -1378,7 +1417,7 @@ static void SlRing(void *ring, VarType conv)
 			 * This is permitted for load-related actions, because invalid fields of this type are present
 			 * from SLV_COMPANY_ALLOW_LIST up to SLV_COMPANY_ALLOW_LIST_V2. */
 			assert(_sl.action != SLA_SAVE);
-			SlStorageHelper<ring_buffer_sl, std::string>::SlSaveLoad(ring, conv, SL_STDSTR);
+			SlStorageHelper<jgr::ring_buffer, std::string>::SlSaveLoad(ring, conv, SL_STDSTR);
 			break;
 
 		default: NOT_REACHED();
@@ -1674,6 +1713,7 @@ size_t SlGetStructListLength(size_t limit)
 {
 	size_t length = SlReadArrayLength();
 	if (length > limit) SlErrorCorrupt("List exceeds storage size");
+	if (limit >= UINT32_MAX && length > SlGetFieldLength()) SlErrorCorrupt("List size is implausibly large");
 
 	return length;
 }
@@ -1789,7 +1829,7 @@ std::vector<SaveLoad> SlTableHeader(const SaveLoadTable &slt)
 					}
 
 					/* We don't know this field, so read to nothing. */
-					saveloads.push_back({key, saveload_type, ((VarType)type & SLE_FILE_TYPE_MASK) | SLE_VAR_NULL, 1, SL_MIN_VERSION, SL_MAX_VERSION, nullptr, 0, handler});
+					saveloads.emplace_back(std::move(key), saveload_type, ((VarType)type & SLE_FILE_TYPE_MASK) | SLE_VAR_NULL, 1, SL_MIN_VERSION, SL_MAX_VERSION, nullptr, 0, std::move(handler));
 					continue;
 				}
 
@@ -1803,7 +1843,7 @@ std::vector<SaveLoad> SlTableHeader(const SaveLoadTable &slt)
 					Debug(sl, 1, "Field type for '{}' was expected to be 0x{:02X} but 0x{:02X} was found", key, correct_type, type);
 					SlErrorCorrupt("Field type is different than expected");
 				}
-				saveloads.push_back(*sld_it->second);
+				saveloads.emplace_back(*sld_it->second);
 			}
 
 			for (auto &sld : saveloads) {
@@ -1896,7 +1936,7 @@ std::vector<SaveLoad> SlCompatTableHeader(const SaveLoadTable &slt, const SaveLo
 			/* In old savegames there can be data we no longer care for. We
 			 * skip this by simply reading the amount of bytes indicated and
 			 * send those to /dev/null. */
-			saveloads.push_back({"", SL_NULL, GetVarFileType(slc.null_type) | SLE_VAR_NULL, slc.null_length, slc.version_from, slc.version_to, nullptr, 0, nullptr});
+			saveloads.emplace_back("", SL_NULL, GetVarFileType(slc.null_type) | SLE_VAR_NULL, slc.null_length, slc.version_from, slc.version_to, nullptr, 0, nullptr);
 		} else {
 			auto sld_it = key_lookup.find(slc.name);
 			/* If this branch triggers, it means that an entry in the
@@ -1988,7 +2028,7 @@ static void SlLoadChunk(const ChunkHandler &ch)
 	/* The header should always be at the start. Read the length; the
 	 * Load() should as first action process the header. */
 	if (_sl.expect_table_header) {
-		SlIterateArray();
+		if (SlIterateArray() != INT32_MAX) SlErrorCorrupt("Table chunk without header");
 	}
 
 	switch (_sl.block_mode) {
@@ -2038,7 +2078,7 @@ static void SlLoadCheckChunk(const ChunkHandler &ch)
 	/* The header should always be at the start. Read the length; the
 	 * LoadCheck() should as first action process the header. */
 	if (_sl.expect_table_header) {
-		SlIterateArray();
+		if (SlIterateArray() != INT32_MAX) SlErrorCorrupt("Table chunk without header");
 	}
 
 	switch (_sl.block_mode) {

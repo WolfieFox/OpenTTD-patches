@@ -29,6 +29,7 @@
 #include "zoom_func.h"
 #include "tracerestrict.h"
 #include "tracerestrict_cmd.h"
+#include "core/string_consumer.hpp"
 
 #include "table/sprites.h"
 #include "table/strings.h"
@@ -95,7 +96,7 @@ static SignalOpcode OpcodeForIndex(int index)
 	}
 }
 
-static bool IsConditionComparator(SignalCondition *cond)
+static bool IsConditionComparator(const SignalCondition *cond)
 {
 	switch (cond->ConditionCode()) {
 		case PSC_NUM_GREEN:
@@ -140,51 +141,37 @@ static const StringID _program_sigstate[] = {
 };
 
 /** Get the string for a condition */
-static std::string GetConditionString(SignalCondition *cond)
+static std::string GetConditionString(const SignalCondition *cond)
 {
-	StringID string = INVALID_STRING_ID;
 	if (cond->ConditionCode() == PSC_SLOT_OCC || cond->ConditionCode() == PSC_SLOT_OCC_REM) {
-		SignalSlotCondition *scc = static_cast<SignalSlotCondition*>(cond);
+		const SignalSlotCondition *scc = static_cast<const SignalSlotCondition *>(cond);
 		if (scc->IsSlotValid()) {
-			string = (cond->ConditionCode() == PSC_SLOT_OCC_REM) ? STR_PROGSIG_COND_SLOT_REMAINING_COMPARE : STR_PROGSIG_COND_SLOT_COMPARE;
-			SetDParam(0, scc->slot_id);
+			StringID string = (cond->ConditionCode() == PSC_SLOT_OCC_REM) ? STR_PROGSIG_COND_SLOT_REMAINING_COMPARE : STR_PROGSIG_COND_SLOT_COMPARE;
+			return GetString(string, scc->slot_id, _program_comparator[scc->comparator], scc->value);
 		} else {
-			string = (cond->ConditionCode() == PSC_SLOT_OCC_REM) ? STR_PROGSIG_COND_SLOT_REMAINING_COMPARE_INVALID : STR_PROGSIG_COND_SLOT_COMPARE_INVALID;
-			SetDParam(0, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED);
+			StringID string = (cond->ConditionCode() == PSC_SLOT_OCC_REM) ? STR_PROGSIG_COND_SLOT_REMAINING_COMPARE_INVALID : STR_PROGSIG_COND_SLOT_COMPARE_INVALID;
+			return GetString(string, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED, _program_comparator[scc->comparator], scc->value);
 		}
-		SetDParam(1, _program_comparator[scc->comparator]);
-		SetDParam(2, scc->value);
 	} else if (cond->ConditionCode() == PSC_COUNTER) {
-		SignalCounterCondition *scc = static_cast<SignalCounterCondition*>(cond);
+		const SignalCounterCondition *scc = static_cast<const SignalCounterCondition *>(cond);
 		if (scc->IsCounterValid()) {
-			string = STR_PROGSIG_COND_COUNTER_COMPARE;
-			SetDParam(0, scc->ctr_id);
+			return GetString(STR_PROGSIG_COND_COUNTER_COMPARE, scc->ctr_id, _program_comparator[scc->comparator], scc->value);
 		} else {
-			string = STR_PROGSIG_COND_COUNTER_COMPARE_INVALID;
-			SetDParam(0, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED);
+			return GetString(STR_PROGSIG_COND_COUNTER_COMPARE_INVALID, STR_TRACE_RESTRICT_VARIABLE_UNDEFINED_RED, _program_comparator[scc->comparator], scc->value);
 		}
-		SetDParam(1, _program_comparator[scc->comparator]);
-		SetDParam(2, scc->value);
 	} else if (IsConditionComparator(cond)) {
-		SignalConditionComparable *cv = static_cast<SignalConditionComparable*>(cond);
-		string = STR_PROGSIG_COND_COMPARE;
-		SetDParam(0, _program_condvar[cond->ConditionCode()]);
-		SetDParam(1, _program_comparator[cv->comparator]);
-		SetDParam(2, cv->value);
-	} else {
-		string = _program_condvar[cond->ConditionCode()];
-		if (cond->ConditionCode() == PSC_SIGNAL_STATE) {
-			SignalStateCondition *sig_cond = static_cast<SignalStateCondition*>(cond);
-			if (sig_cond->IsSignalValid()) {
-				string = STR_PROGSIG_CONDVAR_SIGNAL_STATE_SPECIFIED;
-				SetDParam(0, TileX(sig_cond->sig_tile));
-				SetDParam(1, TileY(sig_cond->sig_tile));
-			} else {
-				string = STR_PROGSIG_CONDVAR_SIGNAL_STATE_UNSPECIFIED;
-			}
+		const SignalConditionComparable *cv = static_cast<const SignalConditionComparable *>(cond);
+		return GetString(STR_PROGSIG_COND_COMPARE, _program_condvar[cond->ConditionCode()], _program_comparator[cv->comparator], cv->value);
+	} else if (cond->ConditionCode() == PSC_SIGNAL_STATE) {
+		const SignalStateCondition *sig_cond = static_cast<const SignalStateCondition *>(cond);
+		if (sig_cond->IsSignalValid()) {
+			return GetString(STR_PROGSIG_CONDVAR_SIGNAL_STATE_SPECIFIED, TileX(sig_cond->sig_tile), TileY(sig_cond->sig_tile));
+		} else {
+			return GetString(STR_PROGSIG_CONDVAR_SIGNAL_STATE_UNSPECIFIED);
 		}
+	} else {
+		return GetString(_program_condvar[cond->ConditionCode()]);
 	}
-	return GetString(string);
 }
 
 /**
@@ -196,38 +183,36 @@ static std::string GetConditionString(SignalCondition *cond)
  * @param left Left border for text drawing
  * @param right Right border for text drawing
  */
-static void DrawInstructionString(SignalInstruction *instruction, int y, bool selected, int indent, int left, int right)
+static void DrawInstructionString(const SignalInstruction *instruction, int y, bool selected, int indent, int left, int right)
 {
-	StringID instruction_string = INVALID_STRING_ID;
+	format_buffer instruction_string;
 
 	switch (instruction->Opcode()) {
 		case PSO_FIRST:
-			instruction_string = STR_PROGSIG_FIRST;
+			AppendStringInPlace(instruction_string, STR_PROGSIG_FIRST);
 			break;
 
 		case PSO_LAST:
-			instruction_string = STR_PROGSIG_LAST;
+			AppendStringInPlace(instruction_string, STR_PROGSIG_LAST);
 			break;
 
 		case PSO_IF: {
-			SignalIf *if_ins = static_cast<SignalIf*>(instruction);
-			SetDParamStr(0, GetConditionString(if_ins->condition));
-			instruction_string = STR_PROGSIG_IF;
+			const SignalIf *if_ins = static_cast<const SignalIf *>(instruction);
+			AppendStringInPlace(instruction_string, STR_PROGSIG_IF, GetConditionString(if_ins->condition));
 			break;
 		}
 
 		case PSO_IF_ELSE:
-			instruction_string = STR_PROGSIG_ELSE;
+			AppendStringInPlace(instruction_string, STR_PROGSIG_ELSE);
 			break;
 
 		case PSO_IF_ENDIF:
-			instruction_string = STR_PROGSIG_ENDIF;
+			AppendStringInPlace(instruction_string, STR_PROGSIG_ENDIF);
 			break;
 
 		case PSO_SET_SIGNAL: {
-			instruction_string = STR_PROGSIG_SET_SIGNAL;
-			SignalSet *set = static_cast<SignalSet*>(instruction);
-			SetDParam(0, _program_sigstate[set->to_state]);
+			const SignalSet *set = static_cast<const SignalSet *>(instruction);
+			AppendStringInPlace(instruction_string, STR_PROGSIG_SET_SIGNAL, _program_sigstate[set->to_state]);
 			break;
 		}
 
@@ -246,17 +231,29 @@ struct GuiInstruction {
 typedef std::vector<GuiInstruction> GuiInstructionList;
 
 class ProgramWindow : public Window {
-public:
-	ProgramWindow(WindowDesc &desc, SignalReference ref): Window(desc)
-	{
-		this->tile = ref.tile;
-		this->track = ref.track;
-		this->selected_instruction = -1;
+	const TileIndex tile;
+	const Track track;
+	SignalProgram *program = nullptr;
+	GuiInstructionList instructions{};
+	int selected_instruction = -1;
+	Scrollbar *vscroll = nullptr;
+	int current_aux_plane = SZSP_NONE;
 
+	enum QuerySubMode {
+		QSM_NONE,
+		QSM_SET_VALUE,
+		QSM_NEW_SLOT,
+		QSM_NEW_COUNTER,
+	};
+	QuerySubMode query_submode = QSM_NONE;
+
+public:
+	ProgramWindow(WindowDesc &desc, SignalReference ref) : Window(desc), tile(ref.tile), track(ref.track)
+	{
+		this->invalidation_policy = WindowInvalidationPolicy::QueueSingle;
 		this->CreateNestedTree();
 		this->vscroll = this->GetScrollbar(PROGRAM_WIDGET_SCROLLBAR);
 		this->GetWidget<NWidgetStacked>(PROGRAM_WIDGET_SEL_TOP_AUX)->SetDisplayedPlane(SZSP_NONE);
-		this->current_aux_plane = SZSP_NONE;
 		this->FinishInitNested((ref.tile.base() << 3) | ref.track);
 
 		program = GetSignalProgram(ref);
@@ -335,8 +332,7 @@ public:
 				if (!IsConditionComparator(sif->condition)) return;
 				SignalConditionComparable *vc = static_cast<SignalConditionComparable*>(sif->condition);
 
-				SetDParam(0, vc->value);
-				ShowQueryString(STR_JUST_INT, STR_PROGSIG_CONDITION_VALUE_CAPT, 5, this, CS_NUMERAL, QSF_NONE);
+				ShowQueryString(GetString(STR_JUST_INT, vc->value), STR_PROGSIG_CONDITION_VALUE_CAPT, 5, this, CS_NUMERAL, {});
 				this->query_submode = QSM_SET_VALUE;
 				this->LowerWidget(PROGRAM_WIDGET_COND_VALUE);
 				break;
@@ -352,7 +348,7 @@ public:
 				if (sc->IsSignalValid()) {
 					ScrollMainWindowToTile(sc->sig_tile);
 				} else {
-					ShowErrorMessage(STR_PROGSIG_ERROR_CAN_T_GOTO_UNDEFINED_SIGNAL, STR_EMPTY, WL_INFO);
+					ShowErrorMessage(GetEncodedString(STR_PROGSIG_ERROR_CAN_T_GOTO_UNDEFINED_SIGNAL), {}, WL_INFO);
 				}
 				break;
 			}
@@ -438,17 +434,17 @@ public:
 				return;
 
 			if (GetSignalType(tile1, track1) != SIGTYPE_PROG) {
-				ShowErrorMessage(STR_PROGSIG_ERROR_INVALID_SIGNAL, STR_PROGSIG_ERROR_NOT_AN_PROG_SIGNAL, WL_INFO);
+				ShowErrorMessage(GetEncodedString(STR_PROGSIG_ERROR_INVALID_SIGNAL), GetEncodedString(STR_PROGSIG_ERROR_NOT_AN_PROG_SIGNAL), WL_INFO);
 				return;
 			}
 			if (this->tile == tile1 && this->track == track1) {
-				ShowErrorMessage(STR_PROGSIG_ERROR_INVALID_SIGNAL, STR_PROGSIG_ERROR_CANNOT_USE_SELF, WL_INFO);
+				ShowErrorMessage(GetEncodedString(STR_PROGSIG_ERROR_INVALID_SIGNAL), GetEncodedString(STR_PROGSIG_ERROR_CANNOT_USE_SELF), WL_INFO);
 				return;
 			}
 
 			SignalProgram *sp = GetExistingSignalProgram(SignalReference(tile1, track1));
 			if (sp == nullptr) {
-				ShowErrorMessage(STR_PROGSIG_ERROR_INVALID_SIGNAL, STR_PROGSIG_ERROR_NOT_AN_EXIT_SIGNAL, WL_INFO);
+				ShowErrorMessage(GetEncodedString(STR_PROGSIG_ERROR_INVALID_SIGNAL), GetEncodedString(STR_PROGSIG_ERROR_NOT_AN_EXIT_SIGNAL), WL_INFO);
 				return;
 			}
 			ResetObjectToPlace();
@@ -484,7 +480,7 @@ public:
 		Trackdir tdr = ReverseTrackdir(td);
 
 		if (HasSignalOnTrackdir(tile1, td) && HasSignalOnTrackdir(tile1, tdr)) {
-			ShowErrorMessage(STR_PROGSIG_ERROR_INVALID_SIGNAL, STR_PROGSIG_ERROR_CAN_T_DEPEND_UPON_BIDIRECTIONAL_SIGNALS, WL_INFO);
+			ShowErrorMessage(GetEncodedString(STR_PROGSIG_ERROR_INVALID_SIGNAL), GetEncodedString(STR_PROGSIG_ERROR_CAN_T_DEPEND_UPON_BIDIRECTIONAL_SIGNALS), WL_INFO);
 			return;
 		} else if (HasSignalOnTrackdir(tile1, tdr) && !HasSignalOnTrackdir(tile1, td)) {
 			td = tdr;
@@ -495,7 +491,7 @@ public:
 		}
 
 		if (!(GetSignalType(tile1, track1) == SIGTYPE_EXIT || GetSignalType(tile1, track1) == SIGTYPE_PROG)) {
-			ShowErrorMessage(STR_PROGSIG_ERROR_INVALID_SIGNAL, STR_PROGSIG_ERROR_NOT_AN_EXIT_SIGNAL, WL_INFO);
+			ShowErrorMessage(GetEncodedString(STR_PROGSIG_ERROR_INVALID_SIGNAL), GetEncodedString(STR_PROGSIG_ERROR_NOT_AN_EXIT_SIGNAL), WL_INFO);
 			return;
 		}
 
@@ -511,7 +507,12 @@ public:
 		this->RaiseWidgetWhenLowered(PROGRAM_WIDGET_COND_SET_SIGNAL);
 	}
 
-	virtual void OnQueryTextFinished(std::optional<std::string> str) override
+	virtual void OnQueryTextFinished(std::optional<std::string> str) override final
+	{
+		OnQueryTextFinished(str, {});
+	}
+
+	virtual void OnQueryTextFinished(std::optional<std::string> str, std::optional<std::string> str2) override
 	{
 		const auto qsm = this->query_submode;
 		this->query_submode = QSM_NONE;
@@ -530,22 +531,33 @@ public:
 					SignalIf *sif = static_cast <SignalIf*>(si);
 					if (!IsConditionComparator(sif->condition)) break;
 
-					Command<CMD_PROGPRESIG_MODIFY_INSTRUCTION>::Post(STR_PROGSIG_ERROR_CAN_T_MODIFY_INSTRUCTION, this->tile, this->track, si->Id(), PPMCT_VALUE, atoi(str->c_str()), {});
+					auto try_value = ParseInteger<uint>(*str);
+					if (!try_value.has_value()) break;
+
+					Command<CMD_PROGPRESIG_MODIFY_INSTRUCTION>::Post(STR_PROGSIG_ERROR_CAN_T_MODIFY_INSTRUCTION, this->tile, this->track, si->Id(), PPMCT_VALUE, *try_value, {});
 					break;
 				}
 
 				case QSM_NEW_SLOT:
 				case QSM_NEW_COUNTER: {
 					using Payload = CmdPayload<CMD_PROGPRESIG_MODIFY_INSTRUCTION>;
-					ProgPresigModifyCommandType mode = (this->query_submode == QSM_NEW_SLOT) ? PPMCT_SLOT : PPMCT_COUNTER;
+					ProgPresigModifyCommandType mode = (qsm == QSM_NEW_SLOT) ? PPMCT_SLOT : PPMCT_COUNTER;
 					Payload follow_up_payload = Payload::Make(this->track, si->Id(), mode, {}, {});
 					TraceRestrictFollowUpCmdData follow_up{ BaseCommandContainer<CMD_PROGPRESIG_MODIFY_INSTRUCTION>((StringID)0, this->tile, std::move(follow_up_payload)) };
-					if (this->query_submode == QSM_NEW_SLOT) {
+					if (qsm == QSM_NEW_SLOT) {
 						TraceRestrictCreateSlotCmdData data;
 						data.vehtype = VEH_TRAIN;
 						data.parent = INVALID_TRACE_RESTRICT_SLOT_GROUP;
 						data.name = std::move(*str);
+						data.max_occupancy = TRACE_RESTRICT_SLOT_DEFAULT_MAX_OCCUPANCY;
 						data.follow_up_cmd = std::move(follow_up);
+
+						if (str2.has_value() && !str2->empty()) {
+							auto try_value = ParseInteger<uint>(*str2);
+							if (!try_value.has_value()) break;
+							data.max_occupancy = *try_value;
+						}
+
 						DoCommandP<CMD_CREATE_TRACERESTRICT_SLOT>(data, STR_TRACE_RESTRICT_ERROR_SLOT_CAN_T_CREATE, CommandCallback::CreateTraceRestrictSlot);
 					} else {
 						TraceRestrictCreateCounterCmdData data;
@@ -553,12 +565,13 @@ public:
 						data.follow_up_cmd = std::move(follow_up);
 						DoCommandP<CMD_CREATE_TRACERESTRICT_COUNTER>(data, STR_TRACE_RESTRICT_ERROR_COUNTER_CAN_T_CREATE, CommandCallback::CreateTraceRestrictCounter);
 					}
+					break;
 				}
 			}
 		}
 	}
 
-	virtual void OnDropdownSelect(WidgetID widget, int index) override
+	virtual void OnDropdownSelect(WidgetID widget, int index, int) override
 	{
 		SignalInstruction *ins = this->GetSelected();
 		if (ins == nullptr) return;
@@ -588,22 +601,22 @@ public:
 			case PROGRAM_WIDGET_COND_COUNTER: {
 				if (widget == PROGRAM_WIDGET_COND_SLOT && index == NEW_TRACE_RESTRICT_SLOT_ID) {
 					this->query_submode = QSM_NEW_SLOT;
-					ShowQueryString(STR_EMPTY, STR_TRACE_RESTRICT_SLOT_CREATE_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
+					ShowSlotCreationQueryString(*this);
 					return;
 				}
 				if (widget == PROGRAM_WIDGET_COND_COUNTER && index == NEW_TRACE_RESTRICT_COUNTER_ID) {
 					this->query_submode = QSM_NEW_COUNTER;
-					ShowQueryString(STR_EMPTY, STR_TRACE_RESTRICT_COUNTER_CREATE_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
+					ShowQueryString({}, STR_TRACE_RESTRICT_COUNTER_CREATE_CAPTION, MAX_LENGTH_TRACE_RESTRICT_SLOT_NAME_CHARS, this, CS_ALPHANUMERAL, {QueryStringFlag::EnableDefault, QueryStringFlag::LengthIsInChars});
 					return;
 				}
 
 				ProgPresigModifyCommandType mode;
 				if (widget == PROGRAM_WIDGET_COND_SLOT) {
 					mode = PPMCT_SLOT;
-					TraceRestrictRecordRecentSlot(index);
+					TraceRestrictRecordRecentSlot(TraceRestrictSlotID(index));
 				} else {
 					mode = PPMCT_COUNTER;
-					TraceRestrictRecordRecentCounter(index);
+					TraceRestrictRecordRecentCounter(TraceRestrictCounterID(index));
 				}
 
 				Command<CMD_PROGPRESIG_MODIFY_INSTRUCTION>::Post(STR_PROGSIG_ERROR_CAN_T_MODIFY_INSTRUCTION, this->tile, this->track, ins->Id(), mode, index, {});
@@ -661,12 +674,12 @@ public:
 	{
 		switch (widget) {
 			case PROGRAM_WIDGET_COND_SLOT: {
-				GuiShowTooltips(this, TraceRestrictPrepareSlotCounterSelectTooltip(STR_PROGSIG_COND_SLOT_TOOLTIP, VEH_TRAIN), close_cond, 0);
+				GuiShowTooltips(this, TraceRestrictPrepareSlotCounterSelectTooltip(STR_PROGSIG_COND_SLOT_TOOLTIP, VEH_TRAIN), close_cond);
 				return true;
 			}
 
 			case PROGRAM_WIDGET_COND_COUNTER: {
-				GuiShowTooltips(this, TraceRestrictPrepareSlotCounterSelectTooltip(STR_PROGSIG_COND_COUNTER_TOOLTIP, VEH_TRAIN), close_cond, 0);
+				GuiShowTooltips(this, TraceRestrictPrepareSlotCounterSelectTooltip(STR_PROGSIG_COND_COUNTER_TOOLTIP, VEH_TRAIN), close_cond);
 				return true;
 			}
 
@@ -675,41 +688,46 @@ public:
 		}
 	}
 
-	virtual void SetStringParameters(WidgetID widget) const override
+	virtual std::string GetWidgetString(WidgetID widget, StringID stringid) const override
 	{
 		switch (widget) {
 			case PROGRAM_WIDGET_COND_VALUE: {
-				SetDParam(0, 0);
 				SignalInstruction *insn = this->GetSelected();
-				if (insn == nullptr || insn->Opcode() != PSO_IF) return;
+				if (insn == nullptr || insn->Opcode() != PSO_IF) return {};
 				SignalIf *si = static_cast<SignalIf*>(insn);
-				if (!IsConditionComparator(si->condition)) return;
+				if (!IsConditionComparator(si->condition)) return {};
 				SignalConditionComparable *vc = static_cast<SignalConditionComparable*>(si->condition);
-				SetDParam(0, vc->value);
-				break;
+				return GetString(STR_JUST_COMMA, vc->value);
 			}
 
 			case PROGRAM_WIDGET_COND_SLOT: {
-				SetDParam(0, 0);
 				SignalInstruction *insn = this->GetSelected();
-				if (insn == nullptr || insn->Opcode() != PSO_IF) return;
+				if (insn == nullptr || insn->Opcode() != PSO_IF) return {};
 				SignalIf *si = static_cast<SignalIf*>(insn);
-				if (si->condition->ConditionCode() != PSC_SLOT_OCC && si->condition->ConditionCode() != PSC_SLOT_OCC_REM) return;
+				if (si->condition->ConditionCode() != PSC_SLOT_OCC && si->condition->ConditionCode() != PSC_SLOT_OCC_REM) return {};
 				SignalSlotCondition *sc = static_cast<SignalSlotCondition*>(si->condition);
-				SetDParam(0, sc->slot_id);
-				break;
+				if (sc->IsSlotValid()) {
+					return GetString(STR_TRACE_RESTRICT_SLOT_NAME, sc->slot_id);
+				} else {
+					return GetString(STR_TRACE_RESTRICT_VARIABLE_UNDEFINED);
+				}
 			}
 
 			case PROGRAM_WIDGET_COND_COUNTER: {
-				SetDParam(0, 0);
 				SignalInstruction *insn = this->GetSelected();
-				if (insn == nullptr || insn->Opcode() != PSO_IF) return;
+				if (insn == nullptr || insn->Opcode() != PSO_IF) return {};
 				SignalIf *si = static_cast<SignalIf*>(insn);
-				if (si->condition->ConditionCode() != PSC_COUNTER) return;
+				if (si->condition->ConditionCode() != PSC_COUNTER) return {};
 				SignalCounterCondition *sc = static_cast<SignalCounterCondition*>(si->condition);
-				SetDParam(0, sc->ctr_id);
-				break;
+				if (sc->IsCounterValid()) {
+					return GetString(STR_TRACE_RESTRICT_COUNTER_NAME, sc->ctr_id);
+				} else {
+					return GetString(STR_TRACE_RESTRICT_VARIABLE_UNDEFINED);
+				}
 			}
+
+			default:
+				return this->Window::GetWidgetString(widget, stringid);
 		}
 	}
 
@@ -883,13 +901,9 @@ private:
 				}
 
 				if (i->condition->ConditionCode() == PSC_SLOT_OCC || i->condition->ConditionCode() == PSC_SLOT_OCC_REM) {
-					SignalSlotCondition *scc = static_cast<SignalSlotCondition*>(i->condition);
-					this->GetWidget<NWidgetCore>(PROGRAM_WIDGET_COND_SLOT)->SetString(scc->IsSlotValid() ? STR_TRACE_RESTRICT_SLOT_NAME : STR_TRACE_RESTRICT_VARIABLE_UNDEFINED);
 					aux_sel->SetDisplayedPlane(DPA_SLOT);
 				}
 				if (i->condition->ConditionCode() == PSC_COUNTER) {
-					SignalCounterCondition *scc = static_cast<SignalCounterCondition*>(i->condition);
-					this->GetWidget<NWidgetCore>(PROGRAM_WIDGET_COND_COUNTER)->SetString(scc->IsCounterValid() ? STR_TRACE_RESTRICT_COUNTER_NAME : STR_TRACE_RESTRICT_VARIABLE_UNDEFINED);
 					aux_sel->SetDisplayedPlane(DPA_COUNTER);
 				}
 				break;
@@ -917,22 +931,6 @@ private:
 
 		this->SetDirty();
 	}
-
-	TileIndex tile;
-	Track track;
-	SignalProgram *program;
-	GuiInstructionList instructions;
-	int selected_instruction;
-	Scrollbar *vscroll;
-	int current_aux_plane;
-
-	enum QuerySubMode {
-		QSM_NONE,
-		QSM_SET_VALUE,
-		QSM_NEW_SLOT,
-		QSM_NEW_COUNTER,
-	};
-	QuerySubMode query_submode = QSM_NONE;
 };
 
 static constexpr NWidgetPart _nested_program_widgets[] = {
@@ -953,7 +951,7 @@ static constexpr NWidgetPart _nested_program_widgets[] = {
 
 	// Button Bar
 	NWidget(NWID_HORIZONTAL),
-		NWidget(NWID_HORIZONTAL, NC_EQUALSIZE),
+		NWidget(NWID_HORIZONTAL, NWidContainerFlag::EqualSize),
 			NWidget(NWID_SELECTION, INVALID_COLOUR, PROGRAM_WIDGET_SEL_TOP_LEFT),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, PROGRAM_WIDGET_COND_VARIABLE), SetMinimalSize(124, 12), SetFill(1, 0),
 														SetToolTip(STR_PROGSIG_COND_VARIABLE_TOOLTIP), SetResize(1, 0),
@@ -974,7 +972,7 @@ static constexpr NWidgetPart _nested_program_widgets[] = {
 			EndContainer(),
 			NWidget(NWID_SELECTION, INVALID_COLOUR, PROGRAM_WIDGET_SEL_TOP_RIGHT),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, PROGRAM_WIDGET_COND_VALUE), SetMinimalSize(124, 12), SetFill(1, 0),
-														SetStringTip(STR_JUST_COMMA, STR_PROGSIG_COND_VALUE_TOOLTIP), SetResize(1, 0),
+														SetToolTip(STR_PROGSIG_COND_VALUE_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_TEXTBTN, COLOUR_GREY, PROGRAM_WIDGET_COND_SET_SIGNAL), SetMinimalSize(124, 12), SetFill(1, 0),
 														SetStringTip(STR_PROGSIG_COND_SET_SIGNAL, STR_PROGSIG_COND_SET_SIGNAL_TOOLTIP), SetResize(1, 0),
 			EndContainer(),
@@ -984,7 +982,7 @@ static constexpr NWidgetPart _nested_program_widgets[] = {
 
 	/* Second button row. */
 	NWidget(NWID_HORIZONTAL),
-		NWidget(NWID_HORIZONTAL, NC_EQUALSIZE),
+		NWidget(NWID_HORIZONTAL, NWidContainerFlag::EqualSize),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, PROGRAM_WIDGET_INSERT), SetMinimalSize(124, 12), SetFill(1, 0),
 														SetStringTip(STR_PROGSIG_INSERT, STR_PROGSIG_INSERT_TOOLTIP), SetResize(1, 0),
 				NWidget(WWT_PUSHTXTBTN, COLOUR_GREY, PROGRAM_WIDGET_REMOVE), SetMinimalSize(186, 12), SetFill(1, 0),

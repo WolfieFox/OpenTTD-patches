@@ -11,9 +11,8 @@
 #define VIEWPORT_TYPE_H
 
 #include "core/enum_type.hpp"
-#include "zoom_type.h"
 #include "strings_type.h"
-#include "table/strings.h"
+#include "zoom_type.h"
 
 #include <limits>
 #include <vector>
@@ -107,40 +106,35 @@ struct Viewport {
 private:
 	uint GetDirtyBlockShift() const
 	{
-		if (this->zoom >= ZOOM_LVL_DRAW_MAP) return 3;
-		if (this->zoom >= ZOOM_LVL_OUT_2X) return 4;
-		return 7 - this->zoom;
+		if (this->zoom >= ZoomLevel::DrawMap) return 3;
+		if (this->zoom >= ZoomLevel::Out2x) return 4;
+		return 7 - to_underlying(this->zoom);
 	}
 };
 
 /** Location information about a sign as seen on the viewport */
 struct ViewportSign {
-	int32_t center;        ///< The center position of the sign
-	int32_t top;           ///< The top of the sign
-	uint16_t width_normal; ///< The width when not zoomed out (normal font)
-	uint16_t width_small;  ///< The width when zoomed out (small font)
+	int32_t center = 0; ///< The center position of the sign
+	int32_t top = 0; ///< The top of the sign
+	uint16_t width_normal = 0; ///< The width when not zoomed out (normal font)
+	uint16_t width_small = 0; ///< The width when zoomed out (small font)
 
-	void UpdatePosition(ZoomLevel maxzoom, int center, int top, StringID str, StringID str_small = STR_NULL);
+	void UpdatePosition(ZoomLevel maxzoom, int center, int top, std::span<StringParameter> params, StringID str, StringID str_small = STR_NULL);
 	void MarkDirty(ZoomLevel maxzoom) const;
 };
 
 /** Specialised ViewportSign that tracks whether it is valid for entering into a Kdtree */
 struct TrackedViewportSign : ViewportSign {
-	bool kdtree_valid; ///< Are the sign data valid for use with the _viewport_sign_kdtree?
+	bool kdtree_valid = false; ///< Are the sign data valid for use with the _viewport_sign_kdtree?
 
 	/**
 	 * Update the position of the viewport sign.
 	 * Note that this function hides the base class function.
 	 */
-	void UpdatePosition(ZoomLevel maxzoom, int center, int top, StringID str, StringID str_small = STR_NULL)
+	void UpdatePosition(ZoomLevel maxzoom, int center, int top, std::span<StringParameter> params, StringID str, StringID str_small = STR_NULL)
 	{
 		this->kdtree_valid = true;
-		this->ViewportSign::UpdatePosition(maxzoom, center, top, str, str_small);
-	}
-
-
-	TrackedViewportSign() : kdtree_valid{ false }
-	{
+		this->ViewportSign::UpdatePosition(maxzoom, center, top, params, str, str_small);
 	}
 };
 
@@ -160,8 +154,8 @@ enum ZoomStateChange : uint8_t {
  * z=6     reserved, currently unused.
  * z=7     Z separator between bridge/tunnel and the things under/above it.
  */
-static const uint BB_HEIGHT_UNDER_BRIDGE = 6; ///< Everything that can be built under low bridges, must not exceed this Z height.
-static const uint BB_Z_SEPARATOR         = 7; ///< Separates the bridge/tunnel from the things under/above it.
+static constexpr int BB_HEIGHT_UNDER_BRIDGE = 6; ///< Everything that can be built under low bridges, must not exceed this Z height.
+static constexpr int BB_Z_SEPARATOR         = 7; ///< Separates the bridge/tunnel from the things under/above it.
 
 /** Viewport place method (type of highlighted area and placed objects) */
 enum ViewportPlaceMethod : uint8_t {
@@ -198,7 +192,8 @@ enum ViewportDragDropSelectionProcess : uint8_t {
 	DDSP_MEASURE,              ///< Measurement tool
 	DDSP_DRAW_PLANLINE,        ///< Draw a line for a plan
 	DDSP_BUY_LAND,             ///< Purchase land
-	DDSP_BUILD_OBJECT,         ///< Build object
+	DDSP_BUILD_OBJECT,         ///< Build an object
+	DDSP_PLACE_HOUSE,          ///< Place a house
 
 	/* Rail specific actions */
 	DDSP_PLACE_RAIL,           ///< Rail placement

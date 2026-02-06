@@ -54,7 +54,7 @@ static const SpriteID SPR_LARGE_SMALL_WINDOW = 682;
 
 /** Extra graphic spritenumbers */
 static const SpriteID SPR_OPENTTD_BASE   = 4896;
-static const uint16_t OPENTTD_SPRITE_COUNT = 191;
+static const uint16_t OPENTTD_SPRITE_COUNT = 192;
 
 /* Halftile-selection sprites */
 static const SpriteID SPR_HALFTILE_SELECTION_FLAT = SPR_OPENTTD_BASE;
@@ -153,7 +153,7 @@ static const SpriteID SPR_GROUP_LIVERY_SHIP          = SPR_OPENTTD_BASE + 177;
 static const SpriteID SPR_GROUP_LIVERY_AIRCRAFT      = SPR_OPENTTD_BASE + 178;
 
 static const SpriteID SPR_TOWN_RATING_NA             = SPR_OPENTTD_BASE + 162;
-static const SpriteID SPR_TOWN_RATING_APALLING       = SPR_OPENTTD_BASE + 163;
+static const SpriteID SPR_TOWN_RATING_APPALLING      = SPR_OPENTTD_BASE + 163;
 static const SpriteID SPR_TOWN_RATING_MEDIOCRE       = SPR_OPENTTD_BASE + 164;
 static const SpriteID SPR_TOWN_RATING_GOOD           = SPR_OPENTTD_BASE + 165;
 
@@ -171,6 +171,8 @@ static const SpriteID SPR_ADMIN                      = SPR_OPENTTD_BASE + 187;
 static const SpriteID SPR_JOIN                       = SPR_OPENTTD_BASE + 188;
 static const SpriteID SPR_PLAYER_SELF                = SPR_OPENTTD_BASE + 189;
 static const SpriteID SPR_PLAYER_HOST                = SPR_OPENTTD_BASE + 190;
+
+static const SpriteID SPR_EXTRA_MENU                 = SPR_OPENTTD_BASE + 191;
 
 static const SpriteID SPR_IMG_CARGOFLOW              = SPR_OPENTTD_BASE + 174;
 
@@ -315,8 +317,20 @@ static const SpriteID SPR_ROAD_WAYPOINT_X_W   = SPR_ROAD_WAYPOINTS_BASE + 2;
 static const SpriteID SPR_ROAD_WAYPOINT_X_E   = SPR_ROAD_WAYPOINTS_BASE + 3;
 static const uint16_t ROAD_WAYPOINTS_SPRITE_COUNT = 4;
 
+/** Overlay rocks sprites. */
+static constexpr SpriteID SPR_OVERLAY_ROCKS_BASE = SPR_ROAD_WAYPOINTS_BASE + ROAD_WAYPOINTS_SPRITE_COUNT;
+static constexpr uint16_t OVERLAY_ROCKS_SPRITE_COUNT = 19 * 5; /* Rock overlays: plain, snow 1, snow 2, snow 3 and full snow. */
+
+/** Bridge deck sprites. */
+static constexpr SpriteID SPR_BRIDGE_DECKS_BASE = SPR_OVERLAY_ROCKS_BASE + OVERLAY_ROCKS_SPRITE_COUNT;
+static constexpr uint16_t BRIDGE_DECKS_SPRITE_COUNT = 6 * 4; /* Bridge deck sprites: 6 directions * (3 track types + 1 road type). */
+static const SpriteID SPR_BRIDGE_DECKS_RAIL = SPR_BRIDGE_DECKS_BASE + 0;
+static const SpriteID SPR_BRIDGE_DECKS_MONO = SPR_BRIDGE_DECKS_BASE + 6;
+static const SpriteID SPR_BRIDGE_DECKS_MGLV = SPR_BRIDGE_DECKS_BASE + 12;
+static const SpriteID SPR_BRIDGE_DECKS_ROAD = SPR_BRIDGE_DECKS_BASE + 18;
+
 /* Programmable pre-signal sprites */
-static const SpriteID SPR_PROGSIGNAL_BASE = SPR_ROAD_WAYPOINTS_BASE + ROAD_WAYPOINTS_SPRITE_COUNT;
+static const SpriteID SPR_PROGSIGNAL_BASE = SPR_BRIDGE_DECKS_BASE + BRIDGE_DECKS_SPRITE_COUNT;
 static const uint16_t PROGSIGNAL_SPRITE_COUNT = 32;
 static const SpriteID SPR_DUP_PROGSIGNAL_BASE = SPR_PROGSIGNAL_BASE + PROGSIGNAL_SPRITE_COUNT;
 
@@ -352,7 +366,7 @@ static const uint16_t TRACERESTRICT_SPRITE_COUNT = 3;
 
 /* Misc GUI sprites */
 static const SpriteID SPR_MISC_GUI_BASE = SPR_TRACERESTRICT_BASE + TRACERESTRICT_SPRITE_COUNT;
-static const uint16_t MISC_GUI_SPRITE_COUNT = 1;
+static const uint16_t MISC_GUI_SPRITE_COUNT = 2;
 
 /* Duplicated signal sprites */
 static const SpriteID SPR_DUP_ORIGINAL_SIGNALS_BASE = SPR_MISC_GUI_BASE + MISC_GUI_SPRITE_COUNT;
@@ -1663,5 +1677,7 @@ static const PaletteID PALETTE_CHURCH_RED          = 1438; ///< Recolour sprite 
 static const PaletteID PALETTE_CHURCH_CREAM        = 1439; ///< Recolour sprite for white churches
 
 static const PaletteID PALETTE_ALL_BLACK           = SPR_PALETTE_BASE; ///< Exchange any color by black, needed for painting fictive tiles outside map
+
+static const PaletteID PALETTE_WHITE_TINT          = SPR_MISC_GUI_BASE + 1;
 
 #endif /* SPRITES_H */

@@ -10,44 +10,53 @@
 #ifndef SPRITE_H
 #define SPRITE_H
 
+#include "core/geometry_type.hpp"
 #include "transparency.h"
 
 #include "table/sprites.h"
 
-#define GENERAL_SPRITE_COLOUR(colour) ((colour) + PALETTE_RECOLOUR_START)
-#define COMPANY_SPRITE_COLOUR(owner) (GENERAL_SPRITE_COLOUR(_company_colours[owner]))
+struct SpriteBounds {
+	Coord3D<int8_t> origin; ///< Position of northern corner within tile.
+	Coord3D<uint8_t> extent; ///< Size of bounding box.
+	Coord3D<int8_t> offset; ///< Relative position of sprite from bounding box.
+
+	constexpr SpriteBounds() = default;
+	constexpr SpriteBounds(const Coord3D<int8_t> &origin, const Coord3D<uint8_t> &extent, const Coord3D<int8_t> &offset) :
+		origin(origin), extent(extent), offset(offset) {}
+};
 
 /* The following describes bunch of sprites to be drawn together in a single 3D
  * bounding box. Used especially for various multi-sprite buildings (like
  * depots or stations): */
 
 /** A tile child sprite and palette to draw for stations etc, with 3D bounding box */
-struct DrawTileSeqStruct {
-	int8_t delta_x; ///< \c 0x80 is sequence terminator
-	int8_t delta_y;
-	int8_t delta_z; ///< \c 0x80 identifies child sprites
-	uint8_t size_x;
-	uint8_t size_y;
-	uint8_t size_z;
+struct DrawTileSeqStruct : SpriteBounds {
 	PalSpriteID image;
 
-	/** Make this struct a sequence terminator. */
-	void MakeTerminator()
-	{
-		this->delta_x = (int8_t)0x80;
-	}
-
-	/** Check whether this is a sequence terminator. */
-	bool IsTerminator() const
-	{
-		return (uint8_t)this->delta_x == 0x80;
-	}
+	constexpr DrawTileSeqStruct() = default;
+	constexpr DrawTileSeqStruct(int8_t origin_x, int8_t origin_y, int8_t origin_z, uint8_t extent_x, uint8_t extent_y, uint8_t extent_z, PalSpriteID image) :
+		SpriteBounds({origin_x, origin_y, origin_z}, {extent_x, extent_y, extent_z}, {}), image(image) {}
 
 	/** Check whether this is a parent sprite with a boundingbox. */
-	bool IsParentSprite() const
+	inline bool IsParentSprite() const
 	{
-		return (uint8_t)this->delta_z != 0x80;
+		return static_cast<uint8_t>(this->origin.z) != 0x80;
 	}
+};
+
+/**
+ * Ground palette sprite of a tile, together with its sprite layout.
+ * For static sprite layouts see #DrawTileSpriteSpan.
+ * For allocated ones from NewGRF see #NewGRFSpriteLayout.
+ */
+struct DrawTileSprites {
+	PalSpriteID ground{}; ///< Palette and sprite for the ground
+
+	DrawTileSprites(PalSpriteID ground) : ground(ground) {}
+	DrawTileSprites() = default;
+
+	virtual ~DrawTileSprites() = default;
+	virtual std::span<const DrawTileSeqStruct> GetSequence() const = 0;
 };
 
 /**
@@ -55,28 +64,25 @@ struct DrawTileSeqStruct {
  * This struct is used for static sprite layouts in the code.
  * For allocated ones from NewGRF see #NewGRFSpriteLayout.
  */
-struct DrawTileSprites {
-	PalSpriteID ground;           ///< Palette and sprite for the ground
-	const DrawTileSeqStruct *seq; ///< Array of child sprites. Terminated with a terminator entry
+struct DrawTileSpriteSpan : DrawTileSprites {
+	std::span<const DrawTileSeqStruct> seq; ///< Child sprites,
+
+	DrawTileSpriteSpan(PalSpriteID ground, std::span<const DrawTileSeqStruct> seq) : DrawTileSprites(ground), seq(seq) {}
+	DrawTileSpriteSpan(PalSpriteID ground) : DrawTileSprites(ground) {};
+	DrawTileSpriteSpan() = default;
+
+	std::span<const DrawTileSeqStruct> GetSequence() const override { return this->seq; }
 };
 
 /**
  * This structure is the same for both Industries and Houses.
  * Buildings here reference a general type of construction
  */
-struct DrawBuildingsTileStruct {
+struct DrawBuildingsTileStruct : SpriteBounds {
 	PalSpriteID ground;
 	PalSpriteID building;
-	uint8_t subtile_x;
-	uint8_t subtile_y;
-	uint8_t width;
-	uint8_t height;
-	uint8_t dz;
 	uint8_t draw_proc;  // this allows to specify a special drawing procedure.
 };
-
-/** Iterate through all DrawTileSeqStructs in DrawTileSprites. */
-#define foreach_draw_tile_seq(idx, list) for (idx = list; !idx->IsTerminator(); idx++)
 
 void DrawCommonTileSeq(const struct TileInfo *ti, const DrawTileSprites *dts, TransparencyOption to, int32_t orig_offset, uint32_t newgrf_offset, PaletteID default_palette, bool child_offset_is_unsigned);
 void DrawCommonTileSeqInGUI(int x, int y, const DrawTileSprites *dts, int32_t orig_offset, uint32_t newgrf_offset, PaletteID default_palette, bool child_offset_is_unsigned);
@@ -173,5 +179,12 @@ inline PaletteID GroundSpritePaletteTransform(SpriteID image, PaletteID pal, Pal
 		return PAL_NONE;
 	}
 }
+
+/**
+ * Get recolour palette for a colour.
+ * @param colour Colour.
+ * @return Recolour palette.
+ */
+static inline PaletteID GetColourPalette(Colours colour) { return PALETTE_RECOLOUR_START + colour; }
 
 #endif /* SPRITE_H */

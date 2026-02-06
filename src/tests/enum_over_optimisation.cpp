@@ -13,7 +13,11 @@
 
 #include "../stdafx.h"
 
+#include "../core/enum_type.hpp"
+
 #include "../3rdparty/catch2/catch.hpp"
+
+#include "../safeguards.h"
 
 enum TestEnum : int8_t {
 	ZERO,
@@ -28,4 +32,18 @@ TEST_CASE("EnumOverOptimisation_BoundsCheck")
 
 	TestEnum three = static_cast<TestEnum>(3);
 	CHECK(TWO < three);
+}
+
+enum class TestEnumFlags : uint8_t {
+	Zero = 0,
+	One = 1 << 0,
+	Two = 1 << 1,
+};
+DECLARE_ENUM_AS_BIT_SET(TestEnumFlags)
+
+TEST_CASE("EnumOverOptimisation_Bitmask")
+{
+	TestEnumFlags three = TestEnumFlags::One | TestEnumFlags::Two;
+	CHECK(HasFlag(three, TestEnumFlags::One));
+	CHECK(HasFlag(three, TestEnumFlags::Two));
 }

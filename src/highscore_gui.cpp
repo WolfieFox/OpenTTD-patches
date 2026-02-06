@@ -9,7 +9,6 @@
 
 #include "stdafx.h"
 #include "highscore.h"
-#include "table/strings.h"
 #include "gfx_func.h"
 #include "table/sprites.h"
 #include "window_gui.h"
@@ -25,11 +24,13 @@
 
 #include "widgets/highscore_widget.h"
 
+#include "table/strings.h"
+
 #include "safeguards.h"
 
 struct EndGameHighScoreBaseWindow : Window {
-	uint32_t background_img;
-	int8_t rank;
+	SpriteID background_img{};
+	int8_t rank = 0;
 
 	EndGameHighScoreBaseWindow(WindowDesc &desc) : Window(desc)
 	{
@@ -46,10 +47,18 @@ struct EndGameHighScoreBaseWindow : Window {
 
 		this->DrawWidgets();
 
+		/* Fill with the appropriate background colour instead of leaving default window colour */
+		GfxFillRect(Rect{0, 0, this->width, this->height}, PixelColour{105}, FILLRECT_OPAQUE);
+
 		/* Standard background slices are 50 pixels high, but it's designed
 		 * for 480 pixels total. 96% of 500 is 480. */
 		Dimension dim = GetSpriteSize(this->background_img);
-		Point pt = this->GetTopLeft(dim.width, dim.height * 96 / 10);
+		auto total_height = dim.height * 96 / 10;
+		Point pt = this->GetTopLeft(dim.width, total_height);
+
+		/* Original graphics contain some transparency, which assumes a black background. */
+		GfxFillRect(pt.x, pt.y, pt.x + dim.width - 1, pt.y + total_height - 1, PC_BLACK);
+
 		/* Center Highscore/Endscreen background */
 		for (uint i = 0; i < 10; i++) { // the image is split into 10 50px high parts
 			DrawSprite(this->background_img + i, PAL_NONE, pt.x, pt.y + (i * dim.height));
@@ -97,7 +106,7 @@ struct EndGameWindow : EndGameHighScoreBaseWindow {
 	EndGameWindow(WindowDesc &desc) : EndGameHighScoreBaseWindow(desc)
 	{
 		/* Pause in single-player to have a look at the highscore at your own leisure */
-		if (!_networking) Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, true);
+		if (!_networking) Command<CMD_PAUSE>::Post(PauseMode::Normal, true);
 
 		this->background_img = SPR_TYCOON_IMG1_BEGIN;
 
@@ -125,7 +134,7 @@ struct EndGameWindow : EndGameHighScoreBaseWindow {
 
 	void Close([[maybe_unused]] int data = 0) override
 	{
-		if (!_networking) Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, false); // unpause
+		if (!_networking) Command<CMD_PAUSE>::Post(PauseMode::Normal, false); // unpause
 		if (_game_mode != GM_MENU && !_exit_game) ShowHighscoreTable(this->window_number, this->rank);
 		this->EndGameHighScoreBaseWindow::Close();
 	}
@@ -141,26 +150,25 @@ struct EndGameWindow : EndGameHighScoreBaseWindow {
 		/* We need to get performance from last year because the image is shown
 		 * at the start of the new year when these things have already been copied */
 		if (this->background_img == SPR_TYCOON_IMG2_BEGIN) { // Tycoon of the century \o/
-			SetDParam(0, c->index);
-			SetDParam(1, c->index);
-			SetDParam(2, EndGameGetPerformanceTitleFromValue(c->old_economy[0].performance_history));
-			DrawStringMultiLine(pt.x + ScaleSpriteTrad(15), pt.x + ScaleSpriteTrad(640) - ScaleSpriteTrad(25), pt.y + ScaleSpriteTrad(90), pt.y + ScaleSpriteTrad(160), STR_HIGHSCORE_PRESIDENT_OF_COMPANY_ACHIEVES_STATUS, TC_FROMSTRING, SA_CENTER);
+			DrawStringMultiLine(pt.x + ScaleSpriteTrad(15), pt.x + ScaleSpriteTrad(640) - ScaleSpriteTrad(25), pt.y + ScaleSpriteTrad(90), pt.y + ScaleSpriteTrad(160),
+					GetString(STR_HIGHSCORE_PRESIDENT_OF_COMPANY_ACHIEVES_STATUS, c->index, c->index, EndGameGetPerformanceTitleFromValue(c->old_economy[0].performance_history)),
+					TC_FROMSTRING, SA_CENTER);
 		} else {
-			SetDParam(0, c->index);
-			SetDParam(1, EndGameGetPerformanceTitleFromValue(c->old_economy[0].performance_history));
-			DrawStringMultiLine(pt.x + ScaleSpriteTrad(36), pt.x + ScaleSpriteTrad(640), pt.y + ScaleSpriteTrad(140), pt.y + ScaleSpriteTrad(206), STR_HIGHSCORE_COMPANY_ACHIEVES_STATUS, TC_FROMSTRING, SA_CENTER);
+			DrawStringMultiLine(pt.x + ScaleSpriteTrad(36), pt.x + ScaleSpriteTrad(640), pt.y + ScaleSpriteTrad(140), pt.y + ScaleSpriteTrad(206),
+					GetString(STR_HIGHSCORE_COMPANY_ACHIEVES_STATUS, c->index, EndGameGetPerformanceTitleFromValue(c->old_economy[0].performance_history)),
+					TC_FROMSTRING, SA_CENTER);
 		}
 	}
 };
 
 struct HighScoreWindow : EndGameHighScoreBaseWindow {
-	bool game_paused_by_player; ///< True if the game was paused by the player when the highscore window was opened.
+	bool game_paused_by_player = false; ///< True if the game was paused by the player when the highscore window was opened.
 
 	HighScoreWindow(WindowDesc &desc, int difficulty, int8_t ranking) : EndGameHighScoreBaseWindow(desc)
 	{
 		/* pause game to show the chart */
-		this->game_paused_by_player = _pause_mode == PM_PAUSED_NORMAL;
-		if (!_networking && !this->game_paused_by_player) Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, true);
+		this->game_paused_by_player = _pause_mode == PauseMode::Normal;
+		if (!_networking && !this->game_paused_by_player) Command<CMD_PAUSE>::Post(PauseMode::Normal, true);
 
 		/* Close all always on-top windows to get a clean screen */
 		if (_game_mode != GM_MENU) HideVitalWindows();
@@ -175,7 +183,7 @@ struct HighScoreWindow : EndGameHighScoreBaseWindow {
 	{
 		if (_game_mode != GM_MENU && !_exit_game) ShowVitalWindows();
 
-		if (!_networking && !this->game_paused_by_player) Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, false); // unpause
+		if (!_networking && !this->game_paused_by_player) Command<CMD_PAUSE>::Post(PauseMode::Normal, false); // unpause
 
 		this->EndGameHighScoreBaseWindow::Close();
 	}
@@ -192,17 +200,16 @@ struct HighScoreWindow : EndGameHighScoreBaseWindow {
 
 		/* Draw Highscore peepz */
 		for (uint8_t i = 0; i < ClampTo<uint8_t>(hs.size()); i++) {
-			SetDParam(0, i + 1);
-			DrawString(pt.x + ScaleSpriteTrad(40), pt.x + ScaleSpriteTrad(600), pt.y + ScaleSpriteTrad(140 + i * 55), STR_HIGHSCORE_POSITION);
+			DrawString(pt.x + ScaleSpriteTrad(40), pt.x + ScaleSpriteTrad(600), pt.y + ScaleSpriteTrad(140 + i * 55),
+					GetString(STR_HIGHSCORE_POSITION, i + 1));
 
 			if (!hs[i].name.empty()) {
 				TextColour colour = (this->rank == i) ? TC_RED : TC_BLACK; // draw new highscore in red
 
-				SetDParamStr(0, hs[i].name);
-				DrawString(pt.x + ScaleSpriteTrad(71), pt.x + ScaleSpriteTrad(569), pt.y + ScaleSpriteTrad(140 + i * 55), STR_JUST_BIG_RAW_STRING, colour);
-				SetDParam(0, hs[i].title);
-				SetDParam(1, hs[i].score);
-				DrawString(pt.x + ScaleSpriteTrad(71), pt.x + ScaleSpriteTrad(569), pt.y + ScaleSpriteTrad(140) + GetCharacterHeight(FS_LARGE) + ScaleSpriteTrad(i * 55), STR_HIGHSCORE_STATS, colour);
+				DrawString(pt.x + ScaleSpriteTrad(71), pt.x + ScaleSpriteTrad(569), pt.y + ScaleSpriteTrad(140 + i * 55),
+						GetString(STR_JUST_BIG_RAW_STRING, hs[i].name), colour);
+				DrawString(pt.x + ScaleSpriteTrad(71), pt.x + ScaleSpriteTrad(569), pt.y + ScaleSpriteTrad(140) + GetCharacterHeight(FS_LARGE) + ScaleSpriteTrad(i * 55),
+						GetString(STR_HIGHSCORE_STATS, hs[i].title, hs[i].score), colour);
 			}
 		}
 	}

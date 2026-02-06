@@ -23,7 +23,7 @@ ScriptStationList::ScriptStationList(ScriptStation::StationType station_type)
 	::CompanyID owner = ScriptObject::GetCompany();
 	ScriptList::FillList<Station>(this,
 		[is_deity, owner, station_type](const Station *st) {
-			return (is_deity || st->owner == owner) && (st->facilities & static_cast<StationFacility>(station_type)) != 0;
+			return (is_deity || st->owner == owner) && st->facilities.Any(static_cast<StationFacilities>(station_type));
 		}
 	);
 }
@@ -35,7 +35,7 @@ ScriptStationList_Vehicle::ScriptStationList_Vehicle(VehicleID vehicle_id)
 	const Vehicle *v = ::Vehicle::Get(vehicle_id);
 
 	for (const Order *o : v->Orders()) {
-		if (o->IsType(OT_GOTO_STATION)) this->AddItem(o->GetDestination());
+		if (o->IsType(OT_GOTO_STATION)) this->AddItem(o->GetDestination().ToStationID().base());
 	}
 }
 
@@ -122,7 +122,7 @@ private:
 
 CargoCollector::CargoCollector(ScriptStationList_Cargo *parent,
 		StationID station_id, CargoType cargo, StationID other) :
-	list(parent), ge(nullptr), other_station(other), last_key(INVALID_STATION), amount(0)
+	list(parent), ge(nullptr), other_station(other), last_key(StationID::Invalid()), amount(0)
 {
 	if (!ScriptStation::IsValidStation(station_id)) return;
 	if (!ScriptCargo::IsValidCargo(cargo)) return;
@@ -137,14 +137,14 @@ CargoCollector::~CargoCollector()
 void CargoCollector::SetValue()
 {
 	if (this->amount > 0) {
-		this->list->AddToItemValue(this->last_key, this->amount);
+		this->list->AddToItemValue(this->last_key.base(), this->amount);
 	}
 }
 
 template <ScriptStationList_Cargo::CargoSelector Tselector>
 void CargoCollector::Update(StationID from, StationID via, uint amount)
 {
-	StationID key = INVALID_STATION;
+	StationID key = StationID::Invalid();
 	switch (Tselector) {
 		case ScriptStationList_Cargo::CS_VIA_BY_FROM:
 			if (via != this->other_station) return;

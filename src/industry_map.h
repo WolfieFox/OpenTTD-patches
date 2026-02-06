@@ -49,7 +49,7 @@ enum IndustryGraphics : uint8_t {
 	GFX_PLASTIC_FOUNTAIN_ANIMATED_8    = 155,
 	GFX_BUBBLE_GENERATOR               = 161,
 	GFX_BUBBLE_CATCHER                 = 162,
-	GFX_TOFFEE_QUARY                   = 165,
+	GFX_TOFFEE_QUARRY                  = 165,
 	GFX_SUGAR_MINE_SIEVE               = 174,
 	GFX_WATERTILE_SPECIALCHECK         = 255,  ///< not really a tile, but rather a very special check
 };
@@ -63,7 +63,7 @@ enum IndustryGraphics : uint8_t {
 inline IndustryID GetIndustryIndex(TileIndex t)
 {
 	dbg_assert_tile(IsTileType(t, MP_INDUSTRY), t);
-	return _m[t].m2;
+	return static_cast<IndustryID>(_m[t].m2);
 }
 
 /**
@@ -247,10 +247,10 @@ inline void SetIndustryRandomBits(TileIndex tile, uint8_t bits)
  * @pre IsTileType(tile, MP_INDUSTRY)
  * @return requested triggers
  */
-inline uint8_t GetIndustryTriggers(TileIndex tile)
+inline IndustryRandomTriggers GetIndustryRandomTriggers(TileIndex tile)
 {
 	dbg_assert_tile(IsTileType(tile, MP_INDUSTRY), tile);
-	return GB(_me[tile].m6, 3, 3);
+	return static_cast<IndustryRandomTriggers>(GB(_me[tile].m6, 3, 3));
 }
 
 
@@ -261,10 +261,10 @@ inline uint8_t GetIndustryTriggers(TileIndex tile)
  * @param triggers the triggers to set
  * @pre IsTileType(tile, MP_INDUSTRY)
  */
-inline void SetIndustryTriggers(TileIndex tile, uint8_t triggers)
+inline void SetIndustryRandomTriggers(TileIndex tile, IndustryRandomTriggers triggers)
 {
 	dbg_assert_tile(IsTileType(tile, MP_INDUSTRY), tile);
-	SB(_me[tile].m6, 3, 3, triggers);
+	SB(_me[tile].m6, 3, 3, triggers.base());
 }
 
 /**
@@ -279,11 +279,11 @@ inline void MakeIndustry(TileIndex t, IndustryID index, IndustryGfx gfx, uint8_t
 {
 	SetTileType(t, MP_INDUSTRY);
 	_m[t].m1 = 0;
-	_m[t].m2 = index;
+	_m[t].m2 = index.base();
 	SetIndustryRandomBits(t, random); // m3
 	_m[t].m4 = 0;
 	SetIndustryGfx(t, gfx); // m5, part of m6
-	SetIndustryTriggers(t, 0); // rest of m6
+	SetIndustryRandomTriggers(t, {}); // rest of m6
 	SetWaterClass(t, wc);
 	_me[t].m7 = 0;
 }

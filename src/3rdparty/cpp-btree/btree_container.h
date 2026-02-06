@@ -218,6 +218,16 @@ class btree_unique_container : public btree_container<Tree> {
     this->tree_.insert_unique(b, e);
   }
 
+  // Emplace routines.
+  template <typename... Args>
+  std::pair<iterator,bool> emplace(Args&&... args) {
+    return this->insert(value_type(std::forward<Args>(args)...));
+  }
+  template <typename... Args>
+  iterator emplace_hint(iterator position, Args&&... args) {
+    return this->insert(position, value_type(std::forward<Args>(args)...));
+  }
+
   // Deletion routines.
   int erase(const key_type &key) {
     return this->tree_.erase_unique(key);
@@ -246,6 +256,7 @@ class btree_map_container : public btree_unique_container<Tree> {
   typedef typename Tree::mapped_type mapped_type;
   typedef typename Tree::key_compare key_compare;
   typedef typename Tree::allocator_type allocator_type;
+  typedef typename Tree::iterator iterator;
 
   // Default constructor.
   btree_map_container(const key_compare &comp = key_compare(),
@@ -269,6 +280,16 @@ class btree_map_container : public btree_unique_container<Tree> {
   // Insertion routines.
   data_type& operator[](const key_type &key) {
     return this->tree_.insert_unique_args(key, std::piecewise_construct, std::forward_as_tuple(key), std::make_tuple()).first->second;
+  }
+
+  // Try emplace routines.
+  template <typename... Args>
+  std::pair<iterator, bool> try_emplace(const key_type &key, Args&&... args) {
+    return this->tree_.insert_unique_args(key, std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple(std::forward<Args>(args)...));
+  }
+  template <typename... Args>
+  iterator try_emplace(iterator position, const key_type &key, Args&&... args) {
+    return this->tree_.insert_unique_hint_args(position, key, std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple(std::forward<Args>(args)...));
   }
 };
 
@@ -338,6 +359,16 @@ class btree_multi_container : public btree_container<Tree> {
   template <typename InputIterator>
   void insert(InputIterator b, InputIterator e) {
     this->tree_.insert_multi(b, e);
+  }
+
+  // Emplace routines.
+  template <typename... Args>
+  iterator emplace(Args&&... args) {
+    return this->insert(value_type(std::forward<Args>(args)...));
+  }
+  template <typename... Args>
+  iterator emplace_hint(iterator position, Args&&... args) {
+    return this->insert(position, value_type(std::forward<Args>(args)...));
   }
 
   // Deletion routines.

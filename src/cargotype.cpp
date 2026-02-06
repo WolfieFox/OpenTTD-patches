@@ -22,8 +22,6 @@
 #include "table/strings.h"
 #include "table/cargo_const.h"
 
-#include <sstream>
-
 #include "safeguards.h"
 
 CargoSpec CargoSpec::array[NUM_CARGO];
@@ -69,9 +67,9 @@ static std::array<CargoLabel, 32> _climate_independent_cargo_labels;
  * Set up the default cargo types for the given landscape type.
  * @param l Landscape
  */
-void SetupCargoForClimate(LandscapeID l)
+void SetupCargoForClimate(LandscapeType l)
 {
-	assert(l < lengthof(_default_climate_cargo));
+	assert(to_underlying(l) < std::size(_default_climate_cargo));
 
 	_cargo_mask = 0;
 	_default_cargo_labels.clear();
@@ -80,7 +78,7 @@ void SetupCargoForClimate(LandscapeID l)
 
 	/* Copy from default cargo by label or index. */
 	auto insert = std::begin(CargoSpec::array);
-	for (const auto &cl : _default_climate_cargo[l]) {
+	for (const auto &cl : _default_climate_cargo[to_underlying(l)]) {
 
 		struct visitor {
 			const CargoSpec &operator()(const int &index)
@@ -226,11 +224,11 @@ static bool CargoSpecNameSorter(const CargoSpec * const &a, const CargoSpec * co
 /** Sort cargo specifications by their cargo class. */
 static bool CargoSpecClassSorter(const CargoSpec * const &a, const CargoSpec * const &b)
 {
-	int res = (b->classes & CC_PASSENGERS) - (a->classes & CC_PASSENGERS);
+	int res = b->classes.Test(CargoClass::Passengers) - a->classes.Test(CargoClass::Passengers);
 	if (res == 0) {
-		res = (b->classes & CC_MAIL) - (a->classes & CC_MAIL);
+		res = b->classes.Test(CargoClass::Mail) - a->classes.Test(CargoClass::Mail);
 		if (res == 0) {
-			res = (a->classes & CC_SPECIAL) - (b->classes & CC_SPECIAL);
+			res = a->classes.Test(CargoClass::Special) - b->classes.Test(CargoClass::Special);
 			if (res == 0) {
 				return CargoSpecNameSorter(a, b);
 			}
@@ -266,7 +264,7 @@ void InitializeSortedCargoSpecs()
 		assert(cargo->town_production_effect != INVALID_TPE);
 		CargoSpec::town_production_cargoes[cargo->town_production_effect].push_back(cargo->Index());
 		SetBit(CargoSpec::town_production_cargo_mask[cargo->town_production_effect], cargo->Index());
-		if (cargo->classes & CC_SPECIAL) break;
+		if (cargo->classes.Test(CargoClass::Special)) break;
 		nb_standard_cargo++;
 		SetBit(_standard_cargo_mask, cargo->Index());
 	}
@@ -305,9 +303,7 @@ std::optional<std::string> BuildCargoAcceptanceString(const CargoArray &acceptan
 
 			/* If the accepted value is less than 8, show it in 1/8:ths */
 			if (acceptance[cargo_type] < 8) {
-				SetDParam(0, acceptance[cargo_type]);
-				SetDParam(1, cs->name);
-				AppendStringInPlace(line, STR_LAND_AREA_INFORMATION_CARGO_EIGHTS);
+				AppendStringInPlace(line, STR_LAND_AREA_INFORMATION_CARGO_EIGHTS, acceptance[cargo_type], cs->name);
 			} else {
 				AppendStringInPlace(line, cs->name);
 			}

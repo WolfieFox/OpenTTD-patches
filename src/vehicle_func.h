@@ -22,9 +22,18 @@
 #include "cargo_type.h"
 #include <vector>
 
-#define is_custom_sprite(x) (x >= 0xFD)
-#define IS_CUSTOM_FIRSTHEAD_SPRITE(x) (x == 0xFD)
-#define IS_CUSTOM_SECONDHEAD_SPRITE(x) (x == 0xFE)
+/**
+ * Special values for Vehicle::spritenum and (Aircraft|Rail|Road|Ship)VehicleInfo::image_index
+ */
+enum CustomVehicleSpriteNum {
+	CUSTOM_VEHICLE_SPRITENUM = 0xFD, ///< Vehicle sprite from NewGRF
+	CUSTOM_VEHICLE_SPRITENUM_REVERSED = 0xFE, ///< Vehicle sprite from NewGRF with reverse driving direction (from articulation callback)
+};
+
+static inline bool IsCustomVehicleSpriteNum(uint8_t spritenum)
+{
+	return spritenum >= CUSTOM_VEHICLE_SPRITENUM;
+}
 
 static constexpr EconTime::DateDelta VEHICLE_PROFIT_MIN_AGE{DAYS_IN_YEAR * 2}; ///< Only vehicles older than this have a meaningful profit.
 static const Money VEHICLE_PROFIT_THRESHOLD = 10000;        ///< Threshold for a vehicle to be considered making good profit.
@@ -40,89 +49,8 @@ struct Viewport;
 template <VehicleType T>
 bool IsValidImageIndex(uint8_t image_index);
 
-typedef Vehicle *VehicleFromPosProc(Vehicle *v, void *data);
-
 void VehicleServiceInDepot(Vehicle *v);
 uint CountVehiclesInChain(const Vehicle *v);
-
-/**
- * Find a vehicle from a specific location. It will call \a proc for ALL vehicles
- * on the tile and YOU must make SURE that the "best one" is stored in the
- * data value and is ALWAYS the same regardless of the order of the vehicles
- * where proc was called on!
- * When you fail to do this properly you create an almost untraceable DESYNC!
- * @note The return value of \a proc will be ignored.
- * @note Use this function when you have the intention that all vehicles
- *       should be iterated over.
- * @param tile The location on the map
- * @param type The vehicle type
- * @param data Arbitrary data passed to \a proc.
- * @param proc The proc that determines whether a vehicle will be "found".
- */
-inline void FindVehicleOnPos(TileIndex tile, VehicleType type, void *data, VehicleFromPosProc *proc)
-{
-	extern Vehicle *VehicleFromPos(TileIndex tile, VehicleType type, void *data, VehicleFromPosProc *proc, bool find_first);
-	VehicleFromPos(tile, type, data, proc, false);
-}
-
-/**
- * Checks whether a vehicle is on a specific location. It will call \a proc for
- * vehicles until it returns non-nullptr.
- * @note Use #FindVehicleOnPos when you have the intention that all vehicles
- *       should be iterated over.
- * @param tile The location on the map
- * @param type The vehicle type
- * @param data Arbitrary data passed to \a proc.
- * @param proc The \a proc that determines whether a vehicle will be "found".
- * @return True if proc returned non-nullptr.
- */
-inline bool HasVehicleOnPos(TileIndex tile, VehicleType type, void *data, VehicleFromPosProc *proc)
-{
-	extern Vehicle *VehicleFromPos(TileIndex tile, VehicleType type, void *data, VehicleFromPosProc *proc, bool find_first);
-	return VehicleFromPos(tile, type, data, proc, true) != nullptr;
-}
-
-Vehicle *GetFirstVehicleOnPos(TileIndex tile, VehicleType type);
-
-/**
- * Find a vehicle from a specific location. It will call proc for ALL vehicles
- * on the tile and YOU must make SURE that the "best one" is stored in the
- * data value and is ALWAYS the same regardless of the order of the vehicles
- * where proc was called on!
- * When you fail to do this properly you create an almost untraceable DESYNC!
- * @note The return value of proc will be ignored.
- * @note Use this when you have the intention that all vehicles
- *       should be iterated over.
- * @param x    The X location on the map
- * @param y    The Y location on the map
- * @param type The vehicle type
- * @param data Arbitrary data passed to proc
- * @param proc The proc that determines whether a vehicle will be "found".
- */
-inline void FindVehicleOnPosXY(int x, int y, VehicleType type, void *data, VehicleFromPosProc *proc)
-{
-	extern Vehicle *VehicleFromPosXY(int x, int y, VehicleType type, void *data, VehicleFromPosProc *proc, bool find_first);
-	VehicleFromPosXY(x, y, type, data, proc, false);
-}
-
-/**
- * Checks whether a vehicle in on a specific location. It will call proc for
- * vehicles until it returns non-nullptr.
- * @note Use FindVehicleOnPosXY when you have the intention that all vehicles
- *       should be iterated over.
- * @param x    The X location on the map
- * @param y    The Y location on the map
- * @param type The vehicle type
- * @param data Arbitrary data passed to proc
- * @param proc The proc that determines whether a vehicle will be "found".
- * @return True if proc returned non-nullptr.
- */
-inline bool HasVehicleOnPosXY(int x, int y, VehicleType type, void *data, VehicleFromPosProc *proc)
-{
-	extern Vehicle *VehicleFromPosXY(int x, int y, VehicleType type, void *data, VehicleFromPosProc *proc, bool find_first);
-	return VehicleFromPosXY(x, y, type, data, proc, true) != nullptr;
-}
-
 void CallVehicleTicks();
 uint8_t CalcPercentVehicleFilled(const Vehicle *v, StringID *colour);
 uint8_t CalcPercentVehicleFilledOfCargo(const Vehicle *v, CargoType cargo);
@@ -137,7 +65,7 @@ uint8_t GetBestFittingSubType(const Vehicle *v_from, Vehicle *v_for, CargoType d
 void ViewportAddVehicles(DrawPixelInfo *dpi, bool update_vehicles);
 void ViewportMapDrawVehicles(DrawPixelInfo *dpi, Viewport *vp);
 
-void ShowNewGrfVehicleError(EngineID engine, StringID part1, StringID part2, GRFBugs bug_type, bool critical);
+void ShowNewGrfVehicleError(EngineID engine, StringID part1, StringID part2, GRFBug bug_type, bool critical);
 
 enum TunnelBridgeIsFreeMode {
 	TBIFM_ALL,
@@ -153,7 +81,6 @@ void DecreaseVehicleValue(Vehicle *v);
 void CheckVehicleBreakdown(Vehicle *v);
 void EconomyAgeVehicle(Vehicle *v);
 void AgeVehicle(Vehicle *v);
-void VehicleEnteredDepotThisTick(Vehicle *v);
 
 UnitID GetFreeUnitNumber(VehicleType type);
 

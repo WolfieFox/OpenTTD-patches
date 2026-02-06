@@ -13,18 +13,35 @@
  * functions may still be available if you return an older API version
  * in GetAPIVersion() in info.nut.
  *
- * \b 15.0
+ * \b 16.0
  *
  * This version is not yet released. The following changes are not set in stone yet.
  *
+ * \b 15.0
+ *
  * API additions:
  * \li GSEventVehicleCrashed::GetVictims
+ * \li GSEventVehicleCrashed::GetVehicleOwner
  * \li GSEventCompanyRenamed
  * \li GSEventPresidentRenamed
+ * \li GSCargo::CC_OVERSIZED
+ * \li GSCargo::CC_POWDERIZED
+ * \li GSCargo::CC_NON_POURABLE
+ * \li GSCargo::CC_POTABLE
+ * \li GSCargo::CC_NON_POTABLE
+ * \li GSVehicleList_Waypoint
+ * \li GSBaseStation::GetOwner
+ * \li GSError:ERR_BRIDGE_TOO_LOW
+ * \li GSEngine::GetAllRailTypes
+ * \li GSTile::IsHouseTile
  *
  * Other changes:
  * \li GSBridge::GetBridgeID renamed to GSBridge::GetBridgeType
  * \li GSWaypoint::GetWaypointID now returns the StationID of any type of waypoint
+ * \li GSList instances can now be saved
+ * \li GSVehicleList_Station accepts an optional GSVehicle::VehicleType parameter
+ * \li GSList instances can now be cloned
+ * \li GSEngine::GetRailType will only return the first RailType of an engine, use GSEngine::GetAllRailTypes instead
  *
  * \b 14.0
  *
@@ -293,7 +310,7 @@
  * \li GSEngine::IsValidEngine and GSEngine::IsBuildable when outside GSCompanyMode scope
  * \li GSEventExclusiveTransportRights
  * \li GSEventRoadReconstruction
- * \li GSNews::NT_ACCIDENT, GSNews::NT_COMPANY_INFO, GSNews::NT_ADVICE, GSNews::NT_ACCEPTANCE
+ * \li GSNews::NewsType::Accident, GSNews::NewsType::CompanyInfo, GSNews::NewsType::Advice, GSNews::NewsType::Acceptance
  * \li GSIndustryType::IsProcessingIndustry
  * \li GSStation::IsAirportClosed
  * \li GSStation::OpenCloseAirport

@@ -15,6 +15,15 @@
 
 #include "safeguards.h"
 
+template <typename Tproj>
+static uint16_t TownHistoryHelper(const Town *t, CargoLabel label, uint period, Tproj proj)
+{
+	auto it = t->GetCargoSupplied(GetCargoTypeByLabel(label));
+	if (it == std::end(t->supplied)) return 0;
+
+	return ClampTo<uint16_t>(std::invoke(proj, it->history[period]));
+}
+
 /* virtual */ uint32_t TownScopeResolver::GetVariable(uint16_t variable, uint32_t parameter, GetVariableExtra &extra) const
 {
 	if (this->t == nullptr) {
@@ -22,7 +31,6 @@
 		return UINT_MAX;
 	}
 
-	CargoType cargo_type;
 	switch (variable) {
 		/* Larger towns */
 		case 0x40:
@@ -31,7 +39,7 @@
 			return 0;
 
 		/* Town index */
-		case 0x41: return this->t->index;
+		case 0x41: return this->t->index.base();
 
 		/* Get a variable from the persistent storage */
 		case 0x7C: {
@@ -55,18 +63,18 @@
 		case 0x82: return ClampTo<uint16_t>(this->t->cache.population);
 		case 0x83: return GB(ClampTo<uint16_t>(this->t->cache.population), 8, 8);
 		case 0x8A: return this->t->grow_counter / TOWN_GROWTH_TICKS;
-		case 0x92: return this->t->flags;  // In original game, 0x92 and 0x93 are really one word. Since flags is a byte, this is to adjust
+		case 0x92: return this->t->flags.base(); // In original game, 0x92 and 0x93 are one word.
 		case 0x93: return 0;
-		case 0x94: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_EDGE]);
-		case 0x95: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_EDGE]), 8, 8);
-		case 0x96: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_OUTSKIRT]);
-		case 0x97: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_OUTSKIRT]), 8, 8);
-		case 0x98: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_OUTER_SUBURB]);
-		case 0x99: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_OUTER_SUBURB]), 8, 8);
-		case 0x9A: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_INNER_SUBURB]);
-		case 0x9B: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_INNER_SUBURB]), 8, 8);
-		case 0x9C: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_CENTRE]);
-		case 0x9D: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[HZB_TOWN_CENTRE]), 8, 8);
+		case 0x94: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownEdge)]);
+		case 0x95: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownEdge)]), 8, 8);
+		case 0x96: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownOutskirt)]);
+		case 0x97: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownOutskirt)]), 8, 8);
+		case 0x98: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownOuterSuburb)]);
+		case 0x99: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownOuterSuburb)]), 8, 8);
+		case 0x9A: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownInnerSuburb)]);
+		case 0x9B: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownInnerSuburb)]), 8, 8);
+		case 0x9C: return ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownCentre)]);
+		case 0x9D: return GB(ClampTo<uint16_t>(this->t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownCentre)]), 8, 8);
 		case 0x9E: return this->t->ratings[0];
 		case 0x9F: return GB(this->t->ratings[0], 8, 8);
 		case 0xA0: return this->t->ratings[1];
@@ -83,26 +91,26 @@
 		case 0xAB: return GB(this->t->ratings[6], 8, 8);
 		case 0xAC: return this->t->ratings[7];
 		case 0xAD: return GB(this->t->ratings[7], 8, 8);
-		case 0xAE: return this->t->have_ratings;
-		case 0xB2: return this->t->statues;
+		case 0xAE: return this->t->have_ratings.base();
+		case 0xB2: return this->t->statues.base();
 		case 0xB6: return ClampTo<uint16_t>(this->t->cache.num_houses);
 		case 0xB9: return this->t->growth_rate / TOWN_GROWTH_TICKS;
-		case 0xBA: cargo_type = GetCargoTypeByLabel(CT_PASSENGERS); return IsValidCargoType(cargo_type) ? ClampTo<uint16_t>(this->t->supplied[cargo_type].new_max) : 0;
-		case 0xBB: cargo_type = GetCargoTypeByLabel(CT_PASSENGERS); return IsValidCargoType(cargo_type) ? GB(ClampTo<uint16_t>(this->t->supplied[cargo_type].new_max), 8, 8) : 0;
-		case 0xBC: cargo_type = GetCargoTypeByLabel(CT_MAIL); return IsValidCargoType(cargo_type) ? ClampTo<uint16_t>(this->t->supplied[cargo_type].new_max) : 0;
-		case 0xBD: cargo_type = GetCargoTypeByLabel(CT_MAIL); return IsValidCargoType(cargo_type) ? GB(ClampTo<uint16_t>(this->t->supplied[cargo_type].new_max), 8, 8) : 0;
-		case 0xBE: cargo_type = GetCargoTypeByLabel(CT_PASSENGERS); return IsValidCargoType(cargo_type) ? ClampTo<uint16_t>(this->t->supplied[cargo_type].new_act) : 0;
-		case 0xBF: cargo_type = GetCargoTypeByLabel(CT_PASSENGERS); return IsValidCargoType(cargo_type) ? GB(ClampTo<uint16_t>(this->t->supplied[cargo_type].new_act), 8, 8) : 0;
-		case 0xC0: cargo_type = GetCargoTypeByLabel(CT_MAIL); return IsValidCargoType(cargo_type) ? ClampTo<uint16_t>(this->t->supplied[cargo_type].new_act) : 0;
-		case 0xC1: cargo_type = GetCargoTypeByLabel(CT_MAIL); return IsValidCargoType(cargo_type) ? GB(ClampTo<uint16_t>(this->t->supplied[cargo_type].new_act), 8, 8) : 0;
-		case 0xC2: cargo_type = GetCargoTypeByLabel(CT_PASSENGERS); return IsValidCargoType(cargo_type) ? ClampTo<uint16_t>(this->t->supplied[cargo_type].old_max) : 0;
-		case 0xC3: cargo_type = GetCargoTypeByLabel(CT_PASSENGERS); return IsValidCargoType(cargo_type) ? GB(ClampTo<uint16_t>(this->t->supplied[cargo_type].old_max), 8, 8) : 0;
-		case 0xC4: cargo_type = GetCargoTypeByLabel(CT_MAIL); return IsValidCargoType(cargo_type) ? ClampTo<uint16_t>(this->t->supplied[cargo_type].old_max) : 0;
-		case 0xC5: cargo_type = GetCargoTypeByLabel(CT_MAIL); return IsValidCargoType(cargo_type) ? GB(ClampTo<uint16_t>(this->t->supplied[cargo_type].old_max), 8, 8) : 0;
-		case 0xC6: cargo_type = GetCargoTypeByLabel(CT_PASSENGERS); return IsValidCargoType(cargo_type) ? ClampTo<uint16_t>(this->t->supplied[cargo_type].old_act) : 0;
-		case 0xC7: cargo_type = GetCargoTypeByLabel(CT_PASSENGERS); return IsValidCargoType(cargo_type) ? GB(ClampTo<uint16_t>(this->t->supplied[cargo_type].old_act), 8, 8) : 0;
-		case 0xC8: cargo_type = GetCargoTypeByLabel(CT_MAIL); return IsValidCargoType(cargo_type) ? ClampTo<uint16_t>(this->t->supplied[cargo_type].old_act) : 0;
-		case 0xC9: cargo_type = GetCargoTypeByLabel(CT_MAIL); return IsValidCargoType(cargo_type) ? GB(ClampTo<uint16_t>(this->t->supplied[cargo_type].old_act), 8, 8) : 0;
+		case 0xBA: return TownHistoryHelper(this->t, CT_PASSENGERS, THIS_MONTH, &Town::SuppliedHistory::production);
+		case 0xBB: return TownHistoryHelper(this->t, CT_PASSENGERS, THIS_MONTH, &Town::SuppliedHistory::production) >> 8;
+		case 0xBC: return TownHistoryHelper(this->t, CT_MAIL, THIS_MONTH, &Town::SuppliedHistory::production);
+		case 0xBD: return TownHistoryHelper(this->t, CT_MAIL, THIS_MONTH, &Town::SuppliedHistory::production) >> 8;
+		case 0xBE: return TownHistoryHelper(this->t, CT_PASSENGERS, THIS_MONTH, &Town::SuppliedHistory::transported);
+		case 0xBF: return TownHistoryHelper(this->t, CT_PASSENGERS, THIS_MONTH, &Town::SuppliedHistory::transported) >> 8;
+		case 0xC0: return TownHistoryHelper(this->t, CT_MAIL, THIS_MONTH, &Town::SuppliedHistory::transported);
+		case 0xC1: return TownHistoryHelper(this->t, CT_MAIL, THIS_MONTH, &Town::SuppliedHistory::transported) >> 8;
+		case 0xC2: return TownHistoryHelper(this->t, CT_PASSENGERS, LAST_MONTH, &Town::SuppliedHistory::production);
+		case 0xC3: return TownHistoryHelper(this->t, CT_PASSENGERS, LAST_MONTH, &Town::SuppliedHistory::production) >> 8;
+		case 0xC4: return TownHistoryHelper(this->t, CT_MAIL, LAST_MONTH, &Town::SuppliedHistory::production);
+		case 0xC5: return TownHistoryHelper(this->t, CT_MAIL, LAST_MONTH, &Town::SuppliedHistory::production) >> 8;
+		case 0xC6: return TownHistoryHelper(this->t, CT_PASSENGERS, LAST_MONTH, &Town::SuppliedHistory::transported);
+		case 0xC7: return TownHistoryHelper(this->t, CT_PASSENGERS, LAST_MONTH, &Town::SuppliedHistory::transported) >> 8;
+		case 0xC8: return TownHistoryHelper(this->t, CT_MAIL, LAST_MONTH, &Town::SuppliedHistory::transported);
+		case 0xC9: return TownHistoryHelper(this->t, CT_MAIL, LAST_MONTH, &Town::SuppliedHistory::transported) >> 8;
 		case 0xCA: return this->t->GetPercentTransported(GetCargoTypeByLabel(CT_PASSENGERS));
 		case 0xCB: return this->t->GetPercentTransported(GetCargoTypeByLabel(CT_MAIL));
 		case 0xCC: return this->t->received[TAE_FOOD].new_act;

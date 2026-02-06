@@ -10,6 +10,7 @@
 #include "../../stdafx.h"
 #include "../../debug.h"
 #include "../../gfx_func.h"
+#include "../../strings_func.h"
 #include "../../textbuf_gui.h"
 #include "../../fileio_func.h"
 #include <windows.h>
@@ -38,6 +39,8 @@
 #include <map>
 #include <mutex>
 
+#include "table/strings.h"
+
 #include "../../safeguards.h"
 
 #if defined(__MINGW32__) && !defined(__MINGW64__) && !(_WIN32_IE >= 0x0500)
@@ -60,7 +63,7 @@ bool MyShowCursor(bool show, bool toggle)
 	return !show;
 }
 
-void ShowOSErrorBox(const char *buf, bool system)
+void ShowOSErrorBox(std::string_view buf, bool system)
 {
 	MyShowCursor(true);
 	MessageBox(GetActiveWindow(), OTTD2FS(buf).c_str(), L"Error!", MB_ICONSTOP | MB_TASKMODAL);
@@ -208,7 +211,7 @@ void FiosGetDrives(FileList &file_list)
 		fios->mtime = 0;
 		fios->name += (char)(s[0] & 0xFF);
 		fios->name += ':';
-		fios->title = fios->name;
+		fios->title = GetEncodedRawString(fios->name);
 		while (*s++ != '\0') { /* Nothing */ }
 	}
 }
@@ -359,7 +362,7 @@ static INT_PTR CALLBACK HelpDialogFunc(HWND wnd, UINT msg, WPARAM wParam, LPARAM
 void ShowInfoI(std::string_view str)
 {
 	if (_has_console) {
-		fmt::print(stderr, "{}\n", str);
+		fmt_print_no_system_error(stderr, "{}\n", str);
 	} else {
 		bool old;
 		ReleaseCapture();
@@ -562,7 +565,7 @@ char *convert_from_fs(const std::wstring_view src, std::span<char> dst_buf)
  * @param dst_buf span of valid wide-char buffer that will receive the converted string
  * @return pointer to dst_buf. If conversion fails the string is of zero-length
  */
-wchar_t *convert_to_fs(const std::string_view src, std::span<wchar_t> dst_buf)
+wchar_t *convert_to_fs(std::string_view src, std::span<wchar_t> dst_buf)
 {
 	int len = MultiByteToWideChar(CP_UTF8, 0, src.data(), static_cast<int>(src.size()), dst_buf.data(), static_cast<int>(dst_buf.size() - 1U));
 	dst_buf[len] = '\0';
@@ -604,7 +607,7 @@ void Win32SetCurrentLocaleName(std::string iso_code)
 		}
 	}
 
-	MultiByteToWideChar(CP_UTF8, 0, iso_code.c_str(), -1, _cur_iso_locale, static_cast<int>(std::size(_cur_iso_locale)));
+	MultiByteToWideChar(CP_UTF8, 0, iso_code.data(), static_cast<int>(iso_code.size()), _cur_iso_locale, static_cast<int>(std::size(_cur_iso_locale)));
 }
 
 int OTTDStringCompare(std::string_view s1, std::string_view s2)
@@ -644,17 +647,9 @@ int OTTDStringCompare(std::string_view s1, std::string_view s2)
 	return CompareString(MAKELCID(_current_language->winlangid, SORT_DEFAULT), NORM_IGNORECASE, str_s1.get(), len_s1, str_s2.get(), len_s2);
 }
 
-/**
- * Search if a string is contained in another string using the current locale.
- *
- * @param str String to search in.
- * @param value String to search for.
- * @param case_insensitive Search case-insensitive.
- * @return 1 if value was found, 0 if it was not found, or -1 if not supported by the OS.
- */
-int Win32StringContains(const std::string_view str, const std::string_view value, bool case_insensitive)
+typedef int (WINAPI *PFNFINDNLSSTRINGEX)(LPCWSTR, DWORD, LPCWSTR, int, LPCWSTR, int, LPINT, LPNLSVERSIONINFO, LPVOID, LPARAM);
+static PFNFINDNLSSTRINGEX GetFindNLSStringEx()
 {
-	typedef int (WINAPI *PFNFINDNLSSTRINGEX)(LPCWSTR, DWORD, LPCWSTR, int, LPCWSTR, int, LPINT, LPNLSVERSIONINFO, LPVOID, LPARAM);
 	static PFNFINDNLSSTRINGEX _FindNLSStringEx = nullptr;
 	static bool first_time = true;
 
@@ -663,6 +658,21 @@ int Win32StringContains(const std::string_view str, const std::string_view value
 		_FindNLSStringEx = _kernel32.GetFunction("FindNLSStringEx");
 		first_time = false;
 	}
+
+	return _FindNLSStringEx;
+}
+
+/**
+ * Search if a string is contained in another string using the current locale.
+ *
+ * @param str String to search in.
+ * @param value String to search for.
+ * @param case_insensitive Search case-insensitive.
+ * @return 1 if value was found, 0 if it was not found, or -1 if not supported by the OS.
+ */
+int Win32StringContains(std::string_view str, std::string_view value, bool case_insensitive)
+{
+	PFNFINDNLSSTRINGEX _FindNLSStringEx = GetFindNLSStringEx();
 
 	if (_FindNLSStringEx != nullptr) {
 		int len_str = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0);
@@ -680,6 +690,30 @@ int Win32StringContains(const std::string_view str, const std::string_view value
 	}
 
 	return -1; // Failure indication.
+}
+
+UniqueBuffer<wchar_t> Win32LocaleStringForStringContains(std::string_view str)
+{
+	PFNFINDNLSSTRINGEX _FindNLSStringEx = GetFindNLSStringEx();
+
+	if (_FindNLSStringEx == nullptr) return {};
+
+	int len_str = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0);
+	if (len_str == 0) return {};
+
+	UniqueBuffer<wchar_t> buffer((size_t)len_str);
+	MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), buffer.get(), len_str);
+
+	return buffer;
+}
+
+int Win32StringContains(std::span<const wchar_t> str, std::span<const wchar_t> value, bool case_insensitive)
+{
+	PFNFINDNLSSTRINGEX _FindNLSStringEx = GetFindNLSStringEx();
+
+	if (_FindNLSStringEx == nullptr) return -1;
+
+	return _FindNLSStringEx(_cur_iso_locale, FIND_FROMSTART | (case_insensitive ? LINGUISTIC_IGNORECASE : 0), str.data(), (int)str.size(), value.data(), (int)value.size(), nullptr, nullptr, nullptr, 0) >= 0 ? 1 : 0;
 }
 
 static DWORD main_thread_id;
@@ -738,7 +772,7 @@ bool IsNonGameThread()
 static std::map<DWORD, std::string> _thread_name_map;
 static std::mutex _thread_name_map_mutex;
 
-static void Win32SetThreadName(uint id, const char *name)
+static void Win32SetThreadName(uint id, std::string_view name)
 {
 	std::lock_guard<std::mutex> lock(_thread_name_map_mutex);
 	_thread_name_map[id] = name;
@@ -767,13 +801,13 @@ PACK_N(struct THREADNAME_INFO {
 /**
  * Signal thread name to any attached debuggers.
  */
-void SetCurrentThreadName(const char *threadName)
+void SetCurrentThreadName(const std::string &thread_name)
 {
-	Win32SetThreadName(GetCurrentThreadId(), threadName);
+	Win32SetThreadName(GetCurrentThreadId(), thread_name);
 
 	THREADNAME_INFO info;
 	info.dwType = 0x1000;
-	info.szName = threadName;
+	info.szName = thread_name.c_str();
 	info.dwThreadID = -1;
 	info.dwFlags = 0;
 
@@ -786,7 +820,7 @@ void SetCurrentThreadName(const char *threadName)
 #pragma warning(pop)
 }
 #else
-void SetCurrentThreadName(const char *threadName)
+void SetCurrentThreadName(const std::string &threadName)
 {
 	Win32SetThreadName(GetCurrentThreadId(), threadName);
 }

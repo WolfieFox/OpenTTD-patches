@@ -31,8 +31,9 @@
 /**
  * Construct the network error with the given error code.
  * @param error The error code.
+ * @param message The error message. Leave empty to determine this automatically based on the error number.
  */
-NetworkError::NetworkError(int error) : error(error)
+NetworkError::NetworkError(int error, std::string_view message) : error(error), message(message)
 {
 }
 
@@ -81,7 +82,7 @@ bool NetworkError::IsConnectInProgress() const
  * Get the string representation of the error message.
  * @return The string representation that will get overwritten by next calls.
  */
-const char *NetworkError::AsString() const
+std::string_view NetworkError::AsString() const
 {
 	if (this->message.empty()) {
 #if defined(_WIN32)
@@ -96,7 +97,7 @@ const char *NetworkError::AsString() const
 		this->message.assign(StrErrorDumper().Get(this->error));
 #endif
 	}
-	return this->message.c_str();
+	return this->message;
 }
 
 /**
@@ -169,8 +170,8 @@ bool SetNoDelay([[maybe_unused]] SOCKET d)
 	return true;
 #else
 	int flags = 1;
-	/* The (const char*) cast is needed for windows */
-	return setsockopt(d, IPPROTO_TCP, TCP_NODELAY, (const char *)&flags, sizeof(flags)) == 0;
+	/* The (const char *) cast is needed for windows */
+	return setsockopt(d, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char *>(&flags), sizeof(flags)) == 0;
 #endif
 }
 
@@ -225,7 +226,7 @@ NetworkError GetSocketError(SOCKET d)
 {
 	int err;
 	socklen_t len = sizeof(err);
-	getsockopt(d, SOL_SOCKET, SO_ERROR, (char *)&err, &len);
+	if (getsockopt(d, SOL_SOCKET, SO_ERROR, (char *)&err, &len) != 0) return NetworkError(-1, "Could not get error for socket");
 
 	return NetworkError(err);
 }

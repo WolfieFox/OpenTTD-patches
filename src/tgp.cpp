@@ -12,6 +12,7 @@
 #include "clear_map.h"
 #include "void_map.h"
 #include "genworld.h"
+#include "core/alloc_func.hpp"
 #include "core/random_func.hpp"
 #include "landscape_type.h"
 
@@ -323,10 +324,9 @@ static inline bool IsValidXY(int x, int y)
 
 
 /**
- * Allocate array of (Map::SizeX()+1)*(Map::SizeY()+1) heights and init the _height_map structure members
- * @return true on success
+ * Allocate array of (Map::SizeX() + 1) * (Map::SizeY() + 1) heights and init the _height_map structure members
  */
-static inline bool AllocHeightMap()
+static inline void AllocHeightMap()
 {
 	assert(_height_map.h.empty());
 
@@ -337,8 +337,6 @@ static inline bool AllocHeightMap()
 	size_t total_size = static_cast<size_t>(_height_map.size_x + 1) * (_height_map.size_y + 1);
 	_height_map.dim_x = _height_map.size_x + 1;
 	_height_map.h.resize(total_size);
-
-	return true;
 }
 
 /** Free height map */
@@ -473,8 +471,8 @@ static void HeightMapSineTransform(Height h_min, Height h_max)
 		fheight = (double)(h - h_min) / (double)(h_max - h_min);
 		/* Apply sine transform depending on landscape type */
 		switch (_settings_game.game_creation.landscape) {
-			case LT_TOYLAND:
-			case LT_TEMPERATE:
+			case LandscapeType::Toyland:
+			case LandscapeType::Temperate:
 				/* Move and scale 0..1 into -1..+1 */
 				fheight = 2 * fheight - 1;
 				/* Sine transform */
@@ -483,7 +481,7 @@ static void HeightMapSineTransform(Height h_min, Height h_max)
 				fheight = 0.5 * (fheight + 1);
 				break;
 
-			case LT_ARCTIC:
+			case LandscapeType::Arctic:
 				{
 					/* Arctic terrain needs special height distribution.
 					 * Redistribute heights to have more tiles at highest (75%..100%) range */
@@ -504,7 +502,7 @@ static void HeightMapSineTransform(Height h_min, Height h_max)
 				}
 				break;
 
-			case LT_TROPIC:
+			case LandscapeType::Tropic:
 				{
 					/* Desert terrain needs special height distribution.
 					 * Half of tiles should be at lowest (0..25%) heights */
@@ -950,15 +948,17 @@ static double interpolated_noise(const double x, const double y, const int prime
  */
 static double perlin_coast_noise_2D(const double x, const double y, const double p, const int prime)
 {
+	constexpr int OCTAVES = 6;
+	constexpr double INITIAL_FREQUENCY = 1 << OCTAVES;
+
 	double total = 0.0;
-
-	for (int i = 0; i < 6; i++) {
-		const double frequency = (double)(1 << i);
-		const double amplitude = pow(p, (double)i);
-
-		total += interpolated_noise((x * frequency) / 64.0, (y * frequency) / 64.0, prime) * amplitude;
+	double frequency = 1.0 / INITIAL_FREQUENCY;
+	double amplitude = 1.0;
+	for (int i = 0; i < OCTAVES; i++) {
+		total += interpolated_noise(x * frequency, y * frequency, prime) * amplitude;
+		frequency *= 2.0;
+		amplitude *= p;
 	}
-
 	return total;
 }
 
@@ -983,7 +983,7 @@ static void TgenSetTileHeight(TileIndex tile, int height)
  */
 void GenerateTerrainPerlin()
 {
-	if (!AllocHeightMap()) return;
+	AllocHeightMap();
 	GenerateWorldSetAbortCallback(FreeHeightMap);
 
 	HeightMapGenerate();

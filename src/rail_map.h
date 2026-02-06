@@ -239,7 +239,6 @@ inline TrackBits GetRailReservationTrackBits(TileIndex t)
 inline void SetTrackReservation(TileIndex t, TrackBits b)
 {
 	dbg_assert_tile(IsPlainRailTile(t), t);
-	dbg_assert(b != INVALID_TRACK_BIT);
 	dbg_assert(!TracksOverlap(b));
 	Track track = RemoveFirstTrack(&b);
 	SB(_m[t].m2, 8, 3, track == INVALID_TRACK ? 0 : track + 1);
@@ -248,9 +247,9 @@ inline void SetTrackReservation(TileIndex t, TrackBits b)
 
 /**
  * Try to reserve a specific track on a tile
- * @pre IsPlainRailTile(t) && HasTrack(tile, t)
+ * @pre IsPlainRailTile(tile) && HasTrack(tile, t)
  * @param tile the tile
- * @param t the rack to reserve
+ * @param t the track to reserve
  * @return true if successful
  */
 inline bool TryReserveTrack(TileIndex tile, Track t)
@@ -267,7 +266,7 @@ inline bool TryReserveTrack(TileIndex tile, Track t)
 
 /**
  * Lift the reservation of a specific track on a tile
- * @pre IsPlainRailTile(t) && HasTrack(tile, t)
+ * @pre IsPlainRailTile(tile) && HasTrack(tile, t)
  * @param tile the tile
  * @param t the track to free
  */
@@ -692,7 +691,7 @@ inline void MakeRailDepot(TileIndex t, Owner o, DepotID did, DiagDirection d, Ra
 	SetTileType(t, MP_RAILWAY);
 	SetTileOwner(t, o);
 	SetDockingTile(t, false);
-	_m[t].m2 = did;
+	_m[t].m2 = did.base();
 	_m[t].m3 = 0;
 	_m[t].m4 = 0;
 	_m[t].m5 = RAIL_TILE_DEPOT << 6 | d;

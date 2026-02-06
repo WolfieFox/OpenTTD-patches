@@ -15,12 +15,15 @@
 #include "cargo_type.h"
 #include "vehicle_type.h"
 #include "company_type.h"
+#include "source_type.h"
+#include "station_container.h"
+#include "core/typed_container.hpp"
 
 void ResetPriceBaseMultipliers();
 void SetPriceBaseMultiplier(Price price, int factor);
 
 extern const ScoreInfo _score_info[];
-extern int64_t _score_part[MAX_COMPANIES][SCORE_END];
+extern TypedIndexContainer<std::array<std::array<int64_t, SCORE_END>, MAX_COMPANIES>, CompanyID> _score_part;
 extern Economy _economy;
 /* Prices and also the fractional part. */
 extern Prices _price;
@@ -33,7 +36,7 @@ int UpdateCompanyRatingAndValue(Company *c, bool update);
 void StartupIndustryDailyChanges(bool init_counter);
 
 Money GetTransportedGoodsIncome(uint num_pieces, uint dist, uint16_t transit_periods, CargoType cargo_type);
-uint MoveGoodsToStation(CargoType type, uint amount, SourceType source_type, SourceID source_id, const StationList &all_stations, Owner exclusivity = INVALID_OWNER);
+uint MoveGoodsToStation(CargoType cargo, uint amount, Source source, const StationList &all_stations, Owner exclusivity = INVALID_OWNER);
 
 void PrepareUnload(Vehicle *front_v);
 void LoadUnloadStation(Station *st);

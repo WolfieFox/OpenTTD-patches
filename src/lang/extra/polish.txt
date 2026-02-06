@@ -107,3 +107,13 @@ STR_COMPANY_PASSWORD_MAKE_DEFAULT_TOOLTIP                       :{BLACK}Użyj te
 STR_COMPANY_VIEW_PASSWORD                                       :{BLACK}Hasło
 STR_COMPANY_VIEW_PASSWORD_TOOLTIP                               :{BLACK}Ochrona hasłem twojej firmy zapobiega nieautoryzowanemu przyłączeniu się
 STR_COMPANY_VIEW_SET_PASSWORD                                   :{BLACK}Ustaw hasło firmy
+
+# JSON messages
+
+STR_INTRO_NEWGRF_SETTINGS                                       :{BLACK}Ustawienia NewGRF
+STR_INTRO_AI_SETTINGS                                           :{BLACK}Ustawienia SI
+STR_INTRO_GAMESCRIPT_SETTINGS                                   :{BLACK}Ustawienia Skryptu
+STR_INTRO_TOOLTIP_NEWGRF_SETTINGS                               :{BLACK}Otwórz ustawienia dodatków NewGRF
+STR_INTRO_TOOLTIP_AI_SETTINGS                                   :{BLACK}Otwórz ustawienia SI
+STR_INTRO_TOOLTIP_GAMESCRIPT_SETTINGS                           :{BLACK}Otwórz ustawienia Game Script
+STR_INTRO_CAPTION_TRADITIONAL                                   :{WHITE}OpenTTD {REV}

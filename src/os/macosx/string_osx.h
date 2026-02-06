@@ -28,7 +28,7 @@ class OSXStringIterator : public StringIterator {
 	size_t cur_pos; ///< Current iteration position.
 
 public:
-	void SetString(const char *s) override;
+	void SetString(std::string_view s) override;
 	size_t SetCurPosition(size_t pos) override;
 	size_t Next(IterType what) override;
 	size_t Prev(IterType what) override;
@@ -83,10 +83,10 @@ public:
 };
 
 void MacOSResetScriptCache(FontSize size);
-void MacOSSetCurrentLocaleName(const char *iso_code);
+void MacOSSetCurrentLocaleName(std::string_view iso_code);
 int MacOSStringCompare(std::string_view s1, std::string_view s2);
-int MacOSStringContains(const std::string_view str, const std::string_view value, bool case_insensitive);
+int MacOSStringContains(std::string_view str, std::string_view value, bool case_insensitive);
 
-void MacOSRegisterExternalFont(const char *file_path);
+void MacOSRegisterExternalFont(std::string_view file_path);
 
 #endif /* STRING_OSX_H */

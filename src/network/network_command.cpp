@@ -182,7 +182,7 @@ static void DistributeQueue(CommandQueue &queue, const NetworkClientSocket *owne
 	/* Not technically the most performant way, but consider clients rarely click more than once per tick. */
 	for (auto cp = queue.begin(); cp != queue.end(); /* removing some items */) {
 		/* Do not distribute commands when paused and the command is not allowed while paused. */
-		if (_pause_mode != PM_UNPAUSED && !IsCommandAllowedWhilePaused(cp->command_container.cmd)) {
+		if (_pause_mode.Any() && !IsCommandAllowedWhilePaused(cp->command_container.cmd)) {
 			++cp;
 			continue;
 		}
@@ -212,7 +212,7 @@ void NetworkDistributeCommands()
  * Receives a command from the network.
  * @param p the packet to read from.
  * @param cp the struct to write the data to.
- * @return an error message. When nullptr there has been no error.
+ * @return An error message, or nullptr when there has been no error.
  */
 const char *NetworkGameSocketHandler::ReceiveCommand(Packet &p, CommandPacket &cp)
 {

@@ -52,6 +52,7 @@ private:
 	bool initialized;             ///< Whether an iteration has been started
 	bool values_inited;           ///< Whether the 'values' field has been initialised
 	int modifications;            ///< Number of modification that has been done. To prevent changing data while valuating.
+	std::optional<SQInteger> resume_item; ///< Item to use on valuation start.
 
 	void InitValues();
 	void InitSorter();
@@ -75,6 +76,12 @@ private:
 	};
 
 protected:
+	/* Temporary helper functions to get the raw index from either strongly and non-strongly typed pool items. */
+	template <typename T>
+	static auto GetRawIndex(const T &index) { return index; }
+	template <typename T> requires std::is_base_of_v<struct PoolIDBase, T>
+	static auto GetRawIndex(const T &index) { return index.base(); }
+
 	template <typename T, typename... Targs>
 	static void FillList(Targs... args)
 	{
@@ -92,7 +99,7 @@ protected:
 			item_count++;
 			if (!item_valid(item)) continue;
 			if (!item_filter(item)) continue;
-			list->AddItem(item->index);
+			list->AddItem(GetRawIndex(item->index));
 			opcode_charge += 3;
 		}
 		ScriptController::DecreaseOps(opcode_charge + helper.OpcodeCharge(item_count));
@@ -133,11 +140,9 @@ protected:
 			sq_push(vm, 2);
 		}
 
-		/* Don't allow docommand from a Valuator, as we can't resume in
+		/* Don't allow docommand from a filter, as we can't resume in
 		 * mid C++-code. */
-		bool backup_allow = ScriptObject::GetAllowDoCommand();
-		ScriptObject::SetAllowDoCommand(false);
-
+		ScriptObject::DisableDoCommandScope disabler{};
 
 		if (nparam < 1) {
 			ScriptList::FillListT<Thelper>(helper, list, item_valid);
@@ -146,19 +151,18 @@ protected:
 			SQOpsLimiter limiter(vm, MAX_VALUATE_OPS, "list filter function");
 
 			ScriptList::FillListT<Thelper>(helper, list, item_valid,
-				[vm, nparam, backup_allow](const IterType *item) {
+				[vm, nparam](const IterType *item) {
 					/* Push the root table as instance object, this is what squirrel does for meta-functions. */
 					sq_pushroottable(vm);
 					/* Push all arguments for the valuator function. */
-					sq_pushinteger(vm, item->index);
+					sq_pushinteger(vm, GetRawIndex(item->index));
 					for (int i = 0; i < nparam - 1; i++) {
 						sq_push(vm, i + 3);
 					}
 
 					/* Call the function. Squirrel pops all parameters and pushes the return value. */
-					if (SQ_FAILED(sq_call(vm, nparam + 1, SQTrue, SQTrue))) {
-						ScriptObject::SetAllowDoCommand(backup_allow);
-						throw sq_throwerror(vm, "failed to run filter");
+					if (SQ_FAILED(sq_call(vm, nparam + 1, SQTrue, SQFalse))) {
+						throw static_cast<SQInteger>(SQ_ERROR);
 					}
 
 					SQBool add = SQFalse;
@@ -170,7 +174,6 @@ protected:
 							break;
 
 						default:
-							ScriptObject::SetAllowDoCommand(backup_allow);
 							throw sq_throwerror(vm, "return value of filter is not valid (not bool)");
 					}
 
@@ -184,8 +187,6 @@ protected:
 			/* Pop the filter function */
 			sq_poptop(vm);
 		}
-
-		ScriptObject::SetAllowDoCommand(backup_allow);
 	}
 
 	template <typename Thelper>
@@ -195,6 +196,28 @@ protected:
 
 		ScriptList::FillListT<Thelper>(helper, vm, list, [](const IterType *) { return true; });
 	}
+
+	inline size_t GetSize() const
+	{
+		return this->items.size();
+	}
+
+	virtual bool SaveObject(HSQUIRRELVM vm) override;
+	virtual bool LoadObject(HSQUIRRELVM vm) override;
+	virtual ScriptObject *CloneObject() override;
+
+	/**
+	 * Copy the content of a list.
+	 * @param list The list that will be copied.
+	 */
+	void CopyList(const ScriptList *list);
+
+	template <class ValueFilter>
+	void RemoveItems(ValueFilter value_filter);
+
+private:
+	template <bool KEEP_BOTTOM>
+	bool KeepTopBottomFastPath(SQInteger count);
 
 public:
 	ScriptListMap items;       ///< The items in the list
@@ -423,6 +446,7 @@ public:
 
 	/**
 	 * The Valuate() wrapper from Squirrel.
+	 * @suspendable
 	 */
 	SQInteger Valuate(HSQUIRRELVM vm);
 #else

@@ -11,6 +11,7 @@
 #define VIEWPORT_FUNC_H
 
 #include "gfx_type.h"
+#include "sprite.h"
 #include "viewport_type.h"
 #include "window_type.h"
 #include "tile_map.h"
@@ -81,10 +82,14 @@ DECLARE_ENUM_AS_BIT_SET(ViewportSortableSpriteSpecialFlags);
 
 void DrawGroundSprite(SpriteID image, PaletteID pal, const SubSprite *sub = nullptr, int extra_offs_x = 0, int extra_offs_y = 0);
 void DrawGroundSpriteAt(SpriteID image, PaletteID pal, int32_t x, int32_t y, int z, const SubSprite *sub = nullptr, int extra_offs_x = 0, int extra_offs_y = 0);
-void AddSortableSpriteToDraw(SpriteID image, PaletteID pal, int x, int y, int w, int h, int dz, int z, bool transparent = false, int bb_offset_x = 0, int bb_offset_y = 0, int bb_offset_z = 0, const SubSprite *sub = nullptr, ViewportSortableSpriteSpecialFlags special_flags = VSSF_NONE);
+void AddSortableSpriteToDraw(SpriteID image, PaletteID pal, int x, int y, int z, const SpriteBounds &bounds, bool transparent = false, const SubSprite *sub = nullptr, ViewportSortableSpriteSpecialFlags special_flags = VSSF_NONE);
 void AddChildSpriteScreen(SpriteID image, PaletteID pal, int x, int y, bool transparent = false, const SubSprite *sub = nullptr, bool scale = true, ChildScreenSpritePositionMode position_mode = ChildScreenSpritePositionMode::Relative);
 void ViewportAddString(ViewportDrawerDynamic *vdd, const DrawPixelInfo *dpi, const ViewportSign *sign, ViewportStringFlags flags, StringID string, uint64_t params_1, uint64_t params_2 = 0, Colours colour = INVALID_COLOUR);
 
+inline void AddSortableSpriteToDraw(SpriteID image, PaletteID pal, const Coord3D<int32_t> &world, const SpriteBounds &bounds, bool transparent = false, const SubSprite *sub = nullptr, ViewportSortableSpriteSpecialFlags special_flags = VSSF_NONE)
+{
+	AddSortableSpriteToDraw(image, pal, world.x, world.y, world.z, bounds, transparent, sub, special_flags);
+}
 
 void StartSpriteCombine();
 void EndSpriteCombine();
@@ -101,7 +106,6 @@ void SetRedErrorSquare(TileIndex tile);
 void SetTileSelectSize(int w, int h);
 void SetTileSelectBigSize(int ox, int oy, int sx, int sy);
 
-void ViewportDoDraw(Viewport *vp, int left, int top, int right, int bottom, uint8_t display_flags);
 void ViewportDoDrawProcessAllPending();
 
 bool ScrollWindowToTile(TileIndex tile, Window *w, bool instant = false);
@@ -178,5 +182,7 @@ void MarkBridgeOrTunnelDirty(TileIndex tile, TileIndex end, ViewportMarkDirtyFla
 void MarkBridgeOrTunnelDirtyOnReservationChange(TileIndex tile, ViewportMarkDirtyFlags flags = VMDF_NONE);
 
 bool IsViewportMouseHoverActive();
+
+void UpdateRouteStepSpriteSize();
 
 #endif /* VIEWPORT_FUNC_H */

@@ -17,7 +17,11 @@
 #include <vector>
 #include <string>
 #include <tuple>
+#include <variant>
 #include <limits>
+
+template <typename T>
+concept SerialisationAsBase = T::serialisation_as_base || false;
 
 void   BufferSend_bool  (std::vector<uint8_t> &buffer, size_t limit, bool     data);
 void   BufferSend_uint8 (std::vector<uint8_t> &buffer, size_t limit, uint8_t  data);
@@ -45,16 +49,34 @@ struct BufferSerialisationHelper {
 		BufferSend_uint8(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
 	}
 
+	void Send_uint8(const SerialisationAsBase auto &data)
+	{
+		static_assert(sizeof(data.base()) == 1);
+		this->Send_uint8((uint8_t)data.base());
+	}
+
 	void Send_uint16(uint16_t data)
 	{
 		T *self = static_cast<T *>(this);
 		BufferSend_uint16(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
 	}
 
+	void Send_uint16(const SerialisationAsBase auto &data)
+	{
+		static_assert(sizeof(data.base()) <= 2);
+		this->Send_uint16((uint16_t)data.base());
+	}
+
 	void Send_uint32(uint32_t data)
 	{
 		T *self = static_cast<T *>(this);
 		BufferSend_uint32(self->GetSerialisationBuffer(), self->GetSerialisationLimit(), data);
+	}
+
+	void Send_uint32(const SerialisationAsBase auto &data)
+	{
+		static_assert(sizeof(data.base()) <= 4);
+		this->Send_uint32((uint32_t)data.base());
 	}
 
 	void Send_uint64(uint64_t data)
@@ -118,16 +140,24 @@ struct BufferSerialisationHelper {
 		} else if constexpr (sizeof(V) == 2) {
 			this->Send_uint16(static_cast<uint16_t>(data));
 		} else {
-			this->Send_varuint(static_cast<uint64_t>(data));
+			if constexpr (std::is_signed<V>::value) {
+				/* Zig-zag encode */
+				using U = typename std::make_unsigned<V>::type;
+				U zigzag = (static_cast<U>(data) << 1);
+				if (data < 0) zigzag = ~zigzag;
+				this->Send_varuint(zigzag);
+			} else {
+				this->Send_varuint(static_cast<uint64_t>(data));
+			}
 		}
 	}
 
 	template <typename V>
 	void Send_generic(const V &data)
 	{
-		if constexpr (std::is_same_v<V, std::string>) {
+		if constexpr (std::is_same_v<V, std::string> || std::is_same_v<V, std::string_view>) {
 			this->Send_string(data);
-		} else if constexpr (std::is_base_of_v<struct StrongTypedefBase, V> || std::is_base_of_v<struct BaseBitSetBase, V>) {
+		} else if constexpr (SerialisationAsBase<V>) {
 			this->Send_generic_integer(data.base());
 		} else if constexpr (requires { data.Serialise(*this); }) {
 			data.Serialise(*this);
@@ -143,6 +173,33 @@ struct BufferSerialisationHelper {
 			((this->Send_generic(std::get<Tindices>(data))), ...);
 		};
 		handler(std::index_sequence_for<V...>{});
+	}
+
+	template <typename... V>
+	void Send_generic(const std::variant<V...> &data)
+	{
+		static_assert(sizeof...(V) < 256);
+		this->Send_uint8(static_cast<uint8_t>(data.index()));
+
+		const size_t idx = data.index();
+		auto subhandler = [&]<size_t Tidx>() {
+			if (idx == Tidx) this->Send_generic(std::get<Tidx>(data));
+		};
+		auto handler = [&]<size_t... Tindices>(std::index_sequence<Tindices...>) {
+			((subhandler.template operator()<Tindices>()), ...);
+		};
+		handler(std::index_sequence_for<V...>{});
+	}
+
+	void Send_generic(const std::monostate &data)
+	{
+		/* Do nothing */
+	}
+
+	template <typename... V>
+	void Send_generic_seq(const V&... data)
+	{
+		(this->Send_generic(data), ...);
 	}
 
 	size_t GetSendOffset() const
@@ -297,7 +354,7 @@ public:
 	 * @param settings The string validation settings.
 	 * @return The validated string.
 	 */
-	std::string Recv_string(size_t length, StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK)
+	std::string Recv_string(size_t length, StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark)
 	{
 		assert(length > 1);
 
@@ -321,7 +378,7 @@ public:
 	 * @param buffer The buffer to put the data into.
 	 * @param settings The string validation settings.
 	 */
-	void Recv_string(std::string &buffer, StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK)
+	void Recv_string(std::string &buffer, StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark)
 	{
 		/* Don't allow reading from a closed socket */
 		if (!this->CanRecvBytes(0, false)) return;
@@ -427,17 +484,23 @@ public:
 			data = static_cast<V>(this->Recv_uint16());
 		} else {
 			uint64_t val = this->Recv_varuint();
-			if ((val & GetBitMaskSC<uint64_t>(0, sizeof(V) * 8)) != val) this->RaiseRecvError();
-			data = static_cast<V>(val);
+			if (unlikely((val & GetBitMaskSC<uint64_t>(0, sizeof(V) * 8)) != val)) this->RaiseRecvError();
+			if constexpr (std::is_signed<V>::value) {
+				/* Zig-zag decode */
+				using U = typename std::make_unsigned<V>::type;
+				data = static_cast<V>((static_cast<U>(val) >> 1) ^ static_cast<U>(-(static_cast<V>(val) & 1)));
+			} else {
+				data = static_cast<V>(val);
+			}
 		}
 	}
 
 	template <typename V>
-	void Recv_generic(V &data, StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK)
+	void Recv_generic(V &data, StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark)
 	{
 		if constexpr (std::is_same_v<V, std::string>) {
 			this->Recv_string(data, settings);
-		} else if constexpr (std::is_base_of_v<struct StrongTypedefBase, V> || std::is_base_of_v<struct BaseBitSetBase, V>) {
+		} else if constexpr (SerialisationAsBase<V>) {
 			this->Recv_generic_integer(data.edit_base());
 		} else if constexpr (requires { data.Deserialise(*this, settings); }) {
 			data.Deserialise(*this, settings);
@@ -447,12 +510,41 @@ public:
 	}
 
 	template <typename... V>
-	void Recv_generic(std::tuple<V...> &data, StringValidationSettings settings = SVS_REPLACE_WITH_QUESTION_MARK)
+	void Recv_generic(std::tuple<V...> &data, StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark)
 	{
 		auto handler = [&]<size_t... Tindices>(std::index_sequence<Tindices...>) {
 			((this->Recv_generic(std::get<Tindices>(data), settings)), ...);
 		};
 		handler(std::index_sequence_for<V...>{});
+	}
+
+	template <typename... V>
+	void Recv_generic(std::variant<V...> &data, StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark)
+	{
+		static_assert(sizeof...(V) < 256);
+		const size_t idx = Recv_uint8();
+		auto subhandler = [&]<size_t Tidx>() {
+			if (idx == Tidx) {
+				std::variant_alternative_t<Tidx, std::variant<V...>> value;
+				this->Recv_generic(value, settings);
+				data = value;
+			}
+		};
+		auto handler = [&]<size_t... Tindices>(std::index_sequence<Tindices...>) {
+			((subhandler.template operator()<Tindices>()), ...);
+		};
+		handler(std::index_sequence_for<V...>{});
+	}
+
+	void Recv_generic(std::monostate &data, StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark)
+	{
+		/* Do nothing */
+	}
+
+	template <typename... V>
+	void Recv_generic_seq(StringValidationSettings settings, V&... data)
+	{
+		(this->Recv_generic(data, settings), ...);
 	}
 
 	struct DeserialisationBuffer BorrowAsDeserialisationBuffer();

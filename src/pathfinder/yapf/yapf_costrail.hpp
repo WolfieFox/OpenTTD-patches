@@ -174,18 +174,21 @@ public:
 	}
 
 private:
-	// returns true if ExecuteTraceRestrict should be called
-	inline bool ShouldCheckTraceRestrict(Node& n, TileIndex tile)
+	inline bool IsWithinTraceRestrictExecuteDistance(Node& n)
 	{
-		return n.num_signals_passed < this->sig_look_ahead_costs.size() &&
-				IsRestrictedSignal(tile);
+		return n.num_signals_passed < this->sig_look_ahead_costs.size();
 	}
 
-	// returns true if ExecuteTunnelBridgeTraceRestrict should be called
+	/* Returns true if ExecuteTraceRestrict should be called. */
+	inline bool ShouldCheckTraceRestrict(Node& n, TileIndex tile)
+	{
+		return this->IsWithinTraceRestrictExecuteDistance(n) && IsRestrictedSignal(tile);
+	}
+
+	/* Returns true if ExecuteTunnelBridgeTraceRestrict should be called. */
 	inline bool ShouldCheckTunnelBridgeTraceRestrict(Node& n, TileIndex tile)
 	{
-		return n.num_signals_passed < this->sig_look_ahead_costs.size() &&
-				IsTunnelBridgeRestrictedSignal(tile);
+		return this->IsWithinTraceRestrictExecuteDistance(n) && IsTunnelBridgeRestrictedSignal(tile);
 	}
 
 	/**
@@ -314,12 +317,12 @@ private:
 				*no_pbs_back_penalty = true;
 			}
 			if (out.flags & TRPRF_DENY) {
-				n.segment->end_segment_reason |= ESRB_DEAD_END;
+				n.segment->end_segment_reason.Set(EndSegmentReason::DeadEnd);
 				return true;
 			}
 			if (out.flags & TRPRF_REVERSE_BEHIND && flags_to_check & TRPAUF_REVERSE_BEHIND && !n.flags_u.flags_s.reverse_pending) {
 				n.flags_u.flags_s.reverse_pending = true;
-				n.segment->end_segment_reason |= ESRB_REVERSE;
+				n.segment->end_segment_reason.Set(EndSegmentReason::Reverse);
 			}
 			cost += out.penalty;
 		}
@@ -334,7 +337,7 @@ private:
 		if (prog != nullptr && prog->actions_used_flags & flags_to_check) {
 			prog->Execute(Yapf().GetVehicle(), TraceRestrictProgramInput(tile, trackdir, &TraceRestrictPreviousSignalCallback, &n), out);
 			if (out.flags & TRPRF_DENY) {
-				n.segment->end_segment_reason |= ESRB_DEAD_END;
+				n.segment->end_segment_reason.Set(EndSegmentReason::DeadEnd);
 				return true;
 			}
 			cost += out.penalty;
@@ -352,14 +355,14 @@ public:
 			bool has_signal_along = HasSignalOnTrackdir(tile, trackdir);
 			if (has_signal_against && !has_signal_along && IsOnewaySignal(tile, TrackdirToTrack(trackdir))) {
 				/* one-way signal in opposite direction */
-				n.segment->end_segment_reason |= ESRB_DEAD_END;
+				n.segment->end_segment_reason.Set(EndSegmentReason::DeadEnd);
 			} else {
 				if (has_signal_along) {
 					SignalState sig_state = GetSignalStateByTrackdir(tile, trackdir);
 					SignalType sig_type = GetSignalType(tile, TrackdirToTrack(trackdir));
 
 					if (IsNoEntrySignal(sig_type)) {
-						n.segment->end_segment_reason |= ESRB_DEAD_END;
+						n.segment->end_segment_reason.Set(EndSegmentReason::DeadEnd);
 						return cost;
 					}
 
@@ -381,7 +384,7 @@ public:
 						if (!IsPbsSignal(sig_type) && Yapf().TreatFirstRedTwoWaySignalAsEOL() && n.flags_u.flags_s.choice_seen && has_signal_against && n.num_signals_passed == 0) {
 							/* yes, the first signal is two-way red signal => DEAD END. Prune this branch... */
 							Yapf().PruneIntermediateNodeBranch(&n);
-							n.segment->end_segment_reason |= ESRB_DEAD_END;
+							n.segment->end_segment_reason.Set(EndSegmentReason::DeadEnd);
 							Yapf().stopped_on_first_two_way_signal = true;
 							return -1;
 						}
@@ -408,18 +411,20 @@ public:
 					}
 
 					bool is_reserve_through = false;
-					if (ShouldCheckTraceRestrict(n, tile)) {
-						TraceRestrictProgramResult out;
-						if (ExecuteTraceRestrict(n, tile, trackdir, cost, out, &is_reserve_through, nullptr)) {
-							return -1;
+					if (IsWithinTraceRestrictExecuteDistance(n)) {
+						if (IsRestrictedSignal(tile)) {
+							TraceRestrictProgramResult out;
+							if (ExecuteTraceRestrict(n, tile, trackdir, cost, out, &is_reserve_through, nullptr)) {
+								return -1;
+							}
 						}
-						if (is_reserve_through) n.num_signals_res_through_passed++;
+						if (GetSignalAlwaysReserveThrough(tile, TrackdirToTrack(trackdir))) is_reserve_through = true;
 					}
 					if (!is_reserve_through) {
 						n.last_non_reserve_through_signal_tile = tile;
 						n.last_non_reserve_through_signal_td = trackdir;
 						if (n.flags_u.flags_s.reverse_pending) {
-							n.segment->end_segment_reason |= ESRB_SAFE_TILE;
+							n.segment->end_segment_reason.Set(EndSegmentReason::SafeTile);
 						}
 					}
 
@@ -437,7 +442,7 @@ public:
 								TraceRestrictProgramResult out;
 								prog->Execute(Yapf().GetVehicle(), TraceRestrictProgramInput(tile, trackdir, &TraceRestrictPreviousSignalCallback, &n), out);
 								if (out.flags & TRPRF_DENY) {
-									n.segment->end_segment_reason |= ESRB_DEAD_END;
+									n.segment->end_segment_reason.Set(EndSegmentReason::DeadEnd);
 									return -1;
 								}
 								cost += out.penalty;
@@ -465,7 +470,7 @@ public:
 			const bool exiting = TrackdirExitsTunnelBridge(tile, trackdir);
 			if (IsTunnelBridgeSignalSimulationExitOnly(tile) && entering) {
 				/* Entering a signalled bridge/tunnel from the wrong side, equivalent to encountering a one-way signal from the wrong side */
-				n.segment->end_segment_reason |= ESRB_DEAD_END;
+				n.segment->end_segment_reason.Set(EndSegmentReason::DeadEnd);
 			}
 			if (IsTunnelBridgeSignalSimulationExit(tile) && IsTunnelBridgeEffectivelyPBS(tile) && exiting) {
 				/* Exiting a PBS signalled tunnel/bridge, record the last non-reserve through signal */
@@ -479,8 +484,11 @@ public:
 				}
 			}
 			if ((TrackFollower::DoTrackMasking() || n.flags_u.flags_s.reverse_pending) && entering && IsTunnelBridgeSignalSimulationEntrance(tile)) {
-				n.segment->end_segment_reason |= ESRB_SAFE_TILE;
+				n.segment->end_segment_reason.Set(EndSegmentReason::SafeTile);
 			}
+
+			/* Record the entrance signal as a passed signal */
+			if (entering) n.num_signals_passed++;
 		}
 		return cost;
 	}
@@ -514,10 +522,10 @@ public:
 	 *  Calculates only the cost of given node, adds it to the parent node cost
 	 *  and stores the result into Node::cost member
 	 */
-	inline bool PfCalcCost(Node &n, const TrackFollower *tf)
+	inline bool PfCalcCost(Node &n, const TrackFollower *follower)
 	{
 		dbg_assert(!n.flags_u.flags_s.target_seen);
-		dbg_assert(tf->new_tile == n.key.tile);
+		dbg_assert(follower->new_tile == n.key.tile);
 		dbg_assert((HasTrackdir(tf->new_td_bits, n.key.td)));
 
 		/* Does the node have some parent node? */
@@ -567,9 +575,9 @@ public:
 		/* the previous tile will be needed for transition cost calculations */
 		TILE prev = !has_parent ? TILE() : TILE(n.parent->GetLastTile(), n.parent->GetLastTrackdir());
 
-		EndSegmentReasonBits end_segment_reason = ESRB_NONE;
+		EndSegmentReasons end_segment_reason{};
 
-		TrackFollower tf_local(v, Yapf().GetCompatibleRailTypes());
+		TrackFollower follower_local{v, Yapf().GetCompatibleRailTypes()};
 
 		if (!has_parent) {
 			/* We will jump to the middle of the cost calculator assuming that segment cache is not used. */
@@ -623,7 +631,7 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 			segment_cost += Yapf().OneTileCost(cur.tile, cur.td);
 
 			/* If we skipped some tunnel/bridge/station tiles, add their base cost */
-			segment_cost += YAPF_TILE_LENGTH * tf->tiles_skipped;
+			segment_cost += YAPF_TILE_LENGTH * follower->tiles_skipped;
 
 			/* Slope cost. */
 			segment_cost += Yapf().SlopeCost(cur.tile, cur.td);
@@ -632,7 +640,7 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 			segment_cost += Yapf().SignalCost(n, cur.tile, cur.td);
 
 			/* Reserved tiles. */
-			segment_cost += Yapf().ReservationCost(n, cur.tile, cur.td, tf->tiles_skipped);
+			segment_cost += Yapf().ReservationCost(n, cur.tile, cur.td, follower->tiles_skipped);
 
 			end_segment_reason = segment.end_segment_reason;
 
@@ -644,12 +652,12 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 
 			} else if (IsRailDepotTile(cur.tile)) {
 				/* We will end in this pass (depot is possible target) */
-				end_segment_reason |= ESRB_DEPOT;
+				end_segment_reason.Set(EndSegmentReason::Depot);
 
 			} else if (cur.tile_type == MP_STATION && IsRailWaypoint(cur.tile)) {
 				if (v->current_order.IsType(OT_GOTO_WAYPOINT) &&
 						GetStationIndex(cur.tile) == v->current_order.GetDestination() &&
-						!Waypoint::Get(v->current_order.GetDestination())->IsSingleTile()) {
+						!Waypoint::Get(v->current_order.GetDestination().ToStationID())->IsSingleTile()) {
 					/* This waypoint is our destination; maybe this isn't an unreserved
 					 * one, so check that and if so see that as the last signal being
 					 * red. This way waypoints near stations should work better. */
@@ -687,26 +695,26 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 						extra_cost += Yapf().PfGetSettings().rail_lastred_penalty;
 					}
 
-					if (v->current_order.GetWaypointFlags() & OWF_REVERSE && HasStationReservation(cur.tile)) {
+					if (v->current_order.GetWaypointFlags().Test(OrderWaypointFlag::Reverse) && HasStationReservation(cur.tile)) {
 						extra_cost += Yapf().PfGetSettings().rail_pbs_station_penalty * 4;
 					}
 				}
 				/* Waypoint is also a good reason to finish. */
-				end_segment_reason |= ESRB_WAYPOINT;
+				end_segment_reason.Set(EndSegmentReason::Waypoint);
 
-			} else if (tf->is_station) {
+			} else if (follower->is_station) {
 				/* Station penalties. */
-				uint platform_length = tf->tiles_skipped + 1;
+				uint platform_length = follower->tiles_skipped + 1;
 				/* We don't know yet if the station is our target or not. Act like
 				 * if it is pass-through station (not our destination). */
 				segment_cost += Yapf().PfGetSettings().rail_station_penalty * platform_length;
 				/* We will end in this pass (station is possible target) */
-				end_segment_reason |= ESRB_STATION;
+				end_segment_reason.Set(EndSegmentReason::Station);
 
 			} else if (TrackFollower::DoTrackMasking() && cur.tile_type == MP_RAILWAY) {
 				/* Searching for a safe tile? */
 				if (HasSignalOnTrackdir(cur.tile, cur.td) && !IsPbsSignal(GetSignalType(cur.tile, TrackdirToTrack(cur.td)))) {
-					end_segment_reason |= ESRB_SAFE_TILE;
+					end_segment_reason.Set(EndSegmentReason::SafeTile);
 				}
 			}
 
@@ -715,10 +723,10 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 			if (n.num_signals_passed < this->sig_look_ahead_costs.size())
 			{
 				int min_speed = 0;
-				int max_speed = tf->GetSpeedLimit(&min_speed);
+				int max_speed = follower->GetSpeedLimit(&min_speed);
 				int max_veh_speed = std::min<int>(v->GetDisplayMaxSpeed(), v->current_order.GetMaxSpeed());
 				if (max_speed < max_veh_speed) {
-					extra_cost += YAPF_TILE_LENGTH * (max_veh_speed - max_speed) * (4 + tf->tiles_skipped) / max_veh_speed;
+					extra_cost += YAPF_TILE_LENGTH * (max_veh_speed - max_speed) * (4 + follower->tiles_skipped) / max_veh_speed;
 				}
 				if (min_speed > max_veh_speed) {
 					extra_cost += YAPF_TILE_LENGTH * (min_speed - max_veh_speed);
@@ -728,38 +736,38 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 			/* Finish if we already exceeded the maximum path cost (i.e. when
 			 * searching for the nearest depot). */
 			if (this->max_cost > 0 && (parent_cost + segment_entry_cost + segment_cost) > this->max_cost) {
-				end_segment_reason |= ESRB_PATH_TOO_LONG;
+				end_segment_reason.Set(EndSegmentReason::PathTooLong);
 			}
 
 			/* Move to the next tile/trackdir. */
-			tf = &tf_local;
-			tf_local.Init(v, Yapf().GetCompatibleRailTypes());
+			follower = &follower_local;
+			follower_local.Init(v, Yapf().GetCompatibleRailTypes());
 
-			if (!tf_local.Follow(cur.tile, cur.td)) {
+			if (!follower_local.Follow(cur.tile, cur.td)) {
 				dbg_assert(tf_local.err != TrackFollower::EC_NONE);
 				/* Can't move to the next tile (EOL?). */
-				if (!(end_segment_reason & (ESRB_RAIL_TYPE | ESRB_DEAD_END))) end_segment_reason |= ESRB_DEAD_END_EOL;
-				if (tf_local.err == TrackFollower::EC_RAIL_ROAD_TYPE) {
-					end_segment_reason |= ESRB_RAIL_TYPE;
+				if (!end_segment_reason.Any({EndSegmentReason::RailType, EndSegmentReason::DeadEnd})) end_segment_reason.Set(EndSegmentReason::DeadEndEol);
+				if (follower_local.err == TrackFollower::EC_RAIL_ROAD_TYPE) {
+					end_segment_reason.Set(EndSegmentReason::RailType);
 				} else {
-					end_segment_reason |= ESRB_DEAD_END;
+					end_segment_reason.Set(EndSegmentReason::DeadEnd);
 				}
 
 				if (TrackFollower::DoTrackMasking() && !HasOnewaySignalBlockingTrackdir(cur.tile, cur.td)) {
-					end_segment_reason |= ESRB_SAFE_TILE;
+					end_segment_reason.Set(EndSegmentReason::SafeTile);
 				}
 				break;
 			}
 
 			/* Check if the next tile is not a choice. */
-			if (KillFirstBit(tf_local.new_td_bits) != TRACKDIR_BIT_NONE) {
+			if (KillFirstBit(follower_local.new_td_bits) != TRACKDIR_BIT_NONE) {
 				/* More than one segment will follow. Close this one. */
-				end_segment_reason |= ESRB_CHOICE_FOLLOWS;
+				end_segment_reason.Set(EndSegmentReason::ChoiceFollows);
 				break;
 			}
 
 			/* Gather the next tile/trackdir/tile_type/rail_type. */
-			TILE next(tf_local.new_tile, (Trackdir)FindFirstBit(tf_local.new_td_bits));
+			TILE next(follower_local.new_tile, (Trackdir)FindFirstBit(follower_local.new_td_bits));
 
 			if (TrackFollower::DoTrackMasking() && IsTileType(next.tile, MP_RAILWAY)) {
 				if (HasSignalOnTrackdir(next.tile, next.td) && IsPbsSignal(GetSignalType(next.tile, TrackdirToTrack(next.td)))) {
@@ -767,16 +775,17 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 					if (IsNoEntrySignal(next.tile, TrackdirToTrack(next.td))) {
 						if (likely(_settings_game.pf.back_of_one_way_pbs_waiting_point)) {
 							/* Possible safe tile, but not so good as it's the back of a signal... */
-							end_segment_reason |= ESRB_SAFE_TILE | ESRB_DEAD_END;
+							end_segment_reason.Set(EndSegmentReason::SafeTile);
+							end_segment_reason.Set(EndSegmentReason::DeadEnd);
 							extra_cost += Yapf().PfGetSettings().rail_lastred_exit_penalty;
 						}
 					} else {
-						end_segment_reason |= ESRB_SAFE_TILE;
+						end_segment_reason.Set(EndSegmentReason::SafeTile);
 					}
 				} else if (likely(_settings_game.pf.back_of_one_way_pbs_waiting_point) && HasSignalOnTrackdir(next.tile, ReverseTrackdir(next.td)) &&
 						GetSignalType(next.tile, TrackdirToTrack(next.td)) == SIGTYPE_PBS_ONEWAY) {
 					/* Possible safe tile, but not so good as it's the back of a signal... */
-					end_segment_reason |= ESRB_SAFE_TILE | ESRB_DEAD_END;
+					end_segment_reason.Set({EndSegmentReason::SafeTile, EndSegmentReason::DeadEnd});
 					extra_cost += Yapf().PfGetSettings().rail_lastred_exit_penalty;
 				}
 			} else if (TrackFollower::DoTrackMasking() &&
@@ -786,34 +795,35 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 					IsTunnelBridgePBS(next.tile) &&
 					TrackdirEntersTunnelBridge(next.tile, next.td)) {
 				/* Possible safe tile, but not so good as it's the back of a signal... */
-				end_segment_reason |= ESRB_SAFE_TILE | ESRB_DEAD_END;
+				end_segment_reason.Set(EndSegmentReason::SafeTile);
+				end_segment_reason.Set(EndSegmentReason::DeadEnd);
 				extra_cost += Yapf().PfGetSettings().rail_lastred_exit_penalty;
 			}
 
 			/* Check the next tile for the rail type. */
 			if (next.rail_type != cur.rail_type) {
 				/* Segment must consist from the same rail_type tiles. */
-				end_segment_reason |= ESRB_RAIL_TYPE;
+				end_segment_reason.Set(EndSegmentReason::RailType);
 				break;
 			}
 
 			/* Avoid infinite looping. */
 			if (next.tile == n.key.tile && next.td == n.key.td) {
-				end_segment_reason |= ESRB_INFINITE_LOOP;
+				end_segment_reason.Set(EndSegmentReason::InfiniteLoop);
 				break;
 			}
 
 			if (segment_cost > MAX_SEGMENT_COST) {
 				/* Potentially in the infinite loop (or only very long segment?). We should
 				 * not force it to finish prematurely unless we are on a regular tile. */
-				if (IsTileType(tf->new_tile, MP_RAILWAY)) {
-					end_segment_reason |= ESRB_SEGMENT_TOO_LONG;
+				if (IsTileType(follower->new_tile, MP_RAILWAY)) {
+					end_segment_reason.Set(EndSegmentReason::SegmentTooLong);
 					break;
 				}
 			}
 
 			/* Any other reason bit set? */
-			if (end_segment_reason != ESRB_NONE) {
+			if (end_segment_reason.Any()) {
 				break;
 			}
 
@@ -824,10 +834,10 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 		} // for (;;)
 
 		/* Don't consider path any further it if exceeded max_cost. */
-		if (end_segment_reason & ESRB_PATH_TOO_LONG) return false;
+		if (end_segment_reason.Test(EndSegmentReason::PathTooLong)) return false;
 
 		bool target_seen = false;
-		if ((end_segment_reason & ESRB_POSSIBLE_TARGET) != ESRB_NONE) {
+		if (end_segment_reason.Any(ESRF_POSSIBLE_TARGET)) {
 			/* Depot, station or waypoint. */
 			if (Yapf().PfDetectDestination(cur.tile, cur.td)) {
 				/* Destination found. */
@@ -839,14 +849,14 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 		if (!is_cached_segment) {
 			/* Write back the segment information so it can be reused the next time. */
 			segment.cost = segment_cost;
-			segment.end_segment_reason = end_segment_reason & ESRB_CACHED_MASK;
+			segment.end_segment_reason = end_segment_reason & ESRF_CACHED_MASK;
 			/* Save end of segment back to the node. */
 			n.SetLastTileTrackdir(cur.tile, cur.td);
 		}
 
 		/* Do we have an excuse why not to continue pathfinding in this direction? */
-		if (!target_seen && (end_segment_reason & ESRB_ABORT_PF_MASK) != ESRB_NONE) {
-			if (likely(!n.flags_u.flags_s.reverse_pending || (end_segment_reason & ESRB_ABORT_PF_MASK_PENDING_REVERSE) != ESRB_NONE)) {
+		if (!target_seen && end_segment_reason.Any(ESRF_ABORT_PF_MASK)) {
+			if (likely(!n.flags_u.flags_s.reverse_pending || end_segment_reason.Any(ESRF_ABORT_PF_MASK_PENDING_REVERSE))) {
 				/* Reason to not continue. Stop this PF branch. */
 				return false;
 			}
@@ -867,7 +877,7 @@ no_entry_cost: // jump here at the beginning if the node has no parent (it is th
 			}
 
 			/* Station platform-length penalty. */
-			if ((end_segment_reason & ESRB_STATION) != ESRB_NONE) {
+			if (end_segment_reason.Test(EndSegmentReason::Station)) {
 				const BaseStation *st = BaseStation::GetByTile(n.GetLastTile());
 				dbg_assert(st != nullptr);
 				uint platform_length = st->GetPlatformLength(n.GetLastTile(), ReverseDiagDir(TrackdirToExitdir(n.GetLastTrackdir())));

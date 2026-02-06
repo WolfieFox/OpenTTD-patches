@@ -11,6 +11,7 @@
 #define GENWORLD_H
 
 #include "company_type.h"
+#include "landscape_type.h"
 #include <functional>
 #include <thread>
 
@@ -57,17 +58,6 @@ static const uint MAP_HEIGHT_LIMIT_AUTO_CEILING_ROOM = 15; ///< When map height 
 typedef void GWDoneProc();  ///< Procedure called when the genworld process finishes
 typedef void GWAbortProc(); ///< Called when genworld is aborted
 
-/** Properties of current genworld process */
-struct GenWorldInfo {
-	bool abort;            ///< Whether to abort the thread ASAP
-	GenWorldMode mode;     ///< What mode are we making a world in
-	CompanyID lc;          ///< The local_company before generating
-	uint size_x;           ///< X-size of the map
-	uint size_y;           ///< Y-size of the map
-	GWDoneProc *proc;      ///< Proc that is called when done (can be nullptr)
-	GWAbortProc *abortp;   ///< Proc that is called when aborting (can be nullptr)
-};
-
 /** Current stage of world generation process */
 enum GenWorldProgress : uint8_t {
 	GWP_MAP_INIT,    ///< Initialize/allocate the map, start economy
@@ -92,13 +82,13 @@ void GenerateWorldSetAbortCallback(GWAbortProc *proc);
 void GenerateWorld(GenWorldMode mode, uint size_x, uint size_y, bool reset_settings = true);
 void AbortGeneratingWorld();
 bool IsGeneratingWorldAborted();
-void HandleGeneratingWorldAbortion();
+void HandleGeneratingWorldAbortion(bool no_retry = false);
 void ExecuteWithGenerateWorld(std::function<void()> func);
 void ScheduleExecuteWithGenerateWorld(std::function<void()> func);
 void LoadTownData();
 
 /* genworld_gui.cpp */
-void SetNewLandscapeType(uint8_t landscape);
+void SetNewLandscapeType(LandscapeType landscape);
 void SetGeneratingWorldProgress(GenWorldProgress cls, uint total);
 void IncreaseGeneratingWorldProgress(GenWorldProgress cls);
 void PrepareGenerateWorldProgress(bool single_section_mode = false);

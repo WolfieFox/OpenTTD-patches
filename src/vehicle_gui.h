@@ -17,6 +17,7 @@
 #include "engine_type.h"
 #include "company_type.h"
 #include "dropdown_func.h"
+#include <bitset>
 #include <vector>
 
 void ShowVehicleRefitWindow(const Vehicle *v, VehicleOrderID order, Window *parent, bool auto_refit = false, bool is_virtual_train = false);
@@ -36,6 +37,7 @@ enum VehicleInvalidateWindowData : int {
 	VIWD_MODIFY_ORDERS     = -2, ///< Other order modifications.
 	VIWD_CONSIST_CHANGED   = -3, ///< Vehicle composition was changed.
 	VIWD_AUTOREPLACE       = -4, ///< Autoreplace replaced the vehicle.
+	VIWD_ROUTE_OVERLAY     = -5, ///< Route overlay mode change.
 };
 
 /** Extra information about refitted cargo and capacity */
@@ -51,7 +53,7 @@ struct TestedEngineDetails {
 
 int DrawVehiclePurchaseInfo(int left, int right, int y, EngineID engine_number, TestedEngineDetails &te);
 
-void DrawTrainImage(const Train *v, const Rect &r, VehicleID selection, EngineImageType image_type, int skip, VehicleID drag_dest = INVALID_VEHICLE);
+void DrawTrainImage(const Train *v, const Rect &r, VehicleID selection, EngineImageType image_type, int skip, VehicleID drag_dest = VehicleID::Invalid());
 void DrawRoadVehImage(const Vehicle *v, const Rect &r, VehicleID selection, EngineImageType image_type, int skip = 0);
 void DrawShipImage(const Vehicle *v, const Rect &r, VehicleID selection, EngineImageType image_type);
 void DrawAircraftImage(const Vehicle *v, const Rect &r, VehicleID selection, EngineImageType image_type);
@@ -108,11 +110,14 @@ inline WindowClass GetWindowClassForVehicleType(VehicleType vt)
 	}
 }
 
+void InvalidateVehicleListWindows(VehicleType vt);
+
 typedef std::vector<const Vehicle *> VehicleList;
 struct GUIVehicleGroup;
 
 /* Unified window procedure */
 void ShowVehicleViewWindow(const Vehicle *v);
+void DirtySharedVehicleViewWindowTitles(const Vehicle *v);
 bool VehicleClicked(const Vehicle *v);
 bool VehicleClicked(VehicleList::const_iterator begin, VehicleList::const_iterator end);
 bool VehicleClicked(const GUIVehicleGroup &vehgroup);

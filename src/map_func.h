@@ -176,6 +176,7 @@ extern MapTilePtr<TileExtended> _me;
 
 bool ValidateMapSize(uint size_x, uint size_y);
 void AllocateMap(uint size_x, uint size_y);
+void DeallocateMap();
 
 /**
  * Returns the TileIndex of a coordinate.
@@ -488,9 +489,6 @@ inline DiagDirection DiagdirBetweenTiles(TileIndex tile_from, TileIndex tile_to)
  */
 typedef bool TestTileOnSearchProc(TileIndex tile, void *user_data);
 
-bool CircularTileSearch(TileIndex *tile, uint size, TestTileOnSearchProc proc, void *user_data);
-bool CircularTileSearch(TileIndex *tile, uint radius, uint w, uint h, TestTileOnSearchProc proc, void *user_data);
-
 bool EnoughContiguousTilesMatchingCondition(TileIndex tile, uint threshold, TestTileOnSearchProc proc, void *user_data);
 
 /**
@@ -524,5 +522,6 @@ inline TileIndex RandomTileSeed(uint32_t r)
 uint GetClosestWaterDistance(TileIndex tile, bool water);
 
 void DumpTileInfo(struct format_target &buffer, TileIndex tile);
+void DumpTileFields(struct format_target &buffer, TileIndex tile);
 
 #endif /* MAP_FUNC_H */

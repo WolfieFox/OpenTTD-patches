@@ -10,8 +10,7 @@
 #ifndef SPRITECACHE_INTERNAL_H
 #define SPRITECACHE_INTERNAL_H
 
-#include "stdafx.h"
-
+#include "core/alloc_func.hpp"
 #include "core/arena_alloc.hpp"
 #include "core/math_func.hpp"
 #include "gfx_type.h"
@@ -66,7 +65,7 @@ public:
 	uint count;
 
 	SpriteType type;     ///< In some cases a single sprite is misused by two NewGRFs. Once as real sprite and once as recolour sprite. If the recolour sprite gets into the cache it might be drawn as real sprite which causes enormous trouble.
-	uint8_t total_missing_zoom_levels = 0; ///< Zoom levels missing entirely
+	LowZoomLevels total_missing_zoom_levels{}; ///< Zoom levels missing entirely
 	uint16_t flags;      ///< Control flags, see SpriteCacheCtrlFlags
 
 	void *GetPtr() { return this->ptr.get(); }
@@ -103,10 +102,10 @@ public:
 	void Clear()
 	{
 		this->Deallocate();
-		this->total_missing_zoom_levels = 0;
+		this->total_missing_zoom_levels = {};
 	}
 
-	void RemoveByMissingZoomLevels(uint8_t lvls)
+	void RemoveByMissingZoomLevels(LowZoomLevels lvls)
 	{
 		Sprite *base = this->GetSpritePtr();
 		if (base == nullptr) {
@@ -120,7 +119,7 @@ public:
 			base = this->GetSpritePtr();
 		}
 		if (base == nullptr) {
-			this->total_missing_zoom_levels = 0;
+			this->total_missing_zoom_levels = {};
 			return;
 		}
 		this->total_missing_zoom_levels = base->missing_zoom_levels;
@@ -169,7 +168,7 @@ public:
 	{
 		assert(this->GetType() == SpriteType::Normal);
 
-		if (!this->ptr || this->total_missing_zoom_levels == UINT8_MAX) {
+		if (!this->ptr || this->total_missing_zoom_levels == LOW_ZOOM_ALL_BITS) {
 			/* Top level has no data or no zoom levels at all, it's safe to replace it because it cannot be cached for a render job */
 			this->Assign(std::move(other));
 			return;
@@ -219,17 +218,12 @@ struct RecolourSpriteCacheItem {
 	{
 		return memcmp(this->data->data(), other.data->data(), RECOLOUR_SPRITE_SIZE) == 0;
 	}
-};
 
-namespace robin_hood {
-	template <>
-	struct hash<RecolourSpriteCacheItem> {
-		size_t operator()(const RecolourSpriteCacheItem &item) const noexcept
-		{
-			return hash_bytes(item.data->data(), RECOLOUR_SPRITE_SIZE);
-		}
-	};
-}
+	size_t hash(robin_hood::hash_method_tag) const noexcept
+	{
+		return robin_hood::hash_bytes(this->data->data(), RECOLOUR_SPRITE_SIZE);
+	}
+};
 
 class RecolourSpriteCache {
 	BumpAllocContainer<RecolourSpriteCacheData, 65536 / RECOLOUR_SPRITE_SIZE> storage;

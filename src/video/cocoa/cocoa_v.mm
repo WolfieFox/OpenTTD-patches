@@ -141,7 +141,7 @@ const char *VideoDriver_Cocoa::Initialize()
 /**
  * Set dirty a rectangle managed by a cocoa video subdriver.
  * @param left Left x cooordinate of the dirty rectangle.
- * @param top Uppder y coordinate of the dirty rectangle.
+ * @param top Upper y coordinate of the dirty rectangle.
  * @param width Width of the dirty rectangle.
  * @param height Height of the dirty rectangle.
  */
@@ -247,7 +247,7 @@ void VideoDriver_Cocoa::EditBoxLostFocus()
 {
 	[ [ this->cocoaview inputContext ] performSelectorOnMainThread:@selector(discardMarkedText) withObject:nil waitUntilDone:[ NSThread isMainThread ] ];
 	/* Clear any marked string from the current edit box. */
-	HandleTextInput(nullptr, true);
+	HandleTextInput({}, true);
 }
 
 /**
@@ -281,12 +281,6 @@ Dimension VideoDriver_Cocoa::GetScreenSize() const
 {
 	NSRect frame = [ [ NSScreen mainScreen ] frame ];
 	return { static_cast<uint>(NSWidth(frame)), static_cast<uint>(NSHeight(frame)) };
-}
-
-/** Get DPI scale of our window. */
-float VideoDriver_Cocoa::GetDPIScale()
-{
-	return this->cocoaview != nil ? [ this->cocoaview getContentsScale ] : 1.0f;
 }
 
 /** Lock video buffer for drawing if it isn't already mapped. */
@@ -627,8 +621,8 @@ void VideoDriver_CocoaQuartz::Stop()
 
 	CGContextRelease(this->cgcontext);
 
-	free(this->window_buffer);
-	free(this->pixel_buffer);
+	this->window_buffer.reset();
+	this->pixel_buffer.reset();
 }
 
 NSView *VideoDriver_CocoaQuartz::AllocateDrawView()
@@ -651,14 +645,13 @@ void VideoDriver_CocoaQuartz::AllocateBackingStore(bool)
 	this->buffer_depth = BlitterFactory::GetCurrentBlitter()->GetScreenDepth();
 
 	/* Create Core Graphics Context */
-	free(this->window_buffer);
-	this->window_buffer = malloc(this->window_pitch * this->window_height * sizeof(uint32_t));
+	this->window_buffer = std::make_unique<uint32_t[]>(this->window_pitch * this->window_height);
 	/* Initialize with opaque black. */
-	ClearWindowBuffer((uint32_t *)this->window_buffer, this->window_pitch, this->window_height);
+	ClearWindowBuffer(this->window_buffer.get(), this->window_pitch, this->window_height);
 
 	CGContextRelease(this->cgcontext);
 	this->cgcontext = CGBitmapContextCreate(
-		this->window_buffer,       // data
+		this->window_buffer.get(), // data
 		this->window_width,        // width
 		this->window_height,       // height
 		8,                         // bits per component
@@ -673,12 +666,9 @@ void VideoDriver_CocoaQuartz::AllocateBackingStore(bool)
 	CGContextSetInterpolationQuality(this->cgcontext, kCGInterpolationNone);
 
 	if (this->buffer_depth == 8) {
-		free(this->pixel_buffer);
-		this->pixel_buffer = malloc(this->window_width * this->window_height);
-		if (this->pixel_buffer == nullptr) UserError("Out of memory allocating pixel buffer");
+		this->pixel_buffer = std::make_unique<uint8_t[]>(this->window_width * this->window_height);
 	} else {
-		free(this->pixel_buffer);
-		this->pixel_buffer = nullptr;
+		this->pixel_buffer.reset();
 	}
 
 	/* Tell the game that the resolution has changed */
@@ -703,8 +693,8 @@ void VideoDriver_CocoaQuartz::AllocateBackingStore(bool)
 void VideoDriver_CocoaQuartz::BlitIndexedToView32(int left, int top, int right, int bottom)
 {
 	const uint32_t *pal   = this->palette;
-	const uint8_t  *src   = (uint8_t*)this->pixel_buffer;
-	uint32_t       *dst   = (uint32_t*)this->window_buffer;
+	const uint8_t  *src   = this->pixel_buffer.get();
+	uint32_t       *dst   = this->window_buffer.get();
 	uint          width = this->window_width;
 	uint          pitch = this->window_pitch;
 

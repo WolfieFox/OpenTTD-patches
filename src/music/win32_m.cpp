@@ -17,6 +17,7 @@
 #include "midifile.hpp"
 #include "midi.h"
 #include "../base_media_base.h"
+#include "../base_media_music.h"
 #include "../core/mem_func.hpp"
 #include <mutex>
 
@@ -201,7 +202,7 @@ void CALLBACK TimerCallback(UINT uTimerID, UINT, DWORD_PTR, DWORD_PTR, DWORD_PTR
 			preload_bytes += block.data.size();
 			if (block.ticktime >= _midi.current_segment.start) {
 				if (_midi.current_segment.loop) {
-					Debug(driver, 2, "Win32-MIDI: timer: loop from block {} (ticktime {}, realtime {:.3f}, bytes {})", bl, block.ticktime, ((int)block.realtime)/1000.0, preload_bytes);
+					Debug(driver, 2, "Win32-MIDI: timer: loop from block {} (ticktime {}, realtime {:.3f}, bytes {})", bl, block.ticktime, block.realtime / 1000.0, preload_bytes);
 					_midi.current_segment.start_block = bl;
 					break;
 				} else {
@@ -210,7 +211,7 @@ void CALLBACK TimerCallback(UINT uTimerID, UINT, DWORD_PTR, DWORD_PTR, DWORD_PTR
 					 * which have a bitrate of 31,250 bits/sec, and transmit 1+8+1 start/data/stop bits per byte.
 					 * The delay compensation is needed to avoid time-compression of following messages.
 					 */
-					Debug(driver, 2, "Win32-MIDI: timer: start from block {} (ticktime {}, realtime {:.3f}, bytes {})", bl, block.ticktime, ((int)block.realtime) / 1000.0, preload_bytes);
+					Debug(driver, 2, "Win32-MIDI: timer: start from block {} (ticktime {}, realtime {:.3f}, bytes {})", bl, block.ticktime, block.realtime / 1000.0, preload_bytes);
 					_midi.playback_start_time -= block.realtime / 1000 - (DWORD)(preload_bytes * 1000 / 3125);
 					break;
 				}
@@ -371,10 +372,10 @@ const char *MusicDriver_Win32::Start(const StringList &parm)
 
 	int resolution = GetDriverParamInt(parm, "resolution", 5);
 	uint port = (uint)GetDriverParamInt(parm, "port", UINT_MAX);
-	const char *portname = GetDriverParam(parm, "portname");
+	auto portname = GetDriverParam(parm, "portname");
 
 	/* Enumerate ports either for selecting port by name, or for debug output */
-	if (portname != nullptr || GetDebugLevel(DebugLevelID::driver) > 0) {
+	if (portname.has_value() || GetDebugLevel(DebugLevelID::driver) > 0) {
 		uint numports = midiOutGetNumDevs();
 		Debug(driver, 1, "Win32-MIDI: Found {} output devices:", numports);
 		for (uint tryport = 0; tryport < numports; tryport++) {
@@ -385,7 +386,7 @@ const char *MusicDriver_Win32::Start(const StringList &parm)
 
 				/* Compare requested and detected port name.
 				 * If multiple ports have the same name, this will select the last matching port, and the debug output will be confusing. */
-				if (portname != nullptr && strncmp(tryportname, portname, lengthof(tryportname)) == 0) port = tryport;
+				if (portname.has_value() && *portname == tryportname) port = tryport;
 
 				Debug(driver, 1, "MIDI port {:2d}: {}{}", tryport, tryportname, (tryport == port) ? " [selected]" : "");
 			}

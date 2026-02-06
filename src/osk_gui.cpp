@@ -16,6 +16,7 @@
 #include "querystring_gui.h"
 #include "video/video_driver.hpp"
 #include "zoom_func.h"
+#include "core/string_consumer.hpp"
 
 #include "widgets/osk_widget.h"
 
@@ -35,12 +36,12 @@ enum KeyStateBits : uint8_t {
 static uint8_t _keystate = KEYS_NONE;
 
 struct OskWindow : public Window {
-	StringID caption;      ///< the caption for this window.
-	QueryString *qs;       ///< text-input
-	WidgetID text_btn;     ///< widget number of parent's text field
-	Textbuf *text;         ///< pointer to parent's textbuffer (to update caret position)
-	std::string orig_str;  ///< Original string.
-	bool shift;            ///< Is the shift effectively pressed?
+	StringID caption{}; ///< the caption for this window.
+	QueryString *qs = nullptr; ///< text-input
+	WidgetID text_btn{}; ///< widget number of parent's text field
+	Textbuf *text = nullptr; ///< pointer to parent's textbuffer (to update caret position)
+	std::string orig_str{}; ///< Original string.
+	bool shift = false; ///< Is the shift effectively pressed?
 
 	OskWindow(WindowDesc &desc, Window *parent, WidgetID button) : Window(desc)
 	{
@@ -88,9 +89,11 @@ struct OskWindow : public Window {
 		this->SetWidgetLoweredState(WID_OSK_CAPS, HasBit(_keystate, KEYS_CAPS));
 	}
 
-	void SetStringParameters(WidgetID widget) const override
+	std::string GetWidgetString(WidgetID widget, StringID stringid) const override
 	{
-		if (widget == WID_OSK_CAPTION) SetDParam(0, this->caption);
+		if (widget == WID_OSK_CAPTION) return GetString(this->caption);
+
+		return this->Window::GetWidgetString(widget, stringid);
 	}
 
 	void DrawWidget(const Rect &r, WidgetID widget) const override
@@ -319,7 +322,7 @@ static std::unique_ptr<NWidgetBase> MakeSpacebarKeys()
 
 
 static constexpr NWidgetPart _nested_osk_widgets[] = {
-	NWidget(WWT_CAPTION, COLOUR_GREY, WID_OSK_CAPTION), SetStringTip(STR_JUST_STRING), SetTextStyle(TC_WHITE),
+	NWidget(WWT_CAPTION, COLOUR_GREY, WID_OSK_CAPTION), SetTextStyle(TC_WHITE),
 	NWidget(WWT_PANEL, COLOUR_GREY),
 		NWidget(WWT_EDITBOX, COLOUR_GREY, WID_OSK_TEXT), SetMinimalSize(252, 0), SetPadding(2, 2, 2, 2),
 	EndContainer(),
@@ -356,17 +359,10 @@ void GetKeyboardLayout()
 	keyboard[1] = _keyboard_opt[1].empty() ? GetString(STR_OSK_KEYBOARD_LAYOUT_CAPS) : _keyboard_opt[1];
 
 	for (uint j = 0; j < 2; j++) {
-		auto kbd = keyboard[j].begin();
-		bool ended = false;
+		StringConsumer consumer(keyboard[j]);
 		for (uint i = 0; i < OSK_KEYBOARD_ENTRIES; i++) {
-			_keyboard[j][i] = Utf8Consume(kbd);
-
 			/* Be lenient when the last characters are missing (is quite normal) */
-			if (_keyboard[j][i] == '\0' || ended) {
-				ended = true;
-				_keyboard[j][i] = ' ';
-				continue;
-			}
+			_keyboard[j][i] = consumer.AnyBytesLeft() ? consumer.ReadUtf8() : ' ';
 
 			if (IsPrintable(_keyboard[j][i])) {
 				errormark[j] += ' ';

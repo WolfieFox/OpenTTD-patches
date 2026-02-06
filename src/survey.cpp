@@ -32,6 +32,9 @@
 #include "video/video_driver.hpp"
 
 #include "base_media_base.h"
+#include "base_media_graphics.h"
+#include "base_media_music.h"
+#include "base_media_sounds.h"
 #include "blitter/factory.hpp"
 
 #include "social_integration.h"
@@ -251,7 +254,7 @@ void SurveyConfiguration(nlohmann::json &survey)
 		survey["video_info"] = VideoDriver::GetInstance()->GetInfoString();
 	}
 	if (BaseGraphics::GetUsedSet() != nullptr) {
-		survey["graphics_set"] = fmt::format("{}.{}", BaseGraphics::GetUsedSet()->name, BaseGraphics::GetUsedSet()->version);
+		survey["graphics_set"] = fmt::format("{}.{}", BaseGraphics::GetUsedSet()->name, BaseGraphics::GetUsedSet()->FormatVersion());
 		const GRFConfig *extra_cfg = BaseGraphics::GetUsedSet()->GetExtraConfig();
 		if (extra_cfg != nullptr && !extra_cfg->param.empty()) {
 			survey["graphics_set_parameters"] = std::span<const uint32_t>(extra_cfg->param);
@@ -260,10 +263,10 @@ void SurveyConfiguration(nlohmann::json &survey)
 		}
 	}
 	if (BaseMusic::GetUsedSet() != nullptr) {
-		survey["music_set"] = fmt::format("{}.{}", BaseMusic::GetUsedSet()->name, BaseMusic::GetUsedSet()->version);
+		survey["music_set"] = fmt::format("{}.{}", BaseMusic::GetUsedSet()->name, BaseMusic::GetUsedSet()->FormatVersion());
 	}
 	if (BaseSounds::GetUsedSet() != nullptr) {
-		survey["sound_set"] = fmt::format("{}.{}", BaseSounds::GetUsedSet()->name, BaseSounds::GetUsedSet()->version);
+		survey["sound_set"] = fmt::format("{}.{}", BaseSounds::GetUsedSet()->name, BaseSounds::GetUsedSet()->FormatVersion());
 	}
 }
 
@@ -288,7 +291,7 @@ void SurveyFont(nlohmann::json &survey)
 void SurveyCompanies(nlohmann::json &survey)
 {
 	for (const Company *c : Company::Iterate()) {
-		auto &company = survey[std::to_string(c->index)];
+		auto &company = survey[fmt::format("{}", c->index.base())];
 		if (c->ai_info == nullptr) {
 			company["type"] = "human";
 		} else {
@@ -331,9 +334,9 @@ void SurveyTimers(nlohmann::json &survey)
  */
 void SurveyGrfs(nlohmann::json &survey)
 {
-	for (GRFConfig *c = _grfconfig; c != nullptr; c = c->next) {
+	for (const auto &c : _grfconfig) {
 		auto grfid = fmt::format("{:08x}", std::byteswap(c->ident.grfid));
-		auto &grf = survey[grfid];
+		auto &grf = survey[std::move(grfid)];
 
 		grf["md5sum"] = FormatArrayAsHex(c->ident.md5sum, true);
 		grf["status"] = c->status;
@@ -346,7 +349,7 @@ void SurveyGrfs(nlohmann::json &survey)
 		if ((c->palette & GRFP_BLT_MASK) == GRFP_BLT_UNSET) grf["blitter"] = "unset";
 		if ((c->palette & GRFP_BLT_MASK) == GRFP_BLT_32BPP) grf["blitter"] = "32bpp";
 
-		grf["is_static"] = HasBit(c->flags, GCF_STATIC);
+		grf["is_static"] = c->flags.Test(GRFConfigFlag::Static);
 		grf["parameters"] = std::span<const uint32_t>(c->param);
 	}
 }

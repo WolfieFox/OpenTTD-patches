@@ -15,13 +15,32 @@
 
 #include "../../safeguards.h"
 
+bool ScriptTileList::SaveObject(HSQUIRRELVM vm)
+{
+	sq_pushstring(vm, "TileList");
+	if (!ScriptList::SaveObject(vm)) return false;
+	sq_remove(vm, -2);
+	return true;
+}
+
+ScriptObject *ScriptTileList::CloneObject()
+{
+	ScriptTileList *clone = new ScriptTileList();
+	clone->CopyList(this);
+	return clone;
+}
+
 void ScriptTileList::AddRectangle(TileIndex t1, TileIndex t2)
 {
 	if (!::IsValidTile(t1)) return;
 	if (!::IsValidTile(t2)) return;
 
+	const size_t old_size = this->GetSize();
+
 	TileArea ta(t1, t2);
 	for (TileIndex t : ta) this->AddItem(t.base());
+
+	ScriptController::DecreaseOps(3 * static_cast<int>(this->GetSize() - old_size));
 }
 
 void ScriptTileList::AddTile(TileIndex tile)
@@ -36,8 +55,12 @@ void ScriptTileList::RemoveRectangle(TileIndex t1, TileIndex t2)
 	if (!::IsValidTile(t1)) return;
 	if (!::IsValidTile(t2)) return;
 
+	const size_t old_size = this->GetSize();
+
 	TileArea ta(t1, t2);
 	for (TileIndex t : ta) this->RemoveItem(t.base());
+
+	ScriptController::DecreaseOps(3 * static_cast<int>(old_size - this->GetSize()));
 }
 
 void ScriptTileList::RemoveTile(TileIndex tile)
@@ -133,20 +156,20 @@ ScriptTileList_StationType::ScriptTileList_StationType(StationID station_id, Scr
 
 	const StationRect *rect = &::Station::Get(station_id)->rect;
 
-	uint station_type_value = 0;
+	EnumBitSet<StationType, uint8_t> station_types = {};
 	/* Convert ScriptStation::StationType to ::StationType, but do it in a
 	 *  bitmask, so we can scan for multiple entries at the same time. */
-	if ((station_type & ScriptStation::STATION_TRAIN) != 0)      station_type_value |= (1 << to_underlying(::StationType::Rail));
-	if ((station_type & ScriptStation::STATION_TRUCK_STOP) != 0) station_type_value |= (1 << to_underlying(::StationType::Truck));
-	if ((station_type & ScriptStation::STATION_BUS_STOP) != 0)   station_type_value |= (1 << to_underlying(::StationType::Bus));
-	if ((station_type & ScriptStation::STATION_AIRPORT) != 0)    station_type_value |= (1 << to_underlying(::StationType::Airport)) | (1 << to_underlying(::StationType::Oilrig));
-	if ((station_type & ScriptStation::STATION_DOCK) != 0)       station_type_value |= (1 << to_underlying(::StationType::Dock))    | (1 << to_underlying(::StationType::Oilrig));
+	if ((station_type & ScriptStation::STATION_TRAIN) != 0)      station_types.Set(::StationType::Rail);
+	if ((station_type & ScriptStation::STATION_TRUCK_STOP) != 0) station_types.Set(::StationType::Truck);
+	if ((station_type & ScriptStation::STATION_BUS_STOP) != 0)   station_types.Set(::StationType::Bus);
+	if ((station_type & ScriptStation::STATION_AIRPORT) != 0)    station_types.Set({::StationType::Airport, ::StationType::Oilrig});
+	if ((station_type & ScriptStation::STATION_DOCK) != 0)       station_types.Set({::StationType::Dock, ::StationType::Oilrig});
 
 	TileArea ta(::TileXY(rect->left, rect->top), rect->Width(), rect->Height());
 	for (TileIndex cur_tile : ta) {
 		if (!::IsTileType(cur_tile, MP_STATION)) continue;
 		if (::GetStationIndex(cur_tile) != station_id) continue;
-		if (!HasBit(station_type_value, to_underlying(::GetStationType(cur_tile)))) continue;
+		if (!station_types.Test(::GetStationType(cur_tile))) continue;
 		this->AddTile(cur_tile);
 	}
 }

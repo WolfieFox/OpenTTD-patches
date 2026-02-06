@@ -17,6 +17,7 @@ add_subdirectory(linkgraph)
 add_subdirectory(misc)
 add_subdirectory(music)
 add_subdirectory(network)
+add_subdirectory(newgrf)
 add_subdirectory(os)
 add_subdirectory(pathfinder)
 add_subdirectory(saveload)
@@ -38,6 +39,11 @@ add_files(
     gfx_layout_icu.cpp
     gfx_layout_icu.h
     CONDITION ICU_i18n_FOUND AND HARFBUZZ_FOUND
+)
+
+add_files(
+    screenshot_png.cpp
+    CONDITION PNG_FOUND
 )
 
 add_files(
@@ -70,6 +76,9 @@ add_files(
     base_consist.h
     base_media_base.h
     base_media_func.h
+    base_media_graphics.h
+    base_media_music.h
+    base_media_sounds.h
     base_station_base.h
     bitmap_type.h
     bmp.cpp
@@ -154,6 +163,7 @@ add_files(
     disaster_vehicle.cpp
     disaster_vehicle.h
     dock_gui.cpp
+    dock_gui.h
     driver.cpp
     driver.h
     dropdown.cpp
@@ -191,7 +201,6 @@ add_files(
     fios_gui.cpp
     fontcache.cpp
     fontcache.h
-    fontdetection.h
     framerate_gui.cpp
     framerate_type.h
     gamelog.cpp
@@ -290,6 +299,10 @@ add_files(
     newgrf_analysis.h
     newgrf_badge.cpp
     newgrf_badge.h
+    newgrf_badge_config.cpp
+    newgrf_badge_config.h
+    newgrf_badge_gui.cpp
+    newgrf_badge_gui.h
     newgrf_badge_type.h
     newgrf_cache_check.h
     newgrf_callbacks.h
@@ -320,14 +333,12 @@ add_files(
     newgrf_industrytiles.cpp
     newgrf_industrytiles.h
     newgrf_industrytiles_analysis.h
-    newgrf_internal.h
     newgrf_newlandscape.cpp
     newgrf_newlandscape.h
     newgrf_newsignals.cpp
     newgrf_newsignals.h
     newgrf_object.cpp
     newgrf_object.h
-    newgrf_optimiser.cpp
     newgrf_profiling.cpp
     newgrf_profiling.h
     newgrf_properties.h
@@ -369,12 +380,17 @@ add_files(
     order_backup.cpp
     order_backup.h
     order_base.h
+    order_bulk.h
     order_cmd.cpp
     order_cmd.h
     order_dest_func.h
+    order_enums_to_json.h
     order_func.h
     order_gui.cpp
     order_type.h
+    order_serialisation.cpp
+    order_serialisation.h
+    order_serialisation_gui.cpp
     osk_gui.cpp
     palette.cpp
     palette_func.h
@@ -430,6 +446,7 @@ add_files(
     schdispatch.h
     schdispatch_cmd.cpp
     schdispatch_gui.cpp
+    screenshot_bmp.cpp
     screenshot_gui.cpp
     screenshot_gui.h
     screenshot.cpp
@@ -437,6 +454,10 @@ add_files(
     scope.h
     scope_info.cpp
     scope_info.h
+    screenshot_type.h
+    screenshot_pcx.cpp
+    settingentry_gui.cpp
+    settingentry_gui.h
     settings.cpp
     settings_cmd.h
     settings_func.h
@@ -477,6 +498,7 @@ add_files(
     soundloader_type.h
     soundloader_raw.cpp
     soundloader_wav.cpp
+    source_type.h
     sprite.cpp
     sprite.h
     spritecache.cpp
@@ -485,6 +507,7 @@ add_files(
     station_base.h
     station_cmd.cpp
     station_cmd.h
+    station_container.h
     station_func.h
     station_gui.cpp
     station_gui.h
@@ -508,7 +531,6 @@ add_files(
     stringfilter.cpp
     stringfilter_type.h
     strings.cpp
-    strings_builder.h
     strings_func.h
     strings_internal.h
     strings_type.h
@@ -572,6 +594,7 @@ add_files(
     tracerestrict.cpp
     tracerestrict.h
     tracerestrict_cmd.h
+    tracerestrict_id_type.h
     tracerestrict_gui.cpp
     track_func.h
     track_type.h
@@ -585,8 +608,10 @@ add_files(
     transparency_gui.h
     transport_type.h
     tree_cmd.cpp
+    tree_func.h
     tree_gui.cpp
     tree_map.h
+    tree_type.h
     tunnel_base.h
     tunnel_map.cpp
     tunnel_map.h

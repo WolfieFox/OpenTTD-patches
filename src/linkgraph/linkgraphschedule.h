@@ -12,7 +12,7 @@
 
 #include "linkgraph.h"
 #include "../thread.h"
-#include "../core/ring_buffer.hpp"
+#include "../3rdparty/cpp-ring-buffer/ring_buffer.hpp"
 #include <memory>
 #include <vector>
 
@@ -45,8 +45,8 @@ class LinkGraphSchedule {
 private:
 	LinkGraphSchedule();
 	~LinkGraphSchedule();
-	typedef ring_buffer<LinkGraph *> GraphList;
-	typedef ring_buffer<std::unique_ptr<LinkGraphJob>> JobList;
+	typedef jgr::ring_buffer<LinkGraph *> GraphList;
+	typedef jgr::ring_buffer<std::unique_ptr<LinkGraphJob>> JobList;
 	friend NamedSaveLoadTable GetLinkGraphScheduleDesc();
 	friend upstream_sl::SaveLoadTable upstream_sl::GetLinkGraphScheduleDesc();
 
@@ -83,7 +83,7 @@ public:
 	 * Remove a link graph from the execution queue.
 	 * @param lg Link graph to be removed.
 	 */
-	void Unqueue(LinkGraph *lg)
+	void Dequeue(LinkGraph *lg)
 	{
 		for (auto iter = this->schedule.begin(); iter != this->schedule.end();) {
 			if (*iter == lg) {

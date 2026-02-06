@@ -37,18 +37,11 @@ jobs:
     - name: Enable Rust cache
       uses: Swatinem/rust-cache@v2
 
-    - name: Setup vcpkg caching
-      uses: actions/github-script@v7
+    - name: Setup vcpkg
+      uses: ./.github/actions/setup-vcpkg
       with:
-        script: |
-          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-          core.exportVariable('VCPKG_BINARY_SOURCES', 'clear;x-gha,readwrite')
-
-    - name: Install vcpkg
-      run: |
-        git clone https://github.com/microsoft/vcpkg ${{ runner.temp }}/vcpkg
-        ${{ runner.temp }}/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+        vcpkg-location: ${{ runner.temp }}/vcpkg
+        mono-install-command: 'brew install mono'
 
     - name: Install dependencies
       env:
@@ -68,10 +61,7 @@ jobs:
         cd build-host
 
         echo "::group::CMake"
-        # CMake 4.0.0 deprecated < 3.5, but some vcpkg packages still use it.
-        # Yet, they are fully compatible with 3.5, and so there is no problem
-        # forcing them to upgrade.
-        CMAKE_POLICY_VERSION_MINIMUM=3.5 cmake ${GITHUB_WORKSPACE} \
+        cmake ${GITHUB_WORKSPACE} \
           -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DOPTION_TOOLS_ONLY=ON \
           # EOF
@@ -84,7 +74,7 @@ jobs:
 
     - name: Import code signing certificates
       if: ${{ false }} # disable for now
-      uses: Apple-Actions/import-codesign-certs@v3
+      uses: Apple-Actions/import-codesign-certs@v5
       with:
         # The certificates in a PKCS12 file encoded as a base64 string
         p12-file-base64: ${{ secrets.APPLE_DEVELOPER_CERTIFICATE_P12_BASE64 }}
@@ -99,10 +89,7 @@ jobs:
         cd build-arm64
 
         echo "::group::CMake"
-        # CMake 4.0.0 deprecated < 3.5, but some vcpkg packages still use it.
-        # Yet, they are fully compatible with 3.5, and so there is no problem
-        # forcing them to upgrade.
-        CMAKE_POLICY_VERSION_MINIMUM=3.5 cmake ${GITHUB_WORKSPACE} \
+        cmake ${GITHUB_WORKSPACE} \
           -DCMAKE_OSX_ARCHITECTURES=arm64 \
           -DVCPKG_TARGET_TRIPLET=arm64-osx \
           -DCMAKE_TOOLCHAIN_FILE=${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
@@ -124,10 +111,7 @@ jobs:
         cd build-x64
 
         echo "::group::CMake"
-        # CMake 4.0.0 deprecated < 3.5, but some vcpkg packages still use it.
-        # Yet, they are fully compatible with 3.5, and so there is no problem
-        # forcing them to upgrade.
-        CMAKE_POLICY_VERSION_MINIMUM=3.5 cmake ${GITHUB_WORKSPACE} \
+        cmake ${GITHUB_WORKSPACE} \
           -DCMAKE_OSX_ARCHITECTURES=x86_64 \
           -DVCPKG_TARGET_TRIPLET=x64-osx \
           -DCMAKE_TOOLCHAIN_FILE=${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake \

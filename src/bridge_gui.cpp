@@ -89,13 +89,13 @@ private:
 	static const std::initializer_list<GUIBridgeList::SortFunction * const> sorter_funcs;
 
 	/* Internal variables */
-	TileIndex start_tile;
-	TileIndex end_tile;
-	TransportType transport_type;
-	uint8_t road_rail_type;
-	GUIBridgeList bridges;
-	int icon_width; ///< Scaled width of the the bridge icon sprite.
-	Scrollbar *vscroll;
+	TileIndex start_tile = INVALID_TILE;
+	TileIndex end_tile = INVALID_TILE;
+	TransportType transport_type = INVALID_TRANSPORT;
+	uint8_t road_rail_type = 0;
+	GUIBridgeList bridges{};
+	int icon_width = 0; ///< Scaled width of the the bridge icon sprite.
+	Scrollbar *vscroll = nullptr;
 
 	/** Sort the bridges by their index */
 	static bool BridgeIndexSorter(const BuildBridgeData &a, const BuildBridgeData &b)
@@ -144,16 +144,19 @@ private:
 	 * @param bridge_data the bridge to get the StringID of.
 	 * @return the StringID.
 	 */
-	StringID GetBridgeSelectString(const BuildBridgeData &bridge_data) const
+	std::string GetBridgeSelectString(const BuildBridgeData &bridge_data) const
 	{
-		SetDParam(0, bridge_data.spec->material);
-		SetDParam(1, PackVelocity(bridge_data.spec->speed, static_cast<VehicleType>(this->transport_type)));
-		SetDParam(2, bridge_data.cost);
 		/* If the bridge has no meaningful speed limit, don't display it. */
 		if (bridge_data.spec->speed == UINT16_MAX) {
-			return _game_mode == GM_EDITOR ? STR_SELECT_BRIDGE_INFO_NAME : STR_SELECT_BRIDGE_INFO_NAME_COST;
+			return _game_mode == GM_EDITOR
+				? GetString(STR_SELECT_BRIDGE_INFO_NAME, bridge_data.spec->material)
+				: GetString(STR_SELECT_BRIDGE_INFO_NAME_COST, bridge_data.spec->material, bridge_data.cost);
 		}
-		return _game_mode == GM_EDITOR ? STR_SELECT_BRIDGE_INFO_NAME_MAX_SPEED : STR_SELECT_BRIDGE_INFO_NAME_MAX_SPEED_COST;
+
+		uint64_t packed_velocity = PackVelocity(bridge_data.spec->speed, static_cast<VehicleType>(this->transport_type));
+		return _game_mode == GM_EDITOR
+			? GetString(STR_SELECT_BRIDGE_INFO_NAME_MAX_SPEED, bridge_data.spec->material, packed_velocity)
+			: GetString(STR_SELECT_BRIDGE_INFO_NAME_MAX_SPEED_COST, bridge_data.spec->material, packed_velocity, bridge_data.cost);
 	}
 
 public:
@@ -209,7 +212,7 @@ public:
 					sprite_dim = maxdim(sprite_dim, GetScaledSpriteSize(bridge_data.spec->sprite));
 					text_dim = maxdim(text_dim, GetStringBoundingBox(GetBridgeSelectString(bridge_data)));
 				}
-				resize.height = std::max(sprite_dim.height, text_dim.height) + padding.height; // Max of both sizes + account for matrix edges.
+				fill.height = resize.height = std::max(sprite_dim.height, text_dim.height) + padding.height; // Max of both sizes + account for matrix edges.
 
 				this->icon_width = sprite_dim.width; // Width of bridge icon.
 				size.width = this->icon_width + WidgetDimensions::scaled.hsep_normal + text_dim.width + padding.width;
@@ -243,7 +246,7 @@ public:
 				for (auto it = first; it != last; ++it) {
 					const BridgeSpec *b = it->spec;
 					DrawSpriteIgnorePadding(b->sprite, b->pal, tr.WithWidth(this->icon_width, rtl), SA_HOR_CENTER | SA_BOTTOM);
-					DrawStringMultiLine(tr.Indent(this->icon_width + WidgetDimensions::scaled.hsep_normal, rtl), GetBridgeSelectString(*it));
+					DrawStringMultiLineWithClipping(tr.Indent(this->icon_width + WidgetDimensions::scaled.hsep_normal, rtl), GetBridgeSelectString(*it));
 					tr = tr.Translate(0, this->resize.step_height);
 				}
 				break;
@@ -287,7 +290,7 @@ public:
 		}
 	}
 
-	void OnDropdownSelect(WidgetID widget, int index) override
+	void OnDropdownSelect(WidgetID widget, int index, int) override
 	{
 		if (widget == WID_BBS_DROPDOWN_CRITERIA && this->bridges.SortType() != index) {
 			this->bridges.SetSortType(index);
@@ -384,15 +387,11 @@ void ShowBuildBridgeWindow(TileIndex start, TileIndex end, TransportType transpo
 	/* only query bridge building possibility once, result is the same for all bridges,
 	 * unless the result is bridge too low for station or pillars obstruct station, in which case it is bridge-type dependent.
 	 * returns CMD_ERROR on failure, and price on success */
-	StringID errmsg = INVALID_STRING_ID;
-	CommandCost ret = Command<CMD_BUILD_BRIDGE>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_BRIDGE>()) | DC_QUERY_COST, end, start, transport_type, 0, road_rail_type, BuildBridgeFlags::None);
+	CommandCost ret = Command<CMD_BUILD_BRIDGE>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_BRIDGE>()).Set(DoCommandFlag::QueryCost), end, start, transport_type, 0, road_rail_type, BuildBridgeFlags::None);
 
-	const bool query_per_bridge_type = ret.Failed() && (ret.GetErrorMessage() == STR_ERROR_BRIDGE_TOO_LOW_FOR_STATION || ret.GetErrorMessage() == STR_ERROR_BRIDGE_PILLARS_OBSTRUCT_STATION);
+	const bool query_per_bridge_type = ret.Failed() && (ret.GetErrorMessage() == STR_ERROR_BRIDGE_PILLARS_OBSTRUCT_STATION || ret.GetErrorMessage() == STR_ERROR_BRIDGE_PILLARS_OBSTRUCT_LOCKS);
 
 	GUIBridgeList bl;
-	if (ret.Failed()) {
-		errmsg = ret.GetErrorMessage();
-	}
 	if (ret.Succeeded() || query_per_bridge_type) {
 		/* check which bridges can be built */
 		const uint tot_bridgedata_len = CalcBridgeLenCostFactor(bridge_len + 2);
@@ -422,33 +421,28 @@ void ShowBuildBridgeWindow(TileIndex start, TileIndex end, TransportType transpo
 			default: break;
 		}
 
-		bool any_available = false;
-		StringID type_errmsg = INVALID_STRING_ID;
 		/* loop for all bridgetypes */
 		for (BridgeType brd_type = 0; brd_type != MAX_BRIDGES; brd_type++) {
 			CommandCost type_check = CheckBridgeAvailability(brd_type, bridge_len);
 			if (type_check.Succeeded()) {
-				/* Re-check bridge building possibility is initial bridge builindg query indicated a bridge type dependent failure */
-				if (query_per_bridge_type && Command<CMD_BUILD_BRIDGE>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_BRIDGE>()) | DC_QUERY_COST, end, start, transport_type, brd_type, road_rail_type, BuildBridgeFlags::None).Failed()) continue;
+				/* Re-check bridge building possibility if initial bridge building query indicated a bridge type dependent failure */
+				if (query_per_bridge_type && Command<CMD_BUILD_BRIDGE>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_BRIDGE>()).Set(DoCommandFlag::QueryCost), end, start, transport_type, brd_type, road_rail_type, BuildBridgeFlags::None).Failed()) continue;
 				/* bridge is accepted, add to list */
 				BuildBridgeData &item = bl.emplace_back();
 				item.index = brd_type;
 				item.spec = GetBridgeSpec(brd_type);
 				/* Add to terraforming & bulldozing costs the cost of the
-				 * bridge itself (not computed with DC_QUERY_COST) */
+				 * bridge itself (not computed with DoCommandFlag::QueryCost) */
 				item.cost = ret.GetCost() + (((int64_t)tot_bridgedata_len * _price[PR_BUILD_BRIDGE] * item.spec->price) >> 8) + infra_cost;
-				any_available = true;
-			} else if (type_check.GetErrorMessage() != INVALID_STRING_ID && !query_per_bridge_type) {
-				type_errmsg = type_check.GetErrorMessage();
+			} else if (!query_per_bridge_type) {
+				ret = std::move(type_check);
 			}
 		}
-		/* give error cause if no bridges available here*/
-		if (!any_available && type_errmsg != INVALID_STRING_ID) errmsg = type_errmsg;
 	}
 
 	if (!bl.empty()) {
 		new BuildBridgeWindow(_build_bridge_desc, start, end, transport_type, road_rail_type, std::move(bl));
 	} else {
-		ShowErrorMessage(STR_ERROR_CAN_T_BUILD_BRIDGE_HERE, errmsg, WL_INFO, TileX(end) * TILE_SIZE, TileY(end) * TILE_SIZE);
+		ShowErrorMessage(GetEncodedString(STR_ERROR_CAN_T_BUILD_BRIDGE_HERE), TileX(end) * TILE_SIZE, TileY(end) * TILE_SIZE, ret);
 	}
 }

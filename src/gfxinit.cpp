@@ -25,10 +25,10 @@
 #include "debug.h"
 #include "table/tree_land.h"
 #include "blitter/32bpp_base.hpp"
-
-/* The type of set we're replacing */
-#define SET_TYPE "graphics"
 #include "base_media_func.h"
+#include "base_media_graphics.h"
+#include "base_media_sounds.h"
+#include "core/string_consumer.hpp"
 
 #include "table/sprites.h"
 
@@ -128,7 +128,7 @@ void CheckExternalFiles()
 	auto output_iterator = std::back_inserter(error_msg);
 	if (used_set->GetNumInvalid() != 0) {
 		/* Not all files were loaded successfully, see which ones */
-		fmt::format_to(output_iterator, "Trying to load graphics set '{}', but it is incomplete. The game will probably not run correctly until you properly install this set or select another one. See section 4.1 of README.md.\n\nThe following files are corrupted or missing:\n", used_set->name);
+		fmt::format_to(output_iterator, "Trying to load graphics set '{}', but it is incomplete. The game will probably not run correctly until you properly install this set or select another one. See section 1.4 of README.md.\n\nThe following files are corrupted or missing:\n", used_set->name);
 		for (const auto &file : used_set->files) {
 			MD5File::ChecksumResult res = GraphicsSet::CheckMD5(&file, BASESET_DIR);
 			if (res != MD5File::CR_MATCH) fmt::format_to(output_iterator, "\t{} is {} ({})\n", file.filename, res == MD5File::CR_MISMATCH ? "corrupt" : "missing", file.missing_warning);
@@ -138,12 +138,12 @@ void CheckExternalFiles()
 
 	const SoundsSet *sounds_set = BaseSounds::GetUsedSet();
 	if (sounds_set->GetNumInvalid() != 0) {
-		fmt::format_to(output_iterator, "Trying to load sound set '{}', but it is incomplete. The game will probably not run correctly until you properly install this set or select another one. See section 4.1 of README.md.\n\nThe following files are corrupted or missing:\n", sounds_set->name);
+		fmt::format_to(output_iterator, "Trying to load sound set '{}', but it is incomplete. The game will probably not run correctly until you properly install this set or select another one. See section 1.4 of README.md.\n\nThe following files are corrupted or missing:\n", sounds_set->name);
 
 		static_assert(SoundsSet::NUM_FILES == 1);
 		/* No need to loop each file, as long as there is only a single
 		 * sound file. */
-		fmt::format_to(output_iterator, "\t{} is {} ({})\n", sounds_set->files->filename, SoundsSet::CheckMD5(sounds_set->files, BASESET_DIR) == MD5File::CR_MISMATCH ? "corrupt" : "missing", sounds_set->files->missing_warning);
+		fmt::format_to(output_iterator, "\t{} is {} ({})\n", sounds_set->files[0].filename, SoundsSet::CheckMD5(&sounds_set->files[0], BASESET_DIR) == MD5File::CR_MISMATCH ? "corrupt" : "missing", sounds_set->files[0].missing_warning);
 	}
 
 	if (!error_msg.empty()) ShowInfoI(error_msg);
@@ -156,6 +156,31 @@ void InitGRFGlobalVars()
 
 	extern bool _allow_rocks_desert;
 	_allow_rocks_desert = false;
+}
+
+/**
+ * Get GRFConfig for the default extra graphics.
+ * @return Managed pointer to default extra GRFConfig.
+ */
+static std::unique_ptr<GRFConfig> GetDefaultExtraGRFConfig()
+{
+	auto gc = std::make_unique<GRFConfig>("OPENTTD.GRF");
+	gc->palette |= GRFP_GRF_DOS;
+	FillGRFDetails(*gc, false, BASESET_DIR);
+	gc->flags.Reset(GRFConfigFlag::InitOnly);
+	return gc;
+}
+
+/**
+ * Get GRFConfig for the baseset extra graphics.
+ * @return Managed pointer to baseset extra GRFConfig.
+ */
+static std::unique_ptr<GRFConfig> GetBasesetExtraGRFConfig()
+{
+	auto gc = std::make_unique<GRFConfig>(BaseGraphics::GetUsedSet()->GetOrCreateExtraConfig());
+	if (gc->param.empty()) gc->SetParameterDefaults();
+	gc->flags.Reset(GRFConfigFlag::InitOnly);
+	return gc;
 }
 
 /** Actually load the sprite tables. */
@@ -210,10 +235,10 @@ static void LoadSpriteTables()
 	 * This overwrites some of the temperate sprites, such as foundations
 	 * and the ground sprites.
 	 */
-	if (_settings_game.game_creation.landscape != LT_TEMPERATE) {
+	if (_settings_game.game_creation.landscape != LandscapeType::Temperate) {
 		LoadGrfFileIndexed(
-			used_set->files[GFT_ARCTIC + _settings_game.game_creation.landscape - 1].filename,
-			_landscape_spriteindexes[_settings_game.game_creation.landscape - 1],
+			used_set->files[GFT_ARCTIC + to_underlying(_settings_game.game_creation.landscape) - 1].filename,
+			_landscape_spriteindexes[to_underlying(_settings_game.game_creation.landscape) - 1],
 			PAL_DOS != used_set->palette
 		);
 	}
@@ -233,45 +258,33 @@ static void LoadSpriteTables()
 	 * However, we do not want it to show up in the list of used NewGRFs,
 	 * so we have to manually add it, and then remove it later.
 	 */
-	GRFConfig *top = _grfconfig;
 
-	/* Default extra graphics */
-	static const char *master_filename = "OPENTTD.GRF";
-	GRFConfig *master = new GRFConfig(master_filename);
-	master->palette |= GRFP_GRF_DOS;
-	FillGRFDetails(*master, false, BASESET_DIR);
-	ClrBit(master->flags, GCF_INIT_ONLY);
+	auto default_extra = GetDefaultExtraGRFConfig();
+	auto baseset_extra = GetBasesetExtraGRFConfig();
+	std::string default_filename = default_extra->filename;
 
-	/* Baseset extra graphics */
-	GRFConfig *extra = new GRFConfig(used_set->GetOrCreateExtraConfig());
-	if (extra->param.empty()) extra->SetParameterDefaults();
-	ClrBit(extra->flags, GCF_INIT_ONLY);
-
-	extra->next = top;
-	master->next = extra;
-	_grfconfig = master;
+	_grfconfig.insert(std::begin(_grfconfig), std::move(default_extra));
+	_grfconfig.insert(std::next(std::begin(_grfconfig)), std::move(baseset_extra));
 
 	LoadNewGRF(SPR_NEWGRFS_BASE, 2);
 
 	uint total_extra_graphics = SPR_NEWGRFS_BASE - SPR_OPENTTD_BASE;
 	Debug(sprite, 4, "Checking sprites from fallback grf");
-	_missing_extra_graphics = GetSpriteCountForFile(master_filename, SPR_OPENTTD_BASE, SPR_NEWGRFS_BASE);
+	_missing_extra_graphics = GetSpriteCountForFile(default_filename, SPR_OPENTTD_BASE, SPR_NEWGRFS_BASE);
 	Debug(sprite, 1, "{} extra sprites, {} from baseset, {} from fallback", total_extra_graphics, total_extra_graphics - _missing_extra_graphics, _missing_extra_graphics);
 
 	/* The original baseset extra graphics intentionally make use of the fallback graphics.
 	 * Let's say everything which provides less than 500 sprites misses the rest intentionally. */
 	if (500 + _missing_extra_graphics > total_extra_graphics) _missing_extra_graphics = 0;
 
-	/* Free and remove the top element. */
-	delete extra;
-	delete master;
-	_grfconfig = top;
+	/* Remove the default and baseset extra graphics from the config. */
+	_grfconfig.erase(std::begin(_grfconfig), std::next(std::begin(_grfconfig), 2));
 }
 
 
-static void RealChangeBlitter(const std::string_view repl_blitter)
+static void RealChangeBlitter(std::string_view repl_blitter)
 {
-	const std::string_view cur_blitter = BlitterFactory::GetCurrentBlitter()->GetName();
+	std::string_view cur_blitter = BlitterFactory::GetCurrentBlitter()->GetName();
 	if (cur_blitter == repl_blitter) return;
 
 	Debug(driver, 1, "Switching blitter from '{}' to '{}'... ", cur_blitter, repl_blitter);
@@ -286,7 +299,7 @@ static void RealChangeBlitter(const std::string_view repl_blitter)
 
 	/* Clear caches that might have sprites for another blitter. */
 	VideoDriver::GetInstance()->ClearSystemSprites();
-	ClearFontCache();
+	FontCache::ClearFontCaches(FONTSIZES_ALL);
 	GfxClearSpriteCache();
 	ReInitAllWindows(false);
 }
@@ -311,8 +324,8 @@ static bool SwitchNewGRFBlitter()
 	 */
 	uint depth_wanted_by_base = BaseGraphics::GetUsedSet()->blitter == BLT_32BPP ? 32 : 8;
 	uint depth_wanted_by_grf = _support8bpp != S8BPP_NONE ? 8 : 32;
-	for (GRFConfig *c = _grfconfig; c != nullptr; c = c->next) {
-		if (c->status == GCS_DISABLED || c->status == GCS_NOT_FOUND || HasBit(c->flags, GCF_INIT_ONLY)) continue;
+	for (const auto &c : _grfconfig) {
+		if (c->status == GCS_DISABLED || c->status == GCS_NOT_FOUND || c->flags.Test(GRFConfigFlag::InitOnly)) continue;
 		if (c->palette & GRFP_BLT_32BPP) depth_wanted_by_grf = 32;
 	}
 	/* We need a 32bpp blitter for font anti-alias. */
@@ -340,7 +353,7 @@ static bool SwitchNewGRFBlitter()
 	};
 
 	const bool animation_wanted = HasBit(_display_opt, DO_FULL_ANIMATION);
-	const std::string_view cur_blitter = BlitterFactory::GetCurrentBlitter()->GetName();
+	std::string_view cur_blitter = BlitterFactory::GetCurrentBlitter()->GetName();
 
 	for (const auto &replacement_blitter : replacement_blitters) {
 		if (animation_wanted && (replacement_blitter.animation == 0)) continue;
@@ -367,47 +380,9 @@ void CheckBlitter()
 {
 	if (!SwitchNewGRFBlitter()) return;
 
-	ClearFontCache();
+	FontCache::ClearFontCaches(FONTSIZES_ALL);
 	GfxClearSpriteCache();
 	ReInitAllWindows(false);
-}
-
-void UpdateRouteStepSpriteSize()
-{
-	extern uint _vp_route_step_sprite_width;
-	extern uint _vp_route_step_base_width;
-	extern uint _vp_route_step_height_top;
-	extern uint _vp_route_step_height_bottom;
-	extern uint _vp_route_step_string_width[4];
-
-	Dimension d0 = GetSpriteSize(SPR_ROUTE_STEP_TOP);
-	_vp_route_step_sprite_width = d0.width;
-	_vp_route_step_height_top = d0.height;
-
-	_vp_route_step_base_width = (_vp_route_step_height_top + 1) * 2;
-
-	Dimension d2 = GetSpriteSize(SPR_ROUTE_STEP_BOTTOM);
-	_vp_route_step_height_bottom = d2.height;
-
-	const uint min_width = _vp_route_step_sprite_width > _vp_route_step_base_width ? _vp_route_step_sprite_width - _vp_route_step_base_width : 0;
-	uint extra = 0;
-	for (uint i = 0; i < 4; i++) {
-		SetDParamMaxDigits(0, i + 2, FS_SMALL);
-		SetDParam(1, STR_VIEWPORT_SHOW_VEHICLE_ROUTE_STEP_STATION);
-		const uint base_width = GetStringBoundingBox(STR_VIEWPORT_SHOW_VEHICLE_ROUTE_STEP, FS_SMALL).width;
-		if (i == 0) {
-			uint width = base_width;
-			auto process_string = [&](StringID str) {
-				SetDParam(1, str);
-				width = std::max(width, GetStringBoundingBox(STR_VIEWPORT_SHOW_VEHICLE_ROUTE_STEP, FS_SMALL).width);
-			};
-			process_string(STR_VIEWPORT_SHOW_VEHICLE_ROUTE_STEP_DEPOT);
-			process_string(STR_VIEWPORT_SHOW_VEHICLE_ROUTE_STEP_WAYPOINT);
-			process_string(STR_VIEWPORT_SHOW_VEHICLE_ROUTE_STEP_IMPLICIT);
-			extra = width - base_width;
-		}
-		_vp_route_step_string_width[i] = std::max(min_width, base_width + extra);
-	}
 }
 
 #if !defined(DEDICATED)
@@ -469,16 +444,13 @@ void GfxDetermineMainColours()
 
 	/* Trees. */
 	extern uint32_t _vp_map_vegetation_tree_colours[16][5][MAX_TREE_COUNT_BY_LANDSCAPE];
-	const uint base  = _tree_base_by_landscape[_settings_game.game_creation.landscape];
-	const uint count = _tree_count_by_landscape[_settings_game.game_creation.landscape];
+	const TreeTypeRange tree_range  = _tree_range_by_landscape[to_underlying(_settings_game.game_creation.landscape)];
 	for (uint tg = 0; tg < 5; tg++) {
-		for (uint i = base; i < base + count; i++) {
-			_vp_map_vegetation_tree_colours[0][tg][i - base] = GetSpriteMainColour(_tree_sprites[i].sprite, _tree_sprites[i].pal);
+		for (uint i = tree_range.base; i < (uint)(tree_range.base + tree_range.count); i++) {
+			_vp_map_vegetation_tree_colours[0][tg][i - tree_range.base] = GetSpriteMainColour(_tree_sprites[i].sprite, _tree_sprites[i].pal);
 		}
-		const int diff = MAX_TREE_COUNT_BY_LANDSCAPE - count;
-		if (diff > 0) {
-			for (uint i = count; i < MAX_TREE_COUNT_BY_LANDSCAPE; i++)
-				_vp_map_vegetation_tree_colours[0][tg][i] = _vp_map_vegetation_tree_colours[0][tg][i - count];
+		for (uint i = tree_range.count; i < MAX_TREE_COUNT_BY_LANDSCAPE; i++) {
+			_vp_map_vegetation_tree_colours[0][tg][i] = _vp_map_vegetation_tree_colours[0][tg][i - tree_range.count];
 		}
 	}
 	for (int s = 1; s <= SLOPE_ELEVATED; ++s) {
@@ -506,46 +478,44 @@ void GfxLoadSprites()
 
 	SwitchNewGRFBlitter();
 	VideoDriver::GetInstance()->ClearSystemSprites();
-	ClearFontCache();
+	FontCache::ClearFontCaches(FONTSIZES_ALL);
 	GfxInitSpriteMem();
 	GfxInitPalettes();
 	LoadSpriteTables();
 	GfxClearSpriteCacheLoadIndex();
 	GfxDetermineMainColours();
 
+	extern void UpdateRouteStepSpriteSize();
 	UpdateRouteStepSpriteSize();
+
 	UpdateCursorSize();
 
 	Debug(sprite, 2, "Completed loading sprite set {}", _settings_game.game_creation.landscape);
 }
 
-GraphicsSet::GraphicsSet()
-	: BaseSet<GraphicsSet, MAX_GFT, true>{}, palette{}, blitter{}
-{
-	// instantiate here, because unique_ptr needs a complete type
-}
+/* instantiate here, because unique_ptr needs a complete type */
+GraphicsSet::GraphicsSet() = default;
 
-GraphicsSet::~GraphicsSet()
-{
-	// instantiate here, because unique_ptr needs a complete type
-}
+/* instantiate here, because unique_ptr needs a complete type */
+GraphicsSet::~GraphicsSet() = default;
 
 bool GraphicsSet::FillSetDetails(const IniFile &ini, const std::string &path, const std::string &full_filename)
 {
-	bool ret = this->BaseSet<GraphicsSet, MAX_GFT, true>::FillSetDetails(ini, path, full_filename, false);
-	if (ret) {
-		const IniGroup *metadata = ini.GetGroup("metadata");
-		assert(metadata != nullptr); /* ret can't be true if metadata isn't present. */
-		const IniItem *item;
+	if (!this->BaseSet<GraphicsSet>::FillSetDetails(ini, path, full_filename, false)) return false;
 
-		fetch_metadata("palette");
-		this->palette = ((*item->value)[0] == 'D' || (*item->value)[0] == 'd') ? PAL_DOS : PAL_WINDOWS;
+	const IniGroup *metadata = ini.GetGroup("metadata");
+	assert(metadata != nullptr); /* already checked by the inherited FillSetDetails. */
+	const IniItem *item;
 
-		/* Get optional blitter information. */
-		item = metadata->GetItem("blitter");
-		this->blitter = (item != nullptr && (*item->value)[0] == '3') ? BLT_32BPP : BLT_8BPP;
-	}
-	return ret;
+	item = this->GetMandatoryItem(full_filename, *metadata, "palette");
+	if (item == nullptr) return false;
+	this->palette = ((*item->value)[0] == 'D' || (*item->value)[0] == 'd') ? PAL_DOS : PAL_WINDOWS;
+
+	/* Get optional blitter information. */
+	item = metadata->GetItem("blitter");
+	this->blitter = (item != nullptr && (*item->value)[0] == '3') ? BLT_32BPP : BLT_8BPP;
+
+	return true;
 }
 
 /**
@@ -640,41 +610,108 @@ MD5File::ChecksumResult MD5File::CheckMD5(Subdirectory subdir, size_t max_size) 
 	return this->hash == digest ? CR_MATCH : CR_MISMATCH;
 }
 
+/**
+ * Get the description for the given ISO code.
+ * It falls back to the first two characters of the ISO code in case
+ * no match could be made with the full ISO code. If even then the
+ * matching fails the default is returned.
+ * @param isocode the isocode to search for
+ * @return the description
+ */
+const std::string &BaseSetBase::GetDescription(std::string_view isocode) const
+{
+	const std::span<const std::pair<std::string, std::string>> descs(this->description);
+
+	auto find = [&descs](std::string_view key) -> const std::string * {
+		auto it = std::lower_bound(descs.begin(), descs.end(), key, [](const std::pair<std::string, std::string> &a, const std::string_view &b) -> bool {
+			return a.first < b;
+		});
+		if (it != descs.end() && it->first == key) return &(it->second);
+		return nullptr;
+	};
+
+	if (!isocode.empty()) {
+		/* First the full ISO code */
+		auto desc = find(isocode);
+		if (desc != nullptr) return *desc;
+
+		/* Then the first two characters */
+		desc = find(isocode.substr(0, 2));
+		if (desc != nullptr) return *desc;
+	}
+	/* Then fall back */
+	return *find({});
+}
+
+void BaseSetVersionPrinter::fmt_format_value(format_target &output) const
+{
+	for (size_t i = 0; i < this->version.size(); i++) {
+		if (i != 0) output.push_back('.');
+		output.format("{}", this->version[i]);
+	}
+}
+
+bool BaseSetBase::ReadVersionString(std::string_view version_str)
+{
+	for (StringConsumer consumer{version_str};;) {
+		auto value = consumer.TryReadIntegerBase<uint32_t>(10);
+		bool valid = value.has_value();
+		if (valid) this->version.push_back(*value);
+		if (valid && !consumer.AnyBytesLeft()) break;
+		if (!valid || !consumer.ReadIf(".")) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /** Names corresponding to the GraphicsFileType */
-static const char * const _graphics_file_names[] = { "base", "logos", "arctic", "tropical", "toyland", "extra" };
+static const std::string_view _graphics_file_names[] = { "base", "logos", "arctic", "tropical", "toyland", "extra" };
 
 /** Implementation */
-template <class T, size_t Tnum_files, bool Tsearch_in_tars>
-/* static */ const char * const *BaseSet<T, Tnum_files, Tsearch_in_tars>::file_names = _graphics_file_names;
-
-template <class Tbase_set>
-/* static */ bool BaseMedia<Tbase_set>::DetermineBestSet()
+template <>
+/* static */ std::span<const std::string_view> BaseSet<GraphicsSet>::GetFilenames()
 {
-	if (BaseMedia<Tbase_set>::used_set != nullptr) return true;
+	return _graphics_file_names;
+}
 
-	const Tbase_set *best = nullptr;
-	for (const Tbase_set *c = BaseMedia<Tbase_set>::available_sets; c != nullptr; c = c->next) {
+template <>
+/* static */ bool BaseMedia<GraphicsSet>::DetermineBestSet()
+{
+	if (BaseMedia<GraphicsSet>::used_set != nullptr) return true;
+
+	const GraphicsSet *best = nullptr;
+
+	auto IsBetter = [&best] (const GraphicsSet *current) {
+		/* Nothing chosen yet. */
+		if (best == nullptr) return true;
+		/* Not being a fallback is better. */
+		if (best->fallback && !current->fallback) return true;
+		/* Having more valid files is better. */
+		if (best->valid_files < current->valid_files) return true;
+		/* Having (essentially) fewer valid files is worse. */
+		if (best->valid_files != current->valid_files) return false;
+		/* Having a later version of the same base set is better. */
+		if (best->shortname == current->shortname && best->version < current->version) return true;
+		/* The DOS palette is the better palette. */
+		return best->palette != PAL_DOS && current->palette == PAL_DOS;
+	};
+
+	for (const auto &c : BaseMedia<GraphicsSet>::available_sets) {
 		/* Skip unusable sets */
 		if (c->GetNumMissing() != 0) continue;
 
-		if (best == nullptr ||
-				(best->fallback && !c->fallback) ||
-				best->valid_files < c->valid_files ||
-				(best->valid_files == c->valid_files && (
-					(best->shortname == c->shortname && best->version < c->version) ||
-					(best->palette != PAL_DOS && c->palette == PAL_DOS)))) {
-			best = c;
-		}
+		if (IsBetter(c.get())) best = c.get();
 	}
 
-	BaseMedia<Tbase_set>::used_set = best;
-	return BaseMedia<Tbase_set>::used_set != nullptr;
+	BaseMedia<GraphicsSet>::used_set = best;
+	return BaseMedia<GraphicsSet>::used_set != nullptr;
 }
 
-template <class Tbase_set>
-/* static */ const char *BaseMedia<Tbase_set>::GetExtension()
+template <>
+/* static */ std::string_view BaseMedia<GraphicsSet>::GetExtension()
 {
 	return ".obg"; // OpenTTD Base Graphics
 }
 
-INSTANTIATE_BASE_MEDIA_METHODS(BaseMedia<GraphicsSet>, GraphicsSet)
+template class BaseMedia<GraphicsSet>;

@@ -11,20 +11,54 @@
 #define ORDER_TYPE_H
 
 #include "core/enum_type.hpp"
+#include "depot_type.h"
+#include "core/pool_type.hpp"
+#include "station_type.h"
+#include "tracerestrict_id_type.h"
 
 typedef uint16_t VehicleOrderID;  ///< The index of an order within its current vehicle (not pool related)
-typedef uint32_t OrderID;
-typedef uint16_t OrderListID;
-typedef uint16_t DestinationID;
+struct OrderIDTag : public PoolIDTraits<uint32_t, 0xFF0000, 0xFFFFFF> {};
+using OrderID = PoolID<OrderIDTag>;
+struct OrderListIDTag : public PoolIDTraits<uint16_t, 64000, 0xFFFF> {};
+using OrderListID = PoolID<OrderListIDTag>;
 typedef uint32_t TimetableTicks;
+
+struct DestinationID {
+	static inline constexpr bool fmt_as_base = true;
+	static inline constexpr bool serialisation_as_base = true;
+	static inline constexpr bool saveload_primitive_type = true;
+	static inline constexpr bool integer_type_hint = true;
+	static inline constexpr bool string_parameter_as_base = true;
+
+	using BaseType = uint16_t;
+	BaseType value = 0;
+
+	explicit DestinationID() = default;
+	constexpr DestinationID(size_t index) : value(static_cast<BaseType>(index)) {}
+	constexpr DestinationID(DepotID depot) : value(depot.base()) {}
+	constexpr DestinationID(StationID station) : value(station.base()) {}
+	constexpr DestinationID(TraceRestrictSlotID slot) : value(slot.base()) {}
+	constexpr DestinationID(TraceRestrictSlotGroupID sg) : value(sg.base()) {}
+	constexpr DestinationID(TraceRestrictCounterID ctr) : value(ctr.base()) {}
+
+	constexpr DepotID ToDepotID() const noexcept { return static_cast<DepotID>(this->value); }
+	constexpr StationID ToStationID() const noexcept { return static_cast<StationID>(this->value); }
+	constexpr TraceRestrictSlotID ToSlotID() const noexcept { return static_cast<TraceRestrictSlotID>(this->value); }
+	constexpr TraceRestrictSlotGroupID ToSlotGroupID() const noexcept { return static_cast<TraceRestrictSlotGroupID>(this->value); }
+	constexpr TraceRestrictCounterID ToCounterID() const noexcept { return static_cast<TraceRestrictCounterID>(this->value); }
+	constexpr BaseType base() const noexcept { return this->value; }
+	constexpr BaseType &edit_base() { return this->value; }
+
+	constexpr bool operator ==(const DestinationID &destination) const { return this->value == destination.value; }
+	constexpr bool operator ==(const StationID &station) const { return this->value == station; }
+	constexpr bool operator ==(const TraceRestrictSlotID &slot) const { return this->value == slot.base(); }
+	constexpr bool operator ==(const TraceRestrictCounterID &ctr) const { return this->value == ctr.base(); }
+};
 
 /** Invalid vehicle order index (sentinel) */
 static const VehicleOrderID INVALID_VEH_ORDER_ID = 0xFFFF;
 /** Last valid VehicleOrderID. */
 static const VehicleOrderID MAX_VEH_ORDER_ID     = INVALID_VEH_ORDER_ID - 1;
-
-/** Invalid order (sentinel) */
-static const OrderID INVALID_ORDER = 0xFFFFFF;
 
 /**
  * Maximum number of orders in implicit-only lists before we start searching
@@ -71,6 +105,12 @@ enum OrderLabelSubType : uint8_t {
 	OLST_TEXT                  = 0,
 	OLST_DEPARTURES_VIA        = 1,
 	OLST_DEPARTURES_REMOVE_VIA = 2,
+	OLST_ERROR                 = 3,
+};
+
+enum class OrderLabelError : uint16_t {
+	Default                    = 0,
+	ParseError                 = 1,
 };
 
 inline bool IsDestinationOrderLabelSubType(OrderLabelSubType subtype)
@@ -163,11 +203,10 @@ DECLARE_ENUM_AS_BIT_SET(OrderDepotExtraFlags)
 /**
  * Flags for go to waypoint orders
  */
-enum OrderWaypointFlags {
-	OWF_DEFAULT          = 0,      ///< Default waypoint behaviour
-	OWF_REVERSE          = 1 << 0, ///< Reverse train at the waypoint
+enum class OrderWaypointFlag : uint8_t {
+	Reverse             = 0, ///< Reverse train at the waypoint
 };
-DECLARE_ENUM_AS_BIT_SET(OrderWaypointFlags)
+using OrderWaypointFlags = EnumBitSet<OrderWaypointFlag, uint8_t>;
 
 /**
  * Variables (of a vehicle) to 'cause' skipping on.
@@ -313,6 +352,9 @@ enum OrderTimetableConditionMode {
  * +-+-+-+-+-+-+-+-+-+-+-+
  *           |
  *           Slot tag
+ *
+ * Mode = OCDM_ROUTE_ID
+ * Route ID is in low half of xdata2.
 */
 
 enum OrderDispatchConditionBits {
@@ -333,6 +375,7 @@ enum OrderDispatchConditionSources : uint8_t {
 enum OrderDispatchConditionModes : uint8_t {
 	ODCM_FIRST_LAST          = 0,
 	OCDM_TAG                 = 1,
+	OCDM_ROUTE_ID            = 2,
 };
 
 enum OrderDispatchFirstLastConditionBits {
@@ -354,5 +397,8 @@ enum CloneOptions : uint8_t {
 struct Order;
 struct OrderPoolItem;
 struct OrderList;
+
+using DispatchSlotRouteID = uint8_t;
+static const DispatchSlotRouteID INVALID_DISPATCH_SLOT_ROUTE_ID = 0xFF;
 
 #endif /* ORDER_TYPE_H */

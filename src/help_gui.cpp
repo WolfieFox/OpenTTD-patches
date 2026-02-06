@@ -20,6 +20,8 @@
 #include "widgets/help_widget.h"
 #include "widgets/misc_widget.h"
 
+#include "table/strings.h"
+
 #include "safeguards.h"
 
 static const std::string README_FILENAME = "README.md";
@@ -49,7 +51,8 @@ static std::optional<std::string> FindGameManualFilePath(std::string_view filena
 	};
 
 	for (Searchpath sp : searchpaths) {
-		auto file_path = FioGetDirectory(sp, subdir) + filename.data();
+		std::string file_path = FioGetDirectory(sp, subdir);
+		file_path.append(filename);
 		if (FioCheckFileExists(file_path, NO_DIRECTORY)) return file_path;
 	}
 
@@ -58,7 +61,7 @@ static std::optional<std::string> FindGameManualFilePath(std::string_view filena
 
 /** Window class displaying the game manual textfile viewer. */
 struct GameManualTextfileWindow : public TextfileWindow {
-	GameManualTextfileWindow(std::string_view filename, Subdirectory subdir) : TextfileWindow(TFT_GAME_MANUAL)
+	GameManualTextfileWindow(std::string_view filename, Subdirectory subdir) : TextfileWindow(nullptr, TFT_GAME_MANUAL)
 	{
 		this->ConstructWindow();
 
@@ -76,11 +79,13 @@ struct GameManualTextfileWindow : public TextfileWindow {
 		this->OnClick({ 0, 0 }, WID_TF_WRAPTEXT, 1);
 	}
 
-	void SetStringParameters(WidgetID widget) const override
+	std::string GetWidgetString(WidgetID widget, StringID stringid) const override
 	{
 		if (widget == WID_TF_CAPTION) {
-			SetDParamStr(0, this->filename);
+			return GetString(stringid, this->filename);
 		}
+
+		return this->Window::GetWidgetString(widget, stringid);
 	}
 
 	void AfterLoadText() override

@@ -11,9 +11,11 @@
 #define VEHICLE_TYPE_H
 
 #include "core/enum_type.hpp"
+#include "core/pool_type.hpp"
 
 /** The type all our vehicle IDs have. */
-typedef uint32_t VehicleID;
+struct VehicleIDTag : public PoolIDTraits<uint32_t, 0xFF000, 0xFFFFF> {};
+using VehicleID = PoolID<VehicleIDTag>;
 
 static const int GROUND_ACCELERATION = 9800; ///< Acceleration due to gravity, 9.8 m/s^2
 
@@ -49,12 +51,9 @@ struct EffectVehicle;
 struct DisasterVehicle;
 
 /** Base vehicle class. */
-struct BaseVehicle
-{
-	VehicleType type; ///< Type of vehicle
+struct BaseVehicle {
+	VehicleType type = VEH_INVALID; ///< Type of vehicle
 };
-
-static const VehicleID INVALID_VEHICLE = 0xFFFFF; ///< Constant representing a non-existing vehicle.
 
 /** Flags for goto depot commands. */
 enum class DepotCommandFlag : uint8_t {
@@ -116,6 +115,16 @@ enum EngineImageType : uint8_t {
 	EIT_PURCHASE   = 0x20,  ///< Vehicle drawn in purchase list, autoreplace gui, ...
 	EIT_PREVIEW    = 0x21,  ///< Vehicle drawn in preview window, news, ...
 };
+
+/** Randomisation triggers for vehicles */
+enum class VehicleRandomTrigger : uint8_t {
+	NewCargo, ///< Affected vehicle only: Vehicle is loaded with cargo, after it was empty.
+	Depot, ///< Front vehicle only: Consist arrived in depot.
+	Empty, ///< Front vehicle only: Entire consist is empty.
+	AnyNewCargo, ///< All vehicles in consist: Any vehicle in the consist received new cargo.
+	Callback32, ///< All vehicles in consist: 32 day callback requested rerandomisation
+};
+using VehicleRandomTriggers = EnumBitSet<VehicleRandomTrigger, uint8_t>;
 
 static const uint32_t VEHICLE_NAME_NO_GROUP = 0x80000000; ///< String constant to not include the vehicle's group name, if using the long name format
 

@@ -17,12 +17,27 @@
 #include "core/format.hpp"
 #include "3rdparty/fmt/ranges.h"
 
+template <typename T>
+inline bool EncodedString::Deserialise(T &buffer, StringValidationSettings default_string_validation)
+{
+	buffer.Recv_string(this->string, default_string_validation.Set(StringValidationSetting::AllowControlCode));
+	return true;
+}
+
+inline void EncodedString::Sanitise(StringValidationSettings settings)
+{
+	StrMakeValidInPlace(this->string, settings.Set(StringValidationSetting::AllowControlCode));
+}
+
 namespace TupleCmdDataDetail {
 	template <typename U>
 	void SanitiseGeneric(U &value, StringValidationSettings settings)
 	{
 		if constexpr (std::is_same_v<U, std::string>) {
 			StrMakeValidInPlace(value, settings);
+		}
+		if constexpr (std::is_same_v<U, EncodedString>) {
+			value.Sanitise(settings);
 		}
 	}
 
@@ -32,11 +47,11 @@ namespace TupleCmdDataDetail {
 		((SanitiseGeneric(std::get<Tindices>(values), settings)), ...);
 	}
 
-	template<typename T, size_t Tindex>
+	template <typename T, size_t Tindex>
 	constexpr auto MakeRefTupleWithoutStringsItem(const T &values)
 	{
 		const auto &val = std::get<Tindex>(values);
-		if constexpr (std::is_same_v<std::remove_cvref_t<decltype(val)>, std::string>) {
+		if constexpr (CommandPayloadStringType<std::remove_cvref_t<decltype(val)>>) {
 			return std::tuple<>();
 		} else {
 			return std::forward_as_tuple(val);

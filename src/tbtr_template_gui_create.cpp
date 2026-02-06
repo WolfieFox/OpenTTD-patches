@@ -51,8 +51,8 @@
 
 class TemplateReplaceWindow;
 
-// some space in front of the virtual train in the matrix
-uint16_t TRAIN_FRONT_SPACE = 16;
+/* Some space in front of the virtual train in the matrix */
+static constexpr uint16_t TRAIN_FRONT_SPACE = 16;
 
 enum TemplateReplaceCreateWindowWidgets : WidgetID {
 	TCW_CAPTION,
@@ -121,7 +121,7 @@ static void TrainDepotMoveVehicle(const Vehicle *wagon, VehicleID sel, const Veh
 
 	if (wagon == v) return;
 
-	VehicleID target = (wagon == nullptr) ? INVALID_VEHICLE : wagon->index;
+	VehicleID target = (wagon == nullptr) ? VehicleID::Invalid() : wagon->index;
 	MoveRailVehicleFlags move_flags = (_ctrl_pressed ? MoveRailVehicleFlags::MoveChain : MoveRailVehicleFlags::None);
 	Command<CMD_MOVE_VIRTUAL_RAIL_VEHICLE>::Post(STR_ERROR_CAN_T_MOVE_VEHICLE, CommandCallback::VirtualTrainWagonsMoved, v->index, target, move_flags);
 }
@@ -132,15 +132,16 @@ private:
 	Scrollbar *vscroll = nullptr;
 	Train *virtual_train = nullptr;
 	bool *create_window_open = nullptr;            /// used to notify main window of progress (dummy way of disabling 'delete' while editing a template)
-	VehicleID sel = INVALID_VEHICLE;
-	VehicleID vehicle_over = INVALID_VEHICLE;
+	VehicleID sel = VehicleID::Invalid();
+	VehicleID vehicle_over = VehicleID::Invalid();
 	bool sell_hovered{};                           ///< A vehicle is being dragged/hovered over the sell button.
-	uint32_t template_index{};
+	TemplateID template_index = INVALID_TEMPLATE;
 	btree::btree_set<VehicleID> pending_deletions; ///< Vehicle IDs where deletion is in progress
 
 public:
 	TemplateCreateWindow(WindowDesc &desc, TemplateVehicle *to_edit, bool *window_open) : Window(desc)
 	{
+		this->invalidation_policy = WindowInvalidationPolicy::QueueSingle;
 		this->CreateNestedTree();
 		this->hscroll = this->GetScrollbar(TCW_SCROLLBAR_H_NEW_TMPL);
 		this->vscroll = this->GetScrollbar(TCW_SCROLLBAR_V_NEW_TMPL);
@@ -151,10 +152,10 @@ public:
 		this->owner = _local_company;
 
 		this->create_window_open = window_open;
-		this->template_index = (to_edit != nullptr) ? to_edit->index : INVALID_VEHICLE;
+		this->template_index = (to_edit != nullptr) ? to_edit->index : INVALID_TEMPLATE;
 
-		this->sel = INVALID_VEHICLE;
-		this->vehicle_over = INVALID_VEHICLE;
+		this->sel = VehicleID::Invalid();
+		this->vehicle_over = VehicleID::Invalid();
 		this->sell_hovered = false;
 
 		if (to_edit != nullptr) {
@@ -205,15 +206,14 @@ public:
 
 	virtual void OnInvalidateData(int data = 0, bool gui_scope = true) override
 	{
-		if (!gui_scope) return;
-
-		if (this->template_index != INVALID_VEHICLE) {
+		if (this->template_index != INVALID_TEMPLATE) {
 			if (TemplateVehicle::GetIfValid(this->template_index) == nullptr) {
 				this->Close();
 				return;
 			}
 		}
-		this->SetDirty();
+
+		if (!gui_scope) return;
 		UpdateButtonState();
 	}
 
@@ -242,7 +242,7 @@ public:
 			case TCW_OK: {
 				if (this->virtual_train != nullptr) {
 					Command<CMD_REPLACE_TEMPLATE>::Post(STR_ERROR_CAN_T_DO_THIS, this->template_index, this->virtual_train->index);
-				} else if (this->template_index != INVALID_VEHICLE) {
+				} else if (this->template_index != INVALID_TEMPLATE) {
 					Command<CMD_DELETE_TEMPLATE_VEHICLE>::Post(this->template_index);
 				}
 				this->Close();
@@ -280,21 +280,19 @@ public:
 
 	virtual void OnPlaceObjectAbort() override
 	{
-		this->sel = INVALID_VEHICLE;
-		this->vehicle_over = INVALID_VEHICLE;
+		this->sel = VehicleID::Invalid();
+		this->vehicle_over = VehicleID::Invalid();
 		this->RaiseButtons();
 		this->SetDirty();
 	}
 
 	virtual void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
-		switch(widget) {
+		switch (widget) {
 			case TCW_NEW_TMPL_PANEL: {
 				if (this->virtual_train) {
 					DrawTrainImage(this->virtual_train, r.Shrink(TRAIN_FRONT_SPACE, 2, 25, 0), this->sel, EIT_IN_DEPOT, this->hscroll->GetPosition(), this->vehicle_over);
-					SetDParam(0, CeilDiv(this->virtual_train->gcache.cached_total_length * 10, TILE_SIZE));
-					SetDParam(1, 1);
-					DrawString(r.left, r.right, r.top, STR_JUST_DECIMAL, TC_BLACK, SA_RIGHT, false, FS_SMALL);
+					DrawString(r.left, r.right, r.top, GetString(STR_JUST_DECIMAL, CeilDiv(this->virtual_train->gcache.cached_total_length * 10, TILE_SIZE), 1), TC_BLACK, SA_RIGHT, false, FS_SMALL);
 				}
 				break;
 			}
@@ -312,74 +310,82 @@ public:
 					bool buildable = true;
 					Money buy_cost = 0;
 					RailTypes types = static_cast<RailTypes>(UINT64_MAX);
-					for (Train *train = this->virtual_train; train != nullptr; train = train->GetNextUnit()) {
+					for (const Train *train = this->virtual_train; train != nullptr; train = train->GetNextUnit()) {
 						const Engine *e = Engine::Get(train->engine_type);
 						if (!IsEngineBuildable(train->engine_type, VEH_TRAIN, train->owner)) {
 							buildable = false;
 						} else {
-							types &= (GetRailTypeInfo(e->u.rail.railtype))->compatible_railtypes;
+							types &= GetAllCompatibleRailTypes(e->VehInfo<RailVehicleInfo>().railtypes);
 						}
 						buy_cost += e->GetCost();
 					}
 					if (!buildable) {
 						DrawString(left, right, y, STR_TMPL_WARNING_VEH_UNAVAILABLE);
 						y += GetCharacterHeight(FS_NORMAL);
-					} else if (types == RAILTYPES_NONE) {
+					} else if (types.None()) {
 						DrawString(left, right, y, STR_TMPL_WARNING_VEH_NO_COMPATIBLE_RAIL_TYPE);
 						y += GetCharacterHeight(FS_NORMAL);
 					}
 
-					SetDParam(0, STR_TMPL_TEMPLATE_OVR_VALUE_LTBLUE);
-					SetDParam(1, buy_cost);
-					SetDParam(2, STR_TMPL_TEMPLATE_OVR_RUNNING_COST);
-					SetDParam(3, this->virtual_train->GetDisplayRunningCost());
-					DrawString(left, right, y, STR_TMPL_TEMPLATE_OVR_MULTIPLE);
+					DrawString(left, right, y, GetString(STR_TMPL_TEMPLATE_OVR_MULTIPLE,
+							STR_TMPL_TEMPLATE_OVR_VALUE_LTBLUE,
+							buy_cost,
+							STR_TMPL_TEMPLATE_OVR_RUNNING_COST,
+							this->virtual_train->GetDisplayRunningCost()));
 					y += GetCharacterHeight(FS_NORMAL);
 
 					/* Draw vehicle performance info */
 					const bool original_acceleration = (_settings_game.vehicle.train_acceleration_model == AM_ORIGINAL ||
-							GetRailTypeInfo(this->virtual_train->railtype)->acceleration_type == 2);
+							GetAccelerationTypeRailTypes(VehicleAccelerationModel::Maglev).All(this->virtual_train->railtypes));
 					const GroundVehicleCache *gcache = this->virtual_train->GetGroundVehicleCache();
-					SetDParam(2, this->virtual_train->GetDisplayMaxSpeed());
-					SetDParam(1, gcache->cached_power);
-					SetDParam(0, gcache->cached_weight);
-					SetDParam(3, gcache->cached_max_te);
-					DrawString(left, right, y, original_acceleration ? STR_VEHICLE_INFO_WEIGHT_POWER_MAX_SPEED : STR_VEHICLE_INFO_WEIGHT_POWER_MAX_SPEED_MAX_TE);
+					DrawString(left, right, y, GetString(original_acceleration ? STR_VEHICLE_INFO_WEIGHT_POWER_MAX_SPEED : STR_VEHICLE_INFO_WEIGHT_POWER_MAX_SPEED_MAX_TE,
+							gcache->cached_weight,
+							gcache->cached_power,
+							this->virtual_train->GetDisplayMaxSpeed(),
+							gcache->cached_max_te));
+					y += GetCharacterHeight(FS_NORMAL);
+
 					uint32_t full_cargo_weight = 0;
-					for (Train *train = this->virtual_train; train != nullptr; train = train->Next()) {
+					for (const Train *train = this->virtual_train; train != nullptr; train = train->Next()) {
 						full_cargo_weight += train->GetCargoWeight(train->cargo_cap);
 					}
 					if (full_cargo_weight > 0 || _settings_client.gui.show_train_weight_ratios_in_details) {
-						y += GetCharacterHeight(FS_NORMAL);
 						uint full_weight = gcache->cached_weight + full_cargo_weight;
-						SetDParam(0, full_weight);
 						if (_settings_client.gui.show_train_weight_ratios_in_details) {
-							SetDParam(1, STR_VEHICLE_INFO_WEIGHT_RATIOS);
-							SetDParam(2, STR_VEHICLE_INFO_POWER_WEIGHT_RATIO);
-							SetDParam(3, (100 * this->virtual_train->gcache.cached_power) / std::max<uint>(1, full_weight));
-							SetDParam(4, this->virtual_train->GetAccelerationType() == 2 ? STR_EMPTY : STR_VEHICLE_INFO_TE_WEIGHT_RATIO);
-							SetDParam(5, (100 * this->virtual_train->gcache.cached_max_te) / std::max<uint>(1, full_weight));
+							DrawString(left, right, y, GetString(STR_VEHICLE_INFO_FULL_WEIGHT_WITH_RATIOS,
+									full_weight,
+									STR_VEHICLE_INFO_WEIGHT_RATIOS,
+									STR_VEHICLE_INFO_POWER_WEIGHT_RATIO,
+									(100 * this->virtual_train->gcache.cached_power) / std::max<uint>(1, full_weight),
+									GetAccelerationTypeRailTypes(VehicleAccelerationModel::Maglev).All(this->virtual_train->railtypes) ? STR_EMPTY : STR_VEHICLE_INFO_TE_WEIGHT_RATIO,
+									(100 * this->virtual_train->gcache.cached_max_te) / std::max<uint>(1, full_weight)));
 						} else {
-							SetDParam(1, STR_EMPTY);
+							DrawString(left, right, y, GetString(STR_VEHICLE_INFO_FULL_WEIGHT_WITH_RATIOS,
+									full_weight,
+									STR_EMPTY,
+									std::monostate{},
+									std::monostate{},
+									std::monostate{},
+									std::monostate{}));
 						}
-						DrawString(left, right, y, STR_VEHICLE_INFO_FULL_WEIGHT_WITH_RATIOS);
-					}
-					if (_settings_game.vehicle.train_acceleration_model != AM_ORIGINAL) {
 						y += GetCharacterHeight(FS_NORMAL);
-						SetDParam(0, GetTrainEstimatedMaxAchievableSpeed(this->virtual_train, gcache->cached_weight + full_cargo_weight, this->virtual_train->GetDisplayMaxSpeed()));
-						DrawString(left, right, y, STR_VEHICLE_INFO_MAX_SPEED_LOADED);
 					}
+
+					if (_settings_game.vehicle.train_acceleration_model != AM_ORIGINAL) {
+						DrawString(left, right, y, GetString(STR_VEHICLE_INFO_MAX_SPEED_LOADED,
+								GetTrainEstimatedMaxAchievableSpeed(this->virtual_train, gcache->cached_weight + full_cargo_weight, this->virtual_train->GetDisplayMaxSpeed())));
+						y += GetCharacterHeight(FS_NORMAL);
+					}
+
 					/* Draw cargo summary */
 					CargoArray cargo_caps{};
 					for (const Train *tmp = this->virtual_train; tmp != nullptr; tmp = tmp->Next()) {
 						cargo_caps[tmp->cargo_type] += tmp->cargo_cap;
 					}
-					y += GetCharacterHeight(FS_NORMAL) * 2;
+					y += GetCharacterHeight(FS_NORMAL);
 					for (CargoType i = 0; i < NUM_CARGO; ++i) {
 						if (cargo_caps[i] > 0) {
-							SetDParam(0, i);
-							SetDParam(1, cargo_caps[i]);
-							DrawString(left, right, y, STR_TMPL_CARGO_SUMMARY, TC_LIGHT_BLUE, SA_LEFT);
+							DrawString(left, right, y, GetString(STR_TMPL_CARGO_SUMMARY, i, cargo_caps[i]), TC_LIGHT_BLUE, SA_LEFT);
 							y += GetCharacterHeight(FS_NORMAL);
 						}
 					}
@@ -423,22 +429,25 @@ public:
 		}
 
 		/* Build tooltipstring */
-		std::string details;
+		format_buffer details;
 
 		for (CargoType cargo_type = 0; cargo_type < NUM_CARGO; cargo_type++) {
 			if (capacity[cargo_type] == 0) continue;
 
-			SetDParam(0, cargo_type);           // {CARGO} #1
-			SetDParam(1, loaded[cargo_type]);   // {CARGO} #2
-			SetDParam(2, cargo_type);           // {SHORTCARGO} #1
-			SetDParam(3, capacity[cargo_type]); // {SHORTCARGO} #2
-			details = GetString(STR_DEPOT_VEHICLE_TOOLTIP_CARGO);
+			AppendStringInPlace(details, STR_DEPOT_VEHICLE_TOOLTIP_CARGO,
+					cargo_type,           // {CARGO} #1
+					loaded[cargo_type],   // {CARGO} #2
+					cargo_type,           // {SHORTCARGO} #1
+					capacity[cargo_type]  // {SHORTCARGO} #2
+			);
 		}
 
 		/* Show tooltip window */
-		SetDParam(0, whole_chain ? num : v->engine_type);
-		SetDParamStr(1, std::move(details));
-		GuiShowTooltips(this, whole_chain ? STR_DEPOT_VEHICLE_TOOLTIP_CHAIN : STR_DEPOT_VEHICLE_TOOLTIP, TCC_RIGHT_CLICK, 2);
+		if (whole_chain) {
+			GuiShowTooltips(this, GetEncodedString(STR_DEPOT_VEHICLE_TOOLTIP_CHAIN, num, details), TCC_RIGHT_CLICK);
+		} else {
+			GuiShowTooltips(this, GetEncodedString(STR_DEPOT_VEHICLE_TOOLTIP, v->engine_type, details), TCC_RIGHT_CLICK);
+		}
 
 		return true;
 	}
@@ -450,17 +459,17 @@ public:
 				const Vehicle *v = nullptr;
 				VehicleID sel = this->sel;
 
-				this->sel = INVALID_VEHICLE;
+				this->sel = VehicleID::Invalid();
 				this->SetDirty();
 
 				NWidgetBase *nwi = this->GetWidget<NWidgetBase>(TCW_NEW_TMPL_PANEL);
 				GetDepotVehiclePtData gdvp = { nullptr, nullptr };
 
-				if (this->GetVehicleFromDepotWndPt(pt.x - nwi->pos_x, pt.y - nwi->pos_y, &v, &gdvp) == MODE_DRAG_VEHICLE && sel != INVALID_VEHICLE) {
+				if (this->GetVehicleFromDepotWndPt(pt.x - nwi->pos_x, pt.y - nwi->pos_y, &v, &gdvp) == MODE_DRAG_VEHICLE && sel != VehicleID::Invalid()) {
 					if (gdvp.wagon != nullptr && gdvp.wagon->index == sel && _ctrl_pressed) {
 						Command<CMD_REVERSE_TRAIN_DIRECTION>::Post(STR_ERROR_CAN_T_REVERSE_DIRECTION_RAIL_VEHICLE, CommandCallback::VirtualTrainWagonsMoved, Vehicle::Get(sel)->tile, Vehicle::Get(sel)->index, true);
 					} else if (gdvp.wagon == nullptr || gdvp.wagon->index != sel) {
-						this->vehicle_over = INVALID_VEHICLE;
+						this->vehicle_over = VehicleID::Invalid();
 						TrainDepotMoveVehicle(gdvp.wagon, sel, gdvp.head);
 					}
 				}
@@ -468,7 +477,7 @@ public:
 			}
 			case TCW_SELL_TMPL: {
 				if (this->IsWidgetDisabled(widget)) return;
-				if (this->sel == INVALID_VEHICLE) return;
+				if (this->sel == VehicleID::Invalid()) return;
 
 				Train *train_to_delete = Train::Get(this->sel);
 
@@ -485,26 +494,26 @@ public:
 				SellVehicleFlags sell_flags = _ctrl_pressed ? SellVehicleFlags::SellChain : SellVehicleFlags::None;
 				Command<CMD_SELL_VIRTUAL_VEHICLE>::Post(STR_ERROR_CAN_T_SELL_TRAIN, CommandCallback::DeleteVirtualTrain, this->sel, sell_flags, INVALID_CLIENT_ID);
 
-				this->sel = INVALID_VEHICLE;
+				this->sel = VehicleID::Invalid();
 
 				this->SetDirty();
 				UpdateButtonState();
 				break;
 			}
 			default:
-				this->sel = INVALID_VEHICLE;
+				this->sel = VehicleID::Invalid();
 				this->SetDirty();
 				break;
 		}
 		this->sell_hovered = false;
 		_cursor.vehchain = false;
-		this->sel = INVALID_VEHICLE;
+		this->sel = VehicleID::Invalid();
 		this->SetDirty();
 	}
 
 	virtual void OnMouseDrag(Point pt, WidgetID widget) override
 	{
-		if (this->sel == INVALID_VEHICLE) return;
+		if (this->sel == VehicleID::Invalid()) return;
 
 		bool is_sell_widget = widget == TCW_SELL_TMPL;
 		if (is_sell_widget != this->sell_hovered) {
@@ -515,8 +524,8 @@ public:
 
 		/* A rail vehicle is dragged.. */
 		if (widget != TCW_NEW_TMPL_PANEL) { // ..outside of the depot matrix.
-			if (this->vehicle_over != INVALID_VEHICLE) {
-				this->vehicle_over = INVALID_VEHICLE;
+			if (this->vehicle_over != VehicleID::Invalid()) {
+				this->vehicle_over = VehicleID::Invalid();
 				this->SetWidgetDirty(TCW_NEW_TMPL_PANEL);
 			}
 			return;
@@ -527,7 +536,7 @@ public:
 		GetDepotVehiclePtData gdvp = {nullptr, nullptr};
 
 		if (this->GetVehicleFromDepotWndPt(pt.x - matrix->pos_x, pt.y - matrix->pos_y, &v, &gdvp) != MODE_DRAG_VEHICLE) return;
-		VehicleID new_vehicle_over = INVALID_VEHICLE;
+		VehicleID new_vehicle_over = VehicleID::Invalid();
 		if (gdvp.head != nullptr) {
 			if (gdvp.wagon == nullptr && gdvp.head->Last()->index != this->sel) { // ..at the end of the train.
 				/* NOTE: As a wagon can't be moved at the begin of a train, head index isn't used to mark a drag-and-drop
@@ -594,9 +603,6 @@ public:
 		MODE_START_STOP,
 	};
 
-	uint count_width;
-	uint header_width;
-
 	DepotGUIAction GetVehicleFromDepotWndPt(int x, int y, const Vehicle **veh, GetDepotVehiclePtData *d) const
 	{
 		const NWidgetCore *matrix_widget = this->GetWidget<NWidgetCore>(TCW_NEW_TMPL_PANEL);
@@ -604,23 +610,10 @@ public:
 		if (_current_text_dir == TD_RTL) x = matrix_widget->current_x - x;
 
 		x -= TRAIN_FRONT_SPACE;
-
-		uint xm = x;
-
-		bool wagon = false;
-
 		x += this->hscroll->GetPosition();
+
 		const Train *v = this->virtual_train;
 		d->head = d->wagon = v;
-
-		if (xm <= this->header_width) {
-			if (wagon) return MODE_ERROR;
-
-			return MODE_SHOW_VEHICLE;
-		}
-
-		/* Account for the header */
-		x -= this->header_width;
 
 		/* find the vehicle in this row that was clicked */
 		for (; v != nullptr; v = v->Next()) {
@@ -644,8 +637,8 @@ public:
 		if (v != nullptr && VehicleClicked(v)) return;
 		VehicleID sel = this->sel;
 
-		if (sel != INVALID_VEHICLE) {
-			this->sel = INVALID_VEHICLE;
+		if (sel != VehicleID::Invalid()) {
+			this->sel = VehicleID::Invalid();
 			TrainDepotMoveVehicle(v, sel, gdvp.head);
 		} else if (v != nullptr) {
 			SetObjectToPlaceWnd(SPR_CURSOR_MOUSE, PAL_NONE, HT_DRAG, this);
@@ -659,7 +652,7 @@ public:
 
 	EventState OnCTRLStateChange() override
 	{
-		if (this->sel != INVALID_VEHICLE) {
+		if (this->sel != VehicleID::Invalid()) {
 			_cursor.vehchain = _ctrl_pressed;
 			this->SetWidgetDirty(TCW_NEW_TMPL_PANEL);
 			return ES_HANDLED;
@@ -697,7 +690,7 @@ public:
 	void ShowNewGRFInspectWindow() const override
 	{
 		if (this->virtual_train != nullptr) {
-			::ShowNewGRFInspectWindow(GetGrfSpecFeature(VEH_TRAIN), this->virtual_train->index);
+			::ShowNewGRFInspectWindow(GetGrfSpecFeature(VEH_TRAIN), this->virtual_train->index.base());
 		}
 	}
 };
@@ -710,11 +703,14 @@ void ShowTemplateCreateWindow(TemplateVehicle *to_edit, bool *create_window_open
 
 void CcSetVirtualTrain(const CommandCost &result)
 {
-	if (result.Failed() || !result.HasResultData()) return;
+	if (result.Failed()) return;
+
+	auto veh_id = result.GetResultData<VehicleID>();
+	if (!veh_id.has_value()) return;
 
 	Window *window = FindWindowById(WC_CREATE_TEMPLATE, 0);
 	if (window != nullptr) {
-		Train *train = Train::From(Vehicle::Get(result.GetResultData()));
+		Train *train = Train::From(Vehicle::Get(*veh_id));
 		((TemplateCreateWindow *)window)->SetVirtualTrain(train);
 		window->InvalidateData();
 	}

@@ -90,3 +90,13 @@ STR_COMPANY_PASSWORD_MAKE_DEFAULT_TOOLTIP                       :{BLACK}இந�
 
 STR_COMPANY_VIEW_PASSWORD                                       :{BLACK}கடவுச்சொல்
 STR_COMPANY_VIEW_SET_PASSWORD                                   :{BLACK}நிறுவனத்தின் கடவுச்சொல்லை அமை
+
+# JSON messages
+
+STR_INTRO_NEWGRF_SETTINGS                                       :{BLACK}NewGRF அமைப்புகள்
+STR_INTRO_AI_SETTINGS                                           :{BLACK}செயற்கை நுண்ணறிவு அமைப்புகள்
+STR_INTRO_GAMESCRIPT_SETTINGS                                   :{BLACK}விளையாட்டு ஸ்கிரிப்ட் அமைப்புகள்
+STR_INTRO_TOOLTIP_NEWGRF_SETTINGS                               :{BLACK}NewGRF அமைப்புகளைத் திற
+STR_INTRO_TOOLTIP_AI_SETTINGS                                   :{BLACK}AI அமைப்புகளைத் திற
+STR_INTRO_TOOLTIP_GAMESCRIPT_SETTINGS                           :{BLACK}விளையாட்டு ஸ்கிரிப்ட் அமைப்புகளைத் திற
+STR_INTRO_CAPTION_TRADITIONAL                                   :{WHITE}OpenTTD {REV}

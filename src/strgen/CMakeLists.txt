@@ -10,6 +10,9 @@ if (NOT HOST_BINARY_DIR)
             strgen_base.cpp
             ../core/alloc_func.cpp
             ../core/format.cpp
+            ../core/string_builder.cpp
+            ../core/string_consumer.cpp
+            ../core/utf8.cpp
             ../misc/getoptdata.cpp
             ../error.cpp
             ../string.cpp

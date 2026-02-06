@@ -35,9 +35,9 @@
 /** GUI for accessing waypoints and buoys. */
 struct WaypointWindow : Window {
 private:
-	VehicleType vt; ///< Vehicle type using the waypoint.
-	Waypoint *wp;   ///< Waypoint displayed by the window.
-	bool show_hide_label; ///< Show hide label button
+	VehicleType vt = VEH_INVALID; ///< Vehicle type using the waypoint.
+	Waypoint *wp = nullptr; ///< Waypoint displayed by the window.
+	bool show_hide_label = false; ///< Show hide label button
 	bool place_object_active = false;
 
 	/**
@@ -48,7 +48,6 @@ private:
 	{
 		if (!this->wp->IsInUse()) return this->wp->xy;
 
-		TileArea ta;
 		StationType type;
 		switch (this->vt) {
 			case VEH_TRAIN:
@@ -66,8 +65,7 @@ private:
 			default:
 				NOT_REACHED();
 		}
-		this->wp->GetTileArea(&ta, type);
-		return ta.GetCenterTile();
+		return this->wp->GetTileArea(type).GetCenterTile();
 	}
 
 public:
@@ -78,6 +76,7 @@ public:
 	 */
 	WaypointWindow(WindowDesc &desc, WindowNumber window_number) : Window(desc)
 	{
+		this->invalidation_policy = WindowInvalidationPolicy::QueueSingle;
 		this->wp = Waypoint::Get(window_number);
 		if (wp->string_id == STR_SV_STNAME_WAYPOINT) {
 			this->vt = HasBit(this->wp->waypoint_flags, WPF_ROAD) ? VEH_ROAD : VEH_TRAIN;
@@ -96,7 +95,7 @@ public:
 			this->GetWidget<NWidgetCore>(WID_W_CENTER_VIEW)->SetToolTip(STR_WAYPOINT_VIEW_CENTER_TOOLTIP);
 			this->GetWidget<NWidgetCore>(WID_W_RENAME)->SetToolTip(STR_WAYPOINT_VIEW_CHANGE_WAYPOINT_NAME);
 		}
-		this->show_hide_label = (this->vt != VEH_SHIP && _settings_client.gui.allow_hiding_waypoint_labels);
+		this->show_hide_label = _settings_client.gui.allow_hiding_waypoint_labels;
 		this->GetWidget<NWidgetStacked>(WID_W_TOGGLE_HIDDEN_SEL)->SetDisplayedPlane(this->show_hide_label ? 0 : SZSP_NONE);
 		this->FinishInitNested(window_number);
 
@@ -104,28 +103,30 @@ public:
 		this->flags.Set(WindowFlag::DisableVpScroll);
 
 		NWidgetViewport *nvp = this->GetWidget<NWidgetViewport>(WID_W_VIEWPORT);
-		nvp->InitializeViewport(this, this->GetCenterTile().base(), ScaleZoomGUI(ZOOM_LVL_VIEWPORT));
+		nvp->InitializeViewport(this, this->GetCenterTile().base(), ScaleZoomGUI(ZoomLevel::Viewport));
 
 		this->OnInvalidateData(0);
 	}
 
 	void Close([[maybe_unused]] int data = 0) override
 	{
-		CloseWindowById(GetWindowClassForVehicleType(this->vt), VehicleListIdentifier(VL_STATION_LIST, this->vt, this->owner, this->window_number).Pack(), false);
+		CloseWindowById(GetWindowClassForVehicleType(this->vt), VehicleListIdentifier(VL_STATION_LIST, this->vt, this->owner, this->window_number).ToWindowNumber(), false);
 		SetViewportCatchmentWaypoint(Waypoint::Get(this->window_number), false);
 		this->Window::Close();
 	}
 
-	void SetStringParameters(WidgetID widget) const override
+	std::string GetWidgetString(WidgetID widget, StringID stringid) const override
 	{
-		if (widget == WID_W_CAPTION) SetDParam(0, this->wp->index);
+		if (widget == WID_W_CAPTION) return GetString(STR_WAYPOINT_VIEW_CAPTION, this->wp->index);
+
+		return this->Window::GetWidgetString(widget, stringid);
 	}
 
 	bool OnTooltip(Point pt, WidgetID widget, TooltipCloseCondition close_cond) override
 	{
 		if (widget == WID_W_RENAME) {
-			SetDParam(0, this->GetWidget<NWidgetCore>(WID_W_RENAME)->GetToolTip());
-			GuiShowTooltips(this, STR_WAYPOINT_VIEW_RENAME_TOOLTIP_EXTRA, close_cond, 1);
+			StringID str = this->GetWidget<NWidgetCore>(WID_W_RENAME)->GetToolTip();
+			GuiShowTooltips(this, GetEncodedString(STR_WAYPOINT_VIEW_RENAME_TOOLTIP_EXTRA, str), close_cond);
 			return true;
 		}
 
@@ -164,8 +165,7 @@ public:
 					}
 					break;
 				}
-				SetDParam(0, this->wp->index);
-				ShowQueryString(STR_WAYPOINT_NAME, STR_EDIT_WAYPOINT_NAME, MAX_LENGTH_STATION_NAME_CHARS, this, CS_ALPHANUMERAL, QSF_ENABLE_DEFAULT | QSF_LEN_IN_CHARS);
+				ShowQueryString(GetString(STR_WAYPOINT_NAME, this->wp->index), STR_EDIT_WAYPOINT_NAME, MAX_LENGTH_STATION_NAME_CHARS, this, CS_ALPHANUMERAL, {QueryStringFlag::EnableDefault, QueryStringFlag::LengthIsInChars});
 				break;
 
 			case WID_W_SHOW_VEHICLES: // show list of vehicles having this waypoint in their orders
@@ -218,14 +218,15 @@ public:
 	{
 		if (!gui_scope) return;
 		/* You can only change your own waypoints */
-		this->SetWidgetDisabledState(WID_W_RENAME, !this->wp->IsInUse() || (this->wp->owner != _local_company && this->wp->owner != OWNER_NONE));
-		this->SetWidgetDisabledState(WID_W_TOGGLE_HIDDEN, !this->wp->IsInUse() || this->wp->owner != _local_company);
+		bool disable_rename = !this->wp->IsInUse() || (this->wp->owner != _local_company && this->wp->owner != OWNER_NONE);
+		this->SetWidgetDisabledState(WID_W_RENAME, disable_rename);
+		this->SetWidgetDisabledState(WID_W_TOGGLE_HIDDEN, disable_rename);
 		/* Disable the widget for waypoints with no use */
 		this->SetWidgetDisabledState(WID_W_SHOW_VEHICLES, !this->wp->IsInUse());
 
 		this->SetWidgetLoweredState(WID_W_TOGGLE_HIDDEN, HasBit(this->wp->waypoint_flags, WPF_HIDE_LABEL));
 
-		bool show_hide_label = (this->vt != VEH_SHIP && _settings_client.gui.allow_hiding_waypoint_labels);
+		bool show_hide_label = _settings_client.gui.allow_hiding_waypoint_labels;
 		if (show_hide_label != this->show_hide_label) {
 			this->show_hide_label = show_hide_label;
 			this->GetWidget<NWidgetStacked>(WID_W_TOGGLE_HIDDEN_SEL)->SetDisplayedPlane(this->show_hide_label ? 0 : SZSP_NONE);
@@ -269,7 +270,7 @@ static constexpr NWidgetPart _nested_waypoint_view_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
 		NWidget(WWT_IMGBTN, COLOUR_GREY, WID_W_RENAME), SetAspect(WidgetDimensions::ASPECT_RENAME), SetSpriteTip(SPR_RENAME, STR_BUOY_VIEW_RENAME_TOOLTIP),
-		NWidget(WWT_CAPTION, COLOUR_GREY, WID_W_CAPTION), SetStringTip(STR_WAYPOINT_VIEW_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_CAPTION, COLOUR_GREY, WID_W_CAPTION),
 		NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_W_CENTER_VIEW), SetAspect(WidgetDimensions::ASPECT_LOCATION), SetSpriteTip(SPR_GOTO_LOCATION, STR_BUOY_VIEW_CENTER_TOOLTIP),
 		NWidget(WWT_DEBUGBOX, COLOUR_GREY),
 		NWidget(WWT_SHADEBOX, COLOUR_GREY),

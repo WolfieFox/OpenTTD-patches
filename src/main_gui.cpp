@@ -55,19 +55,18 @@ void CcGiveMoney(const CommandCost &result, Money money, CompanyID dest_company)
 	if (result.Failed() || !_settings_game.economy.give_money || !_networking) return;
 
 	/* Inform the company of the action of one of its clients (controllers). */
-	SetDParam(0, dest_company);
-	std::string msg = GetString(STR_COMPANY_NAME);
+	std::string msg = GetString(STR_COMPANY_NAME, dest_company);
 
 	/*
 	 * bits 31-16: source company
 	 * bits 15-0: target company
 	 */
-	uint64_t auxdata = (uint64_t)dest_company | (((uint64_t) _local_company) << 16);
+	uint64_t auxdata = (uint64_t)dest_company.base() | (((uint64_t) _local_company.base()) << 16);
 
 	if (!_network_server) {
-		NetworkClientSendChat(NETWORK_ACTION_GIVE_MONEY, DESTTYPE_BROADCAST_SS, dest_company, msg, NetworkTextMessageData(result.GetCost(), auxdata));
+		NetworkClientSendChat(NETWORK_ACTION_GIVE_MONEY, DESTTYPE_BROADCAST_SS, dest_company.base(), msg, NetworkTextMessageData(result.GetCost(), auxdata));
 	} else {
-		NetworkServerSendChat(NETWORK_ACTION_GIVE_MONEY, DESTTYPE_BROADCAST_SS, dest_company, msg, CLIENT_ID_SERVER, NetworkTextMessageData(result.GetCost(), auxdata));
+		NetworkServerSendChat(NETWORK_ACTION_GIVE_MONEY, DESTTYPE_BROADCAST_SS, dest_company.base(), msg, CLIENT_ID_SERVER, NetworkTextMessageData(result.GetCost(), auxdata));
 	}
 }
 
@@ -85,7 +84,7 @@ bool HandlePlacePushButton(Window *w, WidgetID widget, CursorID cursor, HighLigh
 {
 	if (w->IsWidgetDisabled(widget)) return false;
 
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	SndClickBeep();
 	w->SetDirty();
 
 	if (w->IsWidgetLowered(widget)) {
@@ -136,7 +135,7 @@ bool DoZoomInOutWindow(ZoomStateChange how, Window *w)
 			break;
 		case ZOOM_OUT:
 			if (vp->zoom >= _settings_client.gui.zoom_max) return false;
-			if (w->window_class != WC_MAIN_WINDOW && w->window_class != WC_EXTRA_VIEWPORT && vp->zoom >= ZOOM_LVL_DRAW_SPR) return false;
+			if (w->window_class != WC_MAIN_WINDOW && w->window_class != WC_EXTRA_VIEWPORT && vp->zoom >= ZoomLevel::SpriteMax) return false;
 			vp->zoom = (ZoomLevel)((int)vp->zoom + 1);
 
 			w->viewport->scrollpos_x -= vp->virtual_width >> 1;
@@ -225,7 +224,7 @@ enum GlobalHotKeys : int32_t {
 	GHK_TOGGLE_TRANSPARENCY,
 	GHK_TOGGLE_INVISIBILITY = GHK_TOGGLE_TRANSPARENCY + 10,
 	GHK_TRANSPARENCY_TOOLBAR = GHK_TOGGLE_INVISIBILITY + 8,
-	GHK_TRANSPARANCY,
+	GHK_TRANSPARENCY,
 	GHK_CHAT,
 	GHK_CHAT_ALL,
 	GHK_CHAT_COMPANY,
@@ -241,7 +240,7 @@ enum GlobalHotKeys : int32_t {
 
 struct MainWindow : Window
 {
-	GUITimer refresh;
+	GUITimer refresh{};
 
 	/* Refresh times in milliseconds */
 	static const uint LINKGRAPH_REFRESH_PERIOD = 7650;
@@ -254,10 +253,10 @@ struct MainWindow : Window
 		ResizeWindow(this, _screen.width, _screen.height);
 
 		NWidgetViewport *nvp = this->GetWidget<NWidgetViewport>(WID_M_VIEWPORT);
-		nvp->InitializeViewport(this, TileXY(32, 32).base(), ScaleZoomGUI(ZOOM_LVL_VIEWPORT));
+		nvp->InitializeViewport(this, TileXY(32, 32).base(), ScaleZoomGUI(ZoomLevel::Viewport));
 
 		this->viewport->map_type = (ViewportMapType) _settings_client.gui.default_viewport_map_mode;
-		this->viewport->overlay = new LinkGraphOverlay(this, WID_M_VIEWPORT, 0, 0, 2);
+		this->viewport->overlay = new LinkGraphOverlay(this, WID_M_VIEWPORT, 0, CompanyMask{}, 2);
 		this->refresh.SetInterval(LINKGRAPH_DELAY);
 	}
 
@@ -268,7 +267,7 @@ struct MainWindow : Window
 		this->refresh.SetInterval(LINKGRAPH_REFRESH_PERIOD);
 
 		if (this->viewport->overlay->GetCargoMask() == 0 ||
-				this->viewport->overlay->GetCompanyMask() == 0) {
+				this->viewport->overlay->GetCompanyMask().None()) {
 			return;
 		}
 
@@ -295,6 +294,11 @@ struct MainWindow : Window
 			for (const SpriteID &sprite : title_sprites) {
 				DrawSprite(sprite, PAL_NONE, off_x, ScaleGUITrad(50));
 				off_x += GetSpriteSize(sprite).width + letter_spacing;
+			}
+
+			if (!_settings_client.gui.traditional_intro_menu) {
+				int text_y = this->height - GetCharacterHeight(FS_NORMAL) * 2;
+				DrawString(0, this->width - 1, text_y, STR_INTRO_VERSION, TC_WHITE, SA_CENTER);
 			}
 		}
 	}
@@ -410,7 +414,7 @@ struct MainWindow : Window
 				ShowTransparencyToolbar();
 				break;
 
-			case GHK_TRANSPARANCY:
+			case GHK_TRANSPARENCY:
 				ResetRestoreAllTransparency();
 				break;
 
@@ -419,7 +423,7 @@ struct MainWindow : Window
 					const NetworkClientInfo *cio = NetworkClientInfo::GetByClientID(_network_own_client_id);
 					if (cio == nullptr) break;
 
-					ShowNetworkChatQueryWindow(NetworkClientPreferTeamChat(cio) ? DESTTYPE_TEAM : DESTTYPE_BROADCAST, cio->client_playas);
+					ShowNetworkChatQueryWindow(NetworkClientPreferTeamChat(cio) ? DESTTYPE_TEAM : DESTTYPE_BROADCAST, cio->client_playas.base());
 				}
 				break;
 
@@ -432,7 +436,7 @@ struct MainWindow : Window
 					const NetworkClientInfo *cio = NetworkClientInfo::GetByClientID(_network_own_client_id);
 					if (cio == nullptr) break;
 
-					ShowNetworkChatQueryWindow(DESTTYPE_TEAM, cio->client_playas);
+					ShowNetworkChatQueryWindow(DESTTYPE_TEAM, cio->client_playas.base());
 				}
 				break;
 
@@ -451,19 +455,19 @@ struct MainWindow : Window
 				break;
 
 			case GHK_CHANGE_MAP_MODE_PREV:
-				if (_focused_window && _focused_window->viewport && _focused_window->viewport->zoom >= ZOOM_LVL_DRAW_MAP) {
+				if (_focused_window && _focused_window->viewport && _focused_window->viewport->zoom >= ZoomLevel::DrawMap) {
 					ChangeRenderMode(_focused_window->viewport, true);
 					_focused_window->SetDirty();
-				} else if (this->viewport->zoom >= ZOOM_LVL_DRAW_MAP) {
+				} else if (this->viewport->zoom >= ZoomLevel::DrawMap) {
 					ChangeRenderMode(this->viewport, true);
 					this->SetDirty();
 				}
 				break;
 			case GHK_CHANGE_MAP_MODE_NEXT:
-				if (_focused_window && _focused_window->viewport && _focused_window->viewport->zoom >= ZOOM_LVL_DRAW_MAP) {
+				if (_focused_window && _focused_window->viewport && _focused_window->viewport->zoom >= ZoomLevel::DrawMap) {
 					ChangeRenderMode(_focused_window->viewport, false);
 					_focused_window->SetDirty();
-				} else if (this->viewport->zoom >= ZOOM_LVL_DRAW_MAP) {
+				} else if (this->viewport->zoom >= ZoomLevel::DrawMap) {
 					ChangeRenderMode(this->viewport, false);
 					this->SetDirty();
 				}
@@ -501,8 +505,9 @@ struct MainWindow : Window
 		this->refresh.SetInterval(LINKGRAPH_DELAY);
 	}
 
-	void OnMouseWheel(int wheel) override
+	void OnMouseWheel(int wheel, WidgetID widget) override
 	{
+		if (widget != WID_M_VIEWPORT) return;
 		if (_ctrl_pressed) {
 			/* Cycle through the drawing modes */
 			ChangeRenderMode(this->viewport, wheel < 0);
@@ -511,7 +516,7 @@ struct MainWindow : Window
 			bool in = wheel < 0;
 
 			/* When following, only change zoom - otherwise zoom to the cursor. */
-			if (this->viewport->follow_vehicle != INVALID_VEHICLE) {
+			if (this->viewport->follow_vehicle != VehicleID::Invalid()) {
 				DoZoomInOutWindow(in ? ZOOM_IN : ZOOM_OUT, this);
 			} else {
 				ZoomInOrOutToCursorWindow(in, this);
@@ -604,7 +609,7 @@ static Hotkey global_hotkeys[] = {
 	Hotkey('7' | WKC_CTRL | WKC_SHIFT, "invisibility_structures", GHK_TOGGLE_INVISIBILITY + 6),
 	Hotkey('8' | WKC_CTRL | WKC_SHIFT, "invisibility_catenary", GHK_TOGGLE_INVISIBILITY + 7),
 	Hotkey('X' | WKC_CTRL, "transparency_toolbar", GHK_TRANSPARENCY_TOOLBAR),
-	Hotkey('X', "toggle_transparency", GHK_TRANSPARANCY),
+	Hotkey('X', "toggle_transparency", GHK_TRANSPARENCY),
 	Hotkey(_ghk_chat_keys, "chat", GHK_CHAT),
 	Hotkey(_ghk_chat_all_keys, "chat_all", GHK_CHAT_ALL),
 	Hotkey(_ghk_chat_company_keys, "chat_company", GHK_CHAT_COMPANY),
@@ -647,10 +652,10 @@ void ShowSelectGameWindow();
 void SetupColoursAndInitialWindow()
 {
 	for (Colours i = COLOUR_BEGIN; i != COLOUR_END; i++) {
-		const uint8_t *b = GetNonSprite(GENERAL_SPRITE_COLOUR(i), SpriteType::Recolour);
+		const uint8_t *b = GetNonSprite(GetColourPalette(i), SpriteType::Recolour);
 		assert(b != nullptr);
 		for (ColourShade j = SHADE_BEGIN; j < SHADE_END; j++) {
-			SetColourGradient(i, j, b[0xC6 + j]);
+			SetColourGradient(i, j, PixelColour{b[0xC6 + j]});
 		}
 	}
 

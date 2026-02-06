@@ -22,12 +22,12 @@ public:
 	void SetDestination(const Train *v, bool override_rail_type = false)
 	{
 		this->compatible_railtypes = v->compatible_railtypes;
-		if (override_rail_type) this->compatible_railtypes |= GetRailTypeInfo(v->railtype)->compatible_railtypes;
+		if (override_rail_type) this->compatible_railtypes.Set(GetAllCompatibleRailTypes(v->railtypes));
 	}
 
 	bool IsCompatibleRailType(RailType rt)
 	{
-		return HasBit(this->compatible_railtypes, rt);
+		return this->compatible_railtypes.Test(rt);
 	}
 
 	RailTypes GetCompatibleRailTypes() const
@@ -145,7 +145,7 @@ public:
 		this->any_depot = false;
 		switch (v->current_order.GetType()) {
 			case OT_GOTO_WAYPOINT:
-				if (!Waypoint::Get(v->current_order.GetDestination())->IsSingleTile()) {
+				if (!Waypoint::Get(v->current_order.GetDestination().ToStationID())->IsSingleTile()) {
 					/* In case of 'complex' waypoints we need to do a look
 					 * ahead. This look ahead messes a bit about, which
 					 * means that it 'corrupts' the cache. To prevent this
@@ -156,8 +156,8 @@ public:
 				[[fallthrough]];
 
 			case OT_GOTO_STATION:
-				this->dest_tile = CalcClosestStationTile(v->current_order.GetDestination(), v->tile, v->current_order.IsType(OT_GOTO_STATION) ? StationType::Rail : StationType::RailWaypoint);
-				this->dest_station_id = v->current_order.GetDestination();
+				this->dest_tile = CalcClosestStationTile(v->current_order.GetDestination().ToStationID(), v->tile, v->current_order.IsType(OT_GOTO_STATION) ? StationType::Rail : StationType::RailWaypoint);
+				this->dest_station_id = v->current_order.GetDestination().ToStationID();
 				this->dest_trackdirs = INVALID_TRACKDIR_BIT;
 				break;
 
@@ -168,9 +168,9 @@ public:
 				[[fallthrough]];
 
 			default:
-				this->dest_tile = v->dest_tile;
-				this->dest_station_id = INVALID_STATION;
-				this->dest_trackdirs = GetTileTrackdirBits(v->dest_tile, TRANSPORT_RAIL, 0);
+				this->dest_tile = (v->dest_tile == INVALID_TILE) ? TileIndex{} : v->dest_tile;
+				this->dest_station_id = StationID::Invalid();
+				this->dest_trackdirs = GetTileTrackdirBits(this->dest_tile, TRANSPORT_RAIL, 0);
 				break;
 		}
 		this->CYapfDestinationRailBase::SetDestination(v);
@@ -185,7 +185,7 @@ public:
 	/** Called by YAPF to detect if node ends in the desired destination */
 	inline bool PfDetectDestination(TileIndex tile, Trackdir td)
 	{
-		if (this->dest_station_id != INVALID_STATION) {
+		if (this->dest_station_id != StationID::Invalid()) {
 			return HasStationTileRail(tile)
 				&& (GetStationIndex(tile) == this->dest_station_id)
 				&& (GetRailStationTrack(tile) == TrackdirToTrack(td));
@@ -204,25 +204,12 @@ public:
 	 */
 	inline bool PfCalcEstimate(Node &n)
 	{
-		static const int dg_dir_to_x_offs[] = {-1, 0, 1, 0};
-		static const int dg_dir_to_y_offs[] = {0, 1, 0, -1};
 		if (this->PfDetectDestination(n)) {
 			n.estimate = n.cost;
 			return true;
 		}
 
-		TileIndex tile = n.GetLastTile();
-		DiagDirection exitdir = TrackdirToExitdir(n.GetLastTrackdir());
-		int x1 = 2 * TileX(tile) + dg_dir_to_x_offs[(int)exitdir];
-		int y1 = 2 * TileY(tile) + dg_dir_to_y_offs[(int)exitdir];
-		int x2 = 2 * TileX(this->dest_tile);
-		int y2 = 2 * TileY(this->dest_tile);
-		int dx = abs(x1 - x2);
-		int dy = abs(y1 - y2);
-		int dmin = std::min(dx, dy);
-		int dxy = abs(dx - dy);
-		int d = dmin * YAPF_TILE_CORNER_LENGTH + (dxy - 1) * (YAPF_TILE_LENGTH / 2);
-		n.estimate = n.cost + d;
+		n.estimate = n.cost + OctileDistanceCost(n.GetLastTile(), n.GetLastTrackdir(), this->dest_tile);
 		assert(n.estimate >= n.parent->estimate);
 		return true;
 	}

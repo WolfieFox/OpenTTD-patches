@@ -61,10 +61,10 @@ inline CargoMonitorID EncodeCargoIndustryMonitor(CompanyID company, CargoType ct
 	assert(company < (1 << CCB_COMPANY_LENGTH));
 
 	uint32_t ret = 0;
-	SB(ret, CCB_TOWN_IND_NUMBER_START, CCB_TOWN_IND_NUMBER_LENGTH, ind);
+	SB(ret, CCB_TOWN_IND_NUMBER_START, CCB_TOWN_IND_NUMBER_LENGTH, ind.base());
 	SetBit(ret, CCB_IS_INDUSTRY_BIT);
 	SB(ret, CCB_CARGO_TYPE_START, CCB_CARGO_TYPE_LENGTH, ctype);
-	SB(ret, CCB_COMPANY_START, CCB_COMPANY_LENGTH, company);
+	SB(ret, CCB_COMPANY_START, CCB_COMPANY_LENGTH, company.base());
 	return ret;
 }
 
@@ -81,9 +81,9 @@ inline CargoMonitorID EncodeCargoTownMonitor(CompanyID company, CargoType ctype,
 	assert(company < (1 << CCB_COMPANY_LENGTH));
 
 	uint32_t ret = 0;
-	SB(ret, CCB_TOWN_IND_NUMBER_START, CCB_TOWN_IND_NUMBER_LENGTH, town);
+	SB(ret, CCB_TOWN_IND_NUMBER_START, CCB_TOWN_IND_NUMBER_LENGTH, town.base());
 	SB(ret, CCB_CARGO_TYPE_START, CCB_CARGO_TYPE_LENGTH, ctype);
-	SB(ret, CCB_COMPANY_START, CCB_COMPANY_LENGTH, company);
+	SB(ret, CCB_COMPANY_START, CCB_COMPANY_LENGTH, company.base());
 	return ret;
 }
 
@@ -120,29 +120,29 @@ inline bool MonitorMonitorsIndustry(CargoMonitorID num)
 /**
  * Extract the industry number from the cargo monitor.
  * @param num Cargo monitoring number to decode.
- * @return The extracted industry id, or #INVALID_INDUSTRY if the number does not monitor an industry.
+ * @return The extracted industry id, or #IndustryID::Invalid() if the number does not monitor an industry.
  */
 inline IndustryID DecodeMonitorIndustry(CargoMonitorID num)
 {
-	if (!MonitorMonitorsIndustry(num)) return INVALID_INDUSTRY;
-	return GB(num, CCB_TOWN_IND_NUMBER_START, CCB_TOWN_IND_NUMBER_LENGTH);
+	if (!MonitorMonitorsIndustry(num)) return IndustryID::Invalid();
+	return static_cast<IndustryID>(GB(num, CCB_TOWN_IND_NUMBER_START, CCB_TOWN_IND_NUMBER_LENGTH));
 }
 
 /**
  * Extract the town number from the cargo monitor.
  * @param num Cargo monitoring number to decode.
- * @return The extracted town id, or #INVALID_TOWN if the number does not monitor a town.
+ * @return The extracted town id, or #TownID::Invalid() if the number does not monitor a town.
  */
 inline TownID DecodeMonitorTown(CargoMonitorID num)
 {
-	if (MonitorMonitorsIndustry(num)) return INVALID_TOWN;
-	return GB(num, CCB_TOWN_IND_NUMBER_START, CCB_TOWN_IND_NUMBER_LENGTH);
+	if (MonitorMonitorsIndustry(num)) return TownID::Invalid();
+	return static_cast<TownID>(GB(num, CCB_TOWN_IND_NUMBER_START, CCB_TOWN_IND_NUMBER_LENGTH));
 }
 
 void ClearCargoPickupMonitoring(CompanyID company = INVALID_OWNER);
 void ClearCargoDeliveryMonitoring(CompanyID company = INVALID_OWNER);
 int32_t GetDeliveryAmount(CargoMonitorID monitor, bool keep_monitoring);
 int32_t GetPickupAmount(CargoMonitorID monitor, bool keep_monitoring);
-void AddCargoDelivery(CargoType cargo_type, CompanyID company, uint32_t amount, SourceType src_type, SourceID src, const Station *st, IndustryID dest = INVALID_INDUSTRY);
+void AddCargoDelivery(CargoType cargo_type, CompanyID company, uint32_t amount, Source src, const Station *st, IndustryID dest = IndustryID::Invalid());
 
 #endif /* CARGOMONITOR_H */

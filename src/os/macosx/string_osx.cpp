@@ -11,6 +11,7 @@
 #include "string_osx.h"
 #include "../../string_func.h"
 #include "../../strings_func.h"
+#include "../../core/utf8.hpp"
 #include "../../table/control_codes.h"
 #include "../../fontcache.h"
 #include "../../zoom_func.h"
@@ -19,6 +20,7 @@
 #include <cmath>
 
 #include <CoreFoundation/CoreFoundation.h>
+#include "../../safeguards.h"
 
 
 /* CTRunDelegateCreate is supported since MacOS X 10.5, but was only included in the SDKs starting with the 10.9 SDK. */
@@ -145,7 +147,7 @@ static CGFloat SpriteFontGetWidth(void *ref_con)
 	return GetGlyphWidth(fs, c);
 }
 
-static CTRunDelegateCallbacks _sprite_font_callback = {
+static const CTRunDelegateCallbacks _sprite_font_callback = {
 	kCTRunDelegateCurrentVersion, nullptr, nullptr, nullptr,
 	&SpriteFontGetWidth
 };
@@ -170,8 +172,8 @@ static CTRunDelegateCallbacks _sprite_font_callback = {
 	CFAutoRelease<CFStringRef> base(CFStringCreateWithCharactersNoCopy(kCFAllocatorDefault, buff, length, kCFAllocatorNull));
 	CFAttributedStringReplaceString(str.get(), CFRangeMake(0, 0), base.get());
 
-	const UniChar replacment_char = 0xFFFC;
-	CFAutoRelease<CFStringRef> replacment_str(CFStringCreateWithCharacters(kCFAllocatorDefault, &replacment_char, 1));
+	const UniChar replacement_char = 0xFFFC;
+	CFAutoRelease<CFStringRef> replacement_str(CFStringCreateWithCharacters(kCFAllocatorDefault, &replacement_char, 1));
 
 	/* Apply font and colour ranges to our string. This is important to make sure
 	 * that we get proper glyph boundaries on style changes. */
@@ -199,7 +201,7 @@ static CTRunDelegateCallbacks _sprite_font_callback = {
 			if (buff[c] >= SCC_SPRITE_START && buff[c] <= SCC_SPRITE_END && font->fc->MapCharToGlyph(buff[c], false) == 0) {
 				CFAutoRelease<CTRunDelegateRef> del(CTRunDelegateCreate(&_sprite_font_callback, (void *)(size_t)(buff[c] | (font->fc->GetSize() << 24))));
 				/* According to the official documentation, if a run delegate is used, the char should always be 0xFFFC. */
-				CFAttributedStringReplaceString(str.get(), CFRangeMake(c, 1), replacment_str.get());
+				CFAttributedStringReplaceString(str.get(), CFRangeMake(c, 1), replacement_str.get());
 				CFAttributedStringSetAttribute(str.get(), CFRangeMake(c, 1), kCTRunDelegateAttributeName, del.get());
 			}
 		}
@@ -235,25 +237,25 @@ CoreTextParagraphLayout::CoreTextVisualRun::CoreTextVisualRun(CTRunRef run, Font
 	this->glyphs.resize(CTRunGetGlyphCount(run));
 
 	/* Query map of glyphs to source string index. */
-	CFIndex map[this->glyphs.size()];
-	CTRunGetStringIndices(run, CFRangeMake(0, 0), map);
+	auto map = std::make_unique<CFIndex[]>(this->glyphs.size());
+	CTRunGetStringIndices(run, CFRangeMake(0, 0), map.get());
 
 	this->glyph_to_char.resize(this->glyphs.size());
 	for (size_t i = 0; i < this->glyph_to_char.size(); i++) this->glyph_to_char[i] = (int)map[i];
 
-	CGPoint pts[this->glyphs.size()];
-	CTRunGetPositions(run, CFRangeMake(0, 0), pts);
-	CGSize advs[this->glyphs.size()];
-	CTRunGetAdvances(run, CFRangeMake(0, 0), advs);
+	auto pts = std::make_unique<CGPoint[]>(this->glyphs.size());
+	CTRunGetPositions(run, CFRangeMake(0, 0), pts.get());
+	auto advs = std::make_unique<CGSize[]>(this->glyphs.size());
+	CTRunGetAdvances(run, CFRangeMake(0, 0), advs.get());
 	this->positions.reserve(this->glyphs.size());
 
 	/* Convert glyph array to our data type. At the same time, substitute
 	 * the proper glyphs for our private sprite glyphs. */
-	CGGlyph gl[this->glyphs.size()];
-	CTRunGetGlyphs(run, CFRangeMake(0, 0), gl);
+	auto gl = std::make_unique<CGGlyph[]>(this->glyphs.size());
+	CTRunGetGlyphs(run, CFRangeMake(0, 0), gl.get());
 	for (size_t i = 0; i < this->glyphs.size(); i++) {
 		if (buff[this->glyph_to_char[i]] >= SCC_SPRITE_START && buff[this->glyph_to_char[i]] <= SCC_SPRITE_END && (gl[i] == 0 || gl[i] == 3)) {
-			/* A glyph of 0 indidicates not found, while apparently 3 is what char 0xFFFC maps to. */
+			/* A glyph of 0 indicates not found, while apparently 3 is what char 0xFFFC maps to. */
 			this->glyphs[i] = font->fc->MapCharToGlyph(buff[this->glyph_to_char[i]]);
 			this->positions.emplace_back(pts[i].x, pts[i].x + advs[i].width - 1, (font->fc->GetHeight() - ScaleSpriteTrad(FontCache::GetDefaultFontHeight(font->fc->GetSize()))) / 2); // Align sprite font to centre
 		} else {
@@ -302,22 +304,22 @@ void MacOSResetScriptCache(FontSize size)
 }
 
 /** Register an external font file with the CoreText system. */
-void MacOSRegisterExternalFont(const char *file_path)
+void MacOSRegisterExternalFont(std::string_view file_path)
 {
 	if (!MacOSVersionIsAtLeast(10, 6, 0)) return;
 
-	CFAutoRelease<CFStringRef> path(CFStringCreateWithCString(kCFAllocatorDefault, file_path, kCFStringEncodingUTF8));
+	CFAutoRelease<CFStringRef> path(CFStringCreateWithBytes(kCFAllocatorDefault, reinterpret_cast<const UInt8 *>(file_path.data()), file_path.size(), kCFStringEncodingUTF8, false));
 	CFAutoRelease<CFURLRef> url(CFURLCreateWithFileSystemPath(kCFAllocatorDefault, path.get(), kCFURLPOSIXPathStyle, false));
 
 	CTFontManagerRegisterFontsForURL(url.get(), kCTFontManagerScopeProcess, nullptr);
 }
 
 /** Store current language locale as a CoreFoundation locale. */
-void MacOSSetCurrentLocaleName(const char *iso_code)
+void MacOSSetCurrentLocaleName(std::string_view iso_code)
 {
 	if (!MacOSVersionIsAtLeast(10, 5, 0)) return;
 
-	CFAutoRelease<CFStringRef> iso(CFStringCreateWithCString(kCFAllocatorDefault, iso_code, kCFStringEncodingUTF8));
+	CFAutoRelease<CFStringRef> iso(CFStringCreateWithBytes(kCFAllocatorDefault, reinterpret_cast<const UInt8 *>(iso_code.data()), iso_code.size(), kCFStringEncodingUTF8, false));
 	_osx_locale.reset(CFLocaleCreate(kCFAllocatorDefault, iso.get()));
 }
 
@@ -330,7 +332,7 @@ void MacOSSetCurrentLocaleName(const char *iso_code)
  */
 int MacOSStringCompare(std::string_view s1, std::string_view s2)
 {
-	static bool supported = MacOSVersionIsAtLeast(10, 5, 0);
+	static const bool supported = MacOSVersionIsAtLeast(10, 5, 0);
 	if (!supported) return 0;
 
 	if (_osx_locale == nullptr) return 0;
@@ -354,9 +356,9 @@ int MacOSStringCompare(std::string_view s1, std::string_view s2)
  * @param case_insensitive Search case-insensitive.
  * @return 1 if value was found, 0 if it was not found, or -1 if not supported by the OS.
  */
-int MacOSStringContains(const std::string_view str, const std::string_view value, bool case_insensitive)
+int MacOSStringContains(std::string_view str, std::string_view value, bool case_insensitive)
 {
-	static bool supported = MacOSVersionIsAtLeast(10, 5, 0);
+	static const bool supported = MacOSVersionIsAtLeast(10, 5, 0);
 	if (!supported) return -1;
 
 	CFStringCompareFlags flags = kCFCompareLocalized | kCFCompareWidthInsensitive;
@@ -372,10 +374,8 @@ int MacOSStringContains(const std::string_view str, const std::string_view value
 }
 
 
-/* virtual */ void OSXStringIterator::SetString(const char *s)
+/* virtual */ void OSXStringIterator::SetString(std::string_view s)
 {
-	const char *string_base = s;
-
 	this->utf16_to_utf8.clear();
 	this->str_info.clear();
 	this->cur_pos = 0;
@@ -383,10 +383,10 @@ int MacOSStringContains(const std::string_view str, const std::string_view value
 	/* CoreText operates on UTF-16, thus we have to convert the input string.
 	 * To be able to return proper offsets, we have to create a mapping at the same time. */
 	std::vector<UniChar> utf16_str;     ///< UTF-16 copy of the string.
-	while (*s != '\0') {
-		size_t idx = s - string_base;
-
-		char32_t c = Utf8Consume(&s);
+	Utf8View view(s);
+	for (auto it = view.begin(), end = view.end(); it != end; ++it) {
+		size_t idx = it.GetByteOffset();
+		char32_t c = *it;
 		if (c < 0x10000) {
 			utf16_str.push_back((UniChar)c);
 		} else {
@@ -397,7 +397,7 @@ int MacOSStringContains(const std::string_view str, const std::string_view value
 		}
 		this->utf16_to_utf8.push_back(idx);
 	}
-	this->utf16_to_utf8.push_back(s - string_base);
+	this->utf16_to_utf8.push_back(s.size());
 
 	/* Query CoreText for word and cluster break information. */
 	this->str_info.resize(utf16_to_utf8.size());

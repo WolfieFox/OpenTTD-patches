@@ -12,6 +12,7 @@
 
 #include "core/overflowsafe_type.hpp"
 #include "core/enum_type.hpp"
+#include "core/pool_id_type.hpp"
 #include <array>
 
 typedef OverflowSafeInt64 Money;
@@ -157,7 +158,7 @@ enum Price : uint8_t {
 DECLARE_INCREMENT_DECREMENT_OPERATORS(Price)
 
 typedef Money Prices[PR_END]; ///< Prices of everything. @see Price
-typedef int8_t PriceMultipliers[PR_END];
+using PriceMultipliers = std::array<int8_t, PR_END>;
 
 /** Types of expenses. */
 enum ExpensesType : uint8_t {
@@ -192,16 +193,6 @@ enum PriceCategory : uint8_t {
 	PCAT_NONE,         ///< Not affected by difficulty settings
 	PCAT_RUNNING,      ///< Price is affected by "vehicle running cost" difficulty setting
 	PCAT_CONSTRUCTION, ///< Price is affected by "construction cost" difficulty setting
-};
-
-/**
- * Describes properties of price bases.
- */
-struct PriceBaseSpec {
-	Money start_price;      ///< Default value at game start, before adding multipliers.
-	PriceCategory category; ///< Price is affected by certain difficulty settings.
-	uint grf_feature;       ///< GRF Feature that decides whether price multipliers apply locally or globally, #GSF_END if none.
-	Price fallback_price;   ///< Fallback price multiplier for new prices but old grfs.
 };
 
 /** The "steps" in loan size, in British Pounds! */
@@ -242,20 +233,14 @@ static const uint ROAD_STOP_TRACKBIT_FACTOR = 2;
 static const uint LOCK_DEPOT_TILE_FACTOR = 2;
 
 struct CargoPayment;
-typedef uint32_t CargoPaymentID;
+struct CargoPaymentIDTag : public PoolIDTraits<uint32_t, 0xFF000, 0xFFFFF> {};
+using CargoPaymentID = PoolID<CargoPaymentIDTag>;
 
 enum CargoPaymentAlgorithm : uint8_t {
 	CPA_BEGIN = 0,       ///< Used for iterations and limit testing
 	CPA_TRADITIONAL = 0, ///< Traditional algorithm
 	CPA_MODERN,          ///< Modern algorithm
 	CPA_END,             ///< Used for iterations and limit testing
-};
-
-enum TickRateMode : uint8_t {
-	TRM_BEGIN = 0,       ///< Used for iterations and limit testing
-	TRM_TRADITIONAL = 0, ///< Traditional value (30ms)
-	TRM_MODERN,          ///< Modern value (27ms)
-	TRM_END,             ///< Used for iterations and limit testing
 };
 
 enum CargoScalingMode : uint8_t {

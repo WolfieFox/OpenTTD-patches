@@ -26,7 +26,7 @@
  */
 
 /** Run the dummy info.nut. */
-void Script_CreateDummyInfo(HSQUIRRELVM vm, const char *type, const char *dir)
+void Script_CreateDummyInfo(HSQUIRRELVM vm, std::string_view type, std::string_view dir)
 {
 	std::string dummy_script = fmt::format(
 			"class Dummy{0} extends {0}Info {{\n"
@@ -42,7 +42,7 @@ void Script_CreateDummyInfo(HSQUIRRELVM vm, const char *type, const char *dir)
 	sq_pushroottable(vm);
 
 	/* Load and run the script */
-	if (SQ_SUCCEEDED(sq_compilebuffer(vm, dummy_script.c_str(), dummy_script.size(), "dummy", SQTrue))) {
+	if (SQ_SUCCEEDED(sq_compilebuffer(vm, dummy_script, "dummy", SQTrue))) {
 		sq_push(vm, -2);
 		if (SQ_SUCCEEDED(sq_call(vm, 1, SQFalse, SQTrue))) {
 			sq_pop(vm, 1);
@@ -66,6 +66,7 @@ static std::vector<std::string> EscapeQuotesAndSlashesAndSplitOnNewLines(const s
 	for (auto c : message) {
 		if (c == '\n') {
 			messages.emplace_back(std::move(safe_message));
+			safe_message.clear(); // std::move leaves safe_message in a "valid but unspecified state" according to the specification.
 			continue;
 		}
 
@@ -77,7 +78,7 @@ static std::vector<std::string> EscapeQuotesAndSlashesAndSplitOnNewLines(const s
 }
 
 /** Run the dummy AI and let it generate an error message. */
-void Script_CreateDummy(HSQUIRRELVM vm, StringID string, const char *type)
+void Script_CreateDummy(HSQUIRRELVM vm, StringID string, std::string_view type)
 {
 	/* We want to translate the error message.
 	 * We do this in three steps:
@@ -101,7 +102,7 @@ void Script_CreateDummy(HSQUIRRELVM vm, StringID string, const char *type)
 
 	/* 3) Finally we load and run the script */
 	sq_pushroottable(vm);
-	if (SQ_SUCCEEDED(sq_compilebuffer(vm, dummy_script.c_str(), dummy_script.size(), "dummy", SQTrue))) {
+	if (SQ_SUCCEEDED(sq_compilebuffer(vm, dummy_script, "dummy", SQTrue))) {
 		sq_push(vm, -2);
 		if (SQ_SUCCEEDED(sq_call(vm, 1, SQFalse, SQTrue))) {
 			sq_pop(vm, 1);

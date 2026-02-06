@@ -102,3 +102,13 @@ STR_COMPANY_PASSWORD_MAKE_DEFAULT_TOOLTIP                       :{BLACK}Foloseș
 STR_COMPANY_VIEW_PASSWORD                                       :{BLACK}Parola
 STR_COMPANY_VIEW_PASSWORD_TOOLTIP                               :{BLACK}Protejează-ți compania cu o parolă pentru a preveni accesul neautorizat
 STR_COMPANY_VIEW_SET_PASSWORD                                   :{BLACK}Alege parola companiei
+
+# JSON messages
+
+STR_INTRO_NEWGRF_SETTINGS                                       :{BLACK}Setări NewGRF
+STR_INTRO_AI_SETTINGS                                           :{BLACK}Setări AI
+STR_INTRO_GAMESCRIPT_SETTINGS                                   :{BLACK}Setări pentru scriptul jocului
+STR_INTRO_TOOLTIP_NEWGRF_SETTINGS                               :{BLACK}Afișează setările NewGRF
+STR_INTRO_TOOLTIP_AI_SETTINGS                                   :{BLACK}Afișează setările AI
+STR_INTRO_TOOLTIP_GAMESCRIPT_SETTINGS                           :{BLACK}Afișează setările scriptului de joc
+STR_INTRO_CAPTION_TRADITIONAL                                   :{WHITE}OpenTTD {REV}

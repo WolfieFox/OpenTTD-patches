@@ -133,11 +133,11 @@ static bool OrderDestinationIsAllowed(const Order *order, const Vehicle *v, Owne
 		case OT_IMPLICIT:
 		case OT_GOTO_STATION:
 		case OT_GOTO_WAYPOINT:
-			dest_owner = BaseStation::Get(order->GetDestination())->owner;
+			dest_owner = BaseStation::Get(order->GetDestination().ToStationID())->owner;
 			break;
 		case OT_GOTO_DEPOT:
 			if ((order->GetDepotActionType() & ODATFB_NEAREST_DEPOT) != 0) return true;
-			dest_owner = (v->type == VEH_AIRCRAFT) ? Station::Get(order->GetDestination())->owner : GetTileOwner(Depot::Get(order->GetDestination())->xy);
+			dest_owner = (v->type == VEH_AIRCRAFT) ? Station::Get(order->GetDestination().ToStationID())->owner : GetTileOwner(Depot::Get(order->GetDestination().ToDepotID())->xy);
 			break;
 		case OT_LOADING_ADVANCE:
 		case OT_LOADING:
@@ -192,13 +192,13 @@ static void FixAllReservations()
 	/* if this function is called, we can safely assume that sharing of rails is being switched off */
 	assert(!_settings_game.economy.infrastructure_sharing[VEH_TRAIN]);
 	for (Train *v : Train::IterateFrontOnly()) {
-		if (!v->IsPrimaryVehicle() || (v->vehstatus & VS_CRASHED) != 0 || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
+		if (!v->IsPrimaryVehicle() || v->vehstatus.Test(VehState::Crashed) || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
 		/* It might happen that the train reserved additional tracks,
 		 * but FollowTrainReservation can't detect those because they are no longer reachable.
 		 * detect this by first finding the end of the reservation,
 		 * then switch sharing on and try again. If these two ends differ,
 		 * unreserve the path, switch sharing off and try to reserve a new path */
-		PBSTileInfo end_tile_info = FollowTrainReservation(v, nullptr, FTRF_IGNORE_LOOKAHEAD | FTRF_OKAY_UNUSED);
+		PBSTileInfo end_tile_info = FollowTrainReservation(v, nullptr, { FollowTrainReservationFlag::IgnoreLookahead, FollowTrainReservationFlag::OkayUnused });
 
 		/* first do a quick test to determine whether the next tile has any reservation at all */
 		TileIndex next_tile = end_tile_info.tile + TileOffsByDiagDir(TrackdirToExitdir(end_tile_info.trackdir));
@@ -207,7 +207,7 @@ static void FixAllReservations()
 
 		/* change sharing setting temporarily */
 		_settings_game.economy.infrastructure_sharing[VEH_TRAIN] = true;
-		PBSTileInfo end_tile_info2 = FollowTrainReservation(v, nullptr, FTRF_IGNORE_LOOKAHEAD | FTRF_OKAY_UNUSED);
+		PBSTileInfo end_tile_info2 = FollowTrainReservation(v, nullptr, { FollowTrainReservationFlag::IgnoreLookahead, FollowTrainReservationFlag::OkayUnused });
 		/* if these two reservation ends differ, unreserve the path and try to reserve a new path */
 		if (end_tile_info.tile != end_tile_info2.tile || end_tile_info.trackdir != end_tile_info2.trackdir) {
 			FreeTrainTrackReservation(v);
@@ -265,13 +265,13 @@ bool CheckSharingChangePossible(VehicleType type, bool new_value)
 
 	if (type == VEH_TRAIN && _settings_game.vehicle.train_braking_model == TBM_REALISTIC) {
 		for (Train *v : Train::IterateFrontOnly()) {
-			if (!v->IsPrimaryVehicle() || (v->vehstatus & VS_CRASHED) != 0 || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
+			if (!v->IsPrimaryVehicle() || v->vehstatus.Test(VehState::Crashed) || HasBit(v->subtype, GVSF_VIRTUAL)) continue;
 			/* It might happen that the train reserved additional tracks,
 			 * but FollowTrainReservation can't detect those because they are no longer reachable.
 			 * detect this by first finding the end of the reservation,
 			 * then switch sharing on and try again. If these two ends differ,
 			 * disallow changing the sharing state */
-			PBSTileInfo end_tile_info = FollowTrainReservation(v, nullptr, FTRF_IGNORE_LOOKAHEAD | FTRF_OKAY_UNUSED);
+			PBSTileInfo end_tile_info = FollowTrainReservation(v, nullptr, { FollowTrainReservationFlag::IgnoreLookahead, FollowTrainReservationFlag::OkayUnused });
 
 			/* first do a quick test to determine whether the next tile has any reservation at all */
 			TileIndex next_tile = end_tile_info.tile + TileOffsByDiagDir(TrackdirToExitdir(end_tile_info.trackdir));
@@ -280,7 +280,7 @@ bool CheckSharingChangePossible(VehicleType type, bool new_value)
 
 			/* change sharing setting temporarily */
 			_settings_game.economy.infrastructure_sharing[VEH_TRAIN] = true;
-			PBSTileInfo end_tile_info2 = FollowTrainReservation(v, nullptr, FTRF_IGNORE_LOOKAHEAD | FTRF_OKAY_UNUSED);
+			PBSTileInfo end_tile_info2 = FollowTrainReservation(v, nullptr, { FollowTrainReservationFlag::IgnoreLookahead, FollowTrainReservationFlag::OkayUnused });
 			_settings_game.economy.infrastructure_sharing[VEH_TRAIN] = false;
 
 			/* if these two reservation ends differ, disallow changing the sharing state */
@@ -292,7 +292,7 @@ bool CheckSharingChangePossible(VehicleType type, bool new_value)
 	}
 
 	if (error_message != STR_NULL) {
-		ShowErrorMessage(error_message, INVALID_STRING_ID, WL_ERROR);
+		ShowErrorMessage(GetEncodedString(error_message), {}, WL_ERROR);
 		return false;
 	}
 

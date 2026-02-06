@@ -17,7 +17,8 @@
 #include "effectvehicle_func.h"
 #include "effectvehicle_base.h"
 #include "core/checksum_func.hpp"
-#include "core/container_func.hpp"
+#include "3rdparty/cpp-btree/btree_set.h"
+#include "3rdparty/robin_hood/robin_hood.h"
 
 #include <algorithm>
 
@@ -566,7 +567,7 @@ struct EffectProcs {
 };
 
 /** Per-EffectVehicleType handling. */
-static std::array<EffectProcs, EV_END> _effect_procs = {{
+static const std::array<EffectProcs, EV_END> _effect_procs = {{
 	{ ChimneySmokeInit,   ChimneySmokeTick,   TO_INDUSTRIES }, // EV_CHIMNEY_SMOKE
 	{ SteamSmokeInit,     SteamSmokeTick,     TO_INVALID    }, // EV_STEAM_SMOKE
 	{ DieselSmokeInit,    DieselSmokeTick,    TO_INVALID    }, // EV_DIESEL_SMOKE
@@ -600,7 +601,7 @@ EffectVehicle *CreateEffectVehicle(int x, int y, int z, EffectVehicleType type)
 	v->z_pos = z;
 	v->tile = TileIndex{};
 	v->UpdateDeltaXY();
-	v->vehstatus = VS_UNCLICKABLE;
+	v->vehstatus = VehState::Unclickable;
 
 	_effect_procs[type].init_proc(v);
 
@@ -651,11 +652,7 @@ bool EffectVehicle::Tick()
 
 void EffectVehicle::UpdateDeltaXY()
 {
-	this->x_offs        = 0;
-	this->y_offs        = 0;
-	this->x_extent      = 1;
-	this->y_extent      = 1;
-	this->z_extent      = 1;
+	this->bounds = {{}, {1, 1, 1}, {}};
 }
 
 /**
@@ -667,19 +664,16 @@ TransparencyOption EffectVehicle::GetTransparencyOption() const
 	return _effect_procs[this->subtype].transparency;
 }
 
-extern std::vector<VehicleID> _remove_from_tick_effect_veh_cache;
+extern robin_hood::unordered_flat_set<VehicleID> _remove_from_tick_effect_veh_cache;
 extern btree::btree_set<VehicleID> _tick_effect_veh_cache;
-extern bool _tick_caches_valid;
 
 void EffectVehicle::AddEffectVehicleToTickCache()
 {
-	if (!_tick_caches_valid) return;
-	if (container_unordered_remove(_remove_from_tick_effect_veh_cache, this->index) > 0) return;
+	if (_remove_from_tick_effect_veh_cache.erase(this->index) > 0) return;
 	_tick_effect_veh_cache.insert(this->index);
 }
 
 void EffectVehicle::RemoveEffectVehicleFromTickCache()
 {
-	if (!_tick_caches_valid) return;
-	_remove_from_tick_effect_veh_cache.push_back(this->index);
+	_remove_from_tick_effect_veh_cache.insert(this->index);
 }

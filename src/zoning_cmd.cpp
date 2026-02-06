@@ -48,7 +48,7 @@ static btree::btree_set<uint32_t> _zoning_cache_outer;
 void DrawZoningSprites(SpriteID image, SpriteID colour, const TileInfo *ti)
 {
 	if (colour != ZONING_INVALID_SPRITE_ID) {
-		AddSortableSpriteToDraw(image + ti->tileh, colour, ti->x, ti->y, 0x10, 0x10, 1, ti->z + 7);
+		AddSortableSpriteToDraw(image + ti->tileh, colour, ti->x, ti->y, ti->z + 7, {{}, {0x10, 0x10, 1}, {}});
 	}
 }
 
@@ -68,7 +68,7 @@ bool IsAreaWithinAcceptanceZoneOfStation(TileArea area, Owner owner, StationFaci
 	StationFinder morestations(area);
 
 	for (const Station *st : morestations.GetStations()) {
-		if (st->owner != owner || !(st->facilities & facility_mask)) continue;
+		if (st->owner != owner || !st->facilities.Test(facility_mask)) continue;
 		Rect rect = st->GetCatchmentRect();
 		return TileArea(TileXY(rect.left, rect.top), TileXY(rect.right, rect.bottom)).Intersects(area);
 	}
@@ -134,7 +134,7 @@ SpriteID TileZoneCheckOpinionEvaluation(TileIndex tile, Owner owner)
 	Town *town = ClosestTownFromTile(tile, _settings_game.economy.dist_local_authority);
 
 	if (town != nullptr) {
-		if (HasBit(town->have_ratings, owner)) {
+		if (town->have_ratings.Test(owner)) {
 			opinion = (town->ratings[owner] > 0) ? 3 : 2;
 		} else {
 			opinion = 1;
@@ -239,19 +239,19 @@ SpriteID TileZoneCheckUnservedIndustriesEvaluation(TileIndex tile, Owner owner)
 
 		for (const Station *st : ind->stations_near) {
 			if (st->owner == owner) {
-				if (st->facilities & (~(FACIL_BUS_STOP | FACIL_TRUCK_STOP)) || st->facilities == (FACIL_BUS_STOP | FACIL_TRUCK_STOP)) {
-					return ZONING_INVALID_SPRITE_ID;
-				} else if (st->facilities & (FACIL_BUS_STOP | FACIL_TRUCK_STOP)) {
+				if (st->facilities == StationFacility::BusStop || st->facilities == StationFacility::TruckStop) {
 					for (const auto &p : ind->Produced()) {
-						if (p.cargo != INVALID_CARGO && st->facilities & (IsCargoInClass(p.cargo, CC_PASSENGERS) ? FACIL_BUS_STOP : FACIL_TRUCK_STOP)) {
+						if (p.cargo != INVALID_CARGO && st->facilities.Test(IsCargoInClass(p.cargo, CargoClass::Passengers) ? StationFacility::BusStop : StationFacility::TruckStop)) {
 							return ZONING_INVALID_SPRITE_ID;
 						}
 					}
 					for (const auto &a : ind->Accepted()) {
-						if (a.cargo != INVALID_CARGO && st->facilities & (IsCargoInClass(a.cargo, CC_PASSENGERS) ? FACIL_BUS_STOP : FACIL_TRUCK_STOP)) {
+						if (a.cargo != INVALID_CARGO && st->facilities.Test(IsCargoInClass(a.cargo, CargoClass::Passengers) ? StationFacility::BusStop : StationFacility::TruckStop)) {
 							return ZONING_INVALID_SPRITE_ID;
 						}
 					}
+				} else if (st->facilities.Any()) {
+					return ZONING_INVALID_SPRITE_ID;
 				}
 			}
 		}
@@ -453,7 +453,7 @@ inline SpriteID TileZoningSpriteEvaluationCached(TileIndex tile, Owner owner, Zo
  */
 void DrawTileZoning(const TileInfo *ti)
 {
-	if (IsTileType(ti->tile, MP_VOID) || _game_mode != GM_NORMAL) {
+	if (IsTileType(ti->tile, MP_VOID) || (_game_mode != GM_NORMAL && _game_mode != GM_EDITOR)) {
 		return;
 	}
 

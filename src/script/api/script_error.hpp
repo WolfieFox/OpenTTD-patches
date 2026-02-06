@@ -177,6 +177,9 @@ public:
 
 		/** Station is too spread out */
 		ERR_STATION_TOO_SPREAD_OUT,                   // [STR_ERROR_STATION_TOO_SPREAD_OUT]
+
+		/** Bridge is too low */
+		ERR_BRIDGE_TOO_LOW,                           // [STR_ERROR_BRIDGE_TOO_LOW_FOR_STATION, STR_ERROR_BRIDGE_TOO_LOW_FOR_ROADSTOP, STR_ERROR_BRIDGE_TOO_LOW_FOR_BUOY, STR_ERROR_BRIDGE_TOO_LOW_FOR_RAIL_WAYPOINT, STR_ERROR_BRIDGE_TOO_LOW_FOR_ROAD_WAYPOINT]
 	};
 
 	/**
@@ -220,11 +223,11 @@ public:
 	 * @param ai_error_msg The script error message representation.
 	 * @param message The string representation of this error message, used for debug purposes.
 	 */
-	static void RegisterErrorMapString(ScriptErrorType ai_error_msg, const char *message);
+	static void RegisterErrorMapString(ScriptErrorType ai_error_msg, std::string_view message);
 
 private:
-	typedef robin_hood::unordered_flat_map<StringID, ScriptErrorType> ScriptErrorMap;           ///< The type for mapping between error (internal OpenTTD) StringID to the script error type.
-	typedef robin_hood::unordered_flat_map<ScriptErrorType, const char *> ScriptErrorMapString; ///< The type for mapping between error type and textual representation.
+	using ScriptErrorMap = robin_hood::unordered_flat_map<StringID, ScriptErrorType>;               ///< The type for mapping between error (internal OpenTTD) StringID to the script error type.
+	using ScriptErrorMapString = robin_hood::unordered_flat_map<ScriptErrorType, std::string_view>; ///< The type for mapping between error type and textual representation.
 
 	static ScriptErrorMap error_map;              ///< The mapping between error (internal OpenTTD) StringID to the script error type.
 	static ScriptErrorMapString error_map_string; ///< The mapping between error type and textual representation.

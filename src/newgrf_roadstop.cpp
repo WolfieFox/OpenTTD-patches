@@ -13,7 +13,6 @@
 #include "roadstop_base.h"
 #include "newgrf_badge.h"
 #include "newgrf_roadstop.h"
-#include "newgrf_class_func.h"
 #include "newgrf_cargo.h"
 #include "newgrf_roadtype.h"
 #include "gfx_type.h"
@@ -22,11 +21,16 @@
 #include "window_type.h"
 #include "date_func.h"
 #include "town.h"
+#include "tile_cmd.h"
 #include "viewport_func.h"
 #include "newgrf_animation_base.h"
 #include "newgrf_sound.h"
 #include "newgrf_extension.h"
 #include "newgrf_dump.h"
+
+#include "table/strings.h"
+
+#include "newgrf_class_func.h"
 
 #include "safeguards.h"
 
@@ -62,9 +66,9 @@ uint32_t RoadStopScopeResolver::GetRandomBits() const
 	return bits;
 }
 
-uint32_t RoadStopScopeResolver::GetTriggers() const
+uint32_t RoadStopScopeResolver::GetRandomTriggers() const
 {
-	return this->st == nullptr ? 0 : this->st->waiting_triggers;
+	return this->st == nullptr ? 0 : this->st->waiting_random_triggers.base();
 }
 
 uint32_t RoadStopScopeResolver::GetNearbyRoadStopsInfo(uint32_t parameter, RoadStopScopeResolver::NearbyRoadStopInfoMode mode) const
@@ -143,9 +147,9 @@ uint32_t RoadStopScopeResolver::GetVariable(uint16_t variable, uint32_t paramete
 
 		/* Town zone and Manhattan distance of closest town */
 		case 0x45: {
-			if (this->tile == INVALID_TILE) return HZB_TOWN_EDGE << 16;
+			if (this->tile == INVALID_TILE) return to_underlying(HouseZone::TownEdge) << 16;
 			const Town *t = (this->st == nullptr) ? ClosestTownFromTile(this->tile, UINT_MAX) : this->st->town;
-			return t != nullptr ? (GetTownRadiusGroup(t, this->tile) << 16 | ClampTo<uint16_t>(DistanceManhattan(this->tile, t->xy))) : HZB_TOWN_EDGE << 16;
+			return t != nullptr ? (to_underlying(GetTownRadiusGroup(t, this->tile)) << 16 | ClampTo<uint16_t>(DistanceManhattan(this->tile, t->xy))) : to_underlying(HouseZone::TownEdge) << 16;
 		}
 
 		/* Get square of Euclidean distance of closest town */
@@ -259,7 +263,7 @@ uint32_t RoadStopScopeResolver::GetVariable(uint16_t variable, uint32_t paramete
 
 		case 0x7A: return GetBadgeVariableResult(*this->ro.grffile, this->roadstopspec->badges, parameter);
 
-		case 0xF0: return this->st == nullptr ? 0 : this->st->facilities; // facilities
+		case 0xF0: return this->st == nullptr ? 0 : this->st->facilities.base(); // facilities
 
 		case 0xFA: return ClampTo<uint16_t>((this->st == nullptr ? CalTime::CurDate() : this->st->build_date) - CalTime::DAYS_TILL_ORIGINAL_BASE_YEAR); // build date
 	}
@@ -270,42 +274,34 @@ uint32_t RoadStopScopeResolver::GetVariable(uint16_t variable, uint32_t paramete
 	return UINT_MAX;
 }
 
-const SpriteGroup *RoadStopResolverObject::ResolveReal(const RealSpriteGroup *group) const
-{
-	if (group == nullptr) return nullptr;
-
-	return group->loading[0];
-}
-
 RoadStopResolverObject::RoadStopResolverObject(const RoadStopSpec *roadstopspec, BaseStation *st, TileIndex tile, RoadType roadtype, StationType type, uint8_t view,
 		CallbackID callback, uint32_t param1, uint32_t param2)
-	: ResolverObject(roadstopspec->grf_prop.grffile, callback, param1, param2), roadstop_scope(*this, st, roadstopspec, tile, roadtype, type, view)
+	: SpecializedResolverObject<StationRandomTriggers>(roadstopspec->grf_prop.grffile, callback, param1, param2), roadstop_scope(*this, st, roadstopspec, tile, roadtype, type, view)
 {
-	CargoType ctype = SpriteGroupCargo::SG_DEFAULT_NA;
+	CargoType ctype = CargoGRFFileProps::SG_DEFAULT_NA;
 
 	if (st == nullptr) {
 		/* No station, so we are in a purchase list */
-		ctype = SpriteGroupCargo::SG_PURCHASE;
+		ctype = CargoGRFFileProps::SG_PURCHASE;
 		this->root_spritegroup = roadstopspec->grf_prop.GetSpriteGroup(ctype);
 	} else if (Station::IsExpected(st)) {
 		const Station *station = Station::From(st);
 		/* Pick the first cargo that we have waiting */
 		for (const auto &[cargo, spritegroup] : roadstopspec->grf_prop) {
-			if (cargo < NUM_CARGO && station->goods[cargo].CargoTotalCount() > 0) {
+			if (cargo < NUM_CARGO && station->goods[cargo].CargoTotalCount() > 0 && spritegroup != nullptr) {
 				ctype = cargo;
 				this->root_spritegroup = spritegroup;
 				break;
 			}
 		}
+	}
 
-		if (this->root_spritegroup == nullptr) {
-			ctype = SpriteGroupCargo::SG_DEFAULT_NA;
-			this->root_spritegroup = roadstopspec->grf_prop.GetSpriteGroup(ctype);
-		}
+	if (ctype == CargoGRFFileProps::SG_DEFAULT_NA) {
+		this->root_spritegroup = roadstopspec->grf_prop.GetSpriteGroup(ctype);
 	}
 
 	if (this->root_spritegroup == nullptr) {
-		ctype = SpriteGroupCargo::SG_DEFAULT;
+		ctype = CargoGRFFileProps::SG_DEFAULT;
 		this->root_spritegroup = roadstopspec->grf_prop.GetSpriteGroup(ctype);
 	}
 
@@ -350,25 +346,26 @@ void DrawRoadStopTile(int x, int y, RoadType roadtype, const RoadStopSpec *spec,
 
 	const RoadTypeInfo *rti = GetRoadTypeInfo(roadtype);
 	RoadStopResolverObject object(spec, nullptr, INVALID_TILE, roadtype, type, view);
-	const SpriteGroup *group = object.Resolve();
-	if (group == nullptr || group->type != SGT_TILELAYOUT) return;
-	const DrawTileSprites *dts = ((const TileLayoutSpriteGroup *)group)->ProcessRegisters(nullptr);
+	const TileLayoutSpriteGroup *group = object.Resolve<TileLayoutSpriteGroup>();
+	if (group == nullptr) return;
+	auto processor = group->ProcessRegisters(nullptr);
+	auto dts = processor.GetLayout();
 
-	PaletteID palette = COMPANY_SPRITE_COLOUR(_local_company);
+	PaletteID palette = GetCompanyPalette(_local_company);
 
-	SpriteID image = dts->ground.sprite;
-	PaletteID pal  = dts->ground.pal;
+	SpriteID image = dts.ground.sprite;
+	PaletteID pal = dts.ground.pal;
 
-	RoadStopDrawMode draw_mode;
-	if (HasBit(spec->flags, RSF_DRAW_MODE_REGISTER)) {
-		draw_mode = static_cast<RoadStopDrawMode>(GetRegister(0x100));
+	RoadStopDrawModes draw_mode;
+	if (spec->flags.Test(RoadStopSpecFlag::DrawModeRegister)) {
+		draw_mode = static_cast<RoadStopDrawModes>(GetRegister(0x100));
 	} else {
 		draw_mode = spec->draw_mode;
 	}
 
 	if (type == StationType::RoadWaypoint) {
 		DrawSprite(SPR_ROAD_PAVED_STRAIGHT_X, PAL_NONE, x, y);
-		if ((draw_mode & ROADSTOP_DRAW_MODE_WAYP_GROUND) && GB(image, 0, SPRITE_WIDTH) != 0) {
+		if (draw_mode.Test(RoadStopDrawMode::WaypGround) && GB(image, 0, SPRITE_WIDTH) != 0) {
 			DrawSprite(image, GroundSpritePaletteTransform(image, pal, palette), x, y);
 		}
 	} else if (GB(image, 0, SPRITE_WIDTH) != 0) {
@@ -380,7 +377,7 @@ void DrawRoadStopTile(int x, int y, RoadType roadtype, const RoadStopSpec *spec,
 		uint sprite_offset = 5 - view;
 
 		/* Road underlay takes precedence over tram */
-		if (type == StationType::RoadWaypoint || draw_mode & ROADSTOP_DRAW_MODE_OVERLAY) {
+		if (type == StationType::RoadWaypoint || draw_mode.Test(RoadStopDrawMode::Overlay)) {
 			if (rti->UsesOverlay()) {
 				SpriteID ground = GetCustomRoadSprite(rti, INVALID_TILE, ROTSG_GROUND);
 				DrawSprite(ground + sprite_offset, PAL_NONE, x, y);
@@ -393,13 +390,19 @@ void DrawRoadStopTile(int x, int y, RoadType roadtype, const RoadStopSpec *spec,
 		}
 	} else {
 		/* Bay stop */
-		if ((draw_mode & ROADSTOP_DRAW_MODE_ROAD) && rti->UsesOverlay()) {
+		if (draw_mode.Test(RoadStopDrawMode::Road) && rti->UsesOverlay()) {
 			SpriteID ground = GetCustomRoadSprite(rti, INVALID_TILE, ROTSG_ROADSTOP);
 			DrawSprite(ground + view, PAL_NONE, x, y);
 		}
 	}
 
-	DrawCommonTileSeqInGUI(x, y, dts, 0, 0, palette, true);
+	DrawCommonTileSeqInGUI(x, y, &dts, 0, 0, palette, true);
+}
+
+const TileLayoutSpriteGroup *GetRoadStopLayout(TileInfo *ti, const RoadStopSpec *spec, BaseStation *st, StationType type, int view)
+{
+	RoadStopResolverObject object(spec, st, ti->tile, INVALID_ROADTYPE, type, view);
+	return object.Resolve<TileLayoutSpriteGroup>();
 }
 
 /** Wrapper for animation control, see GetRoadStopCallback. */
@@ -415,11 +418,11 @@ struct RoadStopAnimationFrameAnimationHelper {
 
 /** Helper class for animation control. */
 struct RoadStopAnimationBase : public AnimationBase<RoadStopAnimationBase, RoadStopSpec, BaseStation, int, GetAnimRoadStopCallback, RoadStopAnimationFrameAnimationHelper> {
-	static const CallbackID cb_animation_speed      = CBID_STATION_ANIMATION_SPEED;
-	static const CallbackID cb_animation_next_frame = CBID_STATION_ANIM_NEXT_FRAME;
+	static constexpr CallbackID cb_animation_speed      = CBID_STATION_ANIMATION_SPEED;
+	static constexpr CallbackID cb_animation_next_frame = CBID_STATION_ANIMATION_NEXT_FRAME;
 
-	static const RoadStopCallbackMask cbm_animation_speed      = CBM_ROAD_STOP_ANIMATION_SPEED;
-	static const RoadStopCallbackMask cbm_animation_next_frame = CBM_ROAD_STOP_ANIMATION_NEXT_FRAME;
+	static constexpr RoadStopCallbackMask cbm_animation_speed      = RoadStopCallbackMask::AnimationSpeed;
+	static constexpr RoadStopCallbackMask cbm_animation_next_frame = RoadStopCallbackMask::AnimationNextFrame;
 };
 
 void AnimateRoadStopTile(TileIndex tile)
@@ -427,7 +430,7 @@ void AnimateRoadStopTile(TileIndex tile)
 	const RoadStopSpec *ss = GetRoadStopSpec(tile);
 	if (ss == nullptr) return;
 
-	RoadStopAnimationBase::AnimateTile(ss, BaseStation::GetByTile(tile), tile, HasBit(ss->flags, RSF_CB141_RANDOM_BITS));
+	RoadStopAnimationBase::AnimateTile(ss, BaseStation::GetByTile(tile), tile, ss->flags.Test(RoadStopSpecFlag::Cb141RandomBits));
 }
 
 uint8_t GetRoadStopTileAnimationSpeed(TileIndex tile)
@@ -440,28 +443,25 @@ uint8_t GetRoadStopTileAnimationSpeed(TileIndex tile)
 
 void TriggerRoadStopAnimation(BaseStation *st, TileIndex trigger_tile, StationAnimationTrigger trigger, CargoType cargo_type)
 {
-	/* Get Station if it wasn't supplied */
-	if (st == nullptr) st = BaseStation::GetByTile(trigger_tile);
+	assert(st != nullptr);
 
 	/* Check the cached animation trigger bitmask to see if we need
 	 * to bother with any further processing. */
-	if (!HasBit(st->cached_roadstop_anim_triggers, trigger)) return;
+	if (!st->cached_roadstop_anim_triggers.Test(trigger)) return;
 
 	uint16_t random_bits = Random();
 	auto process_tile = [&](TileIndex cur_tile) {
 		const RoadStopSpec *ss = GetRoadStopSpec(cur_tile);
-		if (ss != nullptr && HasBit(ss->animation.triggers, trigger)) {
-			CargoType cargo;
-			if (cargo_type == INVALID_CARGO) {
-				cargo = INVALID_CARGO;
-			} else {
-				cargo = ss->grf_prop.grffile->cargo_map[cargo_type];
+		if (ss != nullptr && ss->animation.triggers.Test(trigger)) {
+			uint8_t var18_extra = 0;
+			if (IsValidCargoType(cargo_type)) {
+				var18_extra |= ss->grf_prop.grffile->cargo_map[cargo_type] << 8;
 			}
-			RoadStopAnimationBase::ChangeAnimationFrame(CBID_STATION_ANIM_START_STOP, ss, st, cur_tile, (random_bits << 16) | Random(), (uint8_t)trigger | (cargo << 8));
+			RoadStopAnimationBase::ChangeAnimationFrame(CBID_STATION_ANIMATION_TRIGGER, ss, st, cur_tile, (random_bits << 16) | GB(Random(), 0, 16), to_underlying(trigger) | var18_extra);
 		}
 	};
 
-	if (trigger == SAT_NEW_CARGO || trigger == SAT_CARGO_TAKEN || trigger == SAT_250_TICKS) {
+	if (trigger == StationAnimationTrigger::NewCargo || trigger == StationAnimationTrigger::CargoTaken || trigger == StationAnimationTrigger::AcceptanceTick) {
 		for (const RoadStopTileData &tile_data : st->custom_roadstop_tile_data) {
 			process_tile(tile_data.tile);
 		}
@@ -478,41 +478,44 @@ void TriggerRoadStopAnimation(BaseStation *st, TileIndex trigger_tile, StationAn
  * @param trigger trigger type
  * @param cargo_type cargo type causing the trigger
  */
-void TriggerRoadStopRandomisation(Station *st, TileIndex tile, RoadStopRandomTrigger trigger, CargoType cargo_type)
+void TriggerRoadStopRandomisation(BaseStation *st, TileIndex tile, StationRandomTrigger trigger, CargoType cargo_type)
 {
-	if (st == nullptr) st = Station::GetByTile(tile);
+	assert(st != nullptr);
 
 	/* Check the cached cargo trigger bitmask to see if we need
-	 * to bother with any further processing. */
+	 * to bother with any further processing.
+	 * Note: cached_roadstop_cargo_triggers must be non-zero even for cargo-independent triggers. */
 	if (st->cached_roadstop_cargo_triggers == 0) return;
 	if (cargo_type != INVALID_CARGO && !HasBit(st->cached_roadstop_cargo_triggers, cargo_type)) return;
 
-	SetBit(st->waiting_triggers, trigger);
+	st->waiting_random_triggers.Set(trigger);
 
 	uint32_t whole_reseed = 0;
 
 	/* Bitmask of completely empty cargo types to be matched. */
-	CargoTypes empty_mask = (trigger == RSRT_CARGO_TAKEN) ? GetEmptyMask(st) : 0;
+	CargoTypes empty_mask{};
+	if (trigger == StationRandomTrigger::CargoTaken) {
+		empty_mask = GetEmptyMask(Station::From(st));
+	}
 
-	uint32_t used_triggers = 0;
+	StationRandomTriggers used_random_triggers;
 	auto process_tile = [&](TileIndex cur_tile) {
 		const RoadStopSpec *ss = GetRoadStopSpec(cur_tile);
 		if (ss == nullptr) return;
 
 		/* Cargo taken "will only be triggered if all of those
 		 * cargo types have no more cargo waiting." */
-		if (trigger == RSRT_CARGO_TAKEN) {
+		if (trigger == StationRandomTrigger::CargoTaken) {
 			if ((ss->cargo_triggers & ~empty_mask) != 0) return;
 		}
 
 		if (cargo_type == INVALID_CARGO || HasBit(ss->cargo_triggers, cargo_type)) {
 			RoadStopResolverObject object(ss, st, cur_tile, INVALID_ROADTYPE, GetStationType(cur_tile), GetStationGfx(cur_tile));
-			object.waiting_triggers = st->waiting_triggers;
+			object.SetWaitingRandomTriggers(st->waiting_random_triggers);
 
-			const SpriteGroup *group = object.Resolve();
-			if (group == nullptr) return;
+			object.ResolveRerandomisation();
 
-			used_triggers |= object.used_triggers;
+			used_random_triggers.Set(object.GetUsedRandomTriggers());
 
 			uint32_t reseed = object.GetReseedSum();
 			if (reseed != 0) {
@@ -529,7 +532,7 @@ void TriggerRoadStopRandomisation(Station *st, TileIndex tile, RoadStopRandomTri
 			}
 		}
 	};
-	if (trigger == RSRT_NEW_CARGO || trigger == RSRT_CARGO_TAKEN) {
+	if (trigger == StationRandomTrigger::NewCargo || trigger == StationRandomTrigger::CargoTaken) {
 		for (const RoadStopTileData &tile_data : st->custom_roadstop_tile_data) {
 			process_tile(tile_data.tile);
 		}
@@ -538,7 +541,7 @@ void TriggerRoadStopRandomisation(Station *st, TileIndex tile, RoadStopRandomTri
 	}
 
 	/* Update whole station random bits */
-	st->waiting_triggers &= ~used_triggers;
+	st->waiting_random_triggers.Reset(used_random_triggers);
 	if ((whole_reseed & 0xFFFF) != 0) {
 		st->random_bits &= ~whole_reseed;
 		st->random_bits |= Random() & whole_reseed;
@@ -587,11 +590,11 @@ bool GetIfClassHasNewStopsByType(const RoadStopClass *roadstopclass, RoadStopTyp
  */
 bool GetIfStopIsForType(const RoadStopSpec *roadstopspec, RoadStopType rs, RoadType roadtype)
 {
-	// The roadstopspec is nullptr, must be the default station, always return true.
+	/* The roadstopspec is nullptr, must be the default station, always return true. */
 	if (roadstopspec == nullptr) return true;
 
-	if (HasBit(roadstopspec->flags, RSF_BUILD_MENU_ROAD_ONLY) && !RoadTypeIsRoad(roadtype)) return false;
-	if (HasBit(roadstopspec->flags, RSF_BUILD_MENU_TRAM_ONLY) && !RoadTypeIsTram(roadtype)) return false;
+	if (roadstopspec->flags.Test(RoadStopSpecFlag::RoadOnly) && !RoadTypeIsRoad(roadtype)) return false;
+	if (roadstopspec->flags.Test(RoadStopSpecFlag::TramOnly) && !RoadTypeIsTram(roadtype)) return false;
 
 	if (roadstopspec->stop_type == ROADSTOPTYPE_ALL) return true;
 
@@ -680,7 +683,7 @@ void DeallocateRoadStopSpecFromStation(BaseStation *st, uint8_t specindex)
 			st->roadstop_speclist.resize(num_specs + 1);
 		} else {
 			st->roadstop_speclist.clear();
-			st->cached_roadstop_anim_triggers = 0;
+			st->cached_roadstop_anim_triggers = {};
 			st->cached_roadstop_cargo_triggers = 0;
 			return;
 		}
@@ -695,14 +698,14 @@ void DeallocateRoadStopSpecFromStation(BaseStation *st, uint8_t specindex)
  */
 void StationUpdateRoadStopCachedTriggers(BaseStation *st)
 {
-	st->cached_roadstop_anim_triggers = 0;
+	st->cached_roadstop_anim_triggers = {};
 	st->cached_roadstop_cargo_triggers = 0;
 
 	/* Combine animation trigger bitmask for all road stop specs
 	 * of this station. */
 	for (const auto &sm : GetStationSpecList<RoadStopSpec>(st)) {
 		if (sm.spec == nullptr) continue;
-		st->cached_roadstop_anim_triggers |= sm.spec->animation.triggers;
+		st->cached_roadstop_anim_triggers.Set(sm.spec->animation.triggers);
 		st->cached_roadstop_cargo_triggers |= sm.spec->cargo_triggers;
 	}
 }
@@ -718,13 +721,13 @@ void DumpRoadStopSpriteGroup(const BaseStation *st, const RoadStopSpec *spec, Sp
 			written_group = true;
 		}
 		switch (cargo) {
-			case SpriteGroupCargo::SG_DEFAULT:
+			case CargoGRFFileProps::SG_DEFAULT:
 				dumper.Print("SG_DEFAULT");
 				break;
-			case SpriteGroupCargo::SG_PURCHASE:
+			case CargoGRFFileProps::SG_PURCHASE:
 				dumper.Print("SG_PURCHASE");
 				break;
-			case SpriteGroupCargo::SG_DEFAULT_NA:
+			case CargoGRFFileProps::SG_DEFAULT_NA:
 				dumper.Print("SG_DEFAULT_NA");
 				break;
 			default:

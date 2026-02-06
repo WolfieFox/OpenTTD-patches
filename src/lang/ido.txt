@@ -353,6 +353,9 @@ STR_GRAPH_Y_LABEL_NUMBER                                        :{TINY_FONT}{COM
 
 
 
+
+
+
 # Graph key window
 
 # Company league window
@@ -466,7 +469,8 @@ STR_GAME_OPTIONS_CAPTION                                        :{WHITE}Ludo Sel
 
 
 
-###length 45
+
+###length 46
 
 
 # Autosave dropdown
@@ -475,6 +479,7 @@ STR_GAME_OPTIONS_CAPTION                                        :{WHITE}Ludo Sel
 
 
 STR_GAME_OPTIONS_RESOLUTION_OTHER                               :altra
+
 
 
 
@@ -539,7 +544,7 @@ STR_SEA_LEVEL_CUSTOM_PERCENTAGE                                 :Kustumigita ({N
 ###length 4
 
 
-# Settings tree window
+# Settings tree in the Game Options window
 
 
 
@@ -559,6 +564,7 @@ STR_CONFIG_SETTING_NONE                                         :Nulo
 ###setting-zero-is-special
 
 
+###length 3
 
 
 
@@ -567,12 +573,14 @@ STR_CONFIG_SETTING_NONE                                         :Nulo
 
 ###setting-zero-is-special
 
+###length 3
 
 
 
 
 
 ###setting-zero-is-special
+
 
 
 
@@ -680,6 +688,7 @@ STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_VIOLET                  :Violkolora
 ###length 4
 
 ###length 4
+
 
 
 
@@ -904,7 +913,7 @@ STR_NETWORK_ERROR_TOO_MANY_COMMANDS                             :{WHITE}Tu sendi
 STR_NETWORK_ERROR_CLIENT_TOO_MANY_COMMANDS                      :sendinta tro multa imperi
 
 # Network related errors
-STR_NETWORK_SERVER_MESSAGE                                      :*** {1:STRING}
+STR_NETWORK_SERVER_MESSAGE                                      :*** {STRING}
 
 ###length 12
 
@@ -948,6 +957,10 @@ STR_STATION_BUILD_ACCEPTS_CARGO                                 :{BLACK}Aceptas:
 # Rail waypoint construction window
 
 # Rail station construction window
+
+
+
+
 
 
 
@@ -1000,6 +1013,7 @@ STR_OBJECT_BUILD_SIZE                                           :{BLACK}Grandeso
 
 
 # Town generation window (SE)
+
 
 
 
@@ -1081,7 +1095,6 @@ STR_NEWGRF_SETTINGS_VERSION                                     :{BLACK}Versiono
 # NewGRF save preset window
 
 # NewGRF parameters window
-STR_NEWGRF_PARAMETERS_CLOSE                                     :{BLACK}Klozas
 STR_NEWGRF_PARAMETERS_SETTING                                   :{STRING}: {ORANGE}{STRING}
 STR_NEWGRF_PARAMETERS_NUM_PARAM                                 :{LTBLUE}Nombro di parametri: {ORANGE}{NUM}
 
@@ -1434,12 +1447,11 @@ STR_ORDER_INDEX                                                 :{COMMA}:{NBSP}
 ###length 3
 ###next-name-looks-similar
 
-STR_ORDER_GO_TO_NEAREST_DEPOT_FORMAT                            :{STRING} {STRING} {STRING}
 STR_ORDER_GO_TO_DEPOT_FORMAT                                    :{STRING} {DEPOT}
 
 
 
-STR_ORDER_GO_TO_STATION                                         :{STRING} {STATION} {STRING}
+STR_ORDER_GO_TO_STATION                                         :{STRING} {STATION}
 
 
 
@@ -1451,7 +1463,6 @@ STR_ORDER_GO_TO_STATION                                         :{STRING} {STATI
 
 
 # Time table window
-
 
 
 
@@ -1511,7 +1522,6 @@ STR_AI_SETTINGS_SETTING                                         :{STRING}: {ORAN
 
 # Error message titles
 STR_ERROR_MESSAGE_CAPTION                                       :{YELLOW}Sendajo
-STR_ERROR_MESSAGE_CAPTION_OTHER_COMPANY                         :{YELLOW}Sendajo de {STRING}
 
 # Generic construction errors
 STR_ERROR_OFF_EDGE_OF_MAP                                       :{WHITE}Exter la bordo del mapo
@@ -1740,3 +1750,4 @@ STR_PLANE                                                       :{BLACK}{PLANE}
 STR_SHIP                                                        :{BLACK}{SHIP}
 
 STR_TOOLBAR_RAILTYPE_VELOCITY                                   :{STRING} ({VELOCITY})
+

@@ -43,7 +43,12 @@ public:
 	virtual uint Height() const { return 0; }
 	virtual uint Width() const { return 0; }
 
-	virtual void Draw(const Rect &full, const Rect &, bool, Colours bg_colour) const
+	virtual int OnClick(const Rect &, const Point &) const
+	{
+		return -1;
+	}
+
+	virtual void Draw(const Rect &full, const Rect &, bool, int, Colours bg_colour) const
 	{
 		if (this->masked) GfxFillRect(full, GetColourGradient(bg_colour, SHADE_LIGHT), FILLRECT_CHECKER);
 	}
@@ -86,6 +91,6 @@ void ShowDropDownList(Window *w, DropDownList &&list, int selected, WidgetID but
 
 Dimension GetDropDownListDimension(const DropDownList &list);
 
-void ReplaceDropDownList(Window *parent, DropDownList &&list);
+void ReplaceDropDownList(Window *parent, DropDownList &&list, std::optional<int> selected_result = std::nullopt);
 
 #endif /* DROPDOWN_TYPE_H */

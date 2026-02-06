@@ -29,6 +29,7 @@
 #include "object_base.h"
 #include "newgrf_text.h"
 #include "string_func.h"
+#include "scope.h"
 #include "scope_info.h"
 #include "core/random_func.hpp"
 #include "settings_func.h"
@@ -36,9 +37,10 @@
 #include "debug_settings.h"
 #include "debug_desync.h"
 #include "order_backup.h"
-#include "core/ring_buffer.hpp"
 #include "core/checksum_func.hpp"
+#include "3rdparty/cpp-ring-buffer/ring_buffer.hpp"
 #include "3rdparty/nlohmann/json.hpp"
+#include "3rdparty/fmt/std.h"
 #include <array>
 #include <typeinfo>
 
@@ -104,7 +106,7 @@ static constexpr CommandExecTrampoline *MakeTrampoline()
 }
 
 template <bool no_tile, typename F, typename T, size_t... Tindices>
-CommandCost CommandExecTrampolineTuple(F proc, TileIndex tile, DoCommandFlag flags, const T &payload, std::index_sequence<Tindices...>)
+CommandCost CommandExecTrampolineTuple(F proc, TileIndex tile, DoCommandFlags flags, const T &payload, std::index_sequence<Tindices...>)
 {
 	if constexpr (no_tile) {
 		return proc(flags, std::get<Tindices>(payload.GetValues())...);
@@ -224,12 +226,21 @@ template <> struct CommandCallbackTraits<CommandCallback::cb_> { \
 	}; \
 };
 
+#define DEF_CB_RES_PAYLOAD(cb_, cmd_) \
+ResultPayloadCommandCallback<CmdPayload<cmd_>> Cc ## cb_; \
+template <> struct CommandCallbackTraits<CommandCallback::cb_> { \
+	static constexpr CommandCallbackTrampoline *handler = [](const CommandCost &result, Commands cmd, TileIndex tile, const CommandPayloadBase &payload, CallbackParameter param) { \
+		Cc ## cb_(result, static_cast<const CmdPayload<cmd_> &>(payload)); \
+		return true; \
+	}; \
+};
+
 template <Commands Tcmd, typename S> struct CommandCallbackTupleHelper;
 
 template <Commands Tcmd, typename... Targs>
 struct CommandCallbackTupleHelper<Tcmd, std::tuple<Targs...>> {
-	using ResultTupleCommandCallback = void(const CommandCost &, typename CommandProcTupleAdapter::replace_string_t<std::remove_cvref_t<Targs>>...);
-	using ResultTileTupleCommandCallback = void(const CommandCost &, TileIndex, typename CommandProcTupleAdapter::replace_string_t<std::remove_cvref_t<Targs>>...);
+	using ResultTupleCommandCallback = void(const CommandCost &, typename CommandProcTupleAdapter::with_ref_params<std::remove_cvref_t<Targs>>...);
+	using ResultTileTupleCommandCallback = void(const CommandCost &, TileIndex, typename CommandProcTupleAdapter::with_ref_params<std::remove_cvref_t<Targs>>...);
 
 	static inline bool ResultExecute(ResultTupleCommandCallback *cb, Commands cmd, const CommandCost &result, const CommandPayloadBase &payload)
 	{
@@ -293,10 +304,11 @@ DEF_CB_RES_TUPLE(GiveMoney, CMD_GIVE_MONEY)
 DEF_CB_RES_TUPLE(CreateGroup, CMD_CREATE_GROUP)
 DEF_CB_RES(FoundRandomTown)
 DEF_CB_RES_TILE_TUPLE(RoadStop, CMD_BUILD_ROAD_STOP)
-DEF_CB_RES_TILE_TUPLE(BuildIndustry, CMD_BUILD_INDUSTRY)
 DEF_CB_RES_TUPLE(StartStopVehicle, CMD_START_STOP_VEHICLE)
 DEF_CB_GENERAL(Game)
 DEF_CB_RES(AddVehicleNewGroup)
+DEF_CB_RES_PAYLOAD(InsertOrder, CMD_INSERT_ORDER)
+DEF_CB_RES_TUPLE(InsertOrdersFromVehicle, CMD_INSERT_ORDERS_FROM_VEH)
 DEF_CB_RES(AddPlan)
 DEF_CB_RES(SetVirtualTrain)
 DEF_CB_RES(VirtualTrainWagonsMoved)
@@ -305,6 +317,8 @@ DEF_CB_RES(AddVirtualEngine)
 DEF_CB_RES(MoveNewVirtualEngine)
 DEF_CB_RES_TUPLE(AddNewSchDispatchSchedule, CMD_SCH_DISPATCH_ADD_NEW_SCHEDULE)
 DEF_CB_RES_TUPLE(SwapSchDispatchSchedules, CMD_SCH_DISPATCH_SWAP_SCHEDULES)
+DEF_CB_RES_TUPLE(AdjustSchDispatch, CMD_SCH_DISPATCH_ADJUST)
+DEF_CB_RES_TUPLE(AdjustSchDispatchSlot, CMD_SCH_DISPATCH_ADJUST_SLOT)
 DEF_CB_RES(CreateTraceRestrictSlot)
 DEF_CB_RES(CreateTraceRestrictCounter)
 
@@ -370,11 +384,11 @@ struct CommandLogEntry {
 
 	CommandLogEntry() { }
 
-	CommandLogEntry(TileIndex tile, Commands cmd, CommandLogEntryFlag log_flags, std::string summary) :
+	CommandLogEntry(TileIndex tile, Commands cmd, CommandLogEntryFlag log_flags, std::string &&summary) :
 			date(EconTime::CurDate()), date_fract(EconTime::CurDateFract()), tick_skip_counter(TickSkipCounter()), frame_counter(_frame_counter),
 			current_company(_current_company), local_company(_local_company), client_id(_cmd_client_id),
 			log_flags(log_flags),
-			cmd(cmd), tile(tile), summary(summary) {}
+			cmd(cmd), tile(tile), summary(std::move(summary)) {}
 };
 
 struct CommandLog {
@@ -397,7 +411,7 @@ struct CommandQueueItem {
 	CompanyID company;
 	DoCommandIntlFlag intl_flags;
 };
-static ring_buffer<CommandQueueItem> _command_queue;
+static jgr::ring_buffer<CommandQueueItem> _command_queue;
 
 void ClearCommandLog()
 {
@@ -428,7 +442,7 @@ static void DumpSubCommandLogEntry(format_target &buffer, const CommandLogEntry 
 			script_fc(), fc(CLEF_MY_CMD, 'm'), fc(CLEF_ONLY_SENDING, 's'),
 			fc(CLEF_ESTIMATE_ONLY, 'e'), fc(CLEF_NETWORK, 'n'), fc(CLEF_GENERATING_WORLD, 'g'), fc(CLEF_CMD_FAILED, 'f')
 			);
-	buffer.format("cc: {:3}, lc: {:3}", (uint) entry.current_company, (uint) entry.local_company);
+	buffer.format("cc: {:3}, lc: {:3}", entry.current_company, entry.local_company);
 	if (_network_server) {
 		buffer.format(", client: {:4}", entry.client_id);
 	}
@@ -496,7 +510,7 @@ CommandFlags GetCommandFlags(Commands cmd)
  * @param cmd The integer value of the command
  * @return The name for this command
  */
-const char *GetCommandName(Commands cmd)
+std::string_view GetCommandName(Commands cmd)
 {
 	if (!IsValidCommand(cmd)) return "????"; // This can be reached in error/crash log paths when IsValidCommand checks fail
 
@@ -548,7 +562,7 @@ static int _docommand_recursive = 0;
 
  * @return the cost
  */
-CommandCost DoCommandImplementation(Commands cmd, TileIndex tile, const CommandPayloadBase &payload, DoCommandFlag flags, DoCommandIntlFlag intl_flags)
+CommandCost DoCommandImplementation(Commands cmd, TileIndex tile, const CommandPayloadBase &payload, DoCommandFlags flags, DoCommandIntlFlag intl_flags)
 {
 #if !defined(DISABLE_SCOPE_INFO)
 	FunctorScopeStackRecord scope_print([=, &payload](format_target &output) {
@@ -568,17 +582,17 @@ CommandCost DoCommandImplementation(Commands cmd, TileIndex tile, const CommandP
 	CommandCost res;
 
 	/* Do not even think about executing out-of-bounds tile-commands */
-	if (tile != 0 && (tile >= Map::Size() || (!IsValidTile(tile) && (flags & DC_ALL_TILES) == 0))) return CMD_ERROR;
+	if (tile != 0 && (tile >= Map::Size() || (!IsValidTile(tile) && !flags.Test(DoCommandFlag::AllTiles)))) return CMD_ERROR;
 
 	const CommandInfo &command = _command_proc_table[cmd];
 
 	_docommand_recursive++;
 
 	/* only execute the test call if it's toplevel, or we're not execing. */
-	if (_docommand_recursive == 1 || !(flags & DC_EXEC) ) {
+	if (_docommand_recursive == 1 || !flags.Test(DoCommandFlag::Execute)) {
 		if (_docommand_recursive == 1) _cleared_object_areas.clear();
 		SetTownRatingTestMode(true);
-		res = command.exec({ tile, flags & ~DC_EXEC, payload });
+		res = command.exec({ tile, DoCommandFlags{flags}.Reset(DoCommandFlag::Execute), payload });
 		SetTownRatingTestMode(false);
 		if (res.Failed()) {
 			_docommand_recursive--;
@@ -586,14 +600,14 @@ CommandCost DoCommandImplementation(Commands cmd, TileIndex tile, const CommandP
 		}
 
 		if (_docommand_recursive == 1 &&
-				!(flags & DC_QUERY_COST) &&
-				!(flags & DC_BANKRUPT) &&
+				!flags.Test(DoCommandFlag::QueryCost) &&
+				!flags.Test(DoCommandFlag::Bankrupt) &&
 				!CheckCompanyHasMoney(res)) { // CheckCompanyHasMoney() modifies 'res' to an error if it fails.
 			_docommand_recursive--;
 			return res;
 		}
 
-		if (!(flags & DC_EXEC)) {
+		if (!flags.Test(DoCommandFlag::Execute)) {
 			_docommand_recursive--;
 			return res;
 		}
@@ -609,7 +623,7 @@ CommandCost DoCommandImplementation(Commands cmd, TileIndex tile, const CommandP
 	}
 
 	/* if toplevel, subtract the money. */
-	if (--_docommand_recursive == 0 && !(flags & DC_BANKRUPT)) {
+	if (--_docommand_recursive == 0 && !flags.Test(DoCommandFlag::Bankrupt)) {
 		SubtractMoneyFromCompany(res);
 	}
 
@@ -630,12 +644,12 @@ static void AppendCommandLogEntry(const CommandCost &res, TileIndex tile, Comman
 	if (res.Failed()) log_flags |= CLEF_CMD_FAILED;
 	if (_generating_world) log_flags |= CLEF_GENERATING_WORLD;
 
-	CommandLog &cmd_log = (GetCommandFlags(cmd) & CMD_LOG_AUX) ? _command_log_aux : _command_log;
+	CommandLog &cmd_log = GetCommandFlags(cmd).Test(CommandFlag::LogAux) ? _command_log_aux : _command_log;
 
 	format_buffer summary;
 	payload.FormatDebugSummary(summary);
-	if (res.HasResultData()) {
-		summary.format(" --> {}", res.GetResultData());
+	if (res.HasAnyResultData()) {
+		summary.format(" --> {}", res.GetUntypedResultData());
 	}
 
 	if (_networking && cmd_log.count > 0) {
@@ -673,7 +687,7 @@ void SetPreCheckedCommandPayloadClientID(Commands cmd, CommandPayloadBase &paylo
 	static_assert(INVALID_CLIENT_ID == (ClientID)0);
 
 	auto cmd_check = [&]<Commands Tcmd>() -> bool {
-		if constexpr (CommandTraits<Tcmd>::flags & CMD_CLIENT_ID) {
+		if constexpr (CommandTraits<Tcmd>::flags.Test(CommandFlag::ClientID)) {
 			if (cmd == Tcmd) {
 				SetCommandPayloadClientID(static_cast<CmdPayload<Tcmd> &>(payload), client_id);
 				return true;
@@ -728,7 +742,8 @@ bool DoCommandPImplementation(Commands cmd, TileIndex tile, const CommandPayload
 	bool estimate_only = _shift_pressed && IsLocalCompany() &&
 			!_generating_world &&
 			!(intl_flags & DCIF_NETWORK_COMMAND) &&
-			!(GetCommandFlags(cmd) & CMD_NO_EST);
+			!(intl_flags & DCIF_NO_ESTIMATE) &&
+			!GetCommandFlags(cmd).Test(CommandFlag::NoEst);
 
 	/* We're only sending the command, so don't do
 	 * fancy things for 'success'. */
@@ -739,8 +754,8 @@ bool DoCommandPImplementation(Commands cmd, TileIndex tile, const CommandPayload
 	int x = TileX(tile) * TILE_SIZE;
 	int y = TileY(tile) * TILE_SIZE;
 
-	if (_pause_mode != PM_UNPAUSED && !IsCommandAllowedWhilePaused(cmd) && !estimate_only) {
-		ShowErrorMessage(error_msg, STR_ERROR_NOT_ALLOWED_WHILE_PAUSED, WL_INFO, x, y);
+	if (_pause_mode.Any() && !IsCommandAllowedWhilePaused(cmd) && !estimate_only) {
+		ShowErrorMessage(GetEncodedString(error_msg), GetEncodedString(STR_ERROR_NOT_ALLOWED_WHILE_PAUSED), WL_INFO, x, y);
 		return false;
 	}
 
@@ -748,7 +763,7 @@ bool DoCommandPImplementation(Commands cmd, TileIndex tile, const CommandPayload
 	const CommandPayloadBase *use_payload = &orig_payload;
 
 	/* Only set client ID when the command does not come from the network. */
-	if (!(intl_flags & DCIF_NETWORK_COMMAND) && GetCommandFlags(cmd) & CMD_CLIENT_ID) {
+	if (!(intl_flags & DCIF_NETWORK_COMMAND) && GetCommandFlags(cmd).Test(CommandFlag::ClientID)) {
 		modified_payload = orig_payload.Clone();
 		assert(IsCorrectCommandPayloadType(cmd, *modified_payload));
 		SetPreCheckedCommandPayloadClientID(cmd, *modified_payload, CLIENT_ID_SERVER);
@@ -770,7 +785,7 @@ bool DoCommandPImplementation(Commands cmd, TileIndex tile, const CommandPayload
 	if (intl_flags & DCIF_NETWORK_COMMAND) log_flags |= CLEF_NETWORK;
 	AppendCommandLogEntry(res, tile, cmd, log_flags, *use_payload);
 
-	if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_POST_COMMAND)) && !(GetCommandFlags(cmd) & CMD_LOG_AUX)) {
+	if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_POST_COMMAND)) && !GetCommandFlags(cmd).Test(CommandFlag::LogAux)) {
 		CheckCachesFlags flags = CHECK_CACHE_ALL | CHECK_CACHE_EMIT_LOG;
 		if (HasChickenBit(DCBF_DESYNC_CHECK_NO_GENERAL)) flags &= ~CHECK_CACHE_GENERAL;
 		CheckCaches(true, nullptr, flags);
@@ -779,7 +794,7 @@ bool DoCommandPImplementation(Commands cmd, TileIndex tile, const CommandPayload
 	if (res.Failed()) {
 		/* Only show the error when it's for us. */
 		if (estimate_only || (IsLocalCompany() && error_msg != 0 && !(intl_flags & DCIF_NOT_MY_CMD))) {
-			ShowErrorMessage(error_msg, res.GetErrorMessage(), WL_INFO, x, y, res.GetTextRefStackGRF(), res.GetTextRefStackSize(), res.GetTextRefStack(), res.GetExtraErrorMessage());
+			ShowErrorMessage(GetEncodedString(error_msg), x, y, res);
 		}
 	} else if (estimate_only) {
 		ShowEstimatedCostOrIncome(res.GetCost(), x, y);
@@ -815,7 +830,7 @@ CommandCost DoCommandPScript(Commands cmd, TileIndex tile, const CommandPayloadB
 	if (order_backup_update_counter != OrderBackup::GetUpdateCounter()) log_flags |= CLEF_ORDER_BACKUP;
 	AppendCommandLogEntry(res, tile, cmd, log_flags, payload);
 
-	if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_POST_COMMAND)) && !(GetCommandFlags(cmd) & CMD_LOG_AUX)) {
+	if (unlikely(HasChickenBit(DCBF_DESYNC_CHECK_POST_COMMAND)) && !GetCommandFlags(cmd).Test(CommandFlag::LogAux)) {
 		CheckCachesFlags flags = CHECK_CACHE_ALL | CHECK_CACHE_EMIT_LOG;
 		if (HasChickenBit(DCBF_DESYNC_CHECK_NO_GENERAL)) flags &= ~CHECK_CACHE_GENERAL;
 		CheckCaches(true, nullptr, flags);
@@ -827,6 +842,7 @@ CommandCost DoCommandPScript(Commands cmd, TileIndex tile, const CommandPayloadB
 void ExecuteCommandQueue()
 {
 	while (!_command_queue.empty()) {
+		if (_network_client_commands_sent >= 2) break; // Too many network client commands sent this tick already
 		Backup<CompanyID> cur_company(_current_company, FILE_LINE);
 		cur_company.Change(_command_queue.front().company);
 		DoCommandPContainer(_command_queue.front().cmd, _command_queue.front().intl_flags);
@@ -842,7 +858,8 @@ void ClearCommandQueue()
 
 void EnqueueDoCommandPImplementation(Commands cmd, TileIndex tile, const CommandPayloadBase &payload, StringID error_msg, CommandCallback callback, CallbackParameter callback_param, DoCommandIntlFlag intl_flags)
 {
-	if (_docommand_recursive == 0) {
+	/* Do not execute immediately if we are already in DoCommand context or there have already been multiple client commands sent this tick. */
+	if (_docommand_recursive == 0 || _network_client_commands_sent >= 2) {
 		DoCommandPImplementation(cmd, tile, payload, error_msg, callback, callback_param, intl_flags);
 	} else {
 		CommandQueueItem &item = _command_queue.emplace_back();
@@ -852,12 +869,6 @@ void EnqueueDoCommandPImplementation(Commands cmd, TileIndex tile, const Command
 	}
 }
 
-
-/**
- * Helper to deduplicate the code for returning.
- * @param cmd   the command cost to return.
- */
-#define return_dcpi(cmd) { _docommand_recursive = 0; return cmd; }
 
 /**
  * Helper function for the toplevel network safe docommand function for the current company.
@@ -876,6 +887,9 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 	/* Prevent recursion; it gives a mess over the network */
 	assert(_docommand_recursive == 0);
 	_docommand_recursive = 1;
+	auto guard = scope_guard([]() {
+		_docommand_recursive = 0;
+	});
 
 	assert(IsValidCommand(cmd));
 
@@ -886,32 +900,32 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 	assert(command.exec != nullptr);
 
 	if ((intl_flags & DCIF_TYPE_CHECKED) == 0) {
-		if (!IsCorrectCommandPayloadType(cmd, payload)) return_dcpi(CMD_ERROR);
+		if (!IsCorrectCommandPayloadType(cmd, payload)) return CMD_ERROR;
 		intl_flags |= DCIF_TYPE_CHECKED;
 	}
 
 	/* Command flags are used internally */
 	CommandFlags cmd_flags = GetCommandFlags(cmd);
 	/* Flags get send to the DoCommand */
-	DoCommandFlag flags = CommandFlagsToDCFlags(cmd_flags);
+	DoCommandFlags flags = CommandFlagsToDCFlags(cmd_flags);
 
 	/* Do not even think about executing out-of-bounds tile-commands */
-	if (tile != 0 && (tile >= Map::Size() || (!IsValidTile(tile) && (cmd_flags & CMD_ALL_TILES) == 0))) return_dcpi(CMD_ERROR);
+	if (tile != 0 && (tile >= Map::Size() || (!IsValidTile(tile) && !cmd_flags.Test(CommandFlag::AllTiles)))) return CMD_ERROR;
 
 	/* Always execute server and spectator commands as spectator */
-	bool exec_as_spectator = (cmd_flags & (CMD_SPECTATOR | CMD_SERVER)) != 0;
+	bool exec_as_spectator = cmd_flags.Any({CommandFlag::Spectator, CommandFlag::Server});
 
 	/* If the company isn't valid it may only do server command or start a new company!
 	 * The server will ditch any server commands a client sends to it, so effectively
 	 * this guards the server from executing functions for an invalid company. */
-	if (_game_mode == GM_NORMAL && !exec_as_spectator && !Company::IsValidID(_current_company) && !(_current_company == OWNER_DEITY && (cmd_flags & CMD_DEITY) != 0)) {
-		return_dcpi(CMD_ERROR);
+	if (_game_mode == GM_NORMAL && !exec_as_spectator && !Company::IsValidID(_current_company) && !(_current_company == OWNER_DEITY && cmd_flags.Test(CommandFlag::Deity))) {
+		return CMD_ERROR;
 	}
 
 	Backup<CompanyID> cur_company(_current_company, FILE_LINE);
 	if (exec_as_spectator) cur_company.Change(COMPANY_SPECTATOR);
 
-	bool test_and_exec_can_differ = ((cmd_flags & CMD_NO_TEST) != 0) || HasChickenBit(DCBF_CMD_NO_TEST_ALL);
+	bool test_and_exec_can_differ = cmd_flags.Test(CommandFlag::NoTest) || HasChickenBit(DCBF_CMD_NO_TEST_ALL);
 
 	GameRandomSeedChecker random_state;
 
@@ -926,7 +940,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 	if (!random_state.Check()) {
 		format_buffer buffer;
 		buffer.format("Random seed changed in test command: company: {:02x}; tile: {:06x} ({} x {}); cmd: {:03x}; {}; payload: ",
-				(int)_current_company, tile, TileX(tile), TileY(tile), cmd, GetCommandName(cmd));
+				_current_company, tile, TileX(tile), TileY(tile), cmd, GetCommandName(cmd));
 		payload.FormatDebugSummary(buffer);
 		Debug(desync, 0, "msg: {}; {}", debug_date_dumper().HexDate(), buffer);
 		LogDesyncMsg(buffer.to_string());
@@ -946,7 +960,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 			}
 
 			Debug(desync, 1, "{}: {}; company: {:02x}; tile: {:06x} ({} x {}); cmd: {:03x}; <{}> ({})",
-					prefix, debug_date_dumper().HexDate(), (int)_current_company, tile, TileX(tile), TileY(tile),
+					prefix, debug_date_dumper().HexDate(), _current_company, tile, TileX(tile), TileY(tile),
 					cmd, aux_str, GetCommandName(cmd));
 		}
 	};
@@ -964,7 +978,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 			log_desync_cmd("cmdf");
 		}
 		cur_company.Restore();
-		return_dcpi(res);
+		return res;
 	}
 
 	/*
@@ -981,7 +995,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 		 * This way it's not handled by DoCommand and only the
 		 * actual execution of the command causes messages. Also
 		 * reset the storages as we've not executed the command. */
-		return_dcpi(CommandCost());
+		return CommandCost();
 	}
 	log_desync_cmd("cmd");
 
@@ -989,7 +1003,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 	 * use the construction one */
 	_cleared_object_areas.clear();
 	BasePersistentStorageArray::SwitchMode(PSM_ENTER_COMMAND);
-	CommandCost res2 = command.exec({ tile, flags | DC_EXEC, payload });
+	CommandCost res2 = command.exec({ tile, flags | DoCommandFlag::Execute, payload });
 	BasePersistentStorageArray::SwitchMode(PSM_LEAVE_COMMAND);
 
 	if (cmd == CMD_COMPANY_CTRL) {
@@ -1013,7 +1027,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 				"Command: cmd: 0x{:X} ({}), Test: {}, Exec: {}", cmd, GetCommandName(cmd),
 				res.SummaryMessage(error_msg), res2.SummaryMessage(error_msg)); // sanity check
 	} else if (res2.Failed()) {
-		return_dcpi(res2);
+		return res2;
 	}
 
 	/* If we're needing more money and we haven't done
@@ -1023,8 +1037,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 		 * So make sure the signal buffer is empty even in this case */
 		UpdateSignalsInBuffer();
 		if (_extra_aspects > 0) FlushDeferredAspectUpdates();
-		SetDParam(0, res2.GetAdditionalCashRequired());
-		return_dcpi(CommandCost(STR_ERROR_NOT_ENOUGH_CASH_REQUIRES_CURRENCY));
+		return CommandCostWithParam(STR_ERROR_NOT_ENOUGH_CASH_REQUIRES_CURRENCY, res2.GetAdditionalCashRequired());
 	}
 
 	/* update last build coordinate of company. */
@@ -1041,11 +1054,12 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 	if (_extra_aspects > 0) FlushDeferredAspectUpdates();
 
 	/* Record if there was a command issues during pause; ignore pause/other setting related changes. */
-	if (_pause_mode != PM_UNPAUSED && command.type != CMDT_SERVER_SETTING) _pause_mode |= PM_COMMAND_DURING_PAUSE;
+	if (_pause_mode.Any() && command.type != CMDT_SERVER_SETTING) _pause_mode.Set(PauseMode::CommandDuringPause);
 
-	return_dcpi(res2);
+	return res2;
 }
-#undef return_dcpi
+
+CommandLargeResultBase::~CommandLargeResultBase() {}
 
 CommandCost::CommandCost(const CommandCost &other)
 {
@@ -1067,37 +1081,50 @@ CommandCost &CommandCost::operator=(const CommandCost &other)
 }
 
 /**
+ * Set the encoded message string. If set, this is used by the error message window instead of the error StringID,
+ * to allow more information to be displayed to the local player.
+ * @note Do not set an encoded message if the error is not for the local player, as it will never be seen.
+ * @param message EncodedString message to set.
+ */
+void CommandCost::SetEncodedMessage(EncodedString &&message)
+{
+	if (this->GetInlineType() != CommandCostInlineType::AuxiliaryData) {
+		this->AllocAuxData();
+	}
+
+	this->inl.aux_data->encoded_message = std::move(message);
+}
+
+/**
+ * Get the last encoded error message.
+ * @returns Reference to the encoded message.
+ */
+EncodedString &CommandCost::GetEncodedMessage()
+{
+	static EncodedString empty;
+
+	if (this->GetInlineType() == CommandCostInlineType::AuxiliaryData) {
+		return this->inl.aux_data->encoded_message;
+	} else {
+		empty.clear();
+		return empty;
+	}
+}
+
+/**
  * Adds the cost of the given command return value to this cost.
  * Also takes a possible error message when it is set.
  * @param ret The command to add the cost of.
  */
-void CommandCost::AddCost(const CommandCost &ret)
+void CommandCost::AddCost(CommandCost &&ret)
 {
 	this->AddCost(ret.cost);
 	if (this->Succeeded() && !ret.Succeeded()) {
 		this->message = ret.message;
 		this->flags &= ~CCIF_SUCCESS;
-	}
-}
-
-/**
- * Activate usage of the NewGRF #TextRefStack for the error message.
- * @param grffile NewGRF that provides the #TextRefStack
- * @param num_registers number of entries to copy from the temporary NewGRF registers
- */
-void CommandCost::UseTextRefStack(const GRFFile *grffile, uint num_registers)
-{
-	extern TemporaryStorageArray<int32_t, 0x110> _temp_store;
-
-	if (this->GetInlineType() != CommandCostInlineType::AuxiliaryData) {
-		this->AllocAuxData();
-	}
-
-	assert(num_registers < lengthof(this->inl.aux_data->textref_stack));
-	this->inl.aux_data->textref_stack_grffile = grffile;
-	this->inl.aux_data->textref_stack_size = num_registers;
-	for (uint i = 0; i < num_registers; i++) {
-		this->inl.aux_data->textref_stack[i] = _temp_store.GetValue(0x100 + i);
+		if (ret.GetInlineType() == CommandCostInlineType::AuxiliaryData && !ret.inl.aux_data->encoded_message.empty()) {
+			this->SetEncodedMessage(std::move(ret.inl.aux_data->encoded_message));
+		}
 	}
 }
 
@@ -1106,9 +1133,6 @@ std::string CommandCost::SummaryMessage(StringID cmd_msg) const
 	if (this->Succeeded()) {
 		return fmt::format("Success: cost: {}", (int64_t) this->GetCost());
 	} else {
-		const uint textref_stack_size = this->GetTextRefStackSize();
-		if (textref_stack_size > 0) StartTextRefStackUsage(this->GetTextRefStackGRF(), textref_stack_size, this->GetTextRefStack());
-
 		format_buffer buf;
 		buf.format("Failed: cost: {}", (int64_t) this->GetCost());
 		if (cmd_msg != 0) {
@@ -1119,8 +1143,6 @@ std::string CommandCost::SummaryMessage(StringID cmd_msg) const
 			buf.push_back(' ');
 			AppendStringInPlace(buf, this->message);
 		}
-
-		if (textref_stack_size > 0) StopTextRefStackUsage();
 
 		return buf.to_string();
 	}
@@ -1191,17 +1213,24 @@ void CommandCost::SetAdditionalCashRequired(Money cash)
 	}
 }
 
-void CommandCost::SetResultData(uint32_t result)
+void CommandCost::SetResultDataWithType(CommandResultData result)
 {
 	this->flags |= CCIF_VALID_RESULT;
-
-	if (result == this->GetResultData()) return;
 
 	if (this->AddInlineData(CommandCostInlineType::Result)) {
 		this->inl.aux_data->result = result;
 	} else {
 		this->inl.result = result;
 	}
+}
+
+void CommandCost::SetLargeResult(std::shared_ptr<const CommandLargeResultBase> large_result)
+{
+	if (this->GetInlineType() != CommandCostInlineType::AuxiliaryData) {
+		this->AllocAuxData();
+	}
+
+	this->inl.aux_data->large_result = std::move(large_result);
 }
 
 template <typename T>
@@ -1233,12 +1262,12 @@ const char *DynBaseCommandContainer::Deserialise(DeserialisationBuffer &buffer)
 {
 	this->cmd = static_cast<Commands>(buffer.Recv_uint16());
 	if (!IsValidCommand(this->cmd)) return "invalid command";
-	if (GetCommandFlags(this->cmd) & CMD_OFFLINE) return "single-player only command";
+	if (GetCommandFlags(this->cmd).Test(CommandFlag::Offline)) return "single-player only command";
 
 	this->error_msg = buffer.Recv_uint16();
 	this->tile = TileIndex(buffer.Recv_uint32());
 
-	StringValidationSettings default_settings = (!_network_server && (GetCommandFlags(this->cmd) & CMD_STR_CTRL) != 0) ? SVS_ALLOW_CONTROL_CODE | SVS_REPLACE_WITH_QUESTION_MARK : SVS_REPLACE_WITH_QUESTION_MARK;
+	StringValidationSettings default_settings = (!_network_server && GetCommandFlags(this->cmd).Test(CommandFlag::StrCtrl)) ? StringValidationSettings{StringValidationSetting::AllowControlCode, StringValidationSetting::ReplaceWithQuestionMark} : StringValidationSetting::ReplaceWithQuestionMark;
 
 	uint16_t payload_size = buffer.Recv_uint16();
 	size_t expected_offset = buffer.GetDeserialisationPosition() + payload_size;
@@ -1246,4 +1275,19 @@ const char *DynBaseCommandContainer::Deserialise(DeserialisationBuffer &buffer)
 	if (this->payload == nullptr || expected_offset != buffer.GetDeserialisationPosition()) return "failed to deserialise command payload";
 
 	return nullptr;
+}
+
+/**
+ * Return an error status, with string and parameter.
+ * @param str StringID of error.
+ * @param value Single parameter for error.
+ * @returns CommandCost representing the error.
+ */
+CommandCost CommandCostWithParam(StringID str, uint64_t value)
+{
+	CommandCost error = CommandCost(str);
+	if (IsLocalCompany()) {
+		error.SetEncodedMessage(GetEncodedString(str, value));
+	}
+	return error;
 }

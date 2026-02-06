@@ -43,7 +43,6 @@ uint32_t _old_num_dests;
 uint _cargo_reserved_count;
 
 struct FlowSaveLoad {
-	FlowSaveLoad() : source(0), via(0), share(0), restricted(false) {}
 	StationID source;
 	StationID via;
 	uint32_t share;
@@ -65,27 +64,27 @@ static void SwapPackets(GoodsEntry *ge)
 	StationCargoPacketMap &ge_packets = const_cast<StationCargoPacketMap &>(*ge->data->cargo.Packets());
 
 	if (_packets.empty()) {
-		std::map<StationID, CargoPacketList>::iterator it(ge_packets.find(INVALID_STATION));
+		std::map<StationID, CargoPacketList>::iterator it(ge_packets.find(StationID::Invalid()));
 		if (it == ge_packets.end()) {
 			return;
 		} else {
 			it->second.swap(_packets);
 		}
 	} else {
-		assert(ge_packets[INVALID_STATION].empty());
-		ge_packets[INVALID_STATION].swap(_packets);
+		assert(ge_packets[StationID::Invalid()].empty());
+		ge_packets[StationID::Invalid()].swap(_packets);
 	}
 }
 
 template <typename T>
 class SlStationSpecList : public VectorSaveLoadHandler<SlStationSpecList<T>, BaseStation, SpecMapping<T>> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		SLE_CONDVAR(SpecMapping<T>, grfid,    SLE_UINT32,                SLV_27,                    SL_MAX_VERSION),
 		SLE_CONDVAR(SpecMapping<T>, localidx, SLE_FILE_U8 | SLE_VAR_U16, SLV_27,                    SLV_EXTEND_ENTITY_MAPPING),
 		SLE_CONDVAR(SpecMapping<T>, localidx, SLE_UINT16,                SLV_EXTEND_ENTITY_MAPPING, SL_MAX_VERSION),
 	};
-	inline const static SaveLoadCompatTable compat_description = _station_spec_list_sl_compat;
+	static inline const SaveLoadCompatTable compat_description = _station_spec_list_sl_compat;
 
 	std::vector<SpecMapping<T>> &GetVector(BaseStation *bst) const override { return GetStationSpecList<T>(bst); }
 
@@ -101,11 +100,11 @@ template class SlStationSpecList<RoadStopSpec>;
 
 class SlStationCargo : public DefaultSaveLoadHandler<SlStationCargo, GoodsEntry> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		    SLE_VAR(StationCargoPair, first,  SLE_UINT16),
 		SLE_REFRING(StationCargoPair, second, REF_CARGO_PACKET),
 	};
-	inline const static SaveLoadCompatTable compat_description = _station_cargo_sl_compat;
+	static inline const SaveLoadCompatTable compat_description = _station_cargo_sl_compat;
 
 	void Save(GoodsEntry *ge) const override
 	{
@@ -136,13 +135,13 @@ public:
 
 class SlStationFlow : public DefaultSaveLoadHandler<SlStationFlow, GoodsEntry> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		    SLE_VAR(FlowSaveLoad, source,     SLE_UINT16),
 		    SLE_VAR(FlowSaveLoad, via,        SLE_UINT16),
 		    SLE_VAR(FlowSaveLoad, share,      SLE_UINT32),
 		SLE_CONDVAR(FlowSaveLoad, restricted, SLE_BOOL, SLV_187, SL_MAX_VERSION),
 	};
-	inline const static SaveLoadCompatTable compat_description = _station_flow_sl_compat;
+	static inline const SaveLoadCompatTable compat_description = _station_flow_sl_compat;
 
 	void Save(GoodsEntry *ge) const override
 	{
@@ -154,9 +153,9 @@ public:
 	{
 		size_t num_flows = IsSavegameVersionBefore(SLV_SAVELOAD_LIST_LENGTH) ? _old_num_flows : SlGetStructListLength(UINT32_MAX);
 
-		FlowSaveLoad flow;
+		FlowSaveLoad flow{};
 		FlowStat *fs = nullptr;
-		StationID prev_source = INVALID_STATION;
+		StationID prev_source = StationID::Invalid();
 		for (uint32_t j = 0; j < num_flows; ++j) {
 			SlObject(&flow, this->GetLoadDescription());
 			if (fs == nullptr || prev_source != flow.source) {
@@ -171,7 +170,7 @@ public:
 
 class SlStationGoods : public DefaultSaveLoadHandler<SlStationGoods, BaseStation> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		SLEG_CONDVAR("waiting_acceptance", _waiting_acceptance, SLE_UINT16,        SL_MIN_VERSION, SLV_68),
 		 SLE_CONDVAR(GoodsEntry, status,               SLE_UINT8,                  SLV_68, SL_MAX_VERSION),
 		     SLE_VAR(GoodsEntry, time_since_pickup,    SLE_UINT8),
@@ -196,7 +195,7 @@ public:
 		SLEG_CONDSTRUCTLIST("cargo", SlStationCargo,                              SLV_183, SL_MAX_VERSION),
 	};
 
-	inline const static SaveLoadCompatTable compat_description = _station_goods_sl_compat;
+	static inline const SaveLoadCompatTable compat_description = _station_goods_sl_compat;
 
 	/**
 	 * Get the number of cargoes used by this savegame version.
@@ -223,10 +222,10 @@ public:
 		std::unique_ptr<GoodsEntryData> spare_ged;
 
 		/* Before savegame version 161, persistent storages were not stored in a pool. */
-		if (IsSavegameVersionBefore(SLV_161) && !IsSavegameVersionBefore(SLV_145) && st->facilities & FACIL_AIRPORT) {
+		if (IsSavegameVersionBefore(SLV_161) && !IsSavegameVersionBefore(SLV_145) && st->facilities.Test(StationFacility::Airport)) {
 			/* Store the old persistent storage. The GRFID will be added later. */
 			assert(PersistentStorage::CanAllocateItem());
-			st->airport.psa = new PersistentStorage(0, 0, {});
+			st->airport.psa = new PersistentStorage(0, GSF_INVALID, TileIndex{});
 			std::copy(std::begin(_old_st_persistent_storage.storage), std::end(_old_st_persistent_storage.storage), std::begin(st->airport.psa->storage));
 		}
 
@@ -246,10 +245,10 @@ public:
 				SwapPackets(&ge);
 			}
 			if (IsSavegameVersionBefore(SLV_68)) {
-				AssignBit(ge.status, GoodsEntry::GES_ACCEPTANCE, HasBit(_waiting_acceptance, 15));
+				ge.status.Set(GoodsEntry::State::Acceptance, HasBit(_waiting_acceptance, 15));
 				if (GB(_waiting_acceptance, 0, 12) != 0) {
-					/* In old versions, enroute_from used 0xFF as INVALID_STATION */
-					StationID source = (IsSavegameVersionBefore(SLV_7) && _cargo_source == 0xFF) ? INVALID_STATION : _cargo_source;
+					/* In old versions, enroute_from used 0xFF as StationID::Invalid() */
+					StationID source = (IsSavegameVersionBefore(SLV_7) && _cargo_source == 0xFF) ? StationID::Invalid() : static_cast<StationID>(_cargo_source);
 
 					/* Make sure we can allocate the CargoPacket. This is safe
 					 * as there can only be ~64k stations and 32 cargoes in these
@@ -259,8 +258,8 @@ public:
 
 					/* Don't construct the packet with station here, because that'll fail with old savegames */
 					CargoPacket *cp = new CargoPacket(GB(_waiting_acceptance, 0, 12), _cargo_periods, source, TileIndex{_cargo_source_xy}, _cargo_feeder_share);
-					ge.data->cargo.Append(cp, INVALID_STATION);
-					AssignBit(ge.status, GoodsEntry::GES_RATING, true);
+					ge.data->cargo.Append(cp, StationID::Invalid());
+					ge.status.Set(GoodsEntry::State::Rating);
 				}
 			}
 			if (ge.data->MayBeRemoved()) {
@@ -290,12 +289,12 @@ public:
 
 class SlRoadStopTileData : public VectorSaveLoadHandler<SlRoadStopTileData, BaseStation, RoadStopTileData> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 	    SLE_VAR(RoadStopTileData, tile,            SLE_UINT32),
 	    SLE_VAR(RoadStopTileData, random_bits,     SLE_UINT8),
 	    SLE_VAR(RoadStopTileData, animation_frame, SLE_UINT8),
 	};
-	inline const static SaveLoadCompatTable compat_description = {};
+	static inline const SaveLoadCompatTable compat_description = {};
 
 	std::vector<RoadStopTileData> &GetVector(BaseStation *bst) const override { return bst->custom_roadstop_tile_data; }
 };
@@ -306,7 +305,7 @@ public:
  */
 class SlStationBase : public DefaultSaveLoadHandler<SlStationBase, BaseStation> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		    SLE_VAR(BaseStation, xy,                     SLE_UINT32),
 		    SLE_REF(BaseStation, town,                   REF_TOWN),
 		    SLE_VAR(BaseStation, string_id,              SLE_STRINGID),
@@ -318,9 +317,9 @@ public:
 
 		/* Used by newstations for graphic variations */
 		    SLE_VAR(BaseStation, random_bits,            SLE_UINT16),
-		    SLE_VAR(BaseStation, waiting_triggers,       SLE_UINT8),
+		    SLE_VARNAME(BaseStation, waiting_random_triggers, "waiting_triggers", SLE_UINT8),
 	};
-	inline const static SaveLoadCompatTable compat_description = _station_base_sl_compat;
+	static inline const SaveLoadCompatTable compat_description = _station_base_sl_compat;
 
 	void Save(BaseStation *bst) const override
 	{
@@ -343,7 +342,7 @@ public:
  */
 class SlStationNormal : public DefaultSaveLoadHandler<SlStationNormal, BaseStation> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		SLEG_STRUCT("base", SlStationBase),
 		    SLE_VAR(Station, train_station.tile,         SLE_UINT32),
 		    SLE_VAR(Station, train_station.w,            SLE_FILE_U8 | SLE_VAR_U16),
@@ -362,7 +361,7 @@ public:
 		SLE_CONDVAR(Station, airport.h,                  SLE_FILE_U8 | SLE_VAR_U16, SLV_140, SL_MAX_VERSION),
 		    SLE_VAR(Station, airport.type,               SLE_UINT8),
 		SLE_CONDVAR(Station, airport.layout,             SLE_UINT8,                 SLV_145, SL_MAX_VERSION),
-		    SLE_VAR(Station, airport.flags,              SLE_UINT64),
+		SLE_VARNAME(Station, airport.blocks, "airport.flags", SLE_UINT64),
 		SLE_CONDVAR(Station, airport.rotation,           SLE_UINT8,                 SLV_145, SL_MAX_VERSION),
 		SLEG_CONDARR("storage", _old_st_persistent_storage.storage,  SLE_UINT32, 16, SLV_145, SLV_161),
 		SLE_CONDREF(Station, airport.psa,                REF_STORAGE,               SLV_161, SL_MAX_VERSION),
@@ -379,17 +378,17 @@ public:
 		SLEG_CONDSTRUCTLIST("speclist", SlRoadStopTileData,                          SLV_NEWGRF_ROAD_STOPS, SLV_ROAD_STOP_TILE_DATA),
 		SLEG_STRUCTLIST("goods", SlStationGoods),
 	};
-	inline const static SaveLoadCompatTable compat_description = _station_normal_sl_compat;
+	static inline const SaveLoadCompatTable compat_description = _station_normal_sl_compat;
 
 	void Save(BaseStation *bst) const override
 	{
-		if ((bst->facilities & FACIL_WAYPOINT) != 0) return;
+		if (bst->facilities.Test(StationFacility::Waypoint)) return;
 		SlObject(bst, this->GetDescription());
 	}
 
 	void Load(BaseStation *bst) const override
 	{
-		if ((bst->facilities & FACIL_WAYPOINT) != 0) return;
+		if (bst->facilities.Test(StationFacility::Waypoint)) return;
 		SlObject(bst, this->GetLoadDescription());
 
 		for (CargoType i = 0; i < NUM_CARGO; i++) {
@@ -399,14 +398,14 @@ public:
 
 	void FixPointers(BaseStation *bst) const override
 	{
-		if ((bst->facilities & FACIL_WAYPOINT) != 0) return;
+		if (bst->facilities.Test(StationFacility::Waypoint)) return;
 		SlObject(bst, this->GetDescription());
 	}
 };
 
 class SlStationWaypoint : public DefaultSaveLoadHandler<SlStationWaypoint, BaseStation> {
 public:
-	inline static const SaveLoad description[] = {
+	static inline const SaveLoad description[] = {
 		SLEG_STRUCT("base", SlStationBase),
 		    SLE_VAR(Waypoint, town_cn,                   SLE_UINT16),
 
@@ -418,23 +417,23 @@ public:
 		SLE_CONDVAR(Waypoint, road_waypoint_area.w,      SLE_FILE_U8 | SLE_VAR_U16,   SLV_ROAD_WAYPOINTS, SL_MAX_VERSION),
 		SLE_CONDVAR(Waypoint, road_waypoint_area.h,      SLE_FILE_U8 | SLE_VAR_U16,   SLV_ROAD_WAYPOINTS, SL_MAX_VERSION),
 	};
-	inline const static SaveLoadCompatTable compat_description = _station_waypoint_sl_compat;
+	static inline const SaveLoadCompatTable compat_description = _station_waypoint_sl_compat;
 
 	void Save(BaseStation *bst) const override
 	{
-		if ((bst->facilities & FACIL_WAYPOINT) == 0) return;
+		if (!bst->facilities.Test(StationFacility::Waypoint)) return;
 		SlObject(bst, this->GetDescription());
 	}
 
 	void Load(BaseStation *bst) const override
 	{
-		if ((bst->facilities & FACIL_WAYPOINT) == 0) return;
+		if (!bst->facilities.Test(StationFacility::Waypoint)) return;
 		SlObject(bst, this->GetLoadDescription());
 	}
 
 	void FixPointers(BaseStation *bst) const override
 	{
-		if ((bst->facilities & FACIL_WAYPOINT) == 0) return;
+		if (!bst->facilities.Test(StationFacility::Waypoint)) return;
 		SlObject(bst, this->GetDescription());
 	}
 };
@@ -471,9 +470,9 @@ struct STNNChunkHandler : ChunkHandler {
 
 		int index;
 		while ((index = SlIterateArray()) != -1) {
-			bool waypoint = (SlReadByte() & FACIL_WAYPOINT) != 0;
+			bool waypoint = static_cast<StationFacilities>(SlReadByte()).Test(StationFacility::Waypoint);
 
-			BaseStation *bst = waypoint ? (BaseStation *)new (index) Waypoint() : new (index) Station();
+			BaseStation *bst = waypoint ? (BaseStation *)new (StationID(index)) Waypoint() : new (StationID(index)) Station();
 			SlObject(bst, slt);
 		}
 	}
@@ -511,7 +510,7 @@ struct ROADChunkHandler : ChunkHandler {
 		int index;
 
 		while ((index = SlIterateArray()) != -1) {
-			RoadStop *rs = new (index) RoadStop(INVALID_TILE);
+			RoadStop *rs = new (RoadStopID(index)) RoadStop(INVALID_TILE);
 
 			SlObject(rs, slt);
 		}

@@ -16,7 +16,6 @@
 #include "../gfx_func.h"
 #include "../settings_type.h"
 #include "../zoom_type.h"
-#include "../network/network_func.h"
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -167,16 +166,6 @@ public:
 		return {};
 	}
 
-	/**
-	 * Get a suggested default GUI scale taking screen DPI into account.
-	 */
-	virtual int GetSuggestedUIScale()
-	{
-		float dpi_scale = this->GetDPIScale();
-
-		return Clamp(dpi_scale * 100, MIN_INTERFACE_SCALE, MAX_INTERFACE_SCALE);
-	}
-
 	virtual const char *GetInfoString() const
 	{
 		return this->GetName();
@@ -198,11 +187,18 @@ public:
 	void GameLoopPause();
 
 	/**
+	 * Prevents the system from going to sleep.
+	 *
+	 * @param inhibited If true, sleep will be disabled. If false, sleep will be enabled.
+	 */
+	virtual void SetScreensaverInhibited([[maybe_unused]] bool inhibited) {}
+
+	/**
 	 * Get the currently active instance of the video driver.
 	 */
 	static VideoDriver *GetInstance()
 	{
-		return static_cast<VideoDriver*>(*DriverFactoryBase::GetActiveDriver(Driver::DT_VIDEO));
+		return static_cast<VideoDriver *>(DriverFactoryBase::GetActiveDriver(Driver::DT_VIDEO).get());
 	}
 
 	static std::string GetCaption();
@@ -235,12 +231,6 @@ protected:
 	 * Get the resolution of the main screen.
 	 */
 	virtual Dimension GetScreenSize() const { return { DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT }; }
-
-	/**
-	 * Get DPI scaling factor of the screen OTTD is displayed on.
-	 * @return 1.0 for default platform DPI, > 1.0 for higher DPI values, and < 1.0 for smaller DPI values.
-	 */
-	virtual float GetDPIScale() { return 1.0f; }
 
 	/**
 	 * Apply resolution auto-detection and clamp to sensible defaults.
@@ -325,7 +315,7 @@ protected:
 #endif /* DEBUG_DUMP_COMMANDS */
 
 		/* If we are paused, run on normal speed. */
-		if (_pause_mode) return std::chrono::milliseconds(MILLISECONDS_PER_TICK);
+		if (_pause_mode.Any()) return std::chrono::milliseconds(MILLISECONDS_PER_TICK);
 		/* Infinite speed, as quickly as you can. */
 		if (_game_speed == 0) return std::chrono::microseconds(0);
 

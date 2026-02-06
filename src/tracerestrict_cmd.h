@@ -10,7 +10,6 @@
 #ifndef TRACERESTRICT_CMD_H
 #define TRACERESTRICT_CMD_H
 
-#include "stdafx.h"
 #include "command_type.h"
 #include "tracerestrict.h"
 
@@ -64,7 +63,7 @@ struct TraceRestrictFollowUpCmdData final : public CommandPayloadSerialisable<Tr
 
 	void Serialise(BufferSerialisationRef buffer) const override;
 	bool Deserialise(DeserialisationBuffer &buffer, StringValidationSettings default_string_validation);
-	CommandCost ExecuteWithValue(uint16_t value, DoCommandFlag flags) const;
+	CommandCost ExecuteWithValue(uint16_t value, DoCommandFlags flags) const;
 	void FormatDebugSummary(struct format_target &) const override;
 };
 
@@ -72,6 +71,7 @@ struct TraceRestrictCreateSlotCmdData final : public CommandPayloadSerialisable<
 	VehicleType vehtype = VEH_INVALID;
 	TraceRestrictSlotGroupID parent = INVALID_TRACE_RESTRICT_SLOT_GROUP;
 	std::string name;
+	uint32_t max_occupancy;
 	std::optional<TraceRestrictFollowUpCmdData> follow_up_cmd;
 
 	void Serialise(BufferSerialisationRef buffer) const override;
@@ -105,12 +105,11 @@ struct TraceRestrictProgramSignalData final : public TupleRefCmdData<TraceRestri
 };
 
 /* Flag values for TraceRestrictProgramSignalData::data for TRDCT_MOVE_ITEM operations */
-enum class TraceRestrictProgramSignalMoveFlags : uint32_t {
-	None                  = 0,         ///< No flag set.
-	Up                    = (1U << 0), ///< Move up if flag set, otherwise down.
-	Shallow               = (1U << 1), ///< Shallow mode.
+enum class TraceRestrictProgramSignalMoveFlag : uint8_t {
+	Up      = 0, ///< Move up if flag set, otherwise down.
+	Shallow = 1, ///< Shallow mode.
 };
-DECLARE_ENUM_AS_BIT_SET(TraceRestrictProgramSignalMoveFlags)
+using TraceRestrictProgramSignalMoveFlags = EnumBitSet<TraceRestrictProgramSignalMoveFlag, uint32_t>;
 
 struct TraceRestrictManageSignalInnerData {
 	Track track;

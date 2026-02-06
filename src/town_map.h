@@ -22,7 +22,7 @@
 inline TownID GetTownIndex(TileIndex t)
 {
 	dbg_assert_tile(IsTileType(t, MP_HOUSE) || (IsTileType(t, MP_ROAD) && !IsRoadDepot(t)), t);
-	return _m[t].m2;
+	return static_cast<TownID>(_m[t].m2);
 }
 
 /**
@@ -34,7 +34,7 @@ inline TownID GetTownIndex(TileIndex t)
 inline void SetTownIndex(TileIndex t, TownID index)
 {
 	dbg_assert_tile(IsTileType(t, MP_HOUSE) || (IsTileType(t, MP_ROAD) && !IsRoadDepot(t)), t);
-	_m[t].m2 = index;
+	_m[t].m2 = index.base();
 }
 
 /**
@@ -306,10 +306,10 @@ inline uint8_t GetHouseRandomBits(TileIndex t)
  * @param triggers the activated triggers
  * @pre IsTileType(t, MP_HOUSE)
  */
-inline void SetHouseTriggers(TileIndex t, uint8_t triggers)
+inline void SetHouseRandomTriggers(TileIndex t, HouseRandomTriggers triggers)
 {
 	dbg_assert_tile(IsTileType(t, MP_HOUSE), t);
-	SB(_m[t].m3, 0, 5, triggers);
+	SB(_m[t].m3, 0, 5, triggers.base());
 }
 
 /**
@@ -319,10 +319,10 @@ inline void SetHouseTriggers(TileIndex t, uint8_t triggers)
  * @pre IsTileType(t, MP_HOUSE)
  * @return triggers
  */
-inline uint8_t GetHouseTriggers(TileIndex t)
+inline HouseRandomTriggers GetHouseRandomTriggers(TileIndex t)
 {
 	dbg_assert_tile(IsTileType(t, MP_HOUSE), t);
-	return GB(_m[t].m3, 0, 5);
+	return static_cast<HouseRandomTriggers>(GB(_m[t].m3, 0, 5));
 }
 
 /**
@@ -377,7 +377,7 @@ inline void MakeHouseTile(TileIndex t, TownID tid, uint8_t counter, uint8_t stag
 
 	SetTileType(t, MP_HOUSE);
 	_m[t].m1 = random_bits;
-	_m[t].m2 = tid;
+	_m[t].m2 = tid.base();
 	_m[t].m3 = 0;
 	SetHouseType(t, type);
 	SetHouseCompleted(t, stage == TOWN_HOUSE_COMPLETED);

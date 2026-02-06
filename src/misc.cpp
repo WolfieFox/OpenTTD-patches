@@ -123,7 +123,7 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 	ClearSpecialEventsLog();
 	ClearDesyncMsgLog();
 
-	_pause_mode = PM_UNPAUSED;
+	_pause_mode = {};
 	_pause_countdown = 0;
 	_game_speed = 100;
 	CalTime::Detail::now.sub_date_fract = 0;
@@ -154,7 +154,6 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 		MakeNewgameSettingsLive();
 	} else {
 		UpdateEffectiveDayLengthFactor();
-		SetupTickRate();
 	}
 
 	_newgrf_profilers.clear();
@@ -179,7 +178,8 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 	ClearBridgeSimulatedSignalMapping();
 	ClearBridgeSignalStyleMapping();
 	ClearCargoPacketDeferredPayments();
-	PoolBase::Clean(PT_NORMAL);
+	ClearTemplateReplacements();
+	PoolBase::Clean(PoolType::Normal);
 
 	extern void ClearNewSignalStyleMapping();
 	ClearNewSignalStyleMapping();
@@ -234,6 +234,7 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 	InitializeEconomy();
 
 	InvalidateVehicleTickCaches();
+	InvalidateEffectVehicleTickCache();
 	ClearVehicleTickCaches();
 	InvalidateTemplateReplacementImages();
 

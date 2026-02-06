@@ -14,7 +14,7 @@
 #include "../fileio_type.h"
 #include "../fios.h"
 #include "../strings_type.h"
-#include "../core/ring_buffer.hpp"
+#include "../3rdparty/cpp-ring-buffer/ring_buffer.hpp"
 #include <optional>
 #include <string>
 #include <vector>
@@ -22,8 +22,6 @@
 
 extern SaveLoadVersion _sl_version;
 extern uint8_t         _sl_minor_version;
-extern const SaveLoadVersion SAVEGAME_VERSION;
-extern const SaveLoadVersion MAX_LOAD_SAVEGAME_VERSION;
 
 namespace upstream_sl {
 
@@ -223,7 +221,7 @@ enum VarTypes : uint16_t {
 	SLE_VAR_NULL  =  9 << 4, ///< useful to write zeros in savegame.
 	SLE_VAR_STR   = 12 << 4, ///< string pointer
 	SLE_VAR_STRQ  = 13 << 4, ///< string pointer enclosed in quotes
-	SLE_VAR_NAME  = 14 << 4, ///< old custom name to be converted to a char pointer
+	SLE_VAR_NAME  = 14 << 4, ///< old custom name to be converted to a string pointer
 	/* 1 more possible memory-primitives */
 
 	/* Shortcut values */
@@ -257,6 +255,7 @@ enum VarTypes : uint16_t {
 	 * Flags directing saving/loading of a variable */
 	SLF_ALLOW_CONTROL   = 1 << 8, ///< Allow control codes in the strings.
 	SLF_ALLOW_NEWLINE   = 1 << 9, ///< Allow new lines in the strings.
+	SLF_REPLACE_TABCRLF = 1 << 10, ///< Replace tabs, cr and lf in the string with spaces.
 };
 
 typedef uint32_t VarType;
@@ -388,11 +387,11 @@ inline constexpr bool SlCheckVarSize(SaveLoadType cmd, VarType type, size_t leng
 		case SL_STR: return sizeof(void *) == size;
 		case SL_STDSTR: return SlVarSize(type) == size;
 		case SL_ARR: return SlVarSize(type) * length <= size; // Partial load of array is permitted.
-		case SL_RING: return sizeof(ring_buffer<void *>) == size;
+		case SL_RING: return sizeof(jgr::ring_buffer<void *>) == size;
 		case SL_VECTOR: return sizeof(std::vector<void *>) == size;
 		case SL_REFLIST: return sizeof(std::list<void *>) == size;
 		case SL_REFVECTOR: return sizeof(std::vector<void *>) == size;
-		case SL_REFRING: return sizeof(ring_buffer<void *>) == size;
+		case SL_REFRING: return sizeof(jgr::ring_buffer<void *>) == size;
 		case SL_SAVEBYTE: return true;
 		default: NOT_REACHED();
 	}
@@ -496,6 +495,17 @@ inline constexpr bool SlCheckVarSize(SaveLoadType cmd, VarType type, size_t leng
 #define SLE_CONDSSTR(base, variable, type, from, to) SLE_GENERAL(SL_STDSTR, base, variable, type, 0, from, to, 0)
 
 /**
+ * Storage of a \c std::string in some savegame versions.
+ * @param base     Name of the class or struct containing the string.
+ * @param variable Name of the variable in the class or struct referenced by \a base.
+ * @param name     Field name for table chunks.
+ * @param type     Storage of the data in memory and in the savegame.
+ * @param from     First savegame version that has the string.
+ * @param to       Last savegame version that has the string.
+ */
+#define SLE_CONDSSTRNAME(base, variable, name, type, from, to) SLE_GENERAL_NAME(SL_STDSTR, name, base, variable, type, 0, from, to, 0)
+
+/**
  * Storage of a list of #SL_REF elements in some savegame versions.
  * @param base     Name of the class or struct containing the list.
  * @param variable Name of the variable in the class or struct referenced by \a base.
@@ -596,6 +606,15 @@ inline constexpr bool SlCheckVarSize(SaveLoadType cmd, VarType type, size_t leng
  * @param type     Storage of the data in memory and in the savegame.
  */
 #define SLE_SSTR(base, variable, type) SLE_CONDSSTR(base, variable, type, SL_MIN_VERSION, SL_MAX_VERSION)
+
+/**
+ * Storage of a \c std::string in every savegame version.
+ * @param base     Name of the class or struct containing the string.
+ * @param variable Name of the variable in the class or struct referenced by \a base.
+ * @param name     Field name for table chunks.
+ * @param type     Storage of the data in memory and in the savegame.
+ */
+#define SLE_SSTRNAME(base, variable, name, type) SLE_CONDSSTRNAME(base, variable, name, type, SL_MIN_VERSION, SL_MAX_VERSION)
 
 /**
  * Storage of a list of #SL_REF elements in every savegame version.
@@ -887,6 +906,10 @@ int64_t ReadValue(const void *ptr, VarType conv);
 void WriteValue(void *ptr, VarType conv, int64_t val);
 
 void SlSetArrayIndex(uint index);
+
+template <typename T> requires std::is_base_of_v<struct PoolIDBase, T>
+static void SlSetArrayIndex(const T &index) { SlSetArrayIndex(index.base()); }
+
 int SlIterateArray();
 
 void SlSetStructListLength(size_t length);

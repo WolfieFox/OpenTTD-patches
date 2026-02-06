@@ -19,6 +19,7 @@
 #include "../../strings_func.h"
 #include "../../station_base.h"
 #include "../../landscape.h"
+
 #include "table/strings.h"
 
 #include "../../safeguards.h"
@@ -37,8 +38,7 @@
 {
 	if (!IsValidTown(town_id)) return std::nullopt;
 
-	::SetDParam(0, town_id);
-	return GetString(STR_TOWN_NAME);
+	return ::StrMakeValid(::GetString(STR_TOWN_NAME, town_id), {});
 }
 
 /* static */ bool ScriptTown::SetName(TownID town_id, Text *name)
@@ -63,7 +63,7 @@
 	EnforceDeityMode(false);
 	EnforcePrecondition(false, IsValidTown(town_id));
 
-	return ScriptObject::Command<CMD_TOWN_SET_TEXT>::Do(town_id, text != nullptr ? text->GetEncodedText() : std::string{});
+	return ScriptObject::Command<CMD_TOWN_SET_TEXT>::Do(town_id, text != nullptr ? text->GetEncodedText() : EncodedString{});
 }
 
 /* static */ SQInteger ScriptTown::GetPopulation(TownID town_id)
@@ -94,7 +94,10 @@
 
 	const Town *t = ::Town::Get(town_id);
 
-	return t->supplied[cargo_type].old_max;
+	auto it = t->GetCargoSupplied(cargo_type);
+	if (it == std::end(t->supplied)) return 0;
+
+	return it->history[LAST_MONTH].production;
 }
 
 /* static */ SQInteger ScriptTown::GetLastMonthSupplied(TownID town_id, CargoType cargo_type)
@@ -104,7 +107,10 @@
 
 	const Town *t = ::Town::Get(town_id);
 
-	return t->supplied[cargo_type].old_act;
+	auto it = t->GetCargoSupplied(cargo_type);
+	if (it == std::end(t->supplied)) return 0;
+
+	return it->history[LAST_MONTH].transported;
 }
 
 /* static */ SQInteger ScriptTown::GetLastMonthTransportedPercentage(TownID town_id, CargoType cargo_type)
@@ -207,7 +213,7 @@
 	if (!IsValidTown(town_id)) return false;
 
 	const Town *t = ::Town::Get(town_id);
-	return ((uint32_t)GetDistanceSquareToTile(town_id, tile) <= t->cache.squared_town_zone_radius[HZB_TOWN_EDGE]);
+	return ((uint32_t)GetDistanceSquareToTile(town_id, tile) <= t->cache.squared_town_zone_radius[to_underlying(HouseZone::TownEdge)]);
 }
 
 /* static */ bool ScriptTown::HasStatue(TownID town_id)
@@ -215,7 +221,7 @@
 	EnforceCompanyModeValid(false);
 	if (!IsValidTown(town_id)) return false;
 
-	return ::HasBit(::Town::Get(town_id)->statues, ScriptObject::GetCompany());
+	return ::Town::Get(town_id)->statues.Test(ScriptObject::GetCompany());
 }
 
 /* static */ bool ScriptTown::IsCity(TownID town_id)
@@ -259,7 +265,7 @@
 	EnforceCompanyModeValid(false);
 	if (!IsValidTown(town_id)) return false;
 
-	return HasBit(::GetMaskOfTownActions(nullptr, ScriptObject::GetCompany(), ::Town::Get(town_id)), town_action);
+	return ::GetMaskOfTownActions(ScriptObject::GetCompany(), ::Town::Get(town_id)).Test(::TownAction(town_action));
 }
 
 /* static */ bool ScriptTown::PerformTownAction(TownID town_id, TownAction town_action)
@@ -268,7 +274,7 @@
 	EnforcePrecondition(false, IsValidTown(town_id));
 	EnforcePrecondition(false, IsActionAvailable(town_id, town_action));
 
-	return ScriptObject::Command<CMD_DO_TOWN_ACTION>::Do(town_id, town_action);
+	return ScriptObject::Command<CMD_DO_TOWN_ACTION>::Do(town_id, ::TownAction(town_action));
 }
 
 /* static */ bool ScriptTown::ExpandTown(TownID town_id, SQInteger houses)
@@ -279,7 +285,7 @@
 
 	houses = std::min<SQInteger>(houses, UINT32_MAX);
 
-	return ScriptObject::Command<CMD_EXPAND_TOWN>::Do(town_id, houses);
+	return ScriptObject::Command<CMD_EXPAND_TOWN>::Do(town_id, houses, {TownExpandMode::Buildings, TownExpandMode::Roads});
 }
 
 /* static */ bool ScriptTown::FoundTown(TileIndex tile, TownSize size, bool city, RoadLayout layout, Text *name)
@@ -323,7 +329,7 @@
 
 	::CompanyID c = ScriptCompany::FromScriptCompanyID(company);
 	const Town *t = ::Town::Get(town_id);
-	if (!HasBit(t->have_ratings, c)) {
+	if (!t->have_ratings.Test(c)) {
 		return TOWN_RATING_NONE;
 	} else if (t->ratings[c] <= RATING_APPALLING) {
 		return TOWN_RATING_APPALLING;
@@ -380,7 +386,7 @@
 
 	int num = 0;
 	for (const Station *st : Station::Iterate()) {
-		if (st->town == t && (st->facilities & FACIL_AIRPORT) && st->airport.type != AT_OILRIG) num++;
+		if (st->town == t && st->facilities.Test(StationFacility::Airport) && st->airport.type != AT_OILRIG) num++;
 	}
 	return std::max(0, 2 - num);
 }

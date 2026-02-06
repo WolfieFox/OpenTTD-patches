@@ -24,7 +24,7 @@
 static FBlitter_40bppAnim iFBlitter_40bppAnim;
 
 
-void Blitter_40bppAnim::SetPixel(void *video, int x, int y, uint8_t colour)
+void Blitter_40bppAnim::SetPixel(void *video, int x, int y, PixelColour colour)
 {
 	if (_screen_disable_anim) {
 		Blitter_32bppOptimized::SetPixel(video, x, y, colour);
@@ -32,11 +32,11 @@ void Blitter_40bppAnim::SetPixel(void *video, int x, int y, uint8_t colour)
 		size_t y_offset = static_cast<size_t>(y) * _screen.pitch;
 		*((Colour *)video + x + y_offset) = _black_colour;
 
-		VideoDriver::GetInstance()->GetAnimBuffer()[((uint32_t *)video - (uint32_t *)_screen.dst_ptr) + x + y_offset] = colour;
+		VideoDriver::GetInstance()->GetAnimBuffer()[((uint32_t *)video - (uint32_t *)_screen.dst_ptr) + x + y_offset] = colour.p;
 	}
 }
 
-void Blitter_40bppAnim::SetPixel32(void *video, int x, int y, uint8_t colour, uint32_t colour32)
+void Blitter_40bppAnim::SetPixel32(void *video, int x, int y, PixelColour colour, uint32_t colour32)
 {
 	if (_screen_disable_anim) {
 		Blitter_32bppOptimized::SetPixel32(video, x, y, colour, colour32);
@@ -103,7 +103,7 @@ void Blitter_40bppAnim::SetRectNoD7(void *video, int x, int y, const uint8_t *co
 	}
 }
 
-void Blitter_40bppAnim::DrawRect(void *video, int width, int height, uint8_t colour)
+void Blitter_40bppAnim::DrawRect(void *video, int width, int height, PixelColour colour)
 {
 	if (_screen_disable_anim) {
 		/* This means our output is not to the screen, so we can't be doing any animation stuff, so use our parent DrawRect() */
@@ -116,19 +116,19 @@ void Blitter_40bppAnim::DrawRect(void *video, int width, int height, uint8_t col
 
 	do {
 		memset_colour((Colour *)video, _black_colour, width);
-		memset(anim_line, colour, width);
+		memset(anim_line, colour.p, width);
 
 		video = (uint32_t *)video + _screen.pitch;
 		anim_line += _screen.pitch;
 	} while (--height);
 }
 
-void Blitter_40bppAnim::DrawRectAt(void *video, int x, int y, int width, int height, uint8_t colour)
+void Blitter_40bppAnim::DrawRectAt(void *video, int x, int y, int width, int height, PixelColour colour)
 {
 	this->Blitter_40bppAnim::DrawRect((Colour *)video + x + y * _screen.pitch, width, height, colour);
 }
 
-void Blitter_40bppAnim::DrawLine(void *video, int x, int y, int x2, int y2, int screen_width, int screen_height, uint8_t colour, int width, int dash)
+void Blitter_40bppAnim::DrawLine(void *video, int x, int y, int x2, int y2, int screen_width, int screen_height, PixelColour colour, int width, int dash)
 {
 	if (_screen_disable_anim) {
 		/* This means our output is not to the screen, so we can't be doing any animation stuff, so use our parent DrawRect() */
@@ -141,7 +141,7 @@ void Blitter_40bppAnim::DrawLine(void *video, int x, int y, int x2, int y2, int 
 
 	this->DrawLineGeneric(x, y, x2, y2, screen_width, screen_height, width, dash, [=](int x, int y) {
 		*((Colour *)video + x + y * _screen.pitch) = _black_colour;
-		*(anim + x + y * _screen.pitch) = colour;
+		*(anim + x + y * _screen.pitch) = colour.p;
 	});
 }
 
@@ -159,11 +159,11 @@ inline void Blitter_40bppAnim::Draw(const Blitter::BlitterParams *bp, ZoomLevel 
 
 	/* src_px : each line begins with uint32_t n = 'number of bytes in this line',
 	 *          then n times is the Colour struct for this line */
-	const Colour *src_px = (const Colour *)(src->data + src->offset[zoom][0]);
+	const Colour *src_px = reinterpret_cast<const Colour *>(src->data + src->offset[zoom][0]);
 	/* src_n  : each line begins with uint32_t n = 'number of bytes in this line',
 	 *          then interleaved stream of 'm' and 'n' channels. 'm' is remap,
 	 *          'n' is number of bytes with the same alpha channel class */
-	const uint16_t *src_n  = (const uint16_t *)(src->data + src->offset[zoom][1]);
+	const uint16_t *src_n = reinterpret_cast<const uint16_t *>(src->data + src->offset[zoom][1]);
 
 	/* skip upper lines in src_px and src_n */
 	for (uint i = bp->skip_top; i != 0; i--) {
@@ -466,8 +466,11 @@ void Blitter_40bppAnim::DrawColourMappingRect(void *dst, int width, int height, 
 		const uint8_t *remap = GetNonSprite(pal, SpriteType::Recolour);
 		do {
 			for (int i = 0; i != width; i++) {
-				if (*anim == 0) *udst = MakeGrey(*udst);
-				*anim = remap[*anim];
+				if (*anim == 0) {
+					*udst = MakeGrey(*udst);
+				} else {
+					*anim = remap[*anim];
+				}
 				udst++;
 				anim++;
 			}
@@ -478,7 +481,7 @@ void Blitter_40bppAnim::DrawColourMappingRect(void *dst, int width, int height, 
 		const uint8_t *remap = GetNonSprite(pal, SpriteType::Recolour);
 		do {
 			for (int i = 0; i != width; i++) {
-				*anim = remap[*anim];
+				if (*anim != 0) *anim = remap[*anim];
 				anim++;
 			}
 			anim = anim - width + _screen.pitch;
@@ -486,9 +489,9 @@ void Blitter_40bppAnim::DrawColourMappingRect(void *dst, int width, int height, 
 	}
 }
 
-Sprite *Blitter_40bppAnim::Encode(const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator)
+Sprite *Blitter_40bppAnim::Encode(SpriteType sprite_type, const SpriteLoader::SpriteCollection &sprite, SpriteAllocator &allocator)
 {
-	return this->EncodeInternal<false>(sprite, allocator);
+	return this->EncodeInternal<false>(sprite_type, sprite, allocator);
 }
 
 

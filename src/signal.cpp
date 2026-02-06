@@ -28,6 +28,8 @@
 #include "pathfinder/follow_track.hpp"
 #include "3rdparty/cpp-btree/btree_set.h"
 
+#include "table/signal_data.h"
+
 #include "safeguards.h"
 
 uint8_t _extra_aspects = 0;
@@ -111,9 +113,9 @@ SignalType NextSignalType(SignalType cur, SignalCycleGroups which_signals)
 template <typename Tdir, uint items>
 struct SmallSet {
 private:
-	uint n;           // actual number of units
-	bool overflowed;  // did we try to overflow the set?
-	const char *name; // name, used for debugging purposes...
+	uint n = 0; // actual number of units
+	bool overflowed = false; // did we try to overflow the set?
+	const std::string_view name; // name, used for debugging purposes...
 
 	/** Element of set */
 	struct SSdata {
@@ -123,7 +125,7 @@ private:
 
 public:
 	/** Constructor - just set default values and 'name' */
-	SmallSet(const char *name) : n(0), overflowed(false), name(name) { }
+	SmallSet(std::string_view name) : name(name) { }
 
 	/** Reset variables to default values */
 	void Reset()
@@ -250,22 +252,23 @@ static SmallSet<DiagDirection, SIG_GLOB_SIZE> _globset("_globset"); ///< set of 
 static uint _num_signals_evaluated; ///< Number of programmable pre-signals evaluated
 
 /** Check whether there is a train on rail, not in a depot */
-static Vehicle *TrainOnTileEnum(Vehicle *v, void *)
+static bool IsTrainNotInDepot(const Train *t)
 {
-	if (Train::From(v)->track == TRACK_BIT_DEPOT) return nullptr;
-
-	return v;
+	return t->track != TRACK_BIT_DEPOT;
 }
 
 /** Check whether there is a train only on ramp. */
-static Vehicle *TrainInWormholeTileEnum(Vehicle *v, void *data)
+static bool IsTrainInWormholeTile(const TileIndex veh_tile, const TileIndex portal_tile)
 {
-	/* Only look for front engine or last wagon. */
-	if ((v->Previous() != nullptr && v->Next() != nullptr)) return nullptr;
-	TileIndex tile = (TileIndex) reinterpret_cast<uintptr_t>(data);
-	if (tile != TileVirtXY(v->x_pos, v->y_pos)) return nullptr;
-	if (!(Train::From(v)->track & TRACK_BIT_WORMHOLE) && !(Train::From(v)->track & GetAcrossTunnelBridgeTrackBits(tile))) return nullptr;
-	return v;
+	for (const Train *v : VehiclesOnTile<VEH_TRAIN>(veh_tile)) {
+		/* Only look for front engine or last wagon. */
+		if ((v->Previous() != nullptr && v->Next() != nullptr)) continue;
+		if (portal_tile != TileVirtXY(v->x_pos, v->y_pos)) continue;
+		if (!(v->track & TRACK_BIT_WORMHOLE) && !(v->track & GetAcrossTunnelBridgeTrackBits(portal_tile))) continue;
+
+		return true;
+	}
+	return false;
 }
 
 /**
@@ -364,14 +367,14 @@ static SigInfo ExploreSegment(Owner owner)
 				if (IsRailDepot(tile)) {
 					if (enterdir == INVALID_DIAGDIR) { // from 'inside' - train just entered or left the depot
 						info.flags |= SF_JUNCTION;
-						if (!(info.flags & SF_TRAIN) && HasVehicleOnPos(tile, VEH_TRAIN, nullptr, &TrainOnTileEnum)) info.flags |= SF_TRAIN;
+						if (!(info.flags & SF_TRAIN) && HasVehicleOnTile<VEH_TRAIN>(tile, IsTrainNotInDepot)) info.flags |= SF_TRAIN;
 						exitdir = GetRailDepotDirection(tile);
 						tile += TileOffsByDiagDir(exitdir);
 						enterdir = ReverseDiagDir(exitdir);
 						break;
 					} else if (enterdir == GetRailDepotDirection(tile)) { // entered a depot
 						info.flags |= SF_JUNCTION;
-						if (!(info.flags & SF_TRAIN) && HasVehicleOnPos(tile, VEH_TRAIN, nullptr, &TrainOnTileEnum)) info.flags |= SF_TRAIN;
+						if (!(info.flags & SF_TRAIN) && HasVehicleOnTile<VEH_TRAIN>(tile, IsTrainNotInDepot)) info.flags |= SF_TRAIN;
 						continue;
 					} else {
 						continue;
@@ -388,7 +391,7 @@ static SigInfo ExploreSegment(Owner owner)
 					if (!(info.flags & SF_TRAIN) && EnsureNoTrainOnTrackBits(tile, tracks).Failed()) info.flags |= SF_TRAIN;
 				} else {
 					if (tracks_masked == TRACK_BIT_NONE) continue; // no incidating track
-					if (!(info.flags & SF_TRAIN) && HasVehicleOnPos(tile, VEH_TRAIN, nullptr, &TrainOnTileEnum)) info.flags |= SF_TRAIN;
+					if (!(info.flags & SF_TRAIN) && HasVehicleOnTile<VEH_TRAIN>(tile, IsTrainNotInDepot)) info.flags |= SF_TRAIN;
 				}
 
 				if (HasSignals(tile)) { // there is exactly one track - not zero, because there is exit from this tile
@@ -479,7 +482,7 @@ static SigInfo ExploreSegment(Owner owner)
 				if (DiagDirToAxis(enterdir) != GetRailStationAxis(tile)) continue; // different axis
 				if (IsStationTileBlocked(tile)) continue; // 'eye-candy' station tile
 
-				if (!(info.flags & SF_TRAIN) && HasVehicleOnPos(tile, VEH_TRAIN, nullptr, &TrainOnTileEnum)) info.flags |= SF_TRAIN;
+				if (!(info.flags & SF_TRAIN) && HasVehicleOnTile<VEH_TRAIN>(tile, IsTrainNotInDepot)) info.flags |= SF_TRAIN;
 				tile += TileOffsByDiagDir(exitdir);
 				break;
 
@@ -488,7 +491,7 @@ static SigInfo ExploreSegment(Owner owner)
 				if (!IsOneSignalBlock(owner, GetTileOwner(tile))) continue;
 				if (DiagDirToAxis(enterdir) == GetCrossingRoadAxis(tile)) continue; // different axis
 
-				if (!(info.flags & SF_TRAIN) && HasVehicleOnPos(tile, VEH_TRAIN, nullptr, &TrainOnTileEnum)) info.flags |= SF_TRAIN;
+				if (!(info.flags & SF_TRAIN) && HasVehicleOnTile<VEH_TRAIN>(tile, IsTrainNotInDepot)) info.flags |= SF_TRAIN;
 				if (_settings_game.vehicle.safer_crossings) info.flags |= SF_PBS | SF_JUNCTION;
 				tile += TileOffsByDiagDir(exitdir);
 				break;
@@ -511,7 +514,7 @@ static SigInfo ExploreSegment(Owner owner)
 							return EnsureNoTrainOnTrackBits(tile, tracks & (~across_tracks)).Failed();
 						}
 					} else {
-						return HasVehicleOnPos(tile, VEH_TRAIN, nullptr, &TrainOnTileEnum);
+						return HasVehicleOnTile<VEH_TRAIN>(tile, IsTrainNotInDepot);
 					}
 				};
 
@@ -537,8 +540,8 @@ static SigInfo ExploreSegment(Owner owner)
 					if (enterdir == INVALID_DIAGDIR) {
 						/* Incoming from the wormhole, onto signal */
 						if (!(info.flags & SF_TRAIN) && IsTunnelBridgeSignalSimulationExit(tile)) { // tunnel entrance is ignored
-							if (HasVehicleOnPos(GetOtherTunnelBridgeEnd(tile), VEH_TRAIN, reinterpret_cast<void *>((uintptr_t)tile.base()), &TrainInWormholeTileEnum)) info.flags |= SF_TRAIN;
-							if (!(info.flags & SF_TRAIN) && HasVehicleOnPos(tile, VEH_TRAIN, reinterpret_cast<void *>((uintptr_t)tile.base()), &TrainInWormholeTileEnum)) info.flags |= SF_TRAIN;
+							if (IsTrainInWormholeTile(GetOtherTunnelBridgeEnd(tile), tile)) info.flags |= SF_TRAIN;
+							if (!(info.flags & SF_TRAIN) && IsTrainInWormholeTile(tile, tile)) info.flags |= SF_TRAIN;
 						}
 						if (IsTunnelBridgeSignalSimulationExit(tile) && !_tbuset.Add(tile, INVALID_TRACKDIR)) {
 							info.flags |= SF_FULL;
@@ -568,9 +571,9 @@ static SigInfo ExploreSegment(Owner owner)
 						}
 						if (IsTunnelBridgeSignalSimulationEntrance(tile)) handle_entrance();
 						if (!(info.flags & SF_TRAIN)) {
-							if (HasVehicleOnPos(tile, VEH_TRAIN, reinterpret_cast<void *>((uintptr_t)tile.base()), &TrainInWormholeTileEnum)) info.flags |= SF_TRAIN;
+							if (IsTrainInWormholeTile(tile, tile)) info.flags |= SF_TRAIN;
 							if (!(info.flags & SF_TRAIN) && IsTunnelBridgeSignalSimulationExit(tile)) {
-								if (HasVehicleOnPos(GetOtherTunnelBridgeEnd(tile), VEH_TRAIN, reinterpret_cast<void *>((uintptr_t)tile.base()), &TrainInWormholeTileEnum)) info.flags |= SF_TRAIN;
+								if (IsTrainInWormholeTile(GetOtherTunnelBridgeEnd(tile), tile)) info.flags |= SF_TRAIN;
 							}
 						}
 						continue;

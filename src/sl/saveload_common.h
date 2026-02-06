@@ -12,6 +12,9 @@
 
 #include "../strings_type.h"
 
+template <typename T>
+concept SlIsPrimitiveType = T::saveload_primitive_type || false;
+
 struct SaveLoad;
 struct NamedSaveLoad;
 
@@ -413,6 +416,21 @@ enum SaveLoadVersion : uint16_t {
 
 	SLV_ENCODED_STRING_FORMAT,              ///< 350  PR#13499 Encoded String format changed.
 	SLV_PROTECT_PLACED_HOUSES,              ///< 351  PR#13270 Houses individually placed by players can be protected from town/AI removal.
+	SLV_SCRIPT_SAVE_INSTANCES,              ///< 352  PR#13556 Scripts are allowed to save instances.
+	SLV_FIX_SCC_ENCODED_NEGATIVE,           ///< 353  PR#14049 Fix encoding of negative parameters.
+	SLV_ORDERS_OWNED_BY_ORDERLIST,          ///< 354  PR#13948 Orders stored in OrderList, pool removed.
+
+	SLV_FACE_STYLES,                        ///< 355  PR#14319 Addition of face styles, replacing gender and ethnicity.
+	SLV_INDUSTRY_NUM_VALID_HISTORY,         ///< 356  PR#14416 Store number of valid history records for industries.
+	SLV_INDUSTRY_ACCEPTED_HISTORY,          ///< 357  PR#14321 Add per-industry history of cargo delivered and waiting.
+	SLV_TOWN_SUPPLY_HISTORY,                ///< 358  PR#14461 Town supply history.
+	SLV_STATIONS_UNDER_BRIDGES,             ///< 359  PR#14477 Allow stations under bridges.
+
+	SLV_DOCKS_UNDER_BRIDGES,                ///< 360  PR#14594 Allow docks under bridges.
+	SLV_LOCKS_UNDER_BRIDGES,                ///< 361  PR#14595 Allow locks under bridges.
+	SLV_ENGINE_MULTI_RAILTYPE,              ///< 362  PR#14357 v15.0 Train engines can have multiple railtypes.
+	SLV_SIGN_TEXT_COLOURS,                  ///< 363  PR#14743 Configurable sign text colors in scenario editor.
+	SLV_BUOYS_AT_0_0,                       ///< 364  PR#14983 Allow to build buoys at (0x0).
 
 	SL_MAX_VERSION,                         ///< Highest possible saveload version
 
@@ -441,7 +459,12 @@ enum SaveLoadVersion : uint16_t {
 	SL_CHILLPP_233 = 233,
 };
 
+static constexpr SaveLoadVersion SAVEGAME_VERSION = SLV_CUSTOM_SUBSIDY_DURATION;                    ///< Current savegame version of OpenTTD.
+static constexpr SaveLoadVersion MAX_LOAD_SAVEGAME_VERSION = (SaveLoadVersion)(SL_MAX_VERSION - 1); ///< Max loadable savegame version of OpenTTD.
+static constexpr SaveLoadVersion SL_UPSTREAM_VERSION = MAX_LOAD_SAVEGAME_VERSION;                   ///< Savegame version to save/load in XSLFI_UPSTREAM_VERSION sub-chunk
+
 uint8_t SlReadByte();
+void SlReadString(std::string &str, size_t length);
 void SlWriteByte(uint8_t b);
 
 uint16_t SlReadUint16();
@@ -452,7 +475,28 @@ void SlWriteUint16(uint16_t v);
 void SlWriteUint32(uint32_t v);
 void SlWriteUint64(uint64_t v);
 
+inline void SlWriteByte(const SlIsPrimitiveType auto &data)
+{
+	static_assert(sizeof(data.base()) == 1);
+	SlWriteByte((uint8_t)data.base());
+}
+
+inline void SlWriteUint16(const SlIsPrimitiveType auto &data)
+{
+	static_assert(sizeof(data.base()) <= 2);
+	SlWriteUint16((uint16_t)data.base());
+}
+
+inline void SlWriteUint32(const SlIsPrimitiveType auto &data)
+{
+	static_assert(sizeof(data.base()) <= 4);
+	SlWriteUint32((uint32_t)data.base());
+}
+
 void SlSkipBytes(size_t length);
+
+void SlCopyBytesRead(void *ptr, size_t length);
+void SlCopyBytesWrite(const void *ptr, size_t length);
 
 size_t SlGetBytesRead();
 size_t SlGetBytesWritten();

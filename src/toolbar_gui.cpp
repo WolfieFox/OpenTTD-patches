@@ -15,12 +15,13 @@
 #include "command_func.h"
 #include "dropdown_type.h"
 #include "dropdown_func.h"
-#include "dropdown_common_type.h"
 #include "house.h"
 #include "vehicle_gui.h"
 #include "rail_gui.h"
 #include "road.h"
 #include "road_gui.h"
+#include "dock_gui.h"
+#include "water_map.h"
 #include "date_func.h"
 #include "vehicle_func.h"
 #include "sound_func.h"
@@ -67,12 +68,17 @@
 #include "help_gui.h"
 #include "industry_map.h"
 #include "misc_cmd.h"
+#include "core/string_consumer.hpp"
 
 #include "widgets/toolbar_widget.h"
 
 #include "network/network.h"
 #include "network/network_gui.h"
 #include "network/network_func.h"
+
+#include "table/strings.h"
+
+#include "dropdown_common_type.h"
 
 #include "safeguards.h"
 
@@ -84,7 +90,7 @@ RailType _last_built_railtype;
 RoadType _last_built_roadtype;
 RoadType _last_built_tramtype;
 
-/** Toobar modes */
+/** Toolbar modes */
 enum ToolbarMode : uint8_t {
 	TB_NORMAL,
 	TB_UPPER,
@@ -101,6 +107,11 @@ enum CallBackFunction : uint8_t {
 
 static CallBackFunction _last_started_action = CBF_NONE; ///< Last started user action.
 
+inline DropDownModeFlags ToolbarDropdownMode()
+{
+	return _settings_client.gui.toolbar_dropdown_autoselect ? DDMF_INSTANT_CLOSE : DDMF_NONE;
+}
+
 /**
  * Company name list item, with company-colour icon, name, and lock components.
  */
@@ -109,12 +120,9 @@ public:
 	bool selectable;
 
 	DropDownListCompanyItem(CompanyID company, bool shaded, bool selectable = true) :
-			DropDownIcon<DropDownIcon<DropDownString<DropDownListItem>, true>>(SPR_COMPANY_ICON, COMPANY_SPRITE_COLOUR(company), NetworkCompanyIsPassworded(company) ? SPR_LOCK : SPR_EMPTY, PAL_NONE, STR_NULL, company, false, shaded),
+			DropDownIcon<DropDownIcon<DropDownString<DropDownListItem>, true>>(SPR_COMPANY_ICON, GetCompanyPalette(company), NetworkCompanyIsPassworded(company) ? SPR_LOCK : SPR_EMPTY, PAL_NONE, GetString(STR_COMPANY_NAME_COMPANY_NUM, company, company), company.base(), false, shaded),
 			selectable(selectable)
 	{
-		SetDParam(0, company);
-		SetDParam(1, company);
-		this->SetString(GetString(STR_COMPANY_NAME_COMPANY_NUM));
 	}
 
 	bool Selectable() const override { return this->selectable; }
@@ -134,8 +142,7 @@ std::unique_ptr<DropDownListItem> MakeCompanyDropDownListItem(CompanyID cid, boo
  */
 static void PopupMainToolbarMenu(Window *w, WidgetID widget, DropDownList &&list, int def)
 {
-	ShowDropDownList(w, std::move(list), def, widget, 0, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, std::move(list), def, widget, 0, ToolbarDropdownMode());
 }
 
 /**
@@ -170,7 +177,7 @@ static const int CTMN_SPECTATOR   = -3; ///< Show a company window as spectator
  * @param widget The button widget id.
  * @param grey A bitmask of which companies to mark as disabled.
  */
-static void PopupMainCompanyToolbMenu(Window *w, WidgetID widget, CompanyMask grey = 0)
+static void PopupMainCompanyToolbMenu(Window *w, WidgetID widget, CompanyMask grey = {})
 {
 	DropDownList list;
 
@@ -194,12 +201,12 @@ static void PopupMainCompanyToolbMenu(Window *w, WidgetID widget, CompanyMask gr
 			break;
 	}
 
-	for (CompanyID c = COMPANY_FIRST; c < MAX_COMPANIES; c++) {
+	for (CompanyID c = CompanyID::Begin(); c < MAX_COMPANIES; ++c) {
 		if (!Company::IsValidID(c)) continue;
-		list.push_back(std::make_unique<DropDownListCompanyItem>(c, HasBit(grey, c)));
+		list.push_back(std::make_unique<DropDownListCompanyItem>(c, grey.Test(c)));
 	}
 
-	PopupMainToolbarMenu(w, widget, std::move(list), _local_company == COMPANY_SPECTATOR ? (widget == WID_TN_COMPANIES ? CTMN_CLIENT_LIST : CTMN_SPECTATOR) : (int)_local_company);
+	PopupMainToolbarMenu(w, widget, std::move(list), _local_company == COMPANY_SPECTATOR ? (widget == WID_TN_COMPANIES ? CTMN_CLIENT_LIST : CTMN_SPECTATOR) : _local_company.base());
 }
 
 static ToolbarMode _toolbar_mode;
@@ -221,8 +228,8 @@ static CallBackFunction ToolbarPauseClick(Window *)
 {
 	if (IsNonAdminNetworkClient()) return CBF_NONE; // only server can pause the game
 
-	if (Command<CMD_PAUSE>::Post(PM_PAUSED_NORMAL, _pause_mode == PM_UNPAUSED)) {
-		if (_settings_client.sound.confirm) SndPlayFx(SND_15_BEEP);
+	if (Command<CMD_PAUSE>::Post(PauseMode::Normal, _pause_mode.None())) {
+		SndConfirmBeep();
 	}
 	return CBF_NONE;
 }
@@ -238,7 +245,7 @@ static CallBackFunction ToolbarFastForwardClick(Window *)
 
 	ChangeGameSpeed(_game_speed == 100);
 
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	SndClickBeep();
 	return CBF_NONE;
 }
 
@@ -247,7 +254,6 @@ static CallBackFunction ToolbarFastForwardClick(Window *)
  */
 enum OptionMenuEntries : uint8_t {
 	OME_GAMEOPTIONS,
-	OME_SETTINGS,
 	OME_AI_SETTINGS,
 	OME_GAMESCRIPT_SETTINGS,
 	OME_NEWGRFSETTINGS,
@@ -283,7 +289,6 @@ static CallBackFunction ToolbarOptionsClick(Window *w)
 {
 	DropDownList list;
 	list.push_back(MakeDropDownListStringItem(STR_SETTINGS_MENU_GAME_OPTIONS,             OME_GAMEOPTIONS));
-	list.push_back(MakeDropDownListStringItem(STR_SETTINGS_MENU_CONFIG_SETTINGS_TREE,     OME_SETTINGS));
 	/* Changes to the per-AI settings don't get send from the server to the clients. Clients get
 	 * the settings once they join but never update it. As such don't show the window at all
 	 * to network clients. */
@@ -300,12 +305,12 @@ static CallBackFunction ToolbarOptionsClick(Window *w)
 	list.push_back(MakeDropDownListDividerItem());
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_SHOW_TOWN_NAMES),       STR_SETTINGS_MENU_TOWN_NAMES_DISPLAYED,    OME_SHOW_TOWNNAMES, false));
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_SHOW_STATION_NAMES),    STR_SETTINGS_MENU_STATION_NAMES_DISPLAYED, OME_SHOW_STATIONNAMES, false));
-	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_TRAIN) != 0,       STR_SETTINGS_MENU_STATION_NAMES_TRAIN,     OME_SHOW_STATIONNAMES_TRAIN, false, false, 1));
-	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_TRUCK_STOP) != 0,  STR_SETTINGS_MENU_STATION_NAMES_LORRY,     OME_SHOW_STATIONNAMES_LORRY, false, false, 1));
-	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_BUS_STOP) != 0,    STR_SETTINGS_MENU_STATION_NAMES_BUS,       OME_SHOW_STATIONNAMES_BUS, false, false, 1));
-	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_DOCK) != 0,        STR_SETTINGS_MENU_STATION_NAMES_SHIP,      OME_SHOW_STATIONNAMES_SHIP, false, false, 1));
-	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_AIRPORT) != 0,     STR_SETTINGS_MENU_STATION_NAMES_PLANE,     OME_SHOW_STATIONNAMES_PLANE, false, false, 1));
-	list.push_back(MakeDropDownListCheckedItem((_facility_display_opt & FACIL_GHOST) != 0,       STR_SETTINGS_MENU_STATION_NAMES_GHOST,     OME_SHOW_STATIONNAMES_GHOST, false, false, 1));
+	list.push_back(MakeDropDownListCheckedItem(_facility_display_opt.Test(StationFacility::Train),     STR_SETTINGS_MENU_STATION_NAMES_TRAIN,     OME_SHOW_STATIONNAMES_TRAIN, false, false, 1));
+	list.push_back(MakeDropDownListCheckedItem(_facility_display_opt.Test(StationFacility::TruckStop), STR_SETTINGS_MENU_STATION_NAMES_LORRY,     OME_SHOW_STATIONNAMES_LORRY, false, false, 1));
+	list.push_back(MakeDropDownListCheckedItem(_facility_display_opt.Test(StationFacility::BusStop),   STR_SETTINGS_MENU_STATION_NAMES_BUS,       OME_SHOW_STATIONNAMES_BUS, false, false, 1));
+	list.push_back(MakeDropDownListCheckedItem(_facility_display_opt.Test(StationFacility::Dock),      STR_SETTINGS_MENU_STATION_NAMES_SHIP,      OME_SHOW_STATIONNAMES_SHIP, false, false, 1));
+	list.push_back(MakeDropDownListCheckedItem(_facility_display_opt.Test(StationFacility::Airport),   STR_SETTINGS_MENU_STATION_NAMES_PLANE,     OME_SHOW_STATIONNAMES_PLANE, false, false, 1));
+	list.push_back(MakeDropDownListCheckedItem(_facility_display_opt.Test(STATION_FACILITY_GHOST),     STR_SETTINGS_MENU_STATION_NAMES_GHOST,     OME_SHOW_STATIONNAMES_GHOST, false, false, 1));
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_SHOW_WAYPOINT_NAMES),   STR_SETTINGS_MENU_WAYPOINTS_DISPLAYED,     OME_SHOW_WAYPOINTNAMES, false));
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_SHOW_SIGNS),            STR_SETTINGS_MENU_SIGNS_DISPLAYED,         OME_SHOW_SIGNS, false));
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_SHOW_COMPETITOR_SIGNS), STR_SETTINGS_MENU_SHOW_COMPETITOR_SIGNS,   OME_SHOW_COMPETITOR_SIGNS, false));
@@ -318,22 +323,8 @@ static CallBackFunction ToolbarOptionsClick(Window *w)
 	list.push_back(MakeDropDownListCheckedItem(IsTransparencySet(TO_SIGNS),                    STR_SETTINGS_MENU_TRANSPARENT_SIGNS,       OME_SHOW_STATIONSIGNS, false));
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_extra_display_opt, XDO_SHOW_MONEY_TEXT_EFFECTS), STR_SETTINGS_MENU_MONEY_TEXT_EFFECTS, OME_SHOW_MONEYTEXT, false));
 
-	ShowDropDownList(w, std::move(list), 0, WID_TN_SETTINGS, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, std::move(list), 0, WID_TN_SETTINGS, 140, ToolbarDropdownMode());
 	return CBF_NONE;
-}
-
-/**
- * Toggle display station names for a facility.
- * @param facility Facility to toggle.
- */
-static void ToggleFacilityDisplay(const uint8_t facility)
-{
-	if ((_facility_display_opt & facility) == 0) {
-		SETBITS(_facility_display_opt, facility);
-	} else {
-		CLRBITS(_facility_display_opt, facility);
-	}
 }
 
 /**
@@ -346,7 +337,6 @@ static CallBackFunction MenuClickSettings(int index)
 {
 	switch (index) {
 		case OME_GAMEOPTIONS:          ShowGameOptions();                               return CBF_NONE;
-		case OME_SETTINGS:             ShowGameSettings();                              return CBF_NONE;
 		case OME_AI_SETTINGS:          ShowAIConfigWindow();                            return CBF_NONE;
 		case OME_GAMESCRIPT_SETTINGS:  ShowGSConfigWindow();                            return CBF_NONE;
 		case OME_NEWGRFSETTINGS:       ShowNewGRFSettings(!_networking && _settings_client.gui.UserIsAllowedToChangeNewGRFs(), true, true, _grfconfig); return CBF_NONE;
@@ -356,12 +346,12 @@ static CallBackFunction MenuClickSettings(int index)
 
 		case OME_SHOW_TOWNNAMES:       ToggleBit(_display_opt, DO_SHOW_TOWN_NAMES);     break;
 		case OME_SHOW_STATIONNAMES:    ToggleBit(_display_opt, DO_SHOW_STATION_NAMES);  break;
-		case OME_SHOW_STATIONNAMES_TRAIN: ToggleFacilityDisplay(FACIL_TRAIN); break;
-		case OME_SHOW_STATIONNAMES_LORRY: ToggleFacilityDisplay(FACIL_TRUCK_STOP); break;
-		case OME_SHOW_STATIONNAMES_BUS: ToggleFacilityDisplay(FACIL_BUS_STOP); break;
-		case OME_SHOW_STATIONNAMES_SHIP: ToggleFacilityDisplay(FACIL_DOCK); break;
-		case OME_SHOW_STATIONNAMES_PLANE: ToggleFacilityDisplay(FACIL_AIRPORT); break;
-		case OME_SHOW_STATIONNAMES_GHOST: ToggleFacilityDisplay(FACIL_GHOST); break;
+		case OME_SHOW_STATIONNAMES_TRAIN: _facility_display_opt.Flip(StationFacility::Train); break;
+		case OME_SHOW_STATIONNAMES_LORRY: _facility_display_opt.Flip(StationFacility::TruckStop); break;
+		case OME_SHOW_STATIONNAMES_BUS: _facility_display_opt.Flip(StationFacility::BusStop); break;
+		case OME_SHOW_STATIONNAMES_SHIP: _facility_display_opt.Flip(StationFacility::Dock); break;
+		case OME_SHOW_STATIONNAMES_PLANE: _facility_display_opt.Flip(StationFacility::Airport); break;
+		case OME_SHOW_STATIONNAMES_GHOST: _facility_display_opt.Flip(STATION_FACILITY_GHOST); break;
 		case OME_SHOW_WAYPOINTNAMES:   ToggleBit(_display_opt, DO_SHOW_WAYPOINT_NAMES); break;
 		case OME_SHOW_SIGNS:           ToggleBit(_display_opt, DO_SHOW_SIGNS);          break;
 		case OME_SHOW_COMPETITOR_SIGNS:
@@ -616,7 +606,7 @@ static CallBackFunction MenuClickFinances(int index)
 
 static CallBackFunction ToolbarCompaniesClick(Window *w)
 {
-	PopupMainCompanyToolbMenu(w, WID_TN_COMPANIES, 0);
+	PopupMainCompanyToolbMenu(w, WID_TN_COMPANIES);
 	return CBF_NONE;
 }
 
@@ -652,7 +642,7 @@ static CallBackFunction MenuClickCompany(int index)
 
 static CallBackFunction ToolbarStoryClick(Window *w)
 {
-	PopupMainCompanyToolbMenu(w, WID_TN_STORY, 0);
+	PopupMainCompanyToolbMenu(w, WID_TN_STORY);
 	return CBF_NONE;
 }
 
@@ -664,7 +654,7 @@ static CallBackFunction ToolbarStoryClick(Window *w)
  */
 static CallBackFunction MenuClickStory(int index)
 {
-	ShowStoryBook(index == CTMN_SPECTATOR ? INVALID_COMPANY : (CompanyID)index);
+	ShowStoryBook(index == CTMN_SPECTATOR ? CompanyID::Invalid() : (CompanyID)index);
 	return CBF_NONE;
 }
 
@@ -672,7 +662,7 @@ static CallBackFunction MenuClickStory(int index)
 
 static CallBackFunction ToolbarGoalClick(Window *w)
 {
-	PopupMainCompanyToolbMenu(w, WID_TN_GOAL, 0);
+	PopupMainCompanyToolbMenu(w, WID_TN_GOAL);
 	return CBF_NONE;
 }
 
@@ -684,7 +674,7 @@ static CallBackFunction ToolbarGoalClick(Window *w)
  */
 static CallBackFunction MenuClickGoal(int index)
 {
-	ShowGoalsList(index == CTMN_SPECTATOR ? INVALID_COMPANY : (CompanyID)index);
+	ShowGoalsList(index == CTMN_SPECTATOR ? CompanyID::Invalid() : (CompanyID)index);
 	return CBF_NONE;
 }
 
@@ -708,7 +698,7 @@ static void AddDropDownLeagueTableOptions(DropDownList &list)
 {
 	if (LeagueTable::GetNumItems() > 0) {
 		for (LeagueTable *lt : LeagueTable::Iterate()) {
-			list.push_back(MakeDropDownListStringItem(lt->title, lt->index));
+			list.push_back(MakeDropDownListStringItem(lt->title.GetDecodedString(), lt->index.base()));
 		}
 	} else {
 		list.push_back(MakeDropDownListStringItem(STR_GRAPH_MENU_COMPANY_LEAGUE_TABLE, LTMN_PERFORMANCE_LEAGUE));
@@ -732,8 +722,7 @@ static CallBackFunction ToolbarGraphsClick(Window *w)
 
 	if (_toolbar_mode != TB_NORMAL) AddDropDownLeagueTableOptions(list);
 
-	ShowDropDownList(w, std::move(list), GRMN_OPERATING_PROFIT_GRAPH, WID_TN_GRAPHS, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, std::move(list), GRMN_OPERATING_PROFIT_GRAPH, WID_TN_GRAPHS, 140, ToolbarDropdownMode());
 
 	return CBF_NONE;
 }
@@ -745,8 +734,7 @@ static CallBackFunction ToolbarLeagueClick(Window *w)
 	AddDropDownLeagueTableOptions(list);
 
 	int selected = list[0]->result;
-	ShowDropDownList(w, std::move(list), selected, WID_TN_LEAGUE, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, std::move(list), selected, WID_TN_LEAGUE, 140, ToolbarDropdownMode());
 
 	return CBF_NONE;
 }
@@ -813,10 +801,10 @@ static CallBackFunction MenuClickIndustry(int index)
 
 static void ToolbarVehicleClick(Window *w, VehicleType veh)
 {
-	CompanyMask dis = 0;
+	CompanyMask dis{};
 
 	for (const Company *c : Company::Iterate()) {
-		if (c->group_all[veh].num_vehicle == 0) SetBit(dis, c->index);
+		if (c->group_all[veh].num_vehicle == 0) dis.Set(c->index);
 	}
 	PopupMainCompanyToolbMenu(w, WID_TN_VEHICLE_START + veh, dis);
 }
@@ -906,7 +894,6 @@ static CallBackFunction ToolbarZoomInClick(Window *w)
 {
 	if (DoZoomInOutWindow(ZOOM_IN, GetMainWindow())) {
 		w->HandleButtonClick((_game_mode == GM_EDITOR) ? (WidgetID)WID_TE_ZOOM_IN : (WidgetID)WID_TN_ZOOM_IN);
-		if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
 	}
 	return CBF_NONE;
 }
@@ -917,7 +904,6 @@ static CallBackFunction ToolbarZoomOutClick(Window *w)
 {
 	if (DoZoomInOutWindow(ZOOM_OUT, GetMainWindow())) {
 		w->HandleButtonClick((_game_mode == GM_EDITOR) ? (WidgetID)WID_TE_ZOOM_OUT : (WidgetID)WID_TN_ZOOM_OUT);
-		if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
 	}
 	return CBF_NONE;
 }
@@ -926,8 +912,7 @@ static CallBackFunction ToolbarZoomOutClick(Window *w)
 
 static CallBackFunction ToolbarBuildRailClick(Window *w)
 {
-	ShowDropDownList(w, GetRailTypeDropDownList(), _last_built_railtype, WID_TN_RAILS, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, GetRailTypeDropDownList(), _last_built_railtype, WID_TN_RAILS, 140, ToolbarDropdownMode());
 	return CBF_NONE;
 }
 
@@ -948,8 +933,7 @@ static CallBackFunction MenuClickBuildRail(int index)
 
 static CallBackFunction ToolbarBuildRoadClick(Window *w)
 {
-	ShowDropDownList(w, GetRoadTypeDropDownList(RTTB_ROAD), _last_built_roadtype, WID_TN_ROADS, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, GetRoadTypeDropDownList(RTTB_ROAD), _last_built_roadtype, WID_TN_ROADS, 140, ToolbarDropdownMode());
 	return CBF_NONE;
 }
 
@@ -970,8 +954,7 @@ static CallBackFunction MenuClickBuildRoad(int index)
 
 static CallBackFunction ToolbarBuildTramClick(Window *w)
 {
-	ShowDropDownList(w, GetRoadTypeDropDownList(RTTB_TRAM), _last_built_tramtype, WID_TN_TRAMS, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, GetRoadTypeDropDownList(RTTB_TRAM), _last_built_tramtype, WID_TN_TRAMS, 140, ToolbarDropdownMode());
 	return CBF_NONE;
 }
 
@@ -994,8 +977,7 @@ static CallBackFunction ToolbarBuildWaterClick(Window *w)
 {
 	DropDownList list;
 	list.push_back(MakeDropDownListIconItem(SPR_IMG_BUILD_CANAL, PAL_NONE, STR_WATERWAYS_MENU_WATERWAYS_CONSTRUCTION, 0, false));
-	ShowDropDownList(w, std::move(list), 0, WID_TN_WATER, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, std::move(list), 0, WID_TN_WATER, 140, ToolbarDropdownMode());
 	return CBF_NONE;
 }
 
@@ -1016,8 +998,7 @@ static CallBackFunction ToolbarBuildAirClick(Window *w)
 {
 	DropDownList list;
 	list.push_back(MakeDropDownListIconItem(SPR_IMG_AIRPORT, PAL_NONE, STR_AIRCRAFT_MENU_AIRPORT_CONSTRUCTION, 0, false));
-	ShowDropDownList(w, std::move(list), 0, WID_TN_AIR, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, std::move(list), 0, WID_TN_AIR, 140, ToolbarDropdownMode());
 	return CBF_NONE;
 }
 
@@ -1040,8 +1021,7 @@ static CallBackFunction ToolbarForestClick(Window *w)
 	list.push_back(MakeDropDownListIconItem(SPR_IMG_LANDSCAPING, PAL_NONE, STR_LANDSCAPING_MENU_LANDSCAPING, 0, false));
 	list.push_back(MakeDropDownListIconItem(SPR_IMG_PLANTTREES, PAL_NONE, STR_LANDSCAPING_MENU_PLANT_TREES, 1, false));
 	list.push_back(MakeDropDownListIconItem(SPR_IMG_SIGN, PAL_NONE, STR_LANDSCAPING_MENU_PLACE_SIGN, 2, false));
-	ShowDropDownList(w, std::move(list), 0, WID_TN_LANDSCAPE, 100, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, std::move(list), 0, WID_TN_LANDSCAPE, 100, ToolbarDropdownMode());
 	return CBF_NONE;
 }
 
@@ -1170,6 +1150,11 @@ static void UsePickerTool(TileIndex tile)
 					ShowBuildRoadStopPickerAndSelect(station_type, GetRoadStopSpec(tile), HasRoadTypeRoad(tile) ? RTT_ROAD : RTT_TRAM);
 					break;
 
+				case StationType::Dock:
+				case StationType::Buoy:
+					ShowBuildDocksToolbarFromTile(tile);
+					break;
+
 				default:
 					break;
 			}
@@ -1186,9 +1171,27 @@ static void UsePickerTool(TileIndex tile)
 					ShowBuildRoadToolbarFromTile(tile);
 					break;
 
+				case TRANSPORT_WATER:
+					ShowBuildDocksToolbarFromTile(tile);
+					break;
+
 				default:
 					break;
 			}
+			break;
+
+		case MP_WATER:
+			/* Handle canals, rivers, and locks by opening the waterways toolbar.
+			 * Rivers only work if river building is enabled or in scenario editor. */
+			if (IsLock(tile) || IsCanal(tile)) {
+				ShowBuildDocksToolbarFromTile(tile);
+			} else if (IsRiver(tile) && (_settings_game.construction.enable_build_river || _game_mode == GM_EDITOR)) {
+				ShowBuildDocksToolbarFromTile(tile);
+			/* Depots for now only opens waterways toolbar like other depots */
+			} else if (GetWaterTileType(tile) == WATER_TILE_DEPOT) {
+				ShowBuildDocksToolbarFromTile(tile);
+			}
+			/* Sea & coast tiles are ignored*/
 			break;
 
 		case MP_OBJECT: {
@@ -1298,7 +1301,7 @@ void ToggleDirtyBlocks()
 }
 
 /**
- * Toggle drawing of widget outlihes.
+ * Toggle drawing of widget outlines.
  * @note has only an effect when newgrf_developer_tools are active.
  */
 void ToggleWidgetOutlines()
@@ -1349,7 +1352,7 @@ static CallBackFunction MenuClickHelp(int index)
 		case HME_PICKER:         return PlacePickerTool();
 		case HME_HELP:           ShowHelpWindow();                 break;
 		case HME_CONSOLE:        IConsoleSwitch();                 break;
-		case HME_SCRIPT_DEBUG:   ShowScriptDebugWindow(INVALID_COMPANY, _ctrl_pressed); break;
+		case HME_SCRIPT_DEBUG:   ShowScriptDebugWindow(CompanyID::Invalid(), _ctrl_pressed); break;
 		case HME_SCREENSHOT:     ShowScreenshotWindow();           break;
 		case HME_FRAMERATE:      ShowFramerateWindow();            break;
 		case HME_MODIFIER_KEYS:  ShowModifierKeyToggleWindow();    break;
@@ -1374,7 +1377,7 @@ static CallBackFunction ToolbarSwitchClick(Window *w)
 
 	w->ReInit();
 	w->SetWidgetLoweredState(_game_mode == GM_EDITOR ? (WidgetID)WID_TE_SWITCH_BAR : (WidgetID)WID_TN_SWITCH_BAR, _toolbar_mode == TB_LOWER);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	SndClickBeep();
 	return CBF_NONE;
 }
 
@@ -1385,8 +1388,7 @@ static CallBackFunction ToolbarSwitchClick(Window *w)
  */
 static CallBackFunction ToolbarScenDatePanel(Window *w)
 {
-	SetDParam(0, _settings_game.game_creation.starting_year);
-	ShowQueryString(STR_JUST_INT, STR_MAPGEN_START_DATE_QUERY_CAPT, 8, w, CS_NUMERAL, QSF_ENABLE_DEFAULT);
+	ShowQueryString(GetString(STR_JUST_INT, _settings_game.game_creation.starting_year), STR_MAPGEN_START_DATE_QUERY_CAPT, 8, w, CS_NUMERAL, QueryStringFlag::EnableDefault);
 	return CBF_NONE;
 }
 
@@ -1449,15 +1451,13 @@ static CallBackFunction ToolbarScenGenTown(int index)
 static CallBackFunction ToolbarScenGenIndustry(Window *w)
 {
 	w->HandleButtonClick(WID_TE_INDUSTRY);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
 	ShowBuildIndustryWindow();
 	return CBF_NONE;
 }
 
 static CallBackFunction ToolbarScenBuildRoadClick(Window *w)
 {
-	ShowDropDownList(w, GetScenRoadTypeDropDownList(RTTB_ROAD), _last_built_roadtype, WID_TE_ROADS, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, GetScenRoadTypeDropDownList(RTTB_ROAD), _last_built_roadtype, WID_TE_ROADS, 140, ToolbarDropdownMode());
 	return CBF_NONE;
 }
 
@@ -1476,8 +1476,7 @@ static CallBackFunction ToolbarScenBuildRoad(int index)
 
 static CallBackFunction ToolbarScenBuildTramClick(Window *w)
 {
-	ShowDropDownList(w, GetScenRoadTypeDropDownList(RTTB_TRAM), _last_built_tramtype, WID_TE_TRAMS, 140, DDMF_INSTANT_CLOSE);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+	ShowDropDownList(w, GetScenRoadTypeDropDownList(RTTB_TRAM), _last_built_tramtype, WID_TE_TRAMS, 140, ToolbarDropdownMode());
 	return CBF_NONE;
 }
 
@@ -1497,7 +1496,6 @@ static CallBackFunction ToolbarScenBuildTram(int index)
 static CallBackFunction ToolbarScenBuildDocks(Window *w)
 {
 	w->HandleButtonClick(WID_TE_WATER);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
 	ShowBuildDocksScenToolbar();
 	return CBF_NONE;
 }
@@ -1505,7 +1503,6 @@ static CallBackFunction ToolbarScenBuildDocks(Window *w)
 static CallBackFunction ToolbarScenPlantTrees(Window *w)
 {
 	w->HandleButtonClick(WID_TE_TREES);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
 	ShowBuildTreesToolbar();
 	return CBF_NONE;
 }
@@ -1513,7 +1510,6 @@ static CallBackFunction ToolbarScenPlantTrees(Window *w)
 static CallBackFunction ToolbarScenPlaceSign(Window *w)
 {
 	w->HandleButtonClick(WID_TE_SIGNS);
-	if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
 	return SelectSignTool();
 }
 
@@ -1560,7 +1556,7 @@ static MenuClickedProc * const _menu_clicked_procs[] = {
 /** Full blown container to make it behave exactly as we want :) */
 class NWidgetToolbarContainer : public NWidgetContainer {
 protected:
-	uint spacers;          ///< Number of spacer widgets in this toolbar
+	uint spacers = 0; ///< Number of spacer widgets in this toolbar
 
 public:
 	NWidgetToolbarContainer() : NWidgetContainer(NWID_HORIZONTAL)
@@ -1607,7 +1603,13 @@ public:
 				child_wid->current_x = child_wid->smallest_x;
 			}
 		}
-		_toolbar_width = nbuttons * this->smallest_x;
+
+		/* Exclude the switcher button which is not displayed when the toolbar fits the screen. When the switch is
+		 * displayed there will be no spacers anyway. */
+		--nbuttons;
+
+		/* Allow space for all buttons, and include spacers at quarter the width of buttons. */
+		_toolbar_width = nbuttons * this->smallest_x + this->spacers * this->smallest_x / 4;
 	}
 
 	void AssignSizePosition(SizingType sizing, int x, int y, uint given_width, uint given_height, bool rtl) override
@@ -1620,8 +1622,8 @@ public:
 		this->current_y = given_height;
 
 		/* Figure out what are the visible buttons */
-		uint arrangable_count, button_count, spacer_count;
-		const WidgetID *arrangement = GetButtonArrangement(given_width, arrangable_count, button_count, spacer_count);
+		uint arrangeable_count, button_count, spacer_count;
+		const WidgetID *arrangement = GetButtonArrangement(given_width, arrangeable_count, button_count, spacer_count);
 
 		/* Create us ourselves a quick lookup table from WidgetID to slot. */
 		std::map<WidgetID, uint> lookup;
@@ -1629,7 +1631,9 @@ public:
 			NWidgetBase *nwid = it->get();
 			nwid->current_x = 0; /* Hide widget, it will be revealed in the next step. */
 			if (nwid->type == NWID_SPACER) continue;
-			lookup[dynamic_cast<NWidgetCore *>(nwid)->GetIndex()] = std::distance(this->children.begin(), it);
+			NWidgetCore *nwc = dynamic_cast<NWidgetCore *>(nwid);
+			assert(nwc != nullptr);
+			lookup[nwc->GetIndex()] = std::distance(this->children.begin(), it);
 		}
 
 		/* Now assign the widgets to their rightful place */
@@ -1640,8 +1644,8 @@ public:
 		uint button_i = 0;
 
 		/* Index into the arrangement indices. */
-		const WidgetID *slotp = rtl ? &arrangement[arrangable_count - 1] : arrangement;
-		for (uint i = 0; i < arrangable_count; i++) {
+		const WidgetID *slotp = rtl ? &arrangement[arrangeable_count - 1] : arrangement;
+		for (uint i = 0; i < arrangeable_count; i++) {
 			uint slot = lookup[*slotp];
 			auto &child_wid = this->children[slot];
 			/* If we have space to give to the spacers, do that. */
@@ -1687,24 +1691,24 @@ public:
 	/**
 	 * Get the arrangement of the buttons for the toolbar.
 	 * @param width the new width of the toolbar.
-	 * @param arrangable_count output of the number of visible items.
+	 * @param arrangeable_count output of the number of visible items.
 	 * @param button_count output of the number of visible buttons.
 	 * @param spacer_count output of the number of spacers.
 	 * @return the button configuration.
 	 */
-	virtual const WidgetID *GetButtonArrangement(uint &width, uint &arrangable_count, uint &button_count, uint &spacer_count) const = 0;
+	virtual const WidgetID *GetButtonArrangement(uint &width, uint &arrangeable_count, uint &button_count, uint &spacer_count) const = 0;
 };
 
 /** Container for the 'normal' main toolbar */
 class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
-	const WidgetID *GetButtonArrangement(uint &width, uint &arrangable_count, uint &button_count, uint &spacer_count) const override
+	const WidgetID *GetButtonArrangement(uint &width, uint &arrangeable_count, uint &button_count, uint &spacer_count) const override
 	{
 		static const uint SMALLEST_ARRANGEMENT = 14;
 		static const uint BIGGEST_ARRANGEMENT  = 20;
 
 		/* The number of buttons of each row of the toolbar should match the number of items which we want to be visible.
-		 * The total number of buttons should be equal to arrangable_count * 2.
-		 * No bad things happen, but we could see strange behaviours if we have buttons < (arrangable_count * 2) like a
+		 * The total number of buttons should be equal to arrangeable_count * 2.
+		 * No bad things happen, but we could see strange behaviours if we have buttons < (arrangeable_count * 2) like a
 		 * pause button appearing on the right of the lower toolbar and weird resizing of the widgets even if there is
 		 * enough space.
 		 */
@@ -1723,7 +1727,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_AIR,
 			WID_TN_LANDSCAPE,
 			WID_TN_SWITCH_BAR,
-			// lower toolbar
+			/* lower toolbar */
 			WID_TN_SETTINGS,
 			WID_TN_SAVE,
 			WID_TN_SMALL_MAP,
@@ -1755,7 +1759,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
-			// lower toolbar
+			/* lower toolbar */
 			WID_TN_PAUSE,
 			WID_TN_SETTINGS,
 			WID_TN_SMALL_MAP,
@@ -1789,7 +1793,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
-			// lower toolbar
+			/* lower toolbar */
 			WID_TN_PAUSE,
 			WID_TN_FAST_FORWARD,
 			WID_TN_SAVE,
@@ -1825,7 +1829,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
-			// lower toolbar
+			/* lower toolbar */
 			WID_TN_PAUSE,
 			WID_TN_FAST_FORWARD,
 			WID_TN_SAVE,
@@ -1863,7 +1867,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
-			// lower toolbar
+			/* lower toolbar */
 			WID_TN_PAUSE,
 			WID_TN_FAST_FORWARD,
 			WID_TN_SAVE,
@@ -1903,7 +1907,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
-			// lower toolbar
+			/* lower toolbar */
 			WID_TN_PAUSE,
 			WID_TN_FAST_FORWARD,
 			WID_TN_SAVE,
@@ -1945,7 +1949,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
-			// lower toolbar
+			/* lower toolbar */
 			WID_TN_PAUSE,
 			WID_TN_FAST_FORWARD,
 			WID_TN_SAVE,
@@ -2003,7 +2007,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 		/* If at least BIGGEST_ARRANGEMENT fit, just spread all the buttons nicely */
 		uint full_buttons = std::max(CeilDiv(width, this->smallest_x), SMALLEST_ARRANGEMENT);
 		if (full_buttons > BIGGEST_ARRANGEMENT) {
-			button_count = arrangable_count = lengthof(arrange_all);
+			button_count = arrangeable_count = lengthof(arrange_all);
 			spacer_count = this->spacers;
 			return arrange_all;
 		}
@@ -2011,7 +2015,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 		/* Introduce the split toolbar */
 		static const WidgetID * const arrangements[] = { arrange14, arrange15, arrange16, arrange17, arrange18, arrange19, arrange20 };
 
-		button_count = arrangable_count = full_buttons;
+		button_count = arrangeable_count = full_buttons;
 		spacer_count = this->spacers;
 		return arrangements[full_buttons - SMALLEST_ARRANGEMENT] + ((_toolbar_mode == TB_LOWER) ? full_buttons : 0);
 	}
@@ -2019,24 +2023,25 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 
 /** Container for the scenario editor's toolbar */
 class NWidgetScenarioToolbarContainer : public NWidgetToolbarContainer {
-	uint panel_widths[2]; ///< The width of the two panels (the text panel and date panel)
+	std::array<uint, 2> panel_widths{}; ///< The width of the two panels (the text panel and date panel)
 
 	void SetupSmallestSize(Window *w) override
 	{
 		this->NWidgetToolbarContainer::SetupSmallestSize(w);
 
 		/* Find the size of panel_widths */
-		uint i = 0;
+		auto it = this->panel_widths.begin();
 		for (const auto &child_wid : this->children) {
 			if (child_wid->type == NWID_SPACER || this->IsButton(child_wid->type)) continue;
 
-			assert(i < lengthof(this->panel_widths));
-			this->panel_widths[i++] = child_wid->current_x;
+			assert(it != this->panel_widths.end());
+			*it = child_wid->current_x;
 			_toolbar_width += child_wid->current_x;
+			++it;
 		}
 	}
 
-	const WidgetID *GetButtonArrangement(uint &width, uint &arrangable_count, uint &button_count, uint &spacer_count) const override
+	const WidgetID *GetButtonArrangement(uint &width, uint &arrangeable_count, uint &button_count, uint &spacer_count) const override
 	{
 		static const WidgetID arrange_all[] = {
 			WID_TE_PAUSE,
@@ -2091,7 +2096,7 @@ class NWidgetScenarioToolbarContainer : public NWidgetToolbarContainer {
 			WID_TE_TREES,
 			WID_TE_SIGNS,
 			WID_TE_SWITCH_BAR,
-			// lower toolbar
+			/* lower toolbar */
 			WID_TE_PAUSE,
 			WID_TE_FAST_FORWARD,
 			WID_TE_SETTINGS,
@@ -2106,31 +2111,31 @@ class NWidgetScenarioToolbarContainer : public NWidgetToolbarContainer {
 		};
 
 		/* If we can place all buttons *and* the panels, show them. */
-		uint min_full_width = (lengthof(arrange_all) - lengthof(this->panel_widths)) * this->smallest_x + this->panel_widths[0] + this->panel_widths[1];
+		size_t min_full_width = (lengthof(arrange_all) - std::size(this->panel_widths)) * this->smallest_x + this->panel_widths[0] + this->panel_widths[1];
 		if (width >= min_full_width) {
 			width -= this->panel_widths[0] + this->panel_widths[1];
-			arrangable_count = lengthof(arrange_all);
-			button_count = arrangable_count - 2;
+			arrangeable_count = lengthof(arrange_all);
+			button_count = arrangeable_count - 2;
 			spacer_count = this->spacers;
 			return arrange_all;
 		}
 
 		/* Otherwise don't show the date panel and if we can't fit half the buttons and the panels anymore, split the toolbar in two */
-		uint min_small_width = (lengthof(arrange_switch) - lengthof(this->panel_widths)) * this->smallest_x / 2 + this->panel_widths[1];
+		size_t min_small_width = (lengthof(arrange_switch) - std::size(this->panel_widths)) * this->smallest_x / 2 + this->panel_widths[1];
 		if (width > min_small_width) {
 			width -= this->panel_widths[1];
-			arrangable_count = lengthof(arrange_nopanel);
-			button_count = arrangable_count - 1;
+			arrangeable_count = lengthof(arrange_nopanel);
+			button_count = arrangeable_count - 1;
 			spacer_count = this->spacers - 1;
 			return arrange_nopanel;
 		}
 
 		/* Split toolbar */
 		width -= this->panel_widths[1];
-		arrangable_count = lengthof(arrange_switch) / 2;
-		button_count = arrangable_count - 1;
+		arrangeable_count = lengthof(arrange_switch) / 2;
+		button_count = arrangeable_count - 1;
 		spacer_count = 0;
-		return arrange_switch + ((_toolbar_mode == TB_LOWER) ? arrangable_count : 0);
+		return arrange_switch + ((_toolbar_mode == TB_LOWER) ? arrangeable_count : 0);
 	}
 };
 
@@ -2174,12 +2179,13 @@ static ToolbarButtonProc * const _toolbar_button_procs[] = {
 
 /** Main toolbar. */
 struct MainToolbarWindow : Window {
-	GUITimer timer;
+	GUITimer timer{};
 
 	MainToolbarWindow(WindowDesc &desc) : Window(desc)
 	{
 		MainToolbarScaleAdjuster scale_adjust;
 
+		this->invalidation_policy = WindowInvalidationPolicy::NoQueue;
 		this->InitNested(0);
 
 		_last_started_action = CBF_NONE;
@@ -2191,11 +2197,11 @@ struct MainToolbarWindow : Window {
 		this->timer.SetInterval(MILLISECONDS_PER_TICK);
 	}
 
-	void FindWindowPlacementAndResize([[maybe_unused]] int def_width, [[maybe_unused]] int def_height) override
+	void FindWindowPlacementAndResize(int, int def_height, bool allow_resize) override
 	{
 		MainToolbarScaleAdjuster scale_adjust;
 
-		Window::FindWindowPlacementAndResize(_toolbar_width, def_height);
+		Window::FindWindowPlacementAndResize(_toolbar_width, def_height, allow_resize);
 	}
 
 	void OnPaint() override
@@ -2222,7 +2228,7 @@ struct MainToolbarWindow : Window {
 		if (_game_mode != GM_MENU && !this->IsWidgetDisabled(widget)) _toolbar_button_procs[widget](this);
 	}
 
-	void OnDropdownSelect(WidgetID widget, int index) override
+	void OnDropdownSelect(WidgetID widget, int index, int) override
 	{
 		CallBackFunction cbf = _menu_clicked_procs[widget](index);
 		if (cbf != CBF_NONE) _last_started_action = cbf;
@@ -2319,7 +2325,7 @@ struct MainToolbarWindow : Window {
 		if (!this->timer.Elapsed(delta_ms)) return;
 		this->timer.SetInterval(MILLISECONDS_PER_TICK);
 
-		if (this->IsWidgetLowered(WID_TN_PAUSE) != !!_pause_mode) {
+		if (this->IsWidgetLowered(WID_TN_PAUSE) != _pause_mode.Any()) {
 			this->ToggleWidgetLoweredState(WID_TN_PAUSE);
 			this->SetWidgetDirty(WID_TN_PAUSE);
 		}
@@ -2327,15 +2333,6 @@ struct MainToolbarWindow : Window {
 		if (this->IsWidgetLowered(WID_TN_FAST_FORWARD) != (_game_speed != 100)) {
 			this->ToggleWidgetLoweredState(WID_TN_FAST_FORWARD);
 			this->SetWidgetDirty(WID_TN_FAST_FORWARD);
-		}
-	}
-
-	void OnTimeout() override
-	{
-		/* We do not want to automatically raise the pause, fast forward and
-		 * switchbar buttons; they have to stay down when pressed etc. */
-		for (WidgetID i = WID_TN_SETTINGS; i < WID_TN_SWITCH_BAR; i++) {
-			this->RaiseWidgetWhenLowered(i);
 		}
 	}
 
@@ -2414,43 +2411,43 @@ HotkeyList MainToolbarWindow::hotkeys("maintoolbar", maintoolbar_hotkeys);
 static std::unique_ptr<NWidgetBase> MakeMainToolbar()
 {
 	/** Sprites to use for the different toolbar buttons */
-	static const SpriteID toolbar_button_sprites[] = {
-		SPR_IMG_PAUSE,           // WID_TN_PAUSE
-		SPR_IMG_FASTFORWARD,     // WID_TN_FAST_FORWARD
-		SPR_IMG_SETTINGS,        // WID_TN_SETTINGS
-		SPR_IMG_SAVE,            // WID_TN_SAVE
-		SPR_IMG_SMALLMAP,        // WID_TN_SMALL_MAP
-		SPR_IMG_TOWN,            // WID_TN_TOWNS
-		SPR_IMG_SUBSIDIES,       // WID_TN_SUBSIDIES
-		SPR_IMG_COMPANY_LIST,    // WID_TN_STATIONS
-		SPR_IMG_COMPANY_FINANCE, // WID_TN_FINANCES
-		SPR_IMG_COMPANY_GENERAL, // WID_TN_COMPANIES
-		SPR_IMG_STORY_BOOK,      // WID_TN_STORY
-		SPR_IMG_GOAL,            // WID_TN_GOAL
-		SPR_IMG_GRAPHS,          // WID_TN_GRAPHS
-		SPR_IMG_COMPANY_LEAGUE,  // WID_TN_LEAGUE
-		SPR_IMG_INDUSTRY,        // WID_TN_INDUSTRIES
-		SPR_IMG_TRAINLIST,       // WID_TN_TRAINS
-		SPR_IMG_TRUCKLIST,       // WID_TN_ROADVEHS
-		SPR_IMG_SHIPLIST,        // WID_TN_SHIPS
-		SPR_IMG_AIRPLANESLIST,   // WID_TN_AIRCRAFT
-		SPR_IMG_ZOOMIN,          // WID_TN_ZOOMIN
-		SPR_IMG_ZOOMOUT,         // WID_TN_ZOOMOUT
-		SPR_IMG_BUILDRAIL,       // WID_TN_RAILS
-		SPR_IMG_BUILDROAD,       // WID_TN_ROADS
-		SPR_IMG_BUILDTRAMS,      // WID_TN_TRAMS
-		SPR_IMG_BUILDWATER,      // WID_TN_WATER
-		SPR_IMG_BUILDAIR,        // WID_TN_AIR
-		SPR_IMG_LANDSCAPING,     // WID_TN_LANDSCAPE
-		SPR_IMG_MUSIC,           // WID_TN_MUSIC_SOUND
-		SPR_IMG_MESSAGES,        // WID_TN_MESSAGES
-		SPR_IMG_QUERY,           // WID_TN_HELP
-		SPR_IMG_SWITCH_TOOLBAR,  // WID_TN_SWITCH_BAR
+	static const std::tuple<WidgetID, WidgetType, SpriteID> toolbar_button_sprites[] = {
+		{WID_TN_PAUSE,        WWT_IMGBTN,     SPR_IMG_PAUSE},
+		{WID_TN_FAST_FORWARD, WWT_IMGBTN,     SPR_IMG_FASTFORWARD},
+		{WID_TN_SETTINGS,     WWT_IMGBTN,     SPR_IMG_SETTINGS},
+		{WID_TN_SAVE,         WWT_IMGBTN_2,   SPR_IMG_SAVE},
+		{WID_TN_SMALL_MAP,    WWT_IMGBTN,     SPR_IMG_SMALLMAP},
+		{WID_TN_TOWNS,        WWT_IMGBTN,     SPR_IMG_TOWN},
+		{WID_TN_SUBSIDIES,    WWT_IMGBTN,     SPR_IMG_SUBSIDIES},
+		{WID_TN_STATIONS,     WWT_IMGBTN,     SPR_IMG_COMPANY_LIST},
+		{WID_TN_FINANCES,     WWT_IMGBTN,     SPR_IMG_COMPANY_FINANCE},
+		{WID_TN_COMPANIES,    WWT_IMGBTN,     SPR_IMG_COMPANY_GENERAL},
+		{WID_TN_STORY,        WWT_IMGBTN,     SPR_IMG_STORY_BOOK},
+		{WID_TN_GOAL,         WWT_IMGBTN,     SPR_IMG_GOAL},
+		{WID_TN_GRAPHS,       WWT_IMGBTN,     SPR_IMG_GRAPHS},
+		{WID_TN_LEAGUE,       WWT_IMGBTN,     SPR_IMG_COMPANY_LEAGUE},
+		{WID_TN_INDUSTRIES,   WWT_IMGBTN,     SPR_IMG_INDUSTRY},
+		{WID_TN_TRAINS,       WWT_IMGBTN,     SPR_IMG_TRAINLIST},
+		{WID_TN_ROADVEHS,     WWT_IMGBTN,     SPR_IMG_TRUCKLIST},
+		{WID_TN_SHIPS,        WWT_IMGBTN,     SPR_IMG_SHIPLIST},
+		{WID_TN_AIRCRAFT,     WWT_IMGBTN,     SPR_IMG_AIRPLANESLIST},
+		{WID_TN_ZOOM_IN,      WWT_PUSHIMGBTN, SPR_IMG_ZOOMIN},
+		{WID_TN_ZOOM_OUT,     WWT_PUSHIMGBTN, SPR_IMG_ZOOMOUT},
+		{WID_TN_RAILS,        WWT_IMGBTN,     SPR_IMG_BUILDRAIL},
+		{WID_TN_ROADS,        WWT_IMGBTN,     SPR_IMG_BUILDROAD},
+		{WID_TN_TRAMS,        WWT_IMGBTN,     SPR_IMG_BUILDTRAMS},
+		{WID_TN_WATER,        WWT_IMGBTN,     SPR_IMG_BUILDWATER},
+		{WID_TN_AIR,          WWT_IMGBTN,     SPR_IMG_BUILDAIR},
+		{WID_TN_LANDSCAPE,    WWT_IMGBTN,     SPR_IMG_LANDSCAPING},
+		{WID_TN_MUSIC_SOUND,  WWT_IMGBTN,     SPR_IMG_MUSIC},
+		{WID_TN_MESSAGES,     WWT_IMGBTN,     SPR_IMG_MESSAGES},
+		{WID_TN_HELP,         WWT_IMGBTN,     SPR_IMG_QUERY},
+		{WID_TN_SWITCH_BAR,   WWT_IMGBTN,     SPR_IMG_SWITCH_TOOLBAR},
 	};
 
 	auto hor = std::make_unique<NWidgetMainToolbarContainer>();
-	for (WidgetID i = 0; i < WID_TN_END; i++) {
-		switch (i) {
+	for (const auto &[widget, tp, sprite] : toolbar_button_sprites) {
+		switch (widget) {
 			case WID_TN_SMALL_MAP:
 			case WID_TN_FINANCES:
 			case WID_TN_VEHICLE_START:
@@ -2460,7 +2457,7 @@ static std::unique_ptr<NWidgetBase> MakeMainToolbar()
 				hor->Add(std::make_unique<NWidgetSpacer>(0, 0));
 				break;
 		}
-		auto leaf = std::make_unique<NWidgetLeaf>(i == WID_TN_SAVE ? WWT_IMGBTN_2 : WWT_IMGBTN, COLOUR_GREY, i, WidgetData{.sprite = toolbar_button_sprites[i]}, STR_TOOLBAR_TOOLTIP_PAUSE_GAME + i);
+		auto leaf = std::make_unique<NWidgetLeaf>(tp, COLOUR_GREY, widget, WidgetData{.sprite = sprite}, STR_TOOLBAR_TOOLTIP_PAUSE_GAME + widget);
 		leaf->SetMinimalSize(20, 20);
 		hor->Add(std::move(leaf));
 	}
@@ -2564,12 +2561,13 @@ enum MainToolbarEditorHotkeys : int32_t {
 };
 
 struct ScenarioEditorToolbarWindow : Window {
-	GUITimer timer;
+	GUITimer timer{};
 
 	ScenarioEditorToolbarWindow(WindowDesc &desc) : Window(desc)
 	{
 		MainToolbarScaleAdjuster scale_adjust;
 
+		this->invalidation_policy = WindowInvalidationPolicy::NoQueue;
 		this->InitNested(0);
 
 		_last_started_action = CBF_NONE;
@@ -2580,11 +2578,11 @@ struct ScenarioEditorToolbarWindow : Window {
 		this->timer.SetInterval(MILLISECONDS_PER_TICK);
 	}
 
-	void FindWindowPlacementAndResize([[maybe_unused]] int def_width, [[maybe_unused]] int def_height) override
+	void FindWindowPlacementAndResize(int, int def_height, bool allow_resize) override
 	{
 		MainToolbarScaleAdjuster scale_adjust;
 
-		Window::FindWindowPlacementAndResize(_toolbar_width, def_height);
+		Window::FindWindowPlacementAndResize(_toolbar_width, def_height, allow_resize);
 	}
 
 	void OnPaint() override
@@ -2593,18 +2591,20 @@ struct ScenarioEditorToolbarWindow : Window {
 
 		this->SetWidgetDisabledState(WID_TE_DATE_BACKWARD, _settings_game.game_creation.starting_year <= CalTime::MIN_YEAR);
 		this->SetWidgetDisabledState(WID_TE_DATE_FORWARD, _settings_game.game_creation.starting_year >= CalTime::MAX_YEAR);
-		this->SetWidgetDisabledState(WID_TE_ROADS, (GetRoadTypes(true) & ~_roadtypes_type) == ROADTYPES_NONE);
-		this->SetWidgetDisabledState(WID_TE_TRAMS, (GetRoadTypes(true) & _roadtypes_type) == ROADTYPES_NONE);
+		this->SetWidgetDisabledState(WID_TE_ROADS, !GetRoadTypes(true).Any(GetMaskForRoadTramType(RTT_ROAD)));
+		this->SetWidgetDisabledState(WID_TE_TRAMS, !GetRoadTypes(true).Any(GetMaskForRoadTramType(RTT_TRAM)));
 
 		this->DrawWidgets();
 	}
 
-	void SetStringParameters(WidgetID widget) const override
+	std::string GetWidgetString(WidgetID widget, StringID stringid) const override
 	{
 		switch (widget) {
 			case WID_TE_DATE:
-				SetDParam(0, CalTime::ConvertYMDToDate(_settings_game.game_creation.starting_year, 0, 1));
-				break;
+				return GetString(STR_JUST_DATE_LONG, CalTime::ConvertYMDToDate(_settings_game.game_creation.starting_year, 0, 1));
+
+			default:
+				return this->Window::GetWidgetString(widget, stringid);
 		}
 	}
 
@@ -2632,8 +2632,7 @@ struct ScenarioEditorToolbarWindow : Window {
 				break;
 
 			case WID_TE_DATE:
-				SetDParam(0, CalTime::ConvertYMDToDate(CalTime::MAX_YEAR, 0, 1));
-				size = GetStringBoundingBox(STR_JUST_DATE_LONG);
+				size = GetStringBoundingBox(GetString(STR_JUST_DATE_LONG, CalTime::ConvertYMDToDate(CalTime::MAX_YEAR, 0, 1)));
 				break;
 		}
 	}
@@ -2645,11 +2644,11 @@ struct ScenarioEditorToolbarWindow : Window {
 		if (cbf != CBF_NONE) _last_started_action = cbf;
 	}
 
-	void OnDropdownSelect(WidgetID widget, int index) override
+	void OnDropdownSelect(WidgetID widget, int index, int) override
 	{
 		CallBackFunction cbf = _scen_toolbar_dropdown_procs[widget](index);
 		if (cbf != CBF_NONE) _last_started_action = cbf;
-		if (_settings_client.sound.click_beep) SndPlayFx(SND_15_BEEP);
+		SndClickBeep();
 	}
 
 	EventState OnHotkey(int hotkey) override
@@ -2723,7 +2722,7 @@ struct ScenarioEditorToolbarWindow : Window {
 		if (!this->timer.Elapsed(delta_ms)) return;
 		this->timer.SetInterval(MILLISECONDS_PER_TICK);
 
-		if (this->IsWidgetLowered(WID_TE_PAUSE) != !!_pause_mode) {
+		if (this->IsWidgetLowered(WID_TE_PAUSE) != _pause_mode.Any()) {
 			this->ToggleWidgetLoweredState(WID_TE_PAUSE);
 			this->SetDirty();
 		}
@@ -2753,7 +2752,9 @@ struct ScenarioEditorToolbarWindow : Window {
 
 		CalTime::Year value;
 		if (!str->empty()) {
-			value = CalTime::Year{atoi(str->c_str())};
+			auto val = ParseInteger(*str, 10, true);
+			if (!val.has_value()) return;
+			value = static_cast<CalTime::Year>(*val);
 		} else {
 			/* An empty string means revert to the default */
 			value = CalTime::DEF_START_YEAR;
@@ -2806,7 +2807,7 @@ static constexpr NWidgetPart _nested_toolb_scen_inner_widgets[] = {
 	NWidget(WWT_PANEL, COLOUR_GREY, WID_TE_DATE_PANEL),
 		NWidget(NWID_HORIZONTAL), SetPIP(2, 2, 2), SetPadding(1),
 			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_DATE_BACKWARD), SetSpriteTip(SPR_ARROW_DOWN, STR_SCENEDIT_TOOLBAR_MOVE_THE_STARTING_DATE_BACKWARD_TOOLTIP), SetFill(0, 1),
-			NWidget(WWT_TEXT, INVALID_COLOUR, WID_TE_DATE), SetStringTip(STR_JUST_DATE_LONG, STR_SCENEDIT_TOOLBAR_SET_DATE_TOOLTIP), SetTextStyle(TC_WHITE), SetAlignment(SA_CENTER), SetFill(0, 1),
+			NWidget(WWT_TEXT, INVALID_COLOUR, WID_TE_DATE), SetToolTip(STR_SCENEDIT_TOOLBAR_SET_DATE_TOOLTIP), SetTextStyle(TC_WHITE), SetAlignment(SA_CENTER), SetFill(0, 1),
 			NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_DATE_FORWARD), SetSpriteTip(SPR_ARROW_UP, STR_SCENEDIT_TOOLBAR_MOVE_THE_STARTING_DATE_FORWARD_TOOLTIP), SetFill(0, 1),
 		EndContainer(),
 	EndContainer(),
@@ -2817,7 +2818,7 @@ static constexpr NWidgetPart _nested_toolb_scen_inner_widgets[] = {
 	NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_TE_ZOOM_OUT), SetSpriteTip(SPR_IMG_ZOOMOUT, STR_TOOLBAR_TOOLTIP_ZOOM_THE_VIEW_OUT),
 	NWidget(NWID_SPACER),
 	NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_TE_LAND_GENERATE), SetSpriteTip(SPR_IMG_LANDSCAPING, STR_SCENEDIT_TOOLBAR_LANDSCAPE_GENERATION_TOOLTIP),
-	NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_TE_TOWN_GENERATE), SetSpriteTip(SPR_IMG_TOWN, STR_SCENEDIT_TOOLBAR_TOWN_GENERATION_TOOLTIP),
+	NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_TOWN_GENERATE), SetSpriteTip(SPR_IMG_TOWN, STR_SCENEDIT_TOOLBAR_TOWN_GENERATION_TOOLTIP),
 	NWidget(WWT_PUSHIMGBTN, COLOUR_GREY, WID_TE_INDUSTRY), SetSpriteTip(SPR_IMG_INDUSTRY, STR_SCENEDIT_TOOLBAR_INDUSTRY_GENERATION_TOOLTIP),
 	NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_ROADS), SetSpriteTip(SPR_IMG_BUILDROAD, STR_SCENEDIT_TOOLBAR_ROAD_CONSTRUCTION_TOOLTIP),
 	NWidget(WWT_IMGBTN, COLOUR_GREY, WID_TE_TRAMS), SetSpriteTip(SPR_IMG_BUILDTRAMS, STR_SCENEDIT_TOOLBAR_TRAM_CONSTRUCTION_TOOLTIP),
@@ -2868,8 +2869,8 @@ MainToolbarScaleAdjuster::MainToolbarScaleAdjuster()
 		/* Bump scale to next integer multiple */
 		_gui_scale = Clamp(100 * ((_gui_scale / 100) + 1), MIN_INTERFACE_SCALE, MAX_INTERFACE_SCALE);
 
-		int8_t new_zoom = ScaleGUITrad(1) <= 1 ? ZOOM_LVL_NORMAL : ScaleGUITrad(1) >= 4 ? ZOOM_LVL_MIN : ZOOM_LVL_IN_2X;
-		_gui_zoom = static_cast<ZoomLevel>(Clamp(new_zoom, _settings_client.gui.zoom_min, _settings_client.gui.zoom_max));
+		ZoomLevel new_zoom = ScaleGUITrad(1) <= 1 ? ZoomLevel::Normal : ScaleGUITrad(1) >= 4 ? ZoomLevel::Min : ZoomLevel::In2x;
+		_gui_zoom = Clamp<ZoomLevel>(new_zoom, _settings_client.gui.zoom_min, _settings_client.gui.zoom_max);
 		SetupWidgetDimensions();
 	}
 }

@@ -29,7 +29,7 @@
 #	include <windows.h>
 #	include <bcrypt.h>
 #elif defined(__APPLE__) || defined(__NetBSD__) || defined(__FreeBSD__)
-// No includes required.
+/* No includes required. */
 #elif defined(__GLIBC__) && ((__GLIBC__ > 2) || ((__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 25)))
 #	include <sys/random.h>
 #elif defined(__EMSCRIPTEN__)
@@ -81,14 +81,21 @@ void Randomizer::SetSeed(uint32_t seed)
 void SetRandomSeed(uint32_t seed)
 {
 	_random.SetSeed(seed);
-	_interactive_random.SetSeed(seed * 0x1234567);
+}
+
+void InitialiseRandomSeeds()
+{
+	std::array<uint32_t, 2> random_seeds;
+	RandomBytesWithFallback({ reinterpret_cast<uint8_t *>(random_seeds.data()), std::span(random_seeds).size_bytes() });
+	_random.SetSeed(random_seeds[0]);
+	_interactive_random.SetSeed(random_seeds[1]);
 }
 
 #ifdef RANDOM_DEBUG
 uint32_t DoRandom(int line, const char *file)
 {
 	if (_networking && (!_network_server || (NetworkClientSocket::IsValidID(0) && NetworkClientSocket::Get(0)->status != NetworkClientSocket::STATUS_INACTIVE))) {
-		Debug(random, 0, "{}; {:04x}; {:02x}; {}:{}", debug_date_dumper().HexDate(), _frame_counter, (uint8_t)_current_company, file, line);
+		Debug(random, 0, "{}; {:04x}; {:02x}; {}:{}", debug_date_dumper().HexDate(), _frame_counter, _current_company, file, line);
 	}
 
 	return _random.Next();

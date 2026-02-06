@@ -43,7 +43,7 @@ static inline bool StoryPageElementTypeRequiresText(StoryPageElementType type)
 	return type == SPET_TEXT || type == SPET_LOCATION || type == SPET_GOAL || type == SPET_BUTTON_PUSH || type == SPET_BUTTON_TILE || type == SPET_BUTTON_VEHICLE;
 }
 
-/* static */ ScriptStoryPage::StoryPageID ScriptStoryPage::New(ScriptCompany::CompanyID company, Text *title)
+/* static */ StoryPageID ScriptStoryPage::New(ScriptCompany::CompanyID company, Text *title)
 {
 	ScriptObjectRef counter(title);
 
@@ -53,13 +53,13 @@ static inline bool StoryPageElementTypeRequiresText(StoryPageElementType type)
 	::CompanyID c = ScriptCompany::FromScriptCompanyID(company);
 
 	if (!ScriptObject::Command<CMD_CREATE_STORY_PAGE>::Do(&ScriptInstance::DoCommandReturnStoryPageID,
-		c, title != nullptr ? title->GetEncodedText() : std::string{})) return STORY_PAGE_INVALID;
+		c, title != nullptr ? title->GetEncodedText() : EncodedString{})) return STORY_PAGE_INVALID;
 
 	/* In case of test-mode, we return StoryPageID 0 */
-	return (ScriptStoryPage::StoryPageID)0;
+	return StoryPageID::Begin();
 }
 
-/* static */ ScriptStoryPage::StoryPageElementID ScriptStoryPage::NewElement(StoryPageID story_page_id, StoryPageElementType type, SQInteger reference, Text *text)
+/* static */ StoryPageElementID ScriptStoryPage::NewElement(StoryPageID story_page_id, StoryPageElementType type, SQInteger reference, Text *text)
 {
 	ScriptObjectRef counter(text);
 
@@ -68,15 +68,15 @@ static inline bool StoryPageElementTypeRequiresText(StoryPageElementType type)
 	EnforceDeityMode(STORY_PAGE_ELEMENT_INVALID);
 	EnforcePrecondition(STORY_PAGE_ELEMENT_INVALID, IsValidStoryPage(story_page_id));
 	EnforcePrecondition(STORY_PAGE_ELEMENT_INVALID, IsValidStoryPageElementType(type));
-	std::string encoded_text;
+	EncodedString encoded_text;
 	if (StoryPageElementTypeRequiresText(btype)) {
 		EnforcePrecondition(STORY_PAGE_ELEMENT_INVALID, text != nullptr);
 		encoded_text = text->GetEncodedText();
 		EnforcePreconditionEncodedText(STORY_PAGE_ELEMENT_INVALID, encoded_text);
 	}
 	EnforcePrecondition(STORY_PAGE_ELEMENT_INVALID, type != SPET_LOCATION || ::IsValidTile((::TileIndex)reference));
-	EnforcePrecondition(STORY_PAGE_ELEMENT_INVALID, type != SPET_GOAL || ScriptGoal::IsValidGoal((ScriptGoal::GoalID)reference));
-	EnforcePrecondition(STORY_PAGE_ELEMENT_INVALID, type != SPET_GOAL || !(StoryPage::Get(story_page_id)->company == INVALID_COMPANY && Goal::Get(reference)->company != INVALID_COMPANY));
+	EnforcePrecondition(STORY_PAGE_ELEMENT_INVALID, type != SPET_GOAL || ScriptGoal::IsValidGoal(static_cast<::GoalID>(reference)));
+	EnforcePrecondition(STORY_PAGE_ELEMENT_INVALID, type != SPET_GOAL || !(StoryPage::Get(story_page_id)->company == CompanyID::Invalid() && Goal::Get(reference)->company != CompanyID::Invalid()));
 
 	uint32_t refid = 0;
 	TileIndex reftile{};
@@ -103,7 +103,7 @@ static inline bool StoryPageElementTypeRequiresText(StoryPageElementType type)
 			encoded_text)) return STORY_PAGE_ELEMENT_INVALID;
 
 	/* In case of test-mode, we return StoryPageElementID 0 */
-	return (ScriptStoryPage::StoryPageElementID)0;
+	return StoryPageElementID::Begin();
 }
 
 /* static */ bool ScriptStoryPage::UpdateElement(StoryPageElementID story_page_element_id, SQInteger reference, Text *text)
@@ -117,15 +117,15 @@ static inline bool StoryPageElementTypeRequiresText(StoryPageElementType type)
 	const StoryPage *p = StoryPage::Get(pe->page);
 	::StoryPageElementType type = pe->type;
 
-	std::string encoded_text;
+	EncodedString encoded_text;
 	if (StoryPageElementTypeRequiresText(type)) {
 		EnforcePrecondition(false, text != nullptr);
 		encoded_text = text->GetEncodedText();
 		EnforcePreconditionEncodedText(false, encoded_text);
 	}
 	EnforcePrecondition(false, type != ::SPET_LOCATION || ::IsValidTile((::TileIndex)reference));
-	EnforcePrecondition(false, type != ::SPET_GOAL || ScriptGoal::IsValidGoal((ScriptGoal::GoalID)reference));
-	EnforcePrecondition(false, type != ::SPET_GOAL || !(p->company == INVALID_COMPANY && Goal::Get(reference)->company != INVALID_COMPANY));
+	EnforcePrecondition(false, type != ::SPET_GOAL || ScriptGoal::IsValidGoal(static_cast<::GoalID>(reference)));
+	EnforcePrecondition(false, type != ::SPET_GOAL || !(p->company == CompanyID::Invalid() && Goal::Get(reference)->company != CompanyID::Invalid()));
 
 	uint32_t refid = 0;
 	TileIndex reftile{};
@@ -169,7 +169,7 @@ static inline bool StoryPageElementTypeRequiresText(StoryPageElementType type)
 	EnforcePrecondition(false, IsValidStoryPage(story_page_id));
 	EnforceDeityMode(false);
 
-	return ScriptObject::Command<CMD_SET_STORY_PAGE_TITLE>::Do(story_page_id, title != nullptr ? title->GetEncodedText() : std::string{});
+	return ScriptObject::Command<CMD_SET_STORY_PAGE_TITLE>::Do(story_page_id, title != nullptr ? title->GetEncodedText() : EncodedString{});
 }
 
 /* static */ ScriptCompany::CompanyID ScriptStoryPage::GetCompany(StoryPageID story_page_id)

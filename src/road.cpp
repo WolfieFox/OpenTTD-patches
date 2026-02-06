@@ -147,7 +147,7 @@ bool HasRoadTypeAvail(const CompanyID company, RoadType roadtype)
 		 * The GS under deity mode, as well as anybody in the editor builds roads that are
 		 * owned by towns. So if a town may build it, it should be buildable by them too.
 		 */
-		bool available = (rti->flags & ROTFB_HIDDEN) == 0 || (rti->flags & ROTFB_TOWN_BUILD) != 0;
+		bool available = !rti->flags.Test(RoadTypeFlag::Hidden) || rti->flags.Test(RoadTypeFlag::TownBuild);
 		if (!available && (company == OWNER_TOWN || _game_mode == GM_EDITOR || _generating_world)) {
 			if (roadtype == GetTownRoadType()) return true;
 		}
@@ -155,13 +155,10 @@ bool HasRoadTypeAvail(const CompanyID company, RoadType roadtype)
 	} else {
 		const Company *c = Company::GetIfValid(company);
 		if (c == nullptr) return false;
-		return HasBit(c->avail_roadtypes & ~_roadtypes_hidden_mask, roadtype);
+		RoadTypes avail = c->avail_roadtypes;
+		avail.Reset(_roadtypes_hidden_mask);
+		return avail.Test(roadtype);
 	}
-}
-
-static RoadTypes GetMaskForRoadTramType(RoadTramType rtt)
-{
-	return rtt == RTT_TRAM ? _roadtypes_type : ~_roadtypes_type;
 }
 
 /**
@@ -171,7 +168,9 @@ static RoadTypes GetMaskForRoadTramType(RoadTramType rtt)
  */
 bool HasAnyRoadTypesAvail(CompanyID company, RoadTramType rtt)
 {
-	return (Company::Get(company)->avail_roadtypes & ~_roadtypes_hidden_mask & GetMaskForRoadTramType(rtt)) != ROADTYPES_NONE;
+	RoadTypes avail = Company::Get(company)->avail_roadtypes;
+	avail.Reset(_roadtypes_hidden_mask);
+	return avail.Any(GetMaskForRoadTramType(rtt));
 }
 
 /**
@@ -209,9 +208,9 @@ RoadTypes AddDateIntroducedRoadTypes(RoadTypes current, CalTime::Date date)
 
 		/* Have we introduced all required roadtypes? */
 		RoadTypes required = rti->introduction_required_roadtypes;
-		if ((rts & required) != required) continue;
+		if (!rts.All(required)) continue;
 
-		rts |= rti->introduces_roadtypes;
+		rts.Set(rti->introduces_roadtypes);
 	}
 
 	/* When we added roadtypes we need to run this method again; the added
@@ -227,19 +226,19 @@ RoadTypes AddDateIntroducedRoadTypes(RoadTypes current, CalTime::Date date)
  */
 RoadTypes GetCompanyRoadTypes(CompanyID company, bool introduces)
 {
-	RoadTypes rts = ROADTYPES_NONE;
+	RoadTypes rts{};
 
 	for (const Engine *e : Engine::IterateType(VEH_ROAD)) {
 		const EngineInfo *ei = &e->info;
 
-		if (HasBit(ei->climates, _settings_game.game_creation.landscape) &&
-				(HasBit(e->company_avail, company) || CalTime::CurDate() >= e->intro_date + DAYS_IN_YEAR)) {
-			const RoadVehicleInfo *rvi = &e->u.road;
+		if (ei->climates.Test(_settings_game.game_creation.landscape) &&
+				(e->company_avail.Test(company) || CalTime::CurDate() >= e->intro_date + DAYS_IN_YEAR)) {
+			const RoadVehicleInfo *rvi = &e->VehInfo<RoadVehicleInfo>();
 			assert(rvi->roadtype < ROADTYPE_END);
 			if (introduces) {
-				rts |= GetRoadTypeInfo(rvi->roadtype)->introduces_roadtypes;
+				rts.Set(GetRoadTypeInfo(rvi->roadtype)->introduces_roadtypes);
 			} else {
-				SetBit(rts, rvi->roadtype);
+				rts.Set(rvi->roadtype);
 			}
 		}
 	}
@@ -255,18 +254,18 @@ RoadTypes GetCompanyRoadTypes(CompanyID company, bool introduces)
  */
 RoadTypes GetRoadTypes(bool introduces)
 {
-	RoadTypes rts = ROADTYPES_NONE;
+	RoadTypes rts{};
 
 	for (const Engine *e : Engine::IterateType(VEH_ROAD)) {
 		const EngineInfo *ei = &e->info;
-		if (!HasBit(ei->climates, _settings_game.game_creation.landscape)) continue;
+		if (!ei->climates.Test(_settings_game.game_creation.landscape)) continue;
 
-		const RoadVehicleInfo *rvi = &e->u.road;
+		const RoadVehicleInfo *rvi = &e->VehInfo<RoadVehicleInfo>();
 		assert(rvi->roadtype < ROADTYPE_END);
 		if (introduces) {
-			rts |= GetRoadTypeInfo(rvi->roadtype)->introduces_roadtypes;
+			rts.Set(GetRoadTypeInfo(rvi->roadtype)->introduces_roadtypes);
 		} else {
-			SetBit(rts, rvi->roadtype);
+			rts.Set(rvi->roadtype);
 		}
 	}
 
@@ -378,7 +377,9 @@ static TileIndex BuildTunnel(PathNode *current, TileIndex end_tile = INVALID_TIL
 	assert(!build_tunnel || (IsValidTile(end_tile) && GetTileSlope(start_tile) == ComplementSlope(GetTileSlope(end_tile))));
 
 	Backup cur_company(_current_company, OWNER_DEITY, FILE_LINE);
-	const CommandCost build_tunnel_cmd = CmdBuildTunnel(DC_AUTO | (build_tunnel ? DC_EXEC : DC_NONE), start_tile, TRANSPORT_ROAD, _public_road_type);
+	DoCommandFlags flags{DoCommandFlag::Auto};
+	if (build_tunnel) flags.Set(DoCommandFlag::Execute);
+	const CommandCost build_tunnel_cmd = CmdBuildTunnel(flags, start_tile, TRANSPORT_ROAD, _public_road_type);
 	cur_company.Restore();
 
 	assert(!build_tunnel || build_tunnel_cmd.Succeeded());
@@ -408,7 +409,9 @@ static TileIndex BuildBridge(const TileIndex start_tile, const TileIndex end_til
 	const auto bridge_type = available_bridge_types[build_bridge ? RandomRange((uint32_t)available_bridge_types.size()) : 0];
 
 	Backup cur_company(_current_company, OWNER_DEITY, FILE_LINE);
-	const CommandCost  build_bridge_cmd = CmdBuildBridge(DC_AUTO | (build_bridge ? DC_EXEC : DC_NONE), end_tile, start_tile, TRANSPORT_ROAD, bridge_type, _public_road_type, BuildBridgeFlags::None);
+	DoCommandFlags flags{DoCommandFlag::Auto};
+	if (build_bridge) flags.Set(DoCommandFlag::Execute);
+	const CommandCost  build_bridge_cmd = CmdBuildBridge(flags, end_tile, start_tile, TRANSPORT_ROAD, bridge_type, _public_road_type, BuildBridgeFlags::None);
 	cur_company.Restore();
 
 	assert(!build_bridge || build_bridge_cmd.Succeeded());
@@ -423,6 +426,7 @@ static TileIndex DryRunBuildBridge(const TileIndex start_tile)
 {
 	const DiagDirection direction = ReverseDiagDir(GetInclinedSlopeDirection(GetTileSlope(start_tile)));
 
+	const auto [start_slope, start_z] = GetTileSlopeZ(start_tile);
 	TileIndex tile = start_tile + TileOffsByDiagDir(direction);
 	const bool is_over_water = IsValidTile(tile) && IsTileType(tile, MP_WATER) && IsSea(tile);
 	uint bridge_length = 0;
@@ -430,28 +434,25 @@ static TileIndex DryRunBuildBridge(const TileIndex start_tile)
 
 	TileIndex end_tile = INVALID_TILE;
 
-	// We are not building yet, so we still need to find the end_tile.
-	for (;
-		IsValidTile(tile) &&
-		(bridge_length <= bridge_length_limit) &&
-		(GetTileZ(start_tile) < (GetTileZ(tile) + _settings_game.construction.max_bridge_height)) &&
-		(GetTileZ(tile) <= GetTileZ(start_tile));
-		tile += TileOffsByDiagDir(direction), bridge_length++) {
+	/* We are not building yet, so we still need to find the end_tile. */
+	while (true) {
+		if (!IsValidTile(tile)) break;
+		if (bridge_length < bridge_length_limit) break;
+		const auto [tile_slope, tile_z] = GetTileSlopeZ(tile);
+		if (start_z >= (tile_z + _settings_game.construction.max_bridge_height)) break;
+		if (GetTileZ(tile) > start_z) break;
 
-		auto is_complementary_slope =
-			!IsSteepSlope(GetTileSlope(tile)) &&
-			!IsHalftileSlope(GetTileSlope(tile)) &&
-			GetTileSlope(start_tile) == ComplementSlope(GetTileSlope(tile));
-
-		// No super-short bridges and always ending up on a matching upwards slope.
-		if (!AreTilesAdjacent(start_tile, tile) && is_complementary_slope) {
+		/* No super-short bridges and always ending up on a matching upwards slope. */
+		if (!AreTilesAdjacent(start_tile, tile) && !IsSteepSlope(tile_slope) && !IsHalftileSlope(tile_slope) && start_slope == ComplementSlope(tile_slope)) {
 			end_tile = tile;
 			break;
 		}
+
+		tile += TileOffsByDiagDir(direction);
+		bridge_length++;
 	}
 
 	if (!IsValidTile(end_tile)) return INVALID_TILE;
-	if (GetTileSlope(start_tile) != ComplementSlope(GetTileSlope(end_tile))) return INVALID_TILE;
 	if (!IsTileType(end_tile, MP_CLEAR) && !IsTileType(end_tile, MP_TREES) && !IsCoastTile(end_tile)) return INVALID_TILE;
 
 	return BuildBridge(start_tile, end_tile, false);
@@ -463,28 +464,28 @@ static TileIndex BuildRiverBridge(PathNode *current, const DiagDirection road_di
 	const int start_tile_z = GetTileMaxZ(start_tile);
 
 	if (!build_bridge) {
-		// We are not building yet, so we still need to find the end_tile.
-		// We will only build a bridge if we need to cross a river, so first check for that.
+		/* We are not building yet, so we still need to find the end_tile.
+		 * We will only build a bridge if we need to cross a river, so first check for that. */
 		TileIndex tile = start_tile + TileOffsByDiagDir(road_direction);
 
 		if (!IsWaterTile(tile) || !IsRiver(tile)) return INVALID_TILE;
 
-		// Now let's see if we can bridge it. But don't bridge anything more than 4 river tiles. Cities aren't allowed to, so public roads we are not either.
-		// Only bridges starting at slopes should be longer ones. The others look like crap when built this way. Players can build them but the map generator
-		// should not force that on them. This is just to bridge rivers, not to make long bridges.
-		for (;
-			IsValidTile(tile) &&
-			(GetTunnelBridgeLength(start_tile, tile) <= std::min(_settings_game.construction.max_bridge_length, (uint16_t)3)) &&
-			(start_tile_z < (GetTileZ(tile) + _settings_game.construction.max_bridge_height)) &&
-			(GetTileZ(tile) <= start_tile_z);
-			tile += TileOffsByDiagDir(road_direction)) {
+		/* Now let's see if we can bridge it. But don't bridge anything more than 4 river tiles. Cities aren't allowed to, so public roads we are not either.
+		 * Only bridges starting at slopes should be longer ones. The others look like crap when built this way. Players can build them but the map generator
+		 * should not force that on them. This is just to bridge rivers, not to make long bridges. */
+		while (true) {
+			if (!IsValidTile(tile)) break;
+			if (GetTunnelBridgeLength(start_tile, tile) > std::min<uint16_t>(_settings_game.construction.max_bridge_length, 3)) break;
+			const int tile_z = GetTileZ(tile);
+			if (start_tile_z >= (tile_z + _settings_game.construction.max_bridge_height)) break;
+			if (tile_z > start_tile_z) break;
 
-			if ((IsTileType(tile, MP_CLEAR) || IsTileType(tile, MP_TREES) || IsCoastTile(tile)) &&
-					GetTileZ(tile) <= start_tile_z &&
-					IsSufficientlyFlatSlope(GetTileSlope(tile))) {
+			if ((IsTileType(tile, MP_CLEAR) || IsTileType(tile, MP_TREES) || IsCoastTile(tile)) && IsSufficientlyFlatSlope(GetTileSlope(tile))) {
 				end_tile = tile;
 				break;
 			}
+
+			tile += TileOffsByDiagDir(road_direction);
 		}
 
 		if (!IsValidTile(end_tile)) return INVALID_TILE;
@@ -505,7 +506,9 @@ static TileIndex BuildRiverBridge(PathNode *current, const DiagDirection road_di
 	const auto bridge_type = available_bridge_types[build_bridge ? RandomRange((uint32_t)available_bridge_types.size()) : 0];
 
 	Backup cur_company(_current_company, OWNER_DEITY, FILE_LINE);
-	const CommandCost  build_bridge_cmd = CmdBuildBridge(DC_AUTO | (build_bridge ? DC_EXEC : DC_NONE), end_tile, start_tile, TRANSPORT_ROAD, bridge_type, _public_road_type, BuildBridgeFlags::None);
+	DoCommandFlags flags{DoCommandFlag::Auto};
+	if (build_bridge) flags.Set(DoCommandFlag::Execute);
+	const CommandCost  build_bridge_cmd = CmdBuildBridge(flags, end_tile, start_tile, TRANSPORT_ROAD, bridge_type, _public_road_type, BuildBridgeFlags::None);
 	cur_company.Restore();
 
 	assert(!build_bridge || build_bridge_cmd.Succeeded());
@@ -811,7 +814,7 @@ static void PublicRoad_FoundEndNode(AyStar *aystar, OpenListNode *current)
 
 				if (IsNormalRoadTile(tile)) {
 					const RoadBits existing_bits = GetRoadBits(tile, RTT_ROAD);
-					CLRBITS(road_bits, existing_bits);
+					road_bits &= ~existing_bits;
 					if (road_bits == ROAD_NONE) need_to_build_road = false;
 				} else if (MayHaveRoad(tile)) {
 					/* Tile already has road which can't be modified: level crossings, depots, drive-through stops, etc */
@@ -821,7 +824,7 @@ static void PublicRoad_FoundEndNode(AyStar *aystar, OpenListNode *current)
 				// If it is already a road and has the right bits, we are good. Otherwise build the needed ones.
 				if (need_to_build_road) {
 					Backup cur_company(_current_company, OWNER_DEITY, FILE_LINE);
-					CmdBuildRoad(DC_EXEC, tile, road_bits, _public_road_type, DRD_NONE, INVALID_TOWN, BuildRoadFlags::None);
+					CmdBuildRoad(DoCommandFlag::Execute, tile, road_bits, _public_road_type, DRD_NONE, TownID::Invalid(), BuildRoadFlags::None);
 					cur_company.Restore();
 				}
 			}

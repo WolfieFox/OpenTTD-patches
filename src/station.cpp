@@ -62,10 +62,10 @@ BaseStation::~BaseStation()
 {
 	if (CleaningPool()) return;
 
-	CloseWindowById(WC_TRAINS_LIST,   VehicleListIdentifier(VL_STATION_LIST, VEH_TRAIN,    this->owner, this->index).Pack());
-	CloseWindowById(WC_ROADVEH_LIST,  VehicleListIdentifier(VL_STATION_LIST, VEH_ROAD,     this->owner, this->index).Pack());
-	CloseWindowById(WC_SHIPS_LIST,    VehicleListIdentifier(VL_STATION_LIST, VEH_SHIP,     this->owner, this->index).Pack());
-	CloseWindowById(WC_AIRCRAFT_LIST, VehicleListIdentifier(VL_STATION_LIST, VEH_AIRCRAFT, this->owner, this->index).Pack());
+	CloseWindowById(WC_TRAINS_LIST,   VehicleListIdentifier(VL_STATION_LIST, VEH_TRAIN,    this->owner, this->index).ToWindowNumber());
+	CloseWindowById(WC_ROADVEH_LIST,  VehicleListIdentifier(VL_STATION_LIST, VEH_ROAD,     this->owner, this->index).ToWindowNumber());
+	CloseWindowById(WC_SHIPS_LIST,    VehicleListIdentifier(VL_STATION_LIST, VEH_SHIP,     this->owner, this->index).ToWindowNumber());
+	CloseWindowById(WC_AIRCRAFT_LIST, VehicleListIdentifier(VL_STATION_LIST, VEH_AIRCRAFT, this->owner, this->index).ToWindowNumber());
 	CloseWindowById(WC_STATION_CARGO, this->index);
 
 	extern void CloseStationDeparturesWindow(StationID station);
@@ -107,25 +107,25 @@ Station::~Station()
 
 	for (Aircraft *a : Aircraft::Iterate()) {
 		if (!a->IsNormalAircraft()) continue;
-		if (a->targetairport == this->index) a->targetairport = INVALID_STATION;
+		if (a->targetairport == this->index) a->targetairport = StationID::Invalid();
 	}
 
-	for (CargoType c = 0; c < NUM_CARGO; ++c) {
-		LinkGraph *lg = LinkGraph::GetIfValid(this->goods[c].link_graph);
+	for (CargoType cargo = 0; cargo < NUM_CARGO; ++cargo) {
+		LinkGraph *lg = LinkGraph::GetIfValid(this->goods[cargo].link_graph);
 		if (lg == nullptr) continue;
 
 		for (NodeID node = 0; node < lg->Size(); ++node) {
 			Station *st = Station::Get((*lg)[node].Station());
-			GoodsEntryData *ged = st->goods[c].data.get();
+			GoodsEntryData *ged = st->goods[cargo].data.get();
 			if (ged != nullptr) ged->flows.erase(this->index);
-			if (lg->GetConstEdge(node, this->goods[c].node).LastUpdate() != EconTime::INVALID_DATE) {
+			if (lg->GetConstEdge(node, this->goods[cargo].node).LastUpdate() != EconTime::INVALID_DATE) {
 				if (ged != nullptr) ged->flows.DeleteFlows(this->index);
-				RerouteCargo(st, c, this->index, st->index);
+				RerouteCargo(st, cargo, this->index, st->index);
 			}
 		}
-		lg->RemoveNode(this->goods[c].node);
+		lg->RemoveNode(this->goods[cargo].node);
 		if (lg->Size() == 0) {
-			LinkGraphSchedule::instance.Unqueue(lg);
+			LinkGraphSchedule::instance.Dequeue(lg);
 			delete lg;
 		}
 	}
@@ -133,10 +133,10 @@ Station::~Station()
 	for (Vehicle *v : Vehicle::Iterate()) {
 		/* Forget about this station if this station is removed */
 		if (v->last_station_visited == this->index) {
-			v->last_station_visited = INVALID_STATION;
+			v->last_station_visited = StationID::Invalid();
 		}
 		if (v->last_loading_station == this->index) {
-			v->last_loading_station = INVALID_STATION;
+			v->last_loading_station = StationID::Invalid();
 		}
 	}
 
@@ -154,7 +154,7 @@ Station::~Station()
 	}
 
 	CloseWindowById(WC_STATION_VIEW, index);
-	DeleteNewGRFInspectWindow(GSF_FAKE_STATION_STRUCT, this->index);
+	DeleteNewGRFInspectWindow(GSF_FAKE_STATION_STRUCT, this->index.base());
 
 	/* Now delete all orders that go to the station */
 	RemoveOrderFromAllVehicles(OT_GOTO_STATION, this->index);
@@ -173,7 +173,7 @@ Station::~Station()
 	_station_kdtree.Remove(this->index);
 	if (_viewport_sign_kdtree_valid && this->sign.kdtree_valid) _viewport_sign_kdtree.Remove(ViewportSignKdtreeItem::MakeStation(this->index));
 
-	if (ShouldShowBaseStationViewportLabel(this)) this->sign.MarkDirty(ZOOM_LVL_DRAW_SPR);
+	if (ShouldShowBaseStationViewportLabel(this)) this->sign.MarkDirty(ZoomLevel::SpriteMax);
 }
 
 
@@ -243,11 +243,11 @@ RoadStop *Station::GetPrimaryRoadStop(const RoadVehicle *v) const
  */
 void Station::AddFacility(StationFacility new_facility_bit, TileIndex facil_xy)
 {
-	if (this->facilities == FACIL_NONE) {
+	if (this->facilities.None()) {
 		this->MoveSign(facil_xy);
 		this->random_bits = Random();
 	}
-	this->facilities |= new_facility_bit;
+	this->facilities.Set(new_facility_bit);
 	this->owner = _current_company;
 	this->build_date = CalTime::CurDate();
 	SetWindowClassesDirty(WC_VEHICLE_ORDERS);
@@ -419,7 +419,7 @@ bool Station::IsWithinRangeOfDockingTile(TileIndex tile, uint max_distance) cons
  */
 void Station::AddIndustryToDeliver(Industry *ind, TileIndex tile)
 {
-	/* Using DistanceMax to get about the same order as with previously used CircularTileSearch. */
+	/* Using DistanceMax to get about the same order as with previously used SpiralTileSequence. */
 	uint distance = DistanceMax(this->xy, tile);
 
 	/* Don't check further if this industry is already in the list but update the distance if it's closer */
@@ -756,7 +756,7 @@ Money AirportMaintenanceCost(Owner owner)
 	Money total_cost = 0;
 
 	for (const Station *st : Station::Iterate()) {
-		if (st->owner == owner && (st->facilities & FACIL_AIRPORT)) {
+		if (st->owner == owner && st->facilities.Test(StationFacility::Airport)) {
 			total_cost += _price[PR_INFRASTRUCTURE_AIRPORT] * st->airport.GetSpec()->maintenance_cost;
 		}
 	}

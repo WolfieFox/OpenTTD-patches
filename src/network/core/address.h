@@ -30,10 +30,10 @@ using SocketList = std::map<SOCKET, NetworkAddress>;    ///< Type for a mapping 
  */
 class NetworkAddress {
 private:
-	std::string hostname;     ///< The hostname
-	int address_length;       ///< The length of the resolved address
-	sockaddr_storage address; ///< The resolved address
-	bool resolved;            ///< Whether the address has been (tried to be) resolved
+	std::string hostname{}; ///< The hostname
+	int address_length{}; ///< The length of the resolved address
+	sockaddr_storage address{}; ///< The resolved address
+	bool resolved = false; ///< Whether the address has been (tried to be) resolved
 
 	/**
 	 * Helper function to resolve something to a socket.
@@ -61,12 +61,11 @@ public:
 	 * @param address The IP address with port.
 	 * @param address_length The length of the address.
 	 */
-	NetworkAddress(sockaddr *address, int address_length) :
+	NetworkAddress(const sockaddr *address, int address_length) :
 		address_length(address_length),
 		resolved(address_length != 0)
 	{
-		memset(&this->address, 0, sizeof(this->address));
-		memcpy(&this->address, address, address_length);
+		std::copy_n(reinterpret_cast<const std::byte *>(address), address_length, reinterpret_cast<std::byte *>(&this->address));
 	}
 
 	/**
@@ -84,8 +83,6 @@ public:
 			hostname.remove_suffix(1);
 		}
 		this->hostname = hostname;
-
-		memset(&this->address, 0, sizeof(this->address));
 		this->address.ss_family = family;
 		this->SetPort(port);
 	}
@@ -119,7 +116,7 @@ public:
 	}
 
 	bool IsFamily(int family);
-	bool IsInNetmask(const char *netmask);
+	bool IsInNetmask(std::string_view netmask);
 
 	/**
 	 * Compare the address of this class with the address of another.
@@ -154,35 +151,26 @@ public:
 	{
 		return const_cast<NetworkAddress*>(this)->CompareTo(address) == 0;
 	}
-	/**
-	 * Compare the address of this class with the address of another.
-	 * @param address the other address.
-	 * @return true if both do not match.
-	 */
-	bool operator != (NetworkAddress address) const
-	{
-		return const_cast<NetworkAddress*>(this)->CompareTo(address) != 0;
-	}
 
 	/**
 	 * Compare the address of this class with the address of another.
 	 * @param address the other address.
 	 */
-	bool operator < (NetworkAddress &address)
+	auto operator <=>(NetworkAddress &address)
 	{
-		return this->CompareTo(address) < 0;
+		return this->CompareTo(address) <=> 0;
 	}
 
 	void Listen(int socktype, SocketList *sockets);
 
-	static const char *SocketTypeAsString(int socktype);
-	static const char *AddressFamilyAsString(int family);
+	static std::string_view SocketTypeAsString(int socktype);
+	static std::string_view AddressFamilyAsString(int family);
 	static NetworkAddress GetPeerAddress(SOCKET sock);
 	static NetworkAddress GetSockAddress(SOCKET sock);
 	static const std::string GetPeerName(SOCKET sock);
 };
 
-struct FormatNetworkAddress : public fmt_formattable {
+struct FormatNetworkAddress {
 	NetworkAddress *addr;
 	bool with_family;
 
@@ -217,13 +205,13 @@ private:
 	 * @param type The type of the ServerAdress.
 	 * @param connection_string The connection_string that belongs to this ServerAddress type.
 	 */
-	ServerAddress(ServerAddressType type, const std::string &connection_string) : type(type), connection_string(connection_string) {}
+	ServerAddress(ServerAddressType type, std::string &&connection_string) : type(type), connection_string(std::move(connection_string)) {}
 
 public:
 	ServerAddressType type;        ///< The type of this ServerAddress.
 	std::string connection_string; ///< The connection string for this ServerAddress.
 
-	static ServerAddress Parse(const std::string &connection_string, uint16_t default_port, CompanyID *company_id = nullptr);
+	static ServerAddress Parse(std::string_view connection_string, uint16_t default_port, CompanyID *company_id = nullptr);
 };
 
 #endif /* NETWORK_CORE_ADDRESS_H */

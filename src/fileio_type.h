@@ -11,6 +11,7 @@
 #define FILEIO_TYPE_H
 
 #include "core/enum_type.hpp"
+#include "misc/autorelease.hpp"
 #include <optional>
 
 /** The different abstract types of files that the system knows about. */
@@ -20,10 +21,9 @@ enum AbstractFileType : uint8_t {
 	FT_SCENARIO,  ///< old or new scenario
 	FT_HEIGHTMAP, ///< heightmap file
 	FT_TOWN_DATA, ///< town data file
+	FT_ORDERLIST, ///< orderlist file
 
 	FT_INVALID = 7, ///< Invalid or unknown file type.
-	FT_NUMBITS = 3, ///< Number of bits required for storing a #AbstractFileType value.
-	FT_MASK = (1 << FT_NUMBITS) - 1, ///< Bitmask for extracting an abstract file type.
 };
 
 /** Kinds of files in each #AbstractFileType. */
@@ -35,6 +35,9 @@ enum DetailedFileType : uint8_t {
 	/* Heightmap files. */
 	DFT_HEIGHTMAP_BMP, ///< BMP file.
 	DFT_HEIGHTMAP_PNG, ///< PNG file.
+
+	/* Orderlist files */
+	DFT_ORDERLIST_JSON, ///< JSON file.
 
 	/* Town data files. */
 	DFT_TOWN_DATA_JSON,  ///< JSON file.
@@ -60,55 +63,30 @@ enum SaveLoadOperation : uint8_t {
 };
 
 /**
- * Construct an enum value for #FiosType as a combination of an abstract and a detailed file type.
- * @param abstract Abstract file type (one of #AbstractFileType).
- * @param detailed Detailed file type (one of #DetailedFileType).
- */
-#define MAKE_FIOS_TYPE(abstract, detailed) ((abstract) | ((detailed) << FT_NUMBITS))
-
-/**
  * Elements of a file system that are recognized.
- * Values are a combination of #AbstractFileType and #DetailedFileType.
- * @see GetAbstractFileType GetDetailedFileType
  */
-enum FiosType : uint16_t {
-	FIOS_TYPE_DRIVE  = MAKE_FIOS_TYPE(FT_NONE, DFT_FIOS_DRIVE),
-	FIOS_TYPE_PARENT = MAKE_FIOS_TYPE(FT_NONE, DFT_FIOS_PARENT),
-	FIOS_TYPE_DIR    = MAKE_FIOS_TYPE(FT_NONE, DFT_FIOS_DIR),
-	FIOS_TYPE_DIRECT = MAKE_FIOS_TYPE(FT_NONE, DFT_FIOS_DIRECT),
+struct FiosType {
+	AbstractFileType abstract; ///< Abstract file type.
+	DetailedFileType detailed; ///< Detailed file type.
 
-	FIOS_TYPE_FILE         = MAKE_FIOS_TYPE(FT_SAVEGAME, DFT_GAME_FILE),
-	FIOS_TYPE_OLDFILE      = MAKE_FIOS_TYPE(FT_SAVEGAME, DFT_OLD_GAME_FILE),
-	FIOS_TYPE_SCENARIO     = MAKE_FIOS_TYPE(FT_SCENARIO, DFT_GAME_FILE),
-	FIOS_TYPE_OLD_SCENARIO = MAKE_FIOS_TYPE(FT_SCENARIO, DFT_OLD_GAME_FILE),
-	FIOS_TYPE_PNG          = MAKE_FIOS_TYPE(FT_HEIGHTMAP, DFT_HEIGHTMAP_PNG),
-	FIOS_TYPE_BMP          = MAKE_FIOS_TYPE(FT_HEIGHTMAP, DFT_HEIGHTMAP_BMP),
-	FIOS_TYPE_JSON         = MAKE_FIOS_TYPE(FT_TOWN_DATA, DFT_TOWN_DATA_JSON),
-
-	FIOS_TYPE_INVALID = MAKE_FIOS_TYPE(FT_INVALID, DFT_INVALID),
+	constexpr bool operator==(const FiosType &) const noexcept = default;
 };
 
-#undef MAKE_FIOS_TYPE
+constexpr FiosType FIOS_TYPE_DRIVE{FT_NONE, DFT_FIOS_DRIVE};
+constexpr FiosType FIOS_TYPE_PARENT{FT_NONE, DFT_FIOS_PARENT};
+constexpr FiosType FIOS_TYPE_DIR{FT_NONE, DFT_FIOS_DIR};
+constexpr FiosType FIOS_TYPE_DIRECT{FT_NONE, DFT_FIOS_DIRECT};
 
-/**
- * Extract the abstract file type from a #FiosType.
- * @param fios_type Type to query.
- * @return The Abstract file type of the \a fios_type.
- */
-inline AbstractFileType GetAbstractFileType(FiosType fios_type)
-{
-	return static_cast<AbstractFileType>(static_cast<uint>(fios_type) & FT_MASK);
-}
+constexpr FiosType FIOS_TYPE_FILE{FT_SAVEGAME, DFT_GAME_FILE};
+constexpr FiosType FIOS_TYPE_OLDFILE{FT_SAVEGAME, DFT_OLD_GAME_FILE};
+constexpr FiosType FIOS_TYPE_SCENARIO{FT_SCENARIO, DFT_GAME_FILE};
+constexpr FiosType FIOS_TYPE_OLD_SCENARIO{FT_SCENARIO, DFT_OLD_GAME_FILE};
+constexpr FiosType FIOS_TYPE_PNG{FT_HEIGHTMAP, DFT_HEIGHTMAP_PNG};
+constexpr FiosType FIOS_TYPE_BMP{FT_HEIGHTMAP, DFT_HEIGHTMAP_BMP};
+constexpr FiosType FIOS_TYPE_ORDERLIST{FT_ORDERLIST, DFT_ORDERLIST_JSON};
+constexpr FiosType FIOS_TYPE_JSON{FT_TOWN_DATA, DFT_TOWN_DATA_JSON};
 
-/**
- * Extract the detailed file type from a #FiosType.
- * @param fios_type Type to query.
- * @return The Detailed file type of the \a fios_type.
- */
-inline DetailedFileType GetDetailedFileType(FiosType fios_type)
-{
-	return static_cast<DetailedFileType>(fios_type >> FT_NUMBITS);
-}
+constexpr FiosType FIOS_TYPE_INVALID{FT_INVALID, DFT_INVALID};
 
 /**
  * The different kinds of subdirectories OpenTTD uses
@@ -119,6 +97,7 @@ enum Subdirectory : uint8_t {
 	AUTOSAVE_DIR,  ///< Subdirectory of save for autosaves
 	SCENARIO_DIR,  ///< Base directory for all scenarios
 	HEIGHTMAP_DIR, ///< Subdirectory of scenario for heightmaps
+	ORDERLIST_DIR, ///< Subdirectort for all orderlists
 	OLD_GM_DIR,    ///< Old subdirectory for the music
 	OLD_DATA_DIR,  ///< Old subdirectory for the data.
 	BASESET_DIR,   ///< Subdirectory for all base data (base sets, intro game)
@@ -166,6 +145,13 @@ public:
 		return FileHandle::Open(filename.c_str(), mode);
 	}
 
+	template <typename T> requires std::is_same_v<T, std::string_view>
+	static std::optional<FileHandle> Open(T filename, const char *mode)
+	{
+		std::string filename_str(filename);
+		return FileHandle::Open(filename_str.c_str(), mode);
+	}
+
 	inline int Close()
 	{
 		if (this->f != nullptr) {
@@ -182,15 +168,7 @@ public:
 	}
 
 private:
-	/** Helper to close a FILE * with a \c std::unique_ptr. */
-	struct FileDeleter {
-		void operator ()(FILE *f)
-		{
-			if (f != nullptr) fclose(f);
-		}
-	};
-
-	std::unique_ptr<FILE, FileDeleter> f;
+	AutoRelease<FILE, fclose> f;
 
 	FileHandle(FILE *f) : f(f) { assert(this->f != nullptr); }
 };
