@@ -364,12 +364,12 @@ void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 
 		if (!u->IsArticulatedPart()) {
 			bool bTooWeedyToExist =
-				(rvi_u->power < (AverageLocomotivePower / 2))
-				&& rvi_u->power < 150;
+				(rvi_u.power < (AverageLocomotivePower / 2))
+				&& rvi_u.power < 150;
 
 			/* Do not count powered wagons for the compatible railtypes, as wagons always
 			   have railtype normal */
-			if (rvi_u->power > 0 && !bTooWeedyToExist) {
+			if (rvi_u.power > 0 && !bTooWeedyToExist) {
 				this->compatible_railtypes.Set(GetAllPoweredRailTypes(u->railtypes));
 			}
 
