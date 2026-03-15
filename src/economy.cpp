@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file economy.cpp Handling of the economy. */
@@ -1406,9 +1406,11 @@ static void TriggerIndustryProduction(Industry *i)
 
 /**
  * Makes us a new cargo payment helper.
+ * @param index The index into the cargo payment pool
  * @param front The front of the train
  */
-CargoPayment::CargoPayment(Vehicle *front) :
+CargoPayment::CargoPayment(CargoPaymentID index, Vehicle *front) :
+	PoolItemBase(index),
 	current_station(front->last_station_visited),
 	front(front)
 {
@@ -1416,7 +1418,7 @@ CargoPayment::CargoPayment(Vehicle *front) :
 
 CargoPayment::~CargoPayment()
 {
-	if (this->CleaningPool()) return;
+	if (CleaningPool()) return;
 
 	this->front->cargo_payment = nullptr;
 
@@ -1537,7 +1539,7 @@ void PrepareUnload(Vehicle *front_v)
 	 * limit in number of CargoPayments. Can't go wrong. */
 	static_assert(CargoPaymentPool::MAX_SIZE == VehiclePool::MAX_SIZE);
 	assert(CargoPayment::CanAllocateItem());
-	front_v->cargo_payment = new CargoPayment(front_v);
+	front_v->cargo_payment = CargoPayment::Create(front_v);
 
 	CargoStationIDVectorSet next_station = front_v->GetNextStoppingStation();
 	if (front_v->orders == nullptr || (front_v->current_order.GetUnloadType() & OUFB_NO_UNLOAD) == 0) {
@@ -2522,6 +2524,7 @@ void PostAcquireCompany(Company *c)
 	InvalidateWindowClassesData(WC_ROADVEH_LIST, 0);
 	InvalidateWindowClassesData(WC_AIRCRAFT_LIST, 0);
 	InvalidateWindowClassesData(WC_DEPARTURES_BOARD, 0);
+	InvalidateWindowData(WC_CLIENT_LIST, 0);
 
 	delete c;
 

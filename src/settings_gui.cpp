@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file settings_gui.cpp GUI for settings. */
@@ -216,7 +216,7 @@ static constexpr TextColour GAME_OPTIONS_LABEL = TC_LIGHT_BLUE;
 /** Colour for selected text of game options. */
 static constexpr TextColour GAME_OPTIONS_SELECTED = TC_WHITE;
 
-static constexpr NWidgetPart _nested_social_plugins_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_social_plugins_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_FRAME, GAME_OPTIONS_BACKGROUND, WID_GO_SOCIAL_PLUGIN_TITLE), SetTextStyle(GAME_OPTIONS_FRAME),
 			NWidget(NWID_HORIZONTAL), SetPIP(0, WidgetDimensions::unscaled.hsep_normal, 0),
@@ -231,7 +231,7 @@ static constexpr NWidgetPart _nested_social_plugins_widgets[] = {
 	EndContainer(),
 };
 
-static constexpr NWidgetPart _nested_social_plugins_none_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_social_plugins_none_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_TEXT, INVALID_COLOUR), SetResize(1, 0), SetFill(1, 0), SetStringTip(STR_GAME_OPTIONS_SOCIAL_PLUGINS_NONE), SetTextStyle(GAME_OPTIONS_LABEL),
 	EndContainer(),
@@ -1732,7 +1732,7 @@ struct GameOptionsWindow : Window {
 	}
 };
 
-static constexpr NWidgetPart _nested_game_options_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_game_options_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, GAME_OPTIONS_BACKGROUND),
 		NWidget(WWT_CAPTION, GAME_OPTIONS_BACKGROUND), SetStringTip(STR_GAME_OPTIONS_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
@@ -2280,7 +2280,7 @@ struct CustomCurrencyWindow : Window {
 	}
 };
 
-static constexpr NWidgetPart _nested_cust_currency_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_cust_currency_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
 		NWidget(WWT_CAPTION, COLOUR_GREY), SetStringTip(STR_CURRENCY_WINDOW, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),

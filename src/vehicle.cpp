@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file vehicle.cpp Base implementations of all vehicles. */
@@ -221,7 +221,7 @@ void VehicleServiceInDepot(Vehicle *v)
 		Ship::From(v)->critical_breakdown_count = 0;
 	}
 	v->vehstatus.Reset(VehState::AircraftBroken);
-	v->vehicle_flags.Test(VehicleFlag::ReplacementPending);
+	v->vehicle_flags.Reset(VehicleFlag::ReplacementPending);
 	SetWindowDirty(WC_VEHICLE_DETAILS, v->index); // ensure that last service date and reliability are updated
 
 	do {
@@ -495,9 +495,10 @@ void VehicleLengthChanged(const Vehicle *u)
 
 /**
  * Vehicle constructor.
+ * @param index The index within the vehicle pool.
  * @param type Type of the new vehicle.
  */
-Vehicle::Vehicle(VehicleType type)
+Vehicle::Vehicle(VehicleID index, VehicleType type) : VehiclePool::PoolItem<&_vehicle_pool>(index)
 {
 	this->type               = type;
 	this->coord.left         = INVALID_COORD;
@@ -1162,11 +1163,9 @@ void Vehicle::PreDestructor()
 
 		if (this->owner == _local_company) InvalidateAutoreplaceWindow(this->engine_type, this->group_id);
 		DeleteGroupHighlightOfVehicle(this);
-		if (this->type == VEH_TRAIN) {
-			extern void DeleteTraceRestrictSlotHighlightOfVehicle(const Vehicle *v);
 
-			DeleteTraceRestrictSlotHighlightOfVehicle(this);
-		}
+		extern void DeleteTraceRestrictSlotHighlightOfVehicle(const Vehicle *v);
+		DeleteTraceRestrictSlotHighlightOfVehicle(this);
 	}
 
 	Company::Get(this->owner)->freeunits[this->type].ReleaseID(this->unitnumber);
@@ -1236,6 +1235,8 @@ Vehicle::~Vehicle()
 		this->cargo.OnCleanPool();
 		return;
 	}
+
+	if (this->index == VehicleID::Invalid()) return; // Temporary instances which were never added to the pool
 
 	if (this->type != VEH_EFFECT) InvalidateVehicleTickCaches();
 
@@ -1776,16 +1777,21 @@ void CallVehicleTicks()
 			t = Train::Get(*result_v);
 		}
 		SubtractMoneyFromCompany(CommandCost(EXPENSES_NEW_VEHICLES, -(Money)c->settings.engine_renew_money));
-		if (res2.Succeeded() || res.GetCost() == 0) res.AddCost(res2.GetCost());
 
 		if (!IsLocalCompany()) continue;
 
-		if (res.GetCost() != 0) {
-			ShowCostOrIncomeAnimation(x, y, z, res.GetCost());
+		Money total_cost = 0;
+		if (res.Succeeded()) total_cost += res.GetCost();
+		if (res2.Succeeded()) total_cost += res2.GetCost();
+
+		if (total_cost != 0) {
+			ShowCostOrIncomeAnimation(x, y, z, total_cost);
 		}
 
 		if (res.Failed()) {
 			ShowAutoReplaceAdviceMessage(res, t);
+		} else if (res2.Failed()) {
+			ShowAutoReplaceAdviceMessage(res2, t);
 		}
 	}
 	tmpl_cur_company.Restore();
@@ -3199,16 +3205,16 @@ const Livery *GetEngineLivery(EngineID engine_type, CompanyID company, EngineID 
 			const Group *g = Group::GetIfValid(v->First()->group_id);
 			if (g != nullptr) {
 				/* Traverse parents until we find a livery or reach the top */
-				while (g->livery.in_use == 0 && g->parent != GroupID::Invalid()) {
+				while (!g->livery.in_use.Any({Livery::Flag::Primary, Livery::Flag::Secondary}) && g->parent != GroupID::Invalid()) {
 					g = Group::Get(g->parent);
 				}
-				if (g->livery.in_use != 0) return &g->livery;
+				if (g->livery.in_use.Any({Livery::Flag::Primary, Livery::Flag::Secondary})) return &g->livery;
 			}
 		}
 
 		/* The default livery is always available for use, but its in_use flag determines
 		 * whether any _other_ liveries are in use. */
-		if (c->livery[LS_DEFAULT].in_use != 0) {
+		if (c->livery[LS_DEFAULT].in_use.Any({Livery::Flag::Primary, Livery::Flag::Secondary})) {
 			/* Determine the livery scheme to use */
 			scheme = GetEngineLiveryScheme(engine_type, parent_engine_type, v);
 		}
@@ -4478,7 +4484,7 @@ void Vehicle::AddToShared(Vehicle *shared_chain)
 	if (shared_chain->orders == nullptr) {
 		dbg_assert(shared_chain->previous_shared == nullptr);
 		dbg_assert(shared_chain->next_shared == nullptr);
-		this->orders = shared_chain->orders = new OrderList(nullptr, shared_chain);
+		this->orders = shared_chain->orders = OrderList::Create(nullptr, shared_chain);
 	}
 
 	this->next_shared     = shared_chain->next_shared;

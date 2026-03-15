@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file script_company.cpp Implementation of ScriptCompany. */
@@ -387,20 +387,20 @@
 
 /* static */ ScriptCompany::Colours ScriptCompany::GetPrimaryLiveryColour(ScriptCompany::LiveryScheme scheme)
 {
-	if ((::LiveryScheme)scheme < LS_BEGIN || (::LiveryScheme)scheme >= LS_END) return COLOUR_INVALID;
+	EnforceCompanyModeValid(COLOUR_INVALID);
+	EnforcePrecondition(COLOUR_INVALID, static_cast<::LiveryScheme>(scheme) >= LS_BEGIN);
+	EnforcePrecondition(COLOUR_INVALID, static_cast<::LiveryScheme>(scheme) < LS_END);
 
-	const Company *c = ::Company::GetIfValid(_current_company);
-	if (c == nullptr) return COLOUR_INVALID;
-
+	const Company *c = ::Company::Get(ScriptObject::GetCompany());
 	return (ScriptCompany::Colours)c->livery[scheme].colour1;
 }
 
 /* static */ ScriptCompany::Colours ScriptCompany::GetSecondaryLiveryColour(ScriptCompany::LiveryScheme scheme)
 {
-	if ((::LiveryScheme)scheme < LS_BEGIN || (::LiveryScheme)scheme >= LS_END) return COLOUR_INVALID;
+	EnforceCompanyModeValid(COLOUR_INVALID);
+	EnforcePrecondition(COLOUR_INVALID, static_cast<::LiveryScheme>(scheme) >= LS_BEGIN);
+	EnforcePrecondition(COLOUR_INVALID, static_cast<::LiveryScheme>(scheme) < LS_END);
 
-	const Company *c = ::Company::GetIfValid(_current_company);
-	if (c == nullptr) return COLOUR_INVALID;
-
+	const Company *c = ::Company::Get(ScriptObject::GetCompany());
 	return (ScriptCompany::Colours)c->livery[scheme].colour2;
 }

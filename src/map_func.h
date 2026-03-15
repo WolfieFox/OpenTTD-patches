@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file map_func.h Functions related to maps. */
@@ -88,6 +88,12 @@ struct Map {
 		return Map::SizeY() - 1;
 	}
 
+	static inline uint InitialLandCount()
+	{
+		extern uint _map_initial_land_count;
+		return _map_initial_land_count;
+	}
+
 	/**
 	 * Get the number of base-10 digits required for the size of the map along the X
 	 * @return the number of digits required
@@ -144,6 +150,17 @@ struct Map {
 		 * just half of it. */
 		return CeilDiv((n << Map::LogX()) + (n << Map::LogY()), 1 << 9);
 	}
+
+	/**
+	 * Scales the given value by the number of water tiles.
+	 * @param n the value to scale
+	 * @return the scaled size
+	 */
+	static inline uint ScaleByLandProportion(uint n)
+	{
+		/* Use 64-bit arithmetic to avoid overflow. */
+		return static_cast<uint>(static_cast<uint64_t>(n) * Map::InitialLandCount() / Map::Size());
+	}
 };
 
 template <typename T>
@@ -155,7 +172,7 @@ struct MapTilePtr {
 	 * @param num ID of the node.
 	 * @return the Requested node.
 	 */
-	debug_inline T &operator[](TileIndex tile) { return this->tile_data[tile.base()]; }
+	[[debug_inline]] T &operator[](TileIndex tile) { return this->tile_data[tile.base()]; }
 };
 
 /**
@@ -177,6 +194,7 @@ extern MapTilePtr<TileExtended> _me;
 bool ValidateMapSize(uint size_x, uint size_y);
 void AllocateMap(uint size_x, uint size_y);
 void DeallocateMap();
+void CountLandTiles();
 
 /**
  * Returns the TileIndex of a coordinate.
@@ -185,7 +203,7 @@ void DeallocateMap();
  * @param y The y coordinate of the tile
  * @return The TileIndex calculated by the coordinate
  */
-debug_inline static TileIndex TileXY(uint x, uint y)
+[[debug_inline]] inline static TileIndex TileXY(uint x, uint y)
 {
 	return TileIndex{(y << Map::LogX()) + x};
 }
@@ -216,7 +234,7 @@ inline TileIndexDiff TileDiffXY(int x, int y)
  * @param y The virtual y coordinate of the tile.
  * @return The TileIndex calculated by the coordinate.
  */
-debug_inline static TileIndex TileVirtXY(uint x, uint y)
+[[debug_inline]] inline static TileIndex TileVirtXY(uint x, uint y)
 {
 	return TileIndex{(y >> 4 << Map::LogX()) + (x >> 4)};
 }
@@ -240,7 +258,7 @@ inline TileIndex TileVirtXYClampedToMap(int x, int y)
  * @param tile the tile to get the X component of
  * @return the X component
  */
-debug_inline static uint TileX(TileIndex tile)
+[[debug_inline]] inline static uint TileX(TileIndex tile)
 {
 	return tile.base() & Map::MaxX();
 }
@@ -250,7 +268,7 @@ debug_inline static uint TileX(TileIndex tile)
  * @param tile the tile to get the Y component of
  * @return the Y component
  */
-debug_inline static uint TileY(TileIndex tile)
+[[debug_inline]] inline static uint TileY(TileIndex tile)
 {
 	return tile.base() >> Map::LogX();
 }

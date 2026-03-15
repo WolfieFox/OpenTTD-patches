@@ -14,7 +14,7 @@
 # This file is part of OpenTTD.
 # OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
 # OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
 
 
 ##id 0x0000
@@ -255,6 +255,7 @@ STR_UNITS_FORCE_SI                                              :{DECIMAL}kN
 STR_UNITS_HEIGHT_IMPERIAL                                       :{DECIMAL}피트
 STR_UNITS_HEIGHT_METRIC                                         :{DECIMAL}m
 STR_UNITS_HEIGHT_SI                                             :{DECIMAL}m
+STR_UNITS_HEIGHT_GAMEUNITS                                      :{DECIMAL}층
 
 # Time units used in string control characters
 STR_UNITS_DAYS                                                  :{COMMA}일
@@ -312,6 +313,7 @@ STR_SHOW_HIDDEN_ENGINES_VEHICLE_AIRCRAFT_TOOLTIP                :{BLACK}이 버�
 STR_BUTTON_DEFAULT                                              :{BLACK}기본값
 STR_BUTTON_CANCEL                                               :{BLACK}취소
 STR_BUTTON_OK                                                   :{BLACK}확인
+STR_BUTTON_MOVE                                                 :{BLACK}이동
 
 # On screen keyboard window
 STR_OSK_KEYBOARD_LAYOUT                                         :`1234567890-=\ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔ[]ㅁㄴㅇㄹㅎㅗㅓㅏㅣ;'  ㅋㅌㅊㅍㅠㅜㅡ,./ .
@@ -1247,7 +1249,7 @@ STR_CONFIG_SETTING_EXPAND_ALL                                   :모두 펼치�
 STR_CONFIG_SETTING_COLLAPSE_ALL                                 :모두 접기
 STR_CONFIG_SETTING_RESET_ALL                                    :모든 설정 초기화
 STR_CONFIG_SETTING_NO_EXPLANATION_AVAILABLE_HELPTEXT            :(설명이 존재하지 않습니다)
-STR_CONFIG_SETTING_VALUE                                        :{PUSH_COLOUR}{ORANGE}{STRING}{POP_COLOUR}
+STR_CONFIG_SETTING_VALUE                                        :{ORANGE}{STRING}
 STR_CONFIG_SETTING_DEFAULT_VALUE                                :{LTBLUE}기본값: {ORANGE}{STRING}
 STR_CONFIG_SETTING_TYPE                                         :{LTBLUE}설정 종류: {ORANGE}{STRING}
 STR_CONFIG_SETTING_TYPE_CLIENT                                  :접속자 설정 (게임 저장 파일에 저장되지 않음; 모든 게임에 적용됨)
@@ -1590,7 +1592,7 @@ STR_CONFIG_SETTING_SHOW_CARGO_IN_LISTS                          :차량 목록 �
 STR_CONFIG_SETTING_SHOW_CARGO_IN_LISTS_HELPTEXT                 :이 설정을 켜면, 차량 목록 상단에 차량이 실을 수 있는 화물을 표시합니다
 
 STR_CONFIG_SETTING_LANDSCAPE                                    :지형: {STRING}
-STR_CONFIG_SETTING_LANDSCAPE_HELPTEXT                           :지형에 따라 화물과 도시 성장 요구 조건이 다른 게임 플레이 시나리오가 만들어집니다. NewGRF과 게임 스크립트를 통해 세밀한 조절이 가능합니다.
+STR_CONFIG_SETTING_LANDSCAPE_HELPTEXT                           :지형에 따라 화물과 도시 성장 요구 조건이 다른 게임 플레이 시나리오가 만들어집니다. NewGRF과 게임 스크립트를 통해 세밀한 조절이 가능합니다
 
 STR_CONFIG_SETTING_LAND_GENERATOR                               :지형 만들기: {STRING}
 STR_CONFIG_SETTING_LAND_GENERATOR_HELPTEXT                      :오리지널 모드는 기본 그래픽 세트에 따라 다른 지형을 생성하며, 단조로운 지형을 구성합니다. 천지창조는 개선된 제어 설정을 가진 생성기로 만들어진 임의 지형(펄린 노이즈)을 구성합니다.
@@ -2090,6 +2092,8 @@ STR_CONFIG_SETTING_LARGER_TOWNS_VALUE                           :{COMMA}개 중�
 STR_CONFIG_SETTING_LARGER_TOWNS_DISABLED                        :없음
 STR_CONFIG_SETTING_CITY_SIZE_MULTIPLIER                         :초기 대도시 크기 비율: 일반 도시보다 {STRING}배 크게 시작
 STR_CONFIG_SETTING_CITY_SIZE_MULTIPLIER_HELPTEXT                :게임을 시작했을 때 일반 도시에 대한 대도시의 평균 크기를 설정합니다
+STR_CONFIG_SETTING_TOWN_MIN_DISTANCE                            :도시 사이의 최소 거리: {STRING}
+STR_CONFIG_SETTING_TOWN_MIN_DISTANCE_HELPTEXT                   :지도 생성 및 무작위 설립시 도시 사이의 최소 거리를 몇 칸으로 할지 설정합니다
 
 STR_CONFIG_SETTING_LINKGRAPH_RECALC_INTERVAL                    :분배 그래프를 매 {STRING}마다 업데이트
 STR_CONFIG_SETTING_LINKGRAPH_RECALC_INTERVAL_HELPTEXT           :각 연결 그래프의 하위 시퀀스 재계산 사이의 시간입니다. 각 재계산은 그래프의 한 구성 요소에 대한 계획을 계산합니다. 즉, 이 설정을 X로 설정한다고 해서 전체 그래프를 X초마다 업데이트한다는 뜻은 아닙니다. 일부 구성 요소만 X초마다 업데이트됩니다. 이 값을 더 짧게 설정할 수록 계산하는데 더 많은 CPU 계산 시간이 필요합니다. 값을 더 길게 설정하면 화물 분배가 새 경로로 이뤄지기까지 더 오랜 시간이 걸리게 됩니다
@@ -2160,10 +2164,11 @@ STR_CONFIG_SETTING_LOCALISATION_UNITS_FORCE_SI                  :국제표준규
 
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT                    :높이 단위: {STRING}
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_HELPTEXT           :높이를 표시할 때 선택한 단위를 사용하여 나타냅니다
-###length 3
+###length 4
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_IMPERIAL           :야드파운드법 (ft)
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_METRIC             :미터법 (m)
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_SI                 :국제표준규격 (m)
+STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_GAMEUNITS          :게임 단위 (층)
 
 STR_CONFIG_SETTING_LOCALISATION                                 :단위 설정
 STR_CONFIG_SETTING_GRAPHICS                                     :그래픽
@@ -2847,31 +2852,49 @@ STR_PICKER_PREVIEW_SHRINK_TOOLTIP                               :미리보기 �
 STR_PICKER_PREVIEW_EXPAND                                       :+
 STR_PICKER_PREVIEW_EXPAND_TOOLTIP                               :미리보기 이미지의 높이를 늘입니다. CTRL+클릭하면 최대로 늘입니다
 
+STR_PICKER_DEFAULT_COLLECTION                                   :기본 모음집
+STR_PICKER_SELECT_COLLECTION_TOOLTIP                            :모음집을 선택하세요
+STR_PICKER_COLLECTION_ADD                                       :추가
+STR_PICKER_COLLECTION_ADD_TOOLTIP                               :새 모음집을 생성합니다
+STR_PICKER_COLLECTION_RENAME                                    :이름 변경
+STR_PICKER_COLLECTION_RENAME_TOOLTIP                            :모음집 이름을 변경합니다
+STR_PICKER_COLLECTION_DELETE                                    :삭제
+STR_PICKER_COLLECTION_DELETE_TOOLTIP                            :모음집을 삭제합니다
 
+STR_PICKER_COLLECTION_RENAME_QUERY                              :모음집 이름을 변경합니다
+STR_PICKER_COLLECTION_DELETE_QUERY                              :모음집 삭제
+STR_PICKER_COLLECTION_DELETE_QUERY_TEXT                         :{YELLOW}정말 이 모음집을 삭제하시겠습니까?
+STR_PICKER_COLLECTION_DELETE_QUERY_DISABLED_TEXT                :{YELLOW}정말 이 모음집을 삭제하시겠습니까? (비활성화된 NewGRF에서 온 항목을 포함하고 있습니다)
 
 STR_PICKER_STATION_CLASS_TOOLTIP                                :표시할 역 종류를 선택하세요
 STR_PICKER_STATION_TYPE_TOOLTIP                                 :설치하려는 역 종류를 선택하세요. CTRL+클릭하면 즐겨찾기 추가/제거가 가능합니다
+STR_PICKER_STATION_COLLECTION_TOOLTIP                           :표시할 역 모음집을 선택하세요
 STR_PICKER_WAYPOINT_CLASS_TOOLTIP                               :표시할 경유지 종류를 선택하세요
 STR_PICKER_WAYPOINT_TYPE_TOOLTIP                                :설치하려는 경유지를 선택하세요. CTRL+클릭하면 즐겨찾기 추가/제거가 가능합니다
+STR_PICKER_WAYPOINT_COLLECTION_TOOLTIP                          :표시할 경유지 모음집을 선택하세요
 STR_PICKER_ROADSTOP_BUS_CLASS_TOOLTIP                           :표시할 버스 정류장 종류를 선택하세요
 STR_PICKER_ROADSTOP_BUS_TYPE_TOOLTIP                            :설치하려는 버스 정류장 종류를 선택하세요. CTRL+클릭하면 즐겨찾기 추가/제거가 가능합니다
+STR_PICKER_ROADSTOP_BUS_COLLECTION_TOOLTIP                      :표시할 버스 정류장 모음집을 선택하세요
 STR_PICKER_ROADSTOP_TRUCK_CLASS_TOOLTIP                         :표시할 트럭 적하장 종류를 선택하세요
 STR_PICKER_ROADSTOP_TRUCK_TYPE_TOOLTIP                          :설치하려는 트럭 적하장 종류를 선택하세요. CTRL+클릭하면 즐겨찾기 추가/제거가 가능합니다
+STR_PICKER_ROADSTOP_TRUCK_COLLECTION_TOOLTIP                    :표시할 트럭 적하장 모음집을 선택하세요
 STR_PICKER_OBJECT_CLASS_TOOLTIP                                 :표시할 오브젝트 종류를 선택하세요
 STR_PICKER_OBJECT_TYPE_TOOLTIP                                  :설치하려는 오브젝트 종류를 선택합니다. CTRL+클릭+드래그하면 대각선 방향의 영역을 선택할 수 있습니다. SHIFT 키를 누른 채로 사용하면 예상 비용을 볼 수 있습니다
+STR_PICKER_OBJECT_COLLECTION_TOOLTIP                            :표시할 오브젝트 모음집을 선택하세요
 STR_PICKER_HOUSE_CLASS_TOOLTIP                                  :표시할 도시 구역을 선택하세요
 STR_PICKER_HOUSE_TYPE_TOOLTIP                                   :지으려는 건물 종류를 선택하세요. CTRL+클릭하면 즐겨찾기 추가/제거가 가능합니다
+STR_PICKER_HOUSE_COLLECTION_TOOLTIP                             :표시할 건물 모음집을 선택하세요
 
 STR_HOUSE_PICKER_CAPTION                                        :건물 선택
-STR_HOUSE_PICKER_NAME                                           :{BLACK}이름: {ORANGE}{STRING}
-STR_HOUSE_PICKER_POPULATION                                     :{BLACK}인구: {ORANGE}{NUM}
-STR_HOUSE_PICKER_YEARS                                          :{BLACK}연도: {ORANGE}{NUM} ~ {NUM}
-STR_HOUSE_PICKER_YEARS_ANY                                      :{BLACK}연도: {ORANGE}항상
-STR_HOUSE_PICKER_YEARS_FROM                                     :{BLACK}연도: {ORANGE}{NUM}년부터
-STR_HOUSE_PICKER_YEARS_UNTIL                                    :{BLACK}연도: {ORANGE}{NUM}년까지
-STR_HOUSE_PICKER_SIZE                                           :{BLACK}크기: {ORANGE}{NUM}x{NUM}칸
-STR_HOUSE_PICKER_CARGO_ACCEPTED                                 :{BLACK}받는 화물: {ORANGE}
-STR_HOUSE_PICKER_CARGO_PRODUCED                                 :{BLACK}생산 화물량: {ORANGE}{CARGO_LIST}
+STR_HOUSE_PICKER_NAME                                           :{BLACK}이름: {GOLD}{STRING}
+STR_HOUSE_PICKER_POPULATION                                     :{BLACK}인구: {GOLD}{NUM}
+STR_HOUSE_PICKER_YEARS                                          :{BLACK}연도: {GOLD}{NUM} ~ {NUM}
+STR_HOUSE_PICKER_YEARS_ANY                                      :{BLACK}연도: {GOLD}항상
+STR_HOUSE_PICKER_YEARS_FROM                                     :{BLACK}연도: {GOLD}{NUM}년부터
+STR_HOUSE_PICKER_YEARS_UNTIL                                    :{BLACK}연도: {GOLD}{NUM}년까지
+STR_HOUSE_PICKER_SIZE                                           :{BLACK}크기: {GOLD}{NUM}x{NUM}칸
+STR_HOUSE_PICKER_CARGO_ACCEPTED                                 :{BLACK}받는 화물: {GOLD}{STRING}
+STR_HOUSE_PICKER_CARGO_PRODUCED                                 :{BLACK}생산 화물량: {GOLD}{CARGO_LIST}
 
 STR_HOUSE_PICKER_CLASS_ZONE1                                    :가장자리
 STR_HOUSE_PICKER_CLASS_ZONE2                                    :교외
@@ -3159,7 +3182,7 @@ STR_LAND_AREA_INFORMATION_AIRPORT_CLASS                         :{BLACK}공항 �
 STR_LAND_AREA_INFORMATION_AIRPORT_NAME                          :{BLACK}공항 이름: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_AIRPORTTILE_NAME                      :{BLACK}공항 칸 이름: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_NEWGRF_NAME                           :{BLACK}NewGRF: {LTBLUE}{STRING}
-STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED                        :{BLACK}받을 수 있는 화물: {LTBLUE}
+STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED                        :{BLACK}받을 수 있는 화물: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_CARGO_EIGHTS                          :({COMMA}/8 {STRING})
 STR_LANG_AREA_INFORMATION_RAIL_TYPE                             :{BLACK}철도 종류: {LTBLUE}{STRING}
 STR_LANG_AREA_INFORMATION_ROAD_TYPE                             :{BLACK}도로 종류: {LTBLUE}{STRING}
@@ -3354,6 +3377,8 @@ STR_SAVELOAD_DETAIL_GRFSTATUS                                   :{SILVER}NewGRF:
 STR_SAVELOAD_FILTER_TITLE                                       :{BLACK}검색:
 STR_SAVELOAD_OVERWRITE_TITLE                                    :{WHITE}파일 덮어쓰기
 STR_SAVELOAD_OVERWRITE_WARNING                                  :{YELLOW}정말 이미 존재하는 파일에 덮어씌우시겠습니까?
+STR_SAVELOAD_DELETE_TITLE                                       :{WHITE}파일 삭제
+STR_SAVELOAD_DELETE_WARNING                                     :{YELLOW}정말 이 파일을 삭제하시겠습니까?
 STR_SAVELOAD_DIRECTORY                                          :{STRING} (폴더)
 STR_SAVELOAD_PARENT_DIRECTORY                                   :{STRING} (상위 폴더)
 
@@ -3429,11 +3454,18 @@ STR_MAPGEN_NORTHWEST                                            :{BLACK}북서
 STR_MAPGEN_NORTHEAST                                            :{BLACK}북동
 STR_MAPGEN_SOUTHEAST                                            :{BLACK}남동
 STR_MAPGEN_SOUTHWEST                                            :{BLACK}남서
+STR_MAPGEN_NORTHWEST_TOOLTIP                                    :남서쪽 지도 맨 가장자리를 물로 할지 육지로 할지 고릅니다
+STR_MAPGEN_NORTHEAST_TOOLTIP                                    :북동쪽 지도 맨 가장자리를 물로 할지 육지로 할지 고릅니다
+STR_MAPGEN_SOUTHEAST_TOOLTIP                                    :남동쪽 지도 맨 가장자리를 물로 할지 육지로 할지 고릅니다
+STR_MAPGEN_SOUTHWEST_TOOLTIP                                    :남서쪽 지도 맨 가장자리를 물로 할지 육지로 할지 고릅니다
 STR_MAPGEN_BORDER_FREEFORM                                      :{BLACK}변경 가능
 STR_MAPGEN_BORDER_WATER                                         :{BLACK}물
 STR_MAPGEN_BORDER_RANDOM                                        :{BLACK}임의
-STR_MAPGEN_BORDER_RANDOMIZE                                     :{BLACK}임의
-STR_MAPGEN_BORDER_MANUAL                                        :{BLACK}사용자 정의
+
+###length 3
+STR_MAPGEN_BORDER_RANDOMIZE                                     :임의
+STR_MAPGEN_BORDER_MANUAL                                        :사용자 정의
+STR_MAPGEN_BORDER_INFINITE_WATER                                :물 (지도 밖까지 모두)
 
 STR_MAPGEN_HEIGHTMAP_ROTATION                                   :{BLACK}높이맵 방향:
 STR_MAPGEN_HEIGHTMAP_NAME                                       :{BLACK}높이맵 이름:
@@ -3472,7 +3504,8 @@ STR_GENERATION_LANDSCAPE_GENERATION                             :{BLACK}지형 �
 STR_GENERATION_RIVER_GENERATION                                 :{BLACK}강 제작
 STR_GENERATION_CLEARING_TILES                                   :{BLACK}거친 암석지대 만드는 중
 STR_GENERATION_TOWN_GENERATION                                  :{BLACK}도시 생성
-STR_GENERATION_INDUSTRY_GENERATION                              :{BLACK}산업시설 생성
+STR_GENERATION_LAND_INDUSTRY_GENERATION                         :{BLACK}지상 산업시설 생성
+STR_GENERATION_WATER_INDUSTRY_GENERATION                        :{BLACK}수상 산업시설 생성
 STR_GENERATION_OBJECT_GENERATION                                :{BLACK}움직일수 없는 객체 만드는 중
 STR_GENERATION_TREE_GENERATION                                  :{BLACK}나무 심는 중
 STR_GENERATION_SETTINGUP_GAME                                   :{BLACK}게임 설정 중
@@ -3681,7 +3714,7 @@ STR_SIGN_LIST_MATCH_CASE                                        :{BLACK}대소�
 STR_SIGN_LIST_MATCH_CASE_TOOLTIP                                :{BLACK}팻말의 이름을 비교할 때 검색 문자열의 대소문자 구분할지 여부를 선택합니다
 
 # Sign window
-STR_EDIT_SIGN_CAPTION                                           :{WHITE}팻말 내용 고치기
+STR_EDIT_SIGN_CAPTION                                           :{WHITE}팻말 고치기
 STR_EDIT_SIGN_LOCATION_TOOLTIP                                  :{BLACK}이 팻말의 위치로 이동합니다. CTRL+클릭하면 이 팻말 위치를 기준으로 새로운 외부 화면을 엽니다
 STR_EDIT_SIGN_NEXT_SIGN_TOOLTIP                                 :{BLACK}다음 팻말로 가기
 STR_EDIT_SIGN_PREVIOUS_SIGN_TOOLTIP                             :{BLACK}이전 팻말로 가기
@@ -3899,14 +3932,14 @@ STR_CARGO_RATING_EXCELLENT                                      :훌륭함
 STR_CARGO_RATING_OUTSTANDING                                    :매우 훌륭함
 
 STR_STATION_VIEW_CENTER_TOOLTIP                                 :{BLACK}이 역의 위치로 시점을 변경합니다. CTRL+클릭하면 이 역 위치를 기준으로 새로운 외부 화면을 엽니다
-STR_STATION_VIEW_RENAME_TOOLTIP                                 :{BLACK}이 역의 이름을 변경합니다
+STR_STATION_VIEW_EDIT_TOOLTIP                                   :{BLACK}역의 이름을 바꾸거나 팻말 위치를 바꿉니다
 
 STR_STATION_VIEW_SCHEDULED_TRAINS_TOOLTIP                       :{BLACK}이 역을 거쳐가는 모든 열차를 보여줍니다
 STR_STATION_VIEW_SCHEDULED_ROAD_VEHICLES_TOOLTIP                :{BLACK}이 역을 거쳐가는 모든 차량을 보여줍니다
 STR_STATION_VIEW_SCHEDULED_AIRCRAFT_TOOLTIP                     :{BLACK}이 역을 거쳐가는 모든 항공기를 보여줍니다
 STR_STATION_VIEW_SCHEDULED_SHIPS_TOOLTIP                        :{BLACK}이 역을 거쳐가는 모든 선박을 보여줍니다
 
-STR_STATION_VIEW_RENAME_STATION_CAPTION                         :이 역의 이름을 변경합니다
+STR_STATION_VIEW_EDIT_STATION_SIGN                              :{WHITE}역 팻말 수정
 
 STR_STATION_VIEW_CLOSE_AIRPORT                                  :{BLACK}공항 폐쇄
 STR_STATION_VIEW_CLOSE_AIRPORT_TOOLTIP                          :{BLACK}이 공항에 항공기가 착륙하는 것을 금지합니다
@@ -3914,11 +3947,11 @@ STR_STATION_VIEW_CLOSE_AIRPORT_TOOLTIP                          :{BLACK}이 공�
 # Waypoint/buoy view window
 STR_WAYPOINT_VIEW_CAPTION                                       :{WHITE}{WAYPOINT}
 STR_WAYPOINT_VIEW_CENTER_TOOLTIP                                :{BLACK}이 경유지의 위치로 시점을 변경합니다. CTRL+클릭하면 이 경유지 위치를 기준으로 새로운 외부 화면을 엽니다
-STR_WAYPOINT_VIEW_CHANGE_WAYPOINT_NAME                          :{BLACK}이 경유지의 이름을 변경합니다
+STR_WAYPOINT_VIEW_EDIT_TOOLTIP                                  :{BLACK}경유지의 이름을 바꾸거나 팻말 위치를 바꿉니다
 STR_BUOY_VIEW_CENTER_TOOLTIP                                    :{BLACK}이 부표의 위치로 이동합니다. CTRL+클릭하면 이 부표 위치를 기준으로 새로운 외부 화면을 엽니다
 STR_BUOY_VIEW_RENAME_TOOLTIP                                    :{BLACK}부표 이름 바꾸기
 
-STR_EDIT_WAYPOINT_NAME                                          :{WHITE}경유지 이름 설정
+STR_WAYPOINT_VIEW_EDIT_WAYPOINT_SIGN                            :{WHITE}경유지 팻말 수정
 
 # Finances window
 STR_FINANCES_CAPTION                                            :{WHITE}{COMPANY}의 재정 {BLACK}{COMPANY_NUM}
@@ -4033,7 +4066,7 @@ STR_COMPANY_INFRASTRUCTURE_VIEW_TOTAL_PERIOD                    :{WHITE}{CURRENC
 # Industry directory
 STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}산업시설 ({1:COMMA}개 중 {0:COMMA}개)
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}(없음)
-STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% 수송됨){BLACK}
+STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% 수송됨)
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
@@ -4056,9 +4089,9 @@ STR_INDUSTRY_VIEW_CARGO_GRAPH_TOOLTIP                           :{BLACK}산업�
 STR_INDUSTRY_VIEW_PRODUCTION_LEVEL                              :{BLACK}생산 수준: {YELLOW}{COMMA}%
 STR_INDUSTRY_VIEW_INDUSTRY_ANNOUNCED_CLOSURE                    :{YELLOW}산업시설이 곧 폐쇄됩니다!
 
-STR_INDUSTRY_VIEW_REQUIRES_N_CARGO                              :{BLACK}받는 화물: {YELLOW}{STRING}{STRING}
-STR_INDUSTRY_VIEW_PRODUCES_N_CARGO                              :{BLACK}생산 화물: {YELLOW}{STRING}{STRING}
-STR_INDUSTRY_VIEW_CARGO_LIST_EXTENSION                          :, {STRING}{STRING}
+STR_INDUSTRY_VIEW_REQUIRES_N_CARGO                              :{BLACK}받는 화물: {YELLOW}{STRING}
+STR_INDUSTRY_VIEW_PRODUCES_N_CARGO                              :{BLACK}생산 화물: {YELLOW}{STRING}
+STR_INDUSTRY_VIEW_CARGO_LIST_EXTENSION                          :{STRING}{STRING}
 
 STR_INDUSTRY_VIEW_REQUIRES                                      :{BLACK}받는 화물:
 STR_INDUSTRY_VIEW_ACCEPT_CARGO_SUFFIX                           :{YELLOW}{0:STRING}{BLACK}{3:STRING}
@@ -4228,10 +4261,10 @@ STR_BUY_VEHICLE_SHIP_BUY_REFIT_VEHICLE_TOOLTIP                  :{BLACK}선택�
 STR_BUY_VEHICLE_AIRCRAFT_BUY_REFIT_VEHICLE_TOOLTIP              :{BLACK}선택한 항공기를 구입하고 개조합니다. SHIFT+클릭하면 예상 비용을 볼 수 있습니다
 
 ###length VEHICLE_TYPES
-STR_BUY_VEHICLE_TRAIN_RENAME_BUTTON                             :{BLACK}이름 지정
-STR_BUY_VEHICLE_ROAD_VEHICLE_RENAME_BUTTON                      :{BLACK}이름 지정
-STR_BUY_VEHICLE_SHIP_RENAME_BUTTON                              :{BLACK}이름 지정
-STR_BUY_VEHICLE_AIRCRAFT_RENAME_BUTTON                          :{BLACK}이름 지정
+STR_BUY_VEHICLE_TRAIN_RENAME_BUTTON                             :{BLACK}이름 변경
+STR_BUY_VEHICLE_ROAD_VEHICLE_RENAME_BUTTON                      :{BLACK}이름 변경
+STR_BUY_VEHICLE_SHIP_RENAME_BUTTON                              :{BLACK}이름 변경
+STR_BUY_VEHICLE_AIRCRAFT_RENAME_BUTTON                          :{BLACK}이름 변경
 
 ###length VEHICLE_TYPES
 STR_BUY_VEHICLE_TRAIN_RENAME_TOOLTIP                            :{BLACK}열차의 모델명을 변경합니다
@@ -4351,7 +4384,15 @@ STR_DEPOT_SELL_CONFIRMATION_TEXT                                :{YELLOW}이 안
 
 # Engine preview window
 STR_ENGINE_PREVIEW_CAPTION                                      :{WHITE}차량 개발자가 보낸 메시지
+STR_ENGINE_PREVIEW_CAPTION_COUNT                                :{WHITE}차량 제조사가 보낸 메시지 ({COMMA}/{COMMA})
 STR_ENGINE_PREVIEW_MESSAGE                                      :{GOLD}저희는 이제 막 새로운 {STRING}{G 0 "을" "를"} 개발했습니다. 1년 먼저 이 차량을 사용하셔서 모두에게 공개되기 전에 잘 작동하는지 확인해주시겠습니까?
+
+STR_ENGINE_PREVIEW_PREVIOUS                                     :이전
+STR_ENGINE_PREVIEW_PREVIOUS_TOOLTIP                             :이전 새 차량으로 넘어가려면 클릭하세요
+STR_ENGINE_PREVIEW_NEXT                                         :다음
+STR_ENGINE_PREVIEW_NEXT_TOOLTIP                                 :다음 새 차량으로 넘어가려면 클릭하세요
+STR_ENGINE_PREVIEW_ENGINE_LIST                                  :{COMMA}: {ENGINE}
+STR_ENGINE_PREVIEW_ENGINE_LIST_TOOLTIP                          :새 차량으로 넘어가려면 클릭하세요
 
 STR_ENGINE_PREVIEW_RAILROAD_LOCOMOTIVE                          :{G=f}철도 기관차
 STR_ENGINE_PREVIEW_ELRAIL_LOCOMOTIVE                            :{G=f}전기선로 기관차
@@ -4509,10 +4550,10 @@ STR_VEHICLE_COMMAND_STARTED                                     :{GREEN}출발
 STR_VEHICLE_DETAILS_CAPTION                                     :{WHITE}{VEHICLE} (상세정보)
 
 ###length VEHICLE_TYPES
-STR_VEHICLE_DETAILS_TRAIN_RENAME                                :{BLACK}열차 이름 지정
-STR_VEHICLE_DETAILS_ROAD_VEHICLE_RENAME                         :{BLACK}차량 이름 지정
-STR_VEHICLE_DETAILS_SHIP_RENAME                                 :{BLACK}선박 이름 지정
-STR_VEHICLE_DETAILS_AIRCRAFT_RENAME                             :{BLACK}항공기 이름 지정
+STR_VEHICLE_DETAILS_TRAIN_RENAME                                :{BLACK}열차 이름 변경
+STR_VEHICLE_DETAILS_ROAD_VEHICLE_RENAME                         :{BLACK}차량 이름 변경
+STR_VEHICLE_DETAILS_SHIP_RENAME                                 :{BLACK}선박 이름 변경
+STR_VEHICLE_DETAILS_AIRCRAFT_RENAME                             :{BLACK}항공기 이름 변경
 
 STR_VEHICLE_INFO_AGE                                            :{COMMA}년 ({COMMA})
 STR_VEHICLE_INFO_AGE_RED                                        :{RED}{COMMA}년 ({COMMA})
@@ -4558,10 +4599,10 @@ STR_VEHICLE_DETAILS_MINUTES                                     :분
 STR_VEHICLE_DETAILS_PERCENT                                     :신뢰도
 
 ###length VEHICLE_TYPES
-STR_QUERY_RENAME_TRAIN_CAPTION                                  :{WHITE}열차 이름 지정
-STR_QUERY_RENAME_ROAD_VEHICLE_CAPTION                           :{WHITE}차량 이름 지정
-STR_QUERY_RENAME_SHIP_CAPTION                                   :{WHITE}선박 이름 지정
-STR_QUERY_RENAME_AIRCRAFT_CAPTION                               :{WHITE}항공기 이름 지정
+STR_QUERY_RENAME_TRAIN_CAPTION                                  :{WHITE}열차 이름 변경
+STR_QUERY_RENAME_ROAD_VEHICLE_CAPTION                           :{WHITE}차량 이름 변경
+STR_QUERY_RENAME_SHIP_CAPTION                                   :{WHITE}선박 이름 변경
+STR_QUERY_RENAME_AIRCRAFT_CAPTION                               :{WHITE}항공기 이름 변경
 
 # Extra buttons for train details windows
 STR_VEHICLE_DETAILS_TRAIN_ENGINE_BUILT_AND_VALUE                :{LTBLUE}{ENGINE}{BLACK}   생산: {LTBLUE}{NUM}{BLACK} 가격: {LTBLUE}{CURRENCY_LONG}
@@ -4584,7 +4625,7 @@ STR_VEHICLE_DETAILS_TRAIN_CAPACITIES_TOOLTIP                    :{BLACK}각 차�
 STR_VEHICLE_DETAIL_TAB_TOTAL_CARGO                              :{BLACK}총 화물량
 STR_VEHICLE_DETAILS_TRAIN_TOTAL_CARGO_TOOLTIP                   :{BLACK}각 화물 종류에 따른 총 수송량을 보여줍니다
 
-STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}수송량: {LTBLUE}
+STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}수송량: {LTBLUE}{STRING}
 
 # Vehicle refit
 STR_REFIT_CAPTION                                               :{WHITE}{VEHICLE} (개조)
@@ -5132,6 +5173,7 @@ STR_ERROR_TOO_MANY_TRUCK_STOPS                                  :{WHITE}트럭 �
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_DOCK                             :{WHITE}다른 항구와 너무 가깝습니다
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_AIRPORT                          :{WHITE}다른 공항과 너무 가깝습니다
 STR_ERROR_CAN_T_RENAME_STATION                                  :{WHITE}역 이름을 바꿀 수 없습니다...
+STR_ERROR_CAN_T_MOVE_STATION_NAME                               :{WHITE}역 팻말 위치를 옮길 수 없습니다...
 STR_ERROR_DRIVE_THROUGH_ON_TOWN_ROAD                            :{WHITE}... 도시 소유의 도로입니다
 STR_ERROR_DRIVE_THROUGH_DIRECTION                               :{WHITE}... 도로의 방향과 일치하지 않습니다
 STR_ERROR_DRIVE_THROUGH_CORNER                                  :{WHITE}... 통과식 도로 정류장은 굽은 도로에 건설할 수 없습니다
@@ -5163,6 +5205,7 @@ STR_ERROR_CAN_T_BUILD_RAIL_WAYPOINT                             :{WHITE}여기�
 STR_ERROR_CAN_T_BUILD_ROAD_WAYPOINT                             :{WHITE}여기에 도로 경유지를 지을 수 없습니다...
 STR_ERROR_CAN_T_POSITION_BUOY_HERE                              :{WHITE}여기에 부표를 설치할 수 없습니다...
 STR_ERROR_CAN_T_CHANGE_WAYPOINT_NAME                            :{WHITE}경유지의 이름을 변경할 수 없습니다...
+STR_ERROR_CAN_T_MOVE_WAYPOINT_NAME                              :{WHITE}경유지 팻말 위치를 옮길 수 없습니다...
 
 STR_ERROR_CAN_T_REMOVE_RAIL_WAYPOINT                            :{WHITE}이 열차 경유지를 제거할 수 없습니다...
 STR_ERROR_CAN_T_REMOVE_ROAD_WAYPOINT                            :{WHITE}이 도로 경유지를 제거할 수 없습니다...
@@ -5956,7 +5999,8 @@ STR_LORRY                                                       :{G=m}{BLACK}{LO
 STR_PLANE                                                       :{G=f}{BLACK}{PLANE}
 STR_SHIP                                                        :{G=f}{BLACK}{SHIP}
 
-STR_TOOLBAR_RAILTYPE_VELOCITY                                   :{STRING} ({VELOCITY})
+STR_TOOLBAR_RAILTYPE_VELOCITY                                   :{STRING} {YELLOW}({VELOCITY})
+STR_TOOLBAR_ROADTYPE_VELOCITY                                   :{STRING} {YELLOW}({VELOCITY})
 
 STR_BADGE_NAME_LIST                                             :{STRING}: {GOLD}{STRING}
 STR_BADGE_CONFIG_MENU_TOOLTIP                                   :배지 설정을 엽니다

@@ -2,10 +2,10 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
-/** @file town_map.h Accessors for towns */
+/** @file town_map.h Map accessors for towns. */
 
 #ifndef TOWN_MAP_H
 #define TOWN_MAP_H
@@ -379,6 +379,7 @@ inline void MakeHouseTile(TileIndex t, TownID tid, uint8_t counter, uint8_t stag
 	_m[t].m1 = random_bits;
 	_m[t].m2 = tid.base();
 	_m[t].m3 = 0;
+	_me[t].m8 = 0;
 	SetHouseType(t, type);
 	SetHouseCompleted(t, stage == TOWN_HOUSE_COMPLETED);
 	_m[t].m5 = IsHouseCompleted(t) ? 0 : (stage << 3 | counter);

@@ -14,7 +14,7 @@
 # This file is part of OpenTTD.
 # OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
 # OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
 
 
 ##id 0x0000
@@ -255,6 +255,7 @@ STR_UNITS_FORCE_SI                                              :{DECIMAL} kN
 STR_UNITS_HEIGHT_IMPERIAL                                       :{DECIMAL} pés
 STR_UNITS_HEIGHT_METRIC                                         :{DECIMAL} m
 STR_UNITS_HEIGHT_SI                                             :{DECIMAL} m
+STR_UNITS_HEIGHT_GAMEUNITS                                      :{DECIMAL}{NBSP}Nive{P "" is}
 
 # Time units used in string control characters
 STR_UNITS_DAYS                                                  :{COMMA}{NBSP}día{P "" s}
@@ -312,6 +313,7 @@ STR_SHOW_HIDDEN_ENGINES_VEHICLE_AIRCRAFT_TOOLTIP                :{BLACK}Habilita
 STR_BUTTON_DEFAULT                                              :{BLACK}Por defecto
 STR_BUTTON_CANCEL                                               :{BLACK}Cancelar
 STR_BUTTON_OK                                                   :{BLACK}OK
+STR_BUTTON_MOVE                                                 :{BLACK}Mover
 
 # On screen keyboard window
 STR_OSK_KEYBOARD_LAYOUT                                         :`1234567890-= qwertyuiop[]asdfghjkl;'#\zxcvbnm,./ .
@@ -2160,10 +2162,11 @@ STR_CONFIG_SETTING_LOCALISATION_UNITS_FORCE_SI                  :SI (kN)
 
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT                    :Unidades para a altura (cota): {STRING}
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_HELPTEXT           :Cando as cotas se amosen na interfaz de usuario, facelo coas unidades seleccionadas
-###length 3
+###length 4
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_IMPERIAL           :Imperial (ft)
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_METRIC             :Métrico (m)
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_SI                 :SI (m)
+STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_GAMEUNITS          :Unidades de xogo (niveis)
 
 STR_CONFIG_SETTING_LOCALISATION                                 :Localización
 STR_CONFIG_SETTING_GRAPHICS                                     :Gráficos
@@ -2863,15 +2866,15 @@ STR_PICKER_HOUSE_CLASS_TOOLTIP                                  :Selecciona unha
 STR_PICKER_HOUSE_TYPE_TOOLTIP                                   :Selecciona un tipo de casa a construír. Ctrl+Click para engadir ou eliminar nos elementos gardados.
 
 STR_HOUSE_PICKER_CAPTION                                        :Selección de casas
-STR_HOUSE_PICKER_NAME                                           :{BLACK}Nome: {ORANGE}{STRING}
-STR_HOUSE_PICKER_POPULATION                                     :{BLACK}Poboación: {ORANGE}{NUM}
-STR_HOUSE_PICKER_YEARS                                          :{BLACK}Anos: {ORANGE}{NUM}-{NUM}
-STR_HOUSE_PICKER_YEARS_ANY                                      :{BLACK}Anos: {ORANGE}Calquera
-STR_HOUSE_PICKER_YEARS_FROM                                     :{BLACK}Anos: {ORANGE}Dende {NUM}
-STR_HOUSE_PICKER_YEARS_UNTIL                                    :{BLACK}Anos: {ORANGE}Ata {NUM}
-STR_HOUSE_PICKER_SIZE                                           :{BLACK}Tamaño: {ORANGE}{NUM}x{NUM} cadros
-STR_HOUSE_PICKER_CARGO_ACCEPTED                                 :{BLACK}Carga aceptada: {ORANGE}
-STR_HOUSE_PICKER_CARGO_PRODUCED                                 :{BLACK}Carga producida: {ORANGE}{CARGO_LIST}
+STR_HOUSE_PICKER_NAME                                           :{BLACK}Nome: {GOLD}{STRING}
+STR_HOUSE_PICKER_POPULATION                                     :{BLACK}Poboación: {GOLD}{NUM}
+STR_HOUSE_PICKER_YEARS                                          :{BLACK}Anos: {GOLD}{NUM}-{NUM}
+STR_HOUSE_PICKER_YEARS_ANY                                      :{BLACK}Anos: {GOLD}Calquera
+STR_HOUSE_PICKER_YEARS_FROM                                     :{BLACK}Anos: {GOLD}Dende {NUM}
+STR_HOUSE_PICKER_YEARS_UNTIL                                    :{BLACK}Anos: {GOLD}Ata {NUM}
+STR_HOUSE_PICKER_SIZE                                           :{BLACK}Tamaño: {GOLD}{NUM}x{NUM} cadros
+STR_HOUSE_PICKER_CARGO_ACCEPTED                                 :{BLACK}Carga aceptada: {GOLD}{STRING}
+STR_HOUSE_PICKER_CARGO_PRODUCED                                 :{BLACK}Carga producida: {GOLD}{CARGO_LIST}
 
 STR_HOUSE_PICKER_CLASS_ZONE1                                    :Borde
 STR_HOUSE_PICKER_CLASS_ZONE2                                    :Periferia
@@ -3157,7 +3160,7 @@ STR_LAND_AREA_INFORMATION_AIRPORT_CLASS                         :{BLACK}Clase de
 STR_LAND_AREA_INFORMATION_AIRPORT_NAME                          :{BLACK}Nome do aeroporto: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_AIRPORTTILE_NAME                      :{BLACK}Nome do cadro do aeroporto: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_NEWGRF_NAME                           :{BLACK}NewGRF: {LTBLUE}{STRING}
-STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED                        :{BLACK}Carga aceptada: {LTBLUE}
+STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED                        :{BLACK}Carga aceptada: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_CARGO_EIGHTS                          :({COMMA}/8 {STRING})
 STR_LANG_AREA_INFORMATION_RAIL_TYPE                             :{BLACK}Tipo de vía: {LTBLUE}{STRING}
 STR_LANG_AREA_INFORMATION_ROAD_TYPE                             :{BLACK}Tipo de estrada: {LTBLUE}{STRING}
@@ -3352,6 +3355,8 @@ STR_SAVELOAD_DETAIL_GRFSTATUS                                   :{SILVER}NewGRF:
 STR_SAVELOAD_FILTER_TITLE                                       :{BLACK}Filtro:
 STR_SAVELOAD_OVERWRITE_TITLE                                    :{WHITE}Sobrescribir arquivo
 STR_SAVELOAD_OVERWRITE_WARNING                                  :{YELLOW}Estás seguro de que queres rescribir este arquivo?
+STR_SAVELOAD_DELETE_TITLE                                       :{WHITE}Borrar ficheiro
+STR_SAVELOAD_DELETE_WARNING                                     :{YELLOW}Estás seguro de que queres borrar este ficheiro?
 STR_SAVELOAD_DIRECTORY                                          :{STRING} (Directorio)
 STR_SAVELOAD_PARENT_DIRECTORY                                   :{STRING} (Directorio pai)
 
@@ -3427,11 +3432,18 @@ STR_MAPGEN_NORTHWEST                                            :{BLACK}Noroeste
 STR_MAPGEN_NORTHEAST                                            :{BLACK}Nordés
 STR_MAPGEN_SOUTHEAST                                            :{BLACK}Sueste
 STR_MAPGEN_SOUTHWEST                                            :{BLACK}Suroeste
+STR_MAPGEN_NORTHWEST_TOOLTIP                                    :Alternar auga ou borde de forma libre na esquina noroeste do mapa
+STR_MAPGEN_NORTHEAST_TOOLTIP                                    :Alternar auga ou borde de forma libre na esquina nordeste do mapa
+STR_MAPGEN_SOUTHEAST_TOOLTIP                                    :Alternar auga ou borde de forma libre na esquina sudeste do mapa
+STR_MAPGEN_SOUTHWEST_TOOLTIP                                    :Alternar auga ou borde de forma libre na esquina sudoeste do mapa
 STR_MAPGEN_BORDER_FREEFORM                                      :{BLACK}Forma libre
 STR_MAPGEN_BORDER_WATER                                         :{BLACK}Auga
 STR_MAPGEN_BORDER_RANDOM                                        :{BLACK}Aleatorio
-STR_MAPGEN_BORDER_RANDOMIZE                                     :{BLACK}Aleatorio
-STR_MAPGEN_BORDER_MANUAL                                        :{BLACK}Manual
+
+###length 3
+STR_MAPGEN_BORDER_RANDOMIZE                                     :Aleatorio
+STR_MAPGEN_BORDER_MANUAL                                        :Manual
+STR_MAPGEN_BORDER_INFINITE_WATER                                :Auga infinita
 
 STR_MAPGEN_HEIGHTMAP_ROTATION                                   :{BLACK}Rotación do mapa de alturas:
 STR_MAPGEN_HEIGHTMAP_NAME                                       :{BLACK}Nome do mapa de alturas:
@@ -3470,7 +3482,8 @@ STR_GENERATION_LANDSCAPE_GENERATION                             :{BLACK}Xeració
 STR_GENERATION_RIVER_GENERATION                                 :{BLACK}Xeración de ríos
 STR_GENERATION_CLEARING_TILES                                   :{BLACK}Xeración de áreas rochosas e escarpadas
 STR_GENERATION_TOWN_GENERATION                                  :{BLACK}Xeración de vilas
-STR_GENERATION_INDUSTRY_GENERATION                              :{BLACK}Xeración da industria
+STR_GENERATION_LAND_INDUSTRY_GENERATION                         :{BLACK}Xeración de industria terrestre
+STR_GENERATION_WATER_INDUSTRY_GENERATION                        :{BLACK}Xeración de industria marítima
 STR_GENERATION_OBJECT_GENERATION                                :{BLACK}Xeración de obxectos
 STR_GENERATION_TREE_GENERATION                                  :{BLACK}Xeración de árbores
 STR_GENERATION_SETTINGUP_GAME                                   :{BLACK}Configurando partida
@@ -3679,7 +3692,7 @@ STR_SIGN_LIST_MATCH_CASE                                        :{BLACK}Correspo
 STR_SIGN_LIST_MATCH_CASE_TOOLTIP                                :{BLACK}Activar correspondencia de maiúsculas ao comparar os nomes dos rótulos coa cadea de filtrado
 
 # Sign window
-STR_EDIT_SIGN_CAPTION                                           :{WHITE}Edita-lo texto do rótulo
+STR_EDIT_SIGN_CAPTION                                           :{WHITE}Editar o rótulo
 STR_EDIT_SIGN_LOCATION_TOOLTIP                                  :{BLACK}Centrar a vista principal na localización do sinal. Ctrl+Clic abre unha nova ventá na localización do sinal.
 STR_EDIT_SIGN_NEXT_SIGN_TOOLTIP                                 :{BLACK}Ir ao seguinte rótulo
 STR_EDIT_SIGN_PREVIOUS_SIGN_TOOLTIP                             :{BLACK}Ir ao rótulo anterior
@@ -3896,14 +3909,14 @@ STR_CARGO_RATING_EXCELLENT                                      :Excelente
 STR_CARGO_RATING_OUTSTANDING                                    :Excepcional
 
 STR_STATION_VIEW_CENTER_TOOLTIP                                 :{BLACK}Centra a vista principal na localización da estación. Ctrl+Clic abre un novo punto de vista da localización da estación
-STR_STATION_VIEW_RENAME_TOOLTIP                                 :{BLACK}Cambiar o nome da estación
+STR_STATION_VIEW_EDIT_TOOLTIP                                   :{BLACK}Renomear estación ou mover o sinal
 
 STR_STATION_VIEW_SCHEDULED_TRAINS_TOOLTIP                       :{BLACK}Mostrar tódolos trens que teñen esta estación nas súas ordes
 STR_STATION_VIEW_SCHEDULED_ROAD_VEHICLES_TOOLTIP                :{BLACK}Mostrar tódolos vehículos de estrada que teñen esta estación nas súas ordes
 STR_STATION_VIEW_SCHEDULED_AIRCRAFT_TOOLTIP                     :{BLACK}Mostrar tódolos avións que teñen esta estación nas súas ordes
 STR_STATION_VIEW_SCHEDULED_SHIPS_TOOLTIP                        :{BLACK}Mostrar tódolos barcos que teñen esta estación nas súas ordes
 
-STR_STATION_VIEW_RENAME_STATION_CAPTION                         :Renomear estación/área de carga
+STR_STATION_VIEW_EDIT_STATION_SIGN                              :{WHITE}Editar sinal da estación
 
 STR_STATION_VIEW_CLOSE_AIRPORT                                  :{BLACK}Pechar aeroporto
 STR_STATION_VIEW_CLOSE_AIRPORT_TOOLTIP                          :{BLACK}Evita que os avións aterren neste aeroporto
@@ -3911,11 +3924,11 @@ STR_STATION_VIEW_CLOSE_AIRPORT_TOOLTIP                          :{BLACK}Evita qu
 # Waypoint/buoy view window
 STR_WAYPOINT_VIEW_CAPTION                                       :{WHITE}{WAYPOINT}
 STR_WAYPOINT_VIEW_CENTER_TOOLTIP                                :{BLACK}Centra a vista principal na localización do punto de ruta. Ctrl+Clic abre unha nova ventá na localización do punto de ruta
-STR_WAYPOINT_VIEW_CHANGE_WAYPOINT_NAME                          :{BLACK}Cambiar o nome do punto de ruta
+STR_WAYPOINT_VIEW_EDIT_TOOLTIP                                  :{BLACK}Renomear punto de ruta ou mover o sinal
 STR_BUOY_VIEW_CENTER_TOOLTIP                                    :{BLACK}Centrar a vista principal na localización da boia. Ctrl+Clic abre unha nova ventá na localización da boia
 STR_BUOY_VIEW_RENAME_TOOLTIP                                    :{BLACK}Cambiar o nome da boia
 
-STR_EDIT_WAYPOINT_NAME                                          :{WHITE}Editar o nome do punto de ruta
+STR_WAYPOINT_VIEW_EDIT_WAYPOINT_SIGN                            :{WHITE}Editar sinal de punto de ruta
 
 # Finances window
 STR_FINANCES_CAPTION                                            :{WHITE}{COMPANY} Finanzas {BLACK}{COMPANY_NUM}
@@ -4030,7 +4043,7 @@ STR_COMPANY_INFRASTRUCTURE_VIEW_TOTAL_PERIOD                    :{WHITE}{CURRENC
 # Industry directory
 STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}Industrias ({COMMA} de {COMMA})
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- Ningunha -
-STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% transportado){BLACK}
+STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% transportado)
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
@@ -4053,9 +4066,9 @@ STR_INDUSTRY_VIEW_CARGO_GRAPH_TOOLTIP                           :{BLACK}Amosa o 
 STR_INDUSTRY_VIEW_PRODUCTION_LEVEL                              :{BLACK}Nivel de produción: {YELLOW}{COMMA}%
 STR_INDUSTRY_VIEW_INDUSTRY_ANNOUNCED_CLOSURE                    :{YELLOW}A industria anunció un peche inminente
 
-STR_INDUSTRY_VIEW_REQUIRES_N_CARGO                              :{BLACK}Require: {YELLOW}{STRING}{STRING}
-STR_INDUSTRY_VIEW_PRODUCES_N_CARGO                              :{BLACK}Produce: {YELLOW}{STRING}{STRING}
-STR_INDUSTRY_VIEW_CARGO_LIST_EXTENSION                          :, {STRING}{STRING}
+STR_INDUSTRY_VIEW_REQUIRES_N_CARGO                              :{BLACK}Require: {YELLOW}{STRING}
+STR_INDUSTRY_VIEW_PRODUCES_N_CARGO                              :{BLACK}Produce: {YELLOW}{STRING}
+STR_INDUSTRY_VIEW_CARGO_LIST_EXTENSION                          :{STRING}{STRING}
 
 STR_INDUSTRY_VIEW_REQUIRES                                      :{BLACK}Require:
 STR_INDUSTRY_VIEW_ACCEPT_CARGO_SUFFIX                           :{YELLOW}{0:STRING}{BLACK}{3:STRING}
@@ -4350,6 +4363,7 @@ STR_DEPOT_SELL_CONFIRMATION_TEXT                                :{YELLOW}Vas ven
 STR_ENGINE_PREVIEW_CAPTION                                      :{WHITE}Mensaxe dun fabricante de vehículos
 STR_ENGINE_PREVIEW_MESSAGE                                      :{GOLD}Acabamos de deseñar un novo {STRING} - Interésache probar este vehículo en exclusiva durante un ano, para ve-lo seu rendemento antes de facelo universalmente dispoñíbel?
 
+
 STR_ENGINE_PREVIEW_RAILROAD_LOCOMOTIVE                          :locomotora de ferrocarril
 STR_ENGINE_PREVIEW_ELRAIL_LOCOMOTIVE                            :Locomotora eléctrica
 STR_ENGINE_PREVIEW_MONORAIL_LOCOMOTIVE                          :locomotora de monorraíl
@@ -4581,7 +4595,7 @@ STR_VEHICLE_DETAILS_TRAIN_CAPACITIES_TOOLTIP                    :{BLACK}Mostrar 
 STR_VEHICLE_DETAIL_TAB_TOTAL_CARGO                              :{BLACK}Carga total
 STR_VEHICLE_DETAILS_TRAIN_TOTAL_CARGO_TOOLTIP                   :{BLACK}Mostra-la capacidade total do tren, dividida por tipos de carga
 
-STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}Capacidade: {LTBLUE}
+STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}Capacidade: {LTBLUE}{STRING}
 
 # Vehicle refit
 STR_REFIT_CAPTION                                               :{WHITE}{VEHICLE} (Reformar)
@@ -5129,6 +5143,7 @@ STR_ERROR_TOO_MANY_TRUCK_STOPS                                  :{WHITE}Demasiad
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_DOCK                             :{WHITE}Demasiado preto doutro peirao
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_AIRPORT                          :{WHITE}Demasiado preto doutro aeroporto
 STR_ERROR_CAN_T_RENAME_STATION                                  :{WHITE}Non se pode renomear a estación...
+STR_ERROR_CAN_T_MOVE_STATION_NAME                               :{WHITE}Non se pode mover o sinal da estación
 STR_ERROR_DRIVE_THROUGH_ON_TOWN_ROAD                            :{WHITE}... esta rúa é municipal
 STR_ERROR_DRIVE_THROUGH_DIRECTION                               :{WHITE}... a estrada vai na dirección incorrecta
 STR_ERROR_DRIVE_THROUGH_CORNER                                  :{WHITE}... as paradas pasantes non poden ter esquinas
@@ -5160,6 +5175,7 @@ STR_ERROR_CAN_T_BUILD_RAIL_WAYPOINT                             :{WHITE}Non se p
 STR_ERROR_CAN_T_BUILD_ROAD_WAYPOINT                             :{WHITE}Non se poden construír puntos de ruta de estrada aquí...
 STR_ERROR_CAN_T_POSITION_BUOY_HERE                              :{WHITE}Non se pode coloca-la boia aquí...
 STR_ERROR_CAN_T_CHANGE_WAYPOINT_NAME                            :{WHITE}Non se pode cambia-lo nome do punto de ruta...
+STR_ERROR_CAN_T_MOVE_WAYPOINT_NAME                              :{WHITE}Non se pode mover o sinal do punto de ruta
 
 STR_ERROR_CAN_T_REMOVE_RAIL_WAYPOINT                            :{WHITE}Non se pode eliminar-lo punto de ruta aquí...
 STR_ERROR_CAN_T_REMOVE_ROAD_WAYPOINT                            :{WHITE}Non se pode eliminar o punto de ruta da estrada de aquí...

@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file town_gui.cpp GUI for towns. */
@@ -61,7 +61,7 @@ TownKdtree _town_local_authority_kdtree{};
 
 typedef GUIList<const Town*, const bool &> GUITownList;
 
-static constexpr NWidgetPart _nested_town_authority_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_town_authority_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_BROWN),
 		NWidget(WWT_CAPTION, COLOUR_BROWN, WID_TA_CAPTION),
@@ -839,7 +839,7 @@ public:
 	}
 };
 
-static constexpr NWidgetPart _nested_town_game_view_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_town_game_view_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_BROWN),
 		NWidget(WWT_PUSHIMGBTN, COLOUR_BROWN, WID_TV_CHANGE_NAME), SetAspect(WidgetDimensions::ASPECT_RENAME), SetSpriteTip(SPR_RENAME, STR_TOWN_VIEW_RENAME_TOOLTIP),
@@ -871,7 +871,7 @@ static WindowDesc _town_game_view_desc(__FILE__, __LINE__,
 	_nested_town_game_view_widgets
 );
 
-static constexpr NWidgetPart _nested_town_editor_view_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_town_editor_view_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_BROWN),
 		NWidget(WWT_PUSHIMGBTN, COLOUR_BROWN, WID_TV_CHANGE_NAME), SetAspect(WidgetDimensions::ASPECT_RENAME), SetSpriteTip(SPR_RENAME, STR_TOWN_VIEW_RENAME_TOOLTIP),
@@ -916,7 +916,7 @@ void ShowTownViewWindow(TownID town)
 	}
 }
 
-static constexpr NWidgetPart _nested_town_directory_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_town_directory_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_BROWN),
 		NWidget(WWT_CAPTION, COLOUR_BROWN, WID_TD_CAPTION),
@@ -1374,7 +1374,7 @@ void CcFoundRandomTown(const CommandCost &result)
 	if (town_id.has_value()) ScrollMainWindowToTile(Town::Get(*town_id)->xy);
 }
 
-static constexpr NWidgetPart _nested_found_town_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_found_town_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_DARK_GREEN),
 		NWidget(WWT_CAPTION, COLOUR_DARK_GREEN), SetStringTip(STR_FOUND_TOWN_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
@@ -1739,7 +1739,7 @@ struct SelectTownWindow : Window {
 		if (pos >= this->towns.size()) return;
 
 		/* Place a house */
-		TownID &town_id = std::get<2>(this->cmd.payload.GetValues());
+		TownID &town_id = this->cmd.payload.GetValue<2>();
 		town_id = this->towns[pos];
 		DoCommandPContainer(this->cmd);
 
@@ -2304,8 +2304,13 @@ struct BuildHouseWindow : public PickerWindow {
 		if (house_types.ids.empty()) return;
 
 		if (end_tile == start_tile) {
-			const HouseSpec *spec = HouseSpec::Get(house_types.ids.at(RandomRange(static_cast<uint32_t>(house_types.ids.size()))));
-			this->PlaceSingleHouse(spec, start_tile);
+			HouseID house_type;
+			if (house_types.ids.size() > 1) {
+				house_type = house_types.ids.at(InteractiveRandomRange(static_cast<uint32_t>(house_types.ids.size())));
+			} else {
+				house_type = house_types.ids[0];
+			}
+			this->PlaceSingleHouse(HouseSpec::Get(house_type), start_tile);
 		} else {
 			Command<CMD_PLACE_HOUSE_AREA>::Post(STR_ERROR_CAN_T_BUILD_HOUSE, CommandCallback::PlaySound_CONSTRUCTION_OTHER,
 					end_tile, start_tile, house_types, BuildHouseWindow::house_protected, TownID::Invalid(), BuildHouseWindow::replace, _ctrl_pressed);
@@ -2325,7 +2330,7 @@ struct BuildHouseWindow : public PickerWindow {
 };
 
 /** Nested widget definition for the build NewGRF rail waypoint window */
-static constexpr NWidgetPart _nested_build_house_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_build_house_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_DARK_GREEN),
 		NWidget(WWT_CAPTION, COLOUR_DARK_GREEN), SetStringTip(STR_HOUSE_PICKER_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),

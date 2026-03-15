@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file train_cmd.cpp Handling of trains. */
@@ -25,7 +25,6 @@
 #include "newgrf_station.h"
 #include "effectvehicle_func.h"
 #include "network/network.h"
-#include "spritecache.h"
 #include "core/random_func.hpp"
 #include "company_base.h"
 #include "newgrf.h"
@@ -454,6 +453,9 @@ void Train::ConsistChanged(ConsistChangeFlags allowed_changes)
 		InvalidateWindowData(WC_VEHICLE_REFIT, this->index, VIWD_CONSIST_CHANGED);
 		InvalidateWindowData(WC_VEHICLE_ORDERS, this->index, VIWD_CONSIST_CHANGED);
 		InvalidateNewGRFInspectWindow(GSF_TRAINS, this->index.base());
+
+		/* If the consist is changed while in a depot, the vehicle view window must be invalidated to update the availability of refitting. */
+		InvalidateWindowData(WC_VEHICLE_VIEW, this->index, VIWD_CONSIST_CHANGED);
 	}
 	if (allowed_changes.Test(ConsistChangeFlag::Length)) {
 		for (Train *u = this->Next(); u != nullptr; u = u->Next()) {
@@ -1510,7 +1512,7 @@ static CommandCost CmdBuildRailWagon(TileIndex tile, DoCommandFlags flags, const
 	if (!IsCompatibleRail(rvi->railtypes, GetRailType(tile))) return CommandCost(STR_ERROR_DEPOT_HAS_WRONG_RAIL_TYPE);
 
 	if (flags.Test(DoCommandFlag::Execute)) {
-		Train *v = new Train();
+		Train *v = Train::Create();
 		*ret = v;
 		v->spritenum = rvi->image_index;
 
@@ -1565,23 +1567,25 @@ static CommandCost CmdBuildRailWagon(TileIndex tile, DoCommandFlags flags, const
 
 		CheckConsistencyOfArticulatedVehicle(v);
 
-		/* Try to connect the vehicle to one of free chains of wagons. */
-		std::vector<Train *> candidates;
-		for (Train *w = Train::From(GetFirstVehicleOnTile(tile, VEH_TRAIN)); w != nullptr; w = w->HashTileNext()) {
-			if (w->IsFreeWagon() &&                          ///< A free wagon chain
-					w->engine_type == e->index &&            ///< Same type
-					w->First() != v &&                       ///< Don't connect to ourself
-					!w->vehstatus.Test(VehState::Crashed) && ///< Not crashed/flooded
-					w->owner == v->owner) {                  ///< Same owner
-				candidates.push_back(w);
+		if (!flags.Test(DoCommandFlag::AutoReplace)) {
+			/* Try to connect the vehicle to one of free chains of wagons. */
+			std::vector<Train *> candidates;
+			for (Train *w = Train::From(GetFirstVehicleOnTile(tile, VEH_TRAIN)); w != nullptr; w = w->HashTileNext()) {
+				if (w->IsFreeWagon() &&                          ///< A free wagon chain
+						w->engine_type == e->index &&            ///< Same type
+						w->First() != v &&                       ///< Don't connect to ourself
+						!w->vehstatus.Test(VehState::Crashed) && ///< Not crashed/flooded
+						w->owner == v->owner) {                  ///< Same owner
+					candidates.push_back(w);
+				}
 			}
-		}
-		std::sort(candidates.begin(), candidates.end(), [](const Train *a, const Train *b) {
-			return a->index < b->index;
-		});
-		for (Train *w : candidates) {
-			if (Command<CMD_MOVE_RAIL_VEHICLE>::Do(DoCommandFlag::Execute, v->index, w->Last()->index, MoveRailVehicleFlags::MoveChain).Succeeded()) {
-				break;
+			std::sort(candidates.begin(), candidates.end(), [](const Train *a, const Train *b) {
+				return a->index < b->index;
+			});
+			for (Train *w : candidates) {
+				if (Command<CMD_MOVE_RAIL_VEHICLE>::Do(DoCommandFlag::Execute, v->index, w->Last()->index, MoveRailVehicleFlags::MoveChain).Succeeded()) {
+					break;
+				}
 			}
 		}
 
@@ -1615,7 +1619,7 @@ void NormalizeTrainVehInDepot(const Train *u)
 
 static void AddRearEngineToMultiheadedTrain(Train *v)
 {
-	Train *u = new Train();
+	Train *u = Train::Create();
 	v->value >>= 1;
 	u->value = v->value;
 	u->direction = v->direction;
@@ -1677,7 +1681,7 @@ CommandCost CmdBuildRailVehicle(TileIndex tile, DoCommandFlags flags, const Engi
 		int x = TileX(tile) * TILE_SIZE + _vehicle_initial_x_fract[dir];
 		int y = TileY(tile) * TILE_SIZE + _vehicle_initial_y_fract[dir];
 
-		Train *v = new Train();
+		Train *v = Train::Create();
 		*ret = v;
 		v->direction = DiagDirToDir(dir);
 		v->tile = tile;
@@ -3271,6 +3275,27 @@ CommandCost CmdReverseTrainDirection(DoCommandFlags flags, VehicleID veh_id, boo
 }
 
 /**
+ * Determine to what force_proceed should be changed.
+ * If we are forced to proceed, cancel that order.
+ * If we are marked stuck we would want to force the train to
+ * proceed to the next signal unless we are stuck just before
+ * the next signal. In the other cases we would like to pass
+ * the signal at danger and run till the next signal we encounter.
+ * @param t The train to determine the new value of force_proceed for.
+ * @return The next state of force_proceed.
+ */
+static TrainForceProceeding DetermineNextTrainForceProceeding(const Train *t)
+{
+	if (t->vehstatus.Test(VehState::Crashed) || t->force_proceed == TFP_SIGNAL) return TFP_NONE;
+	if (!t->flags.Test(VehicleRailFlag::Stuck)) return t->IsChainInDepot() ? TFP_STUCK : TFP_SIGNAL;
+
+	TileIndex next_tile = TileAddByDiagDir(t->tile, TrackdirToExitdir(t->GetVehicleTrackdir()));
+	if (next_tile == INVALID_TILE || !IsTileType(next_tile, MP_RAILWAY) || !HasSignals(next_tile)) return TFP_STUCK;
+	TrackBits new_tracks = DiagdirReachesTracks(TrackdirToExitdir(t->GetVehicleTrackdir())) & GetTrackBits(next_tile);
+	return new_tracks != TRACK_BIT_NONE && HasSignalOnTrack(next_tile, FindFirstTrack(new_tracks)) ? TFP_SIGNAL : TFP_STUCK;
+}
+
+/**
  * Force a train through a red signal
  * @param flags type of operation
  * @param veh_id train to ignore the red signal
@@ -3288,12 +3313,7 @@ CommandCost CmdForceTrainProceed(DoCommandFlags flags, VehicleID veh_id)
 
 
 	if (flags.Test(DoCommandFlag::Execute)) {
-		/* If we are forced to proceed, cancel that order.
-		 * If we are marked stuck we would want to force the train
-		 * to proceed to the next signal. In the other cases we
-		 * would like to pass the signal at danger and run till the
-		 * next signal we encounter. */
-		t->force_proceed = t->force_proceed == TFP_SIGNAL ? TFP_NONE : t->flags.Test(VehicleRailFlag::Stuck) || t->IsChainInDepot() ? TFP_STUCK : TFP_SIGNAL;
+		t->force_proceed = DetermineNextTrainForceProceeding(t);
 		SetWindowDirty(WC_VEHICLE_VIEW, t->index);
 
 		/* Unbunching data is no longer valid. */
@@ -5007,7 +5027,7 @@ enum TrainMovedChangeSignalEnum {
 static TrainMovedChangeSignalEnum TrainMovedChangeSignal(Train* v, TileIndex tile, DiagDirection dir, bool front)
 {
 	if (IsTileType(tile, MP_RAILWAY) &&
-			GetRailTileType(tile) == RAIL_TILE_SIGNALS) {
+			GetRailTileType(tile) == RailTileType::Signals) {
 		TrackdirBits tracks = TrackBitsToTrackdirBits(GetTrackBits(tile)) & DiagdirReachesTrackdirs(dir);
 		Trackdir trackdir = FindFirstTrackdir(tracks);
 		if (UpdateSignalsOnSegment(tile,  TrackdirToExitdir(trackdir), GetTileOwner(tile)) == SIGSEG_PBS && HasSignalOnTrackdir(tile, trackdir)) {
@@ -5127,11 +5147,18 @@ static uint CheckTrainCollision(Train *v, Train *t)
 		if (v->owner != t->owner) return 0;
 	}
 
-	/* get first vehicle now to make most usual checks faster */
+	/* Self-check: a vehicle unit cannot collide with itself.
+	 * This is the most common case and skipping it early avoids further calculations. */
+	if (v == t) return 0;
+
+	/* Get the first vehicle of the consist. */
 	Train *coll = v->First();
 
-	/* can't collide with own wagons */
-	if (coll == t) return 0;
+	if (coll == t) {
+		/* If self-collision is disabled, skip all wagons of the same train.
+		 * If enabled, only skip immediate neighbors. */
+		if (!_settings_game.vehicle.train_self_collision || v == t->Next() || v == t->Previous()) return 0;
+	}
 
 	int x_diff = v->x_pos - t->x_pos;
 	int y_diff = v->y_pos - t->y_pos;
@@ -5150,8 +5177,10 @@ static uint CheckTrainCollision(Train *v, Train *t)
 	/* Happens when there is a train under bridge next to bridge head */
 	if (abs(v->z_pos - t->z_pos) > 5) return 0;
 
-	/* crash both trains */
-	return TrainCrashed(t) + TrainCrashed(coll);
+	/* Crash both trains. Two statements required to guarantee execution
+	 * order because RandomRange() is involved. */
+	uint num_victims = TrainCrashed(t);
+	return num_victims + TrainCrashed(coll);
 }
 
 /**
@@ -7085,7 +7114,7 @@ static Train *CmdBuildVirtualRailWagon(const Engine *e, ClientID user, bool no_c
 {
 	const RailVehicleInfo &rvi = e->VehInfo<RailVehicleInfo>();
 
-	Train *v = new Train();
+	Train *v = Train::Create();
 
 	v->x_pos = 0;
 	v->y_pos = 0;
@@ -7147,10 +7176,14 @@ Train *BuildVirtualRailVehicle(EngineID eid, StringID &error, ClientID user, boo
 
 	const RailVehicleInfo &rvi = e->VehInfo<RailVehicleInfo>();
 
-	int num_vehicles = (rvi.railveh_type == RAILVEH_MULTIHEAD ? 2 : 1) + CountArticulatedParts(eid, false);
-	if (!Train::CanAllocateItem(num_vehicles)) {
-		error = STR_ERROR_TOO_MANY_VEHICLES_IN_GAME;
-		return nullptr;
+	/* Check whether the number of vehicles we need to build can be built according to pool space.
+	 * If 2 + MAX_ARTICULATED_PARTS are available, then there's no need to call CountArticulatedParts, which is potentially expensive. */
+	if (!Vehicle::CanAllocateItem(2 + MAX_ARTICULATED_PARTS)) {
+		uint num_vehicles = (rvi.railveh_type == RAILVEH_MULTIHEAD ? 2 : 1) + CountArticulatedParts(eid);
+		if (!Train::CanAllocateItem(num_vehicles)) {
+			error = STR_ERROR_TOO_MANY_VEHICLES_IN_GAME;
+			return nullptr;
+		}
 	}
 
 	RegisterGameEvents(GEF_VIRT_TRAIN);
@@ -7159,7 +7192,7 @@ Train *BuildVirtualRailVehicle(EngineID eid, StringID &error, ClientID user, boo
 		return CmdBuildVirtualRailWagon(e, user, no_consist_change);
 	}
 
-	Train *v = new Train();
+	Train *v = Train::Create();
 
 	v->x_pos = 0;
 	v->y_pos = 0;
@@ -7373,6 +7406,10 @@ static CommandCost CmdTemplateReplaceVehicle(DoCommandFlags flags, Train *incomi
 		}
 	}
 
+	if (tv->IsFreeWagonChain()) {
+		return CommandCost(STR_TMPL_ERROR_NOT_RUNNABLE);
+	}
+
 	TemplateDepotVehicles depot_vehicles;
 	if (tv->IsSetReuseDepotVehicles()) depot_vehicles.Init(tile);
 
@@ -7452,8 +7489,10 @@ static CommandCost CmdTemplateReplaceVehicle(DoCommandFlags flags, Train *incomi
 			if (eid == incoming->engine_type) {
 				new_chain = incoming;
 				remainder_chain = incoming->GetNextUnit();
-				if (remainder_chain) {
-					CommandCost move_cost = CmdMoveRailVehicle(flags, remainder_chain->index, VehicleID::Invalid(), MoveRailVehicleFlags::MoveChain);
+				if (remainder_chain != nullptr) {
+					DoCommandFlags subflags = flags;
+					if (!tv->IsSetKeepRemainingVehicles()) subflags.Set(DoCommandFlag::AutoReplace);
+					CommandCost move_cost = CmdMoveRailVehicle(subflags, remainder_chain->index, VehicleID::Invalid(), MoveRailVehicleFlags::MoveChain);
 					if (move_cost.Failed()) {
 						/* This should not fail, if it does give up immediately */
 						return move_cost;
@@ -7466,7 +7505,7 @@ static CommandCost CmdTemplateReplaceVehicle(DoCommandFlags flags, Train *incomi
 			new_chain = ChainContainsEngine(eid, incoming);
 			if (new_chain != nullptr) {
 				/* new_chain is the needed engine, move it to an empty spot in the depot */
-				CommandCost move_cost = Command<CMD_MOVE_RAIL_VEHICLE>::Do(flags, new_chain->index, VehicleID::Invalid(), MoveRailVehicleFlags::None);
+				CommandCost move_cost = Command<CMD_MOVE_RAIL_VEHICLE>::Do(flags | DoCommandFlag::AutoReplace, new_chain->index, VehicleID::Invalid(), MoveRailVehicleFlags::None);
 				if (move_cost.Succeeded()) {
 					remainder_chain = incoming;
 					return CommandCost();
@@ -7478,7 +7517,7 @@ static CommandCost CmdTemplateReplaceVehicle(DoCommandFlags flags, Train *incomi
 				new_chain = depot_vehicles.ContainsEngine(eid, incoming);
 				if (new_chain != nullptr) {
 					ClearVehicleWindows(new_chain);
-					CommandCost move_cost = Command<CMD_MOVE_RAIL_VEHICLE>::Do(flags, new_chain->index, VehicleID::Invalid(), MoveRailVehicleFlags::None);
+					CommandCost move_cost = Command<CMD_MOVE_RAIL_VEHICLE>::Do(flags | DoCommandFlag::AutoReplace, new_chain->index, VehicleID::Invalid(), MoveRailVehicleFlags::None);
 					if (move_cost.Succeeded()) {
 						depot_vehicles.RemoveVehicle(new_chain->index);
 						remainder_chain = incoming;
@@ -7488,7 +7527,7 @@ static CommandCost CmdTemplateReplaceVehicle(DoCommandFlags flags, Train *incomi
 			}
 
 			/* Case 4 */
-			CommandCost buy_cost = Command<CMD_BUILD_VEHICLE>::Do(flags, tile, eid, false, INVALID_CARGO, INVALID_CLIENT_ID);
+			CommandCost buy_cost = Command<CMD_BUILD_VEHICLE>::Do(flags | DoCommandFlag::AutoReplace, tile, eid, false, INVALID_CARGO, INVALID_CLIENT_ID);
 			/* break up in case buying the vehicle didn't succeed */
 			if (buy_cost.Failed()) return buy_cost;
 			auto buy_veh_id = buy_cost.GetResultData<VehicleID>();
@@ -7531,7 +7570,7 @@ static CommandCost CmdTemplateReplaceVehicle(DoCommandFlags flags, Train *incomi
 					if (new_part == remainder_chain) {
 						remainder_chain_next = remainder_chain->GetNextUnit();
 					}
-					CommandCost move_cost = CmdMoveRailVehicle(flags, new_part->index, last_veh->index, MoveRailVehicleFlags::None);
+					CommandCost move_cost = CmdMoveRailVehicle(flags | DoCommandFlag::AutoReplace, new_part->index, last_veh->index, MoveRailVehicleFlags::None);
 					if (move_cost.Succeeded()) {
 						remainder_chain = remainder_chain_next;
 						return;
@@ -7551,7 +7590,7 @@ static CommandCost CmdTemplateReplaceVehicle(DoCommandFlags flags, Train *incomi
 				}
 
 				/* Case 3: must buy new engine */
-				CommandCost buy_cost = Command<CMD_BUILD_VEHICLE>::Do(flags, tile, cur_tmpl->engine_type, false, INVALID_CARGO, INVALID_CLIENT_ID);
+				CommandCost buy_cost = Command<CMD_BUILD_VEHICLE>::Do(flags | DoCommandFlag::AutoReplace, tile, cur_tmpl->engine_type, false, INVALID_CARGO, INVALID_CLIENT_ID);
 				if (buy_cost.Failed()) {
 					new_part = nullptr;
 					return;
@@ -7563,7 +7602,7 @@ static CommandCost CmdTemplateReplaceVehicle(DoCommandFlags flags, Train *incomi
 				}
 
 				new_part = Train::Get(*buy_veh_id);
-				CommandCost move_cost = CmdMoveRailVehicle(flags, new_part->index, last_veh->index, MoveRailVehicleFlags::None);
+				CommandCost move_cost = CmdMoveRailVehicle(flags | DoCommandFlag::AutoReplace, new_part->index, last_veh->index, MoveRailVehicleFlags::None);
 				if (move_cost.Succeeded()) {
 					buy.AddCost(buy_cost.GetCost());
 				} else {

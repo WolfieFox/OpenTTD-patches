@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file company_base.h Definition of stuff that is very close to a company, like the company struct itself. */
@@ -45,8 +45,10 @@ struct CompanyInfrastructure {
 		return std::accumulate(std::begin(this->rail), std::end(this->rail), 0U);
 	}
 
-	uint32_t GetRoadTotal() const;
-	uint32_t GetTramTotal() const;
+	uint32_t GetRoadTramTotal(RoadTramType rtt) const;
+
+	inline uint32_t GetRoadTotal() const { return GetRoadTramTotal(RTT_ROAD); }
+	inline uint32_t GetTramTotal() const { return GetRoadTramTotal(RTT_TRAM); }
 
 	void Dump(struct format_target &buffer) const;
 
@@ -145,7 +147,7 @@ struct CompanyProperties {
 };
 
 struct Company : CompanyPool::PoolItem<&_company_pool>, CompanyProperties {
-	Company(StringID name_1 = StringID{0}, bool is_ai = false);
+	Company(CompanyID index, StringID name_1 = StringID{0}, bool is_ai = false);
 	~Company();
 
 	RailTypes avail_railtypes{}; ///< Rail types available to this company.

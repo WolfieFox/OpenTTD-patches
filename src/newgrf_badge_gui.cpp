@@ -2,10 +2,10 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
-/** @file newgrf_badge.cpp Functionality for NewGRF badges. */
+/** @file newgrf_badge_gui.cpp GUI functionalities for NewGRF badges. */
 
 #include "stdafx.h"
 
@@ -18,6 +18,7 @@
 #include "newgrf_badge_gui.h"
 #include "newgrf_badge_type.h"
 #include "settings_gui.h"
+#include "settings_type.h"
 #include "strings_func.h"
 #include "timer/timer_game_calendar.h"
 #include "window_gui.h"
@@ -248,17 +249,59 @@ private:
 
 };
 
-using DropDownListBadgeItem = DropDownBadges<DropDownListStringItem>;
-using DropDownListBadgeIconItem = DropDownBadges<DropDownListIconItem>;
+template <class TBase, class TNoMoney>
+class DropDownConditionallyShowMoney : public TBase {
+	bool show_money;
 
-std::unique_ptr<DropDownListItem> MakeDropDownListBadgeItem(const std::shared_ptr<GUIBadgeClasses> &gui_classes, std::span<const BadgeID> badges, GrfSpecFeature feature, std::optional<CalTime::Date> introduction_date, std::string &&str, int value, bool masked, bool shaded)
+public:
+	template <typename... Args>
+	explicit DropDownConditionallyShowMoney(bool show_money, Args&&... args) : TBase(std::forward<Args>(args)...), show_money(show_money) {}
+
+	uint Width() const override
+	{
+		return this->show_money ? this->TBase::Width() : this->TNoMoney::Width();
+	}
+
+	uint Height() const override
+	{
+		return this->show_money ? this->TBase::Height() : this->TNoMoney::Height();
+	}
+
+	int OnClick(const Rect &r, const Point &pt) const override
+	{
+		return this->show_money ? this->TBase::OnClick(r, pt) : this->TNoMoney::OnClick(r, pt);
+	}
+
+	void Draw(const Rect &full, const Rect &r, bool sel, int click_result, Colours bg_colour) const override
+	{
+		if (this->show_money) {
+			this->TBase::Draw(full, r, sel, click_result, bg_colour);
+		} else {
+			this->TNoMoney::Draw(full, r, sel, click_result, bg_colour);
+		}
+	}
+};
+
+template <typename T>
+using DropDownListConditionallyShowMoney = DropDownConditionallyShowMoney<DropDownString<DropDownSpacer<T, true>, FS_SMALL, true>, T>;
+
+using DropDownListBadgeItem = DropDownBadges<DropDownListConditionallyShowMoney<DropDownListStringItem>>;
+using DropDownListBadgeIconItem = DropDownBadges<DropDownListConditionallyShowMoney<DropDownListIconItem>>;
+
+std::unique_ptr<DropDownListItem> MakeDropDownListBadgeItem(const std::shared_ptr<GUIBadgeClasses> &gui_classes, std::span<const BadgeID> badges, GrfSpecFeature feature, std::optional<CalTime::Date> introduction_date, bool show_cost, Money cost, std::string &&str, int value, bool masked, bool shaded)
 {
-	return std::make_unique<DropDownListBadgeItem>(gui_classes, badges, feature, introduction_date, std::move(str), value, masked, shaded);
+	if (!_settings_client.gui.show_rail_road_cost_dropdown) show_cost = false;
+	std::string cost_str;
+	if (show_cost) cost_str = GetString(STR_JUST_CURRENCY_SHORT, cost);
+	return std::make_unique<DropDownListBadgeItem>(gui_classes, badges, feature, introduction_date, show_cost, std::move(cost_str), std::move(str), value, masked, shaded);
 }
 
-std::unique_ptr<DropDownListItem> MakeDropDownListBadgeIconItem(const std::shared_ptr<GUIBadgeClasses> &gui_classes, std::span<const BadgeID> badges, GrfSpecFeature feature, std::optional<CalTime::Date> introduction_date, const Dimension &dim, SpriteID sprite, PaletteID palette, std::string &&str, int value, bool masked, bool shaded)
+std::unique_ptr<DropDownListItem> MakeDropDownListBadgeIconItem(const std::shared_ptr<GUIBadgeClasses> &gui_classes, std::span<const BadgeID> badges, GrfSpecFeature feature, std::optional<CalTime::Date> introduction_date, bool show_cost, Money cost, const Dimension &dim, SpriteID sprite, PaletteID palette, std::string &&str, int value, bool masked, bool shaded)
 {
-	return std::make_unique<DropDownListBadgeIconItem>(gui_classes, badges, feature, introduction_date, dim, sprite, palette, std::move(str), value, masked, shaded);
+	if (!_settings_client.gui.show_rail_road_cost_dropdown) show_cost = false;
+	std::string cost_str;
+	if (show_cost) cost_str = GetString(STR_JUST_CURRENCY_SHORT, cost);
+	return std::make_unique<DropDownListBadgeIconItem>(gui_classes, badges, feature, introduction_date, show_cost, std::move(cost_str), dim, sprite, palette, std::move(str), value, masked, shaded);
 }
 
 /**
@@ -288,7 +331,7 @@ public:
 		bool rtl = (_current_text_dir == TD_RTL);
 		int w = SETTING_BUTTON_WIDTH;
 
-		Rect br = r.WithWidth(w, TEnd ^ rtl).CentreTo(w, SETTING_BUTTON_HEIGHT);
+		Rect br = r.WithWidth(w, TEnd ^ rtl).CentreToHeight(SETTING_BUTTON_HEIGHT);
 		if (br.WithWidth(w / 2, rtl).Contains(pt)) return this->click_up;
 		if (br.WithWidth(w / 2, !rtl).Contains(pt)) return this->click_down;
 
@@ -306,7 +349,7 @@ public:
 			if (click_result == this->click_down) state = 2;
 		}
 
-		Rect br = r.WithWidth(w, TEnd ^ rtl).CentreTo(w, SETTING_BUTTON_HEIGHT);
+		Rect br = r.WithWidth(w, TEnd ^ rtl).CentreToHeight(SETTING_BUTTON_HEIGHT);
 		DrawUpDownButtons(br.left, br.top, this->button_colour, state, this->click_up != 0, this->click_down != 0);
 
 		this->TBase::Draw(full, r.Indent(w + WidgetDimensions::scaled.hsep_wide, TEnd ^ rtl), sel, click_result, bg_colour);

@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file settings_type.h Types related to global configuration settings. */
@@ -10,6 +10,7 @@
 #ifndef SETTINGS_TYPE_H
 #define SETTINGS_TYPE_H
 
+#include "command_settings_type.h"
 #include "date_type.h"
 #include "economy_type.h"
 #include "town_type.h"
@@ -358,8 +359,8 @@ struct GUISettings : public TimeSettings {
 	bool        show_progsig_ui;                                 ///< Show programmable pre-signals feature in UI
 	bool        show_noentrysig_ui;                              ///< Show no-entry signals feature in UI
 	uint8_t     osk_activation;                                  ///< Mouse gesture to trigger the OSK.
-	Colours     starting_colour;                                 ///< default color scheme for the company to start a new game with
-	Colours     starting_colour_secondary;                       ///< default secondary color scheme for the company to start a new game with
+	Colours     starting_colour;                                 ///< default colour scheme for the company to start a new game with
+	Colours     starting_colour_secondary;                       ///< default secondary colour scheme for the company to start a new game with
 	bool        show_newgrf_name;                                ///< Show the name of the NewGRF in the build vehicle window
 	bool        show_cargo_in_vehicle_lists;                     ///< Show the cargoes the vehicles can carry in the list windows
 	bool        show_wagon_intro_year;                           ///< Show the introduction year for wagons in the build vehicle window
@@ -399,6 +400,7 @@ struct GUISettings : public TimeSettings {
 	bool        show_rail_polyline_tool;                         ///< Show rail polyline tool
 	bool        show_running_costs_calendar_year;                ///< Show vehicle running costs in calendar years
 	bool        show_town_growth_status;                         ///< Show town growth status & sorting in town directory
+	bool        show_rail_road_cost_dropdown;                    ///< Show rail and road type cost in dropdown menus
 
 	uint16_t    console_backlog_timeout;                         ///< the minimum amount of time items should be in the console backlog before they will be removed in ~3 seconds granularity.
 	uint16_t    console_backlog_length;                          ///< the minimum amount of items in the console backlog before items will be removed.
@@ -617,7 +619,7 @@ struct ConstructionSettings {
 	uint8_t  trees_around_snow_line_range;   ///< range around snowline for mixed and arctic forest.
 	bool     trees_around_snow_line_enabled; ///< enable mixed and arctic forest around snowline, and no trees above snowline
 	uint8_t  trees_around_snow_line_dynamic_range; ///< how much of the snow line dynamic range to use as the snowline for arctic tree placement
-	uint8_t  command_pause_level;            ///< level/amount of commands that can't be executed while paused
+	CommandPauseLevel command_pause_level;   ///< level/amount of commands that can't be executed while paused
 	uint16_t maximum_signal_evaluations;     ///< maximum number of programmable pre-signals which may be evaluated in one pass
 	bool     enable_build_river;             ///< enable building rivers in-game
 	bool     enable_remove_water;            ///< enable removing sea and rivers in-game
@@ -769,6 +771,7 @@ struct VehicleSettings {
 	uint8_t  repair_cost;                      ///< cost of repairing vehicle
 	bool     ship_collision_avoidance;         ///< ships try to avoid colliding with each other
 	bool     no_train_crash_other_company;     ///< trains cannot crash with trains from other companies
+	bool     train_self_collision;             ///< trains can crash into their own wagons in a circular track
 	bool     roadveh_articulated_overtaking;   ///< enable articulated road vehicles overtaking other vehicles
 	bool     roadveh_cant_quantum_tunnel;      ///< enable or disable vehicles quantum tunnelling through other vehicles when blocked
 	bool     drive_through_train_depot;        ///< enable drive-through train depot emulation
@@ -830,6 +833,7 @@ struct EconomySettings {
 	bool     allow_town_bridges;             ///< towns are allowed to build bridges
 	bool     default_allow_town_growth;      ///< town growth is allowed per-town by default
 	bool     infrastructure_maintenance;     ///< enable monthly maintenance fee for owner infrastructure
+	bool     linear_maintenance;             ///< set maintenance costs to grow linearly rather than polynomially
 	TimekeepingUnits timekeeping_units;      ///< time units to use for the game economy, either calendar or wallclock
 	uint16_t minutes_per_calendar_year;      ///< minutes per calendar year. Special value 0 means that calendar time is frozen.
 	uint16_t town_cargo_scale;               ///< scale cargo production of towns by this percentage.
@@ -907,7 +911,6 @@ struct CompanySettings {
 	VehicleDefaultSettings vehicle{};               ///< default settings for vehicles
 	uint8_t order_occupancy_smoothness = 0;         ///< percentage smoothness of occupancy measurement changes
 	uint8_t  auto_timetable_separation_rate = 0;    ///< percentage of auto timetable separation change to apply
-	bool infra_others_buy_in_depot[4]{};            ///< other companies can buy/autorenew in this companies depots (where infra sharing enabled)
 	uint16_t timetable_autofill_rounding = 0;       ///< round up timetable times to be a multiple of this number of ticks
 	bool advance_order_on_clone = false;            ///< when cloning a vehicle or copying/sharing an order list, advance the current order to a suitable point
 	bool copy_clone_add_to_group = false;           ///< whether to add cloned vehicles to the source vehicle's group, when cloning a vehicle without sharing orders

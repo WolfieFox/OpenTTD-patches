@@ -14,7 +14,7 @@
 # This file is part of OpenTTD.
 # OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
 # OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
 
 
 ##id 0x0000
@@ -255,6 +255,7 @@ STR_UNITS_FORCE_SI                                              :{DECIMAL}{NBSP}
 STR_UNITS_HEIGHT_IMPERIAL                                       :{DECIMAL}{NBSP}ft
 STR_UNITS_HEIGHT_METRIC                                         :{DECIMAL}{NBSP}m
 STR_UNITS_HEIGHT_SI                                             :{DECIMAL}{NBSP}m
+STR_UNITS_HEIGHT_GAMEUNITS                                      :{DECIMAL}{NBSP}seviye
 
 # Time units used in string control characters
 STR_UNITS_DAYS                                                  :{COMMA}{NBSP}gün
@@ -312,6 +313,7 @@ STR_SHOW_HIDDEN_ENGINES_VEHICLE_AIRCRAFT_TOOLTIP                :{BLACK}Bu düğ
 STR_BUTTON_DEFAULT                                              :{BLACK}Öntanımlı
 STR_BUTTON_CANCEL                                               :{BLACK}İptal
 STR_BUTTON_OK                                                   :{BLACK}Tamam
+STR_BUTTON_MOVE                                                 :{BLACK}Taşı
 
 # On screen keyboard window
 STR_OSK_KEYBOARD_LAYOUT                                         :"1234567890*- qwertyuıopğüasdfghjklşi,#\zxcvbnmöç. .
@@ -1247,7 +1249,7 @@ STR_CONFIG_SETTING_EXPAND_ALL                                   :Tümünü geni�
 STR_CONFIG_SETTING_COLLAPSE_ALL                                 :Tümünü kısalt
 STR_CONFIG_SETTING_RESET_ALL                                    :Tüm değerleri sıfırla
 STR_CONFIG_SETTING_NO_EXPLANATION_AVAILABLE_HELPTEXT            :(açıklama bulunmamaktadır)
-STR_CONFIG_SETTING_VALUE                                        :{PUSH_COLOUR}{ORANGE}{STRING}{POP_COLOUR}
+STR_CONFIG_SETTING_VALUE                                        :{ORANGE}{STRING}
 STR_CONFIG_SETTING_DEFAULT_VALUE                                :{LTBLUE}Varsayılan değer: {ORANGE}{STRING}
 STR_CONFIG_SETTING_TYPE                                         :{LTBLUE}Ayar türü: {ORANGE}{STRING}
 STR_CONFIG_SETTING_TYPE_CLIENT                                  :Kullanıcı ayarları (kayıtlı dosyada saklanmaz; tüm oyunları etkilemektedir)
@@ -2090,6 +2092,8 @@ STR_CONFIG_SETTING_LARGER_TOWNS_VALUE                           :{COMMA}'de 1
 STR_CONFIG_SETTING_LARGER_TOWNS_DISABLED                        :Hiçbiri
 STR_CONFIG_SETTING_CITY_SIZE_MULTIPLIER                         :Birincil şehir büyüklüğü çarpanı: {STRING}
 STR_CONFIG_SETTING_CITY_SIZE_MULTIPLIER_HELPTEXT                :Oyun başlangıcında şehirlerin normal kasabalara kıyasla ortalama büyüklüğü
+STR_CONFIG_SETTING_TOWN_MIN_DISTANCE                            :Şehirler arası asgari uzaklık: {STRING}
+STR_CONFIG_SETTING_TOWN_MIN_DISTANCE_HELPTEXT                   :Harita oluştururken ve rastgele kurulurken şehirlerin arasındaki asgari uzaklığı kare cinsinden belirleyin
 
 STR_CONFIG_SETTING_LINKGRAPH_RECALC_INTERVAL                    :Dağıtım grafiğini her {STRING}
 STR_CONFIG_SETTING_LINKGRAPH_RECALC_INTERVAL_HELPTEXT           :Bağlantı grafiğinin sonraki yeniden hesaplamaları arasındaki süre. Her yeniden hesaplama, grafiğin bir bileşeni için planları hesaplar. Bu, bu ayar için bir X değerinin tüm grafiğin her X saniyede bir güncelleneceği anlamına gelmediği anlamına gelir. Sadece bazı bileşenler olacaktır. Ne kadar kısa ayarlarsanız, hesaplamak için o kadar fazla CPU süresi gerekir. Ne kadar uzun ayarlarsanız, kargo dağıtımının yeni rotalarda başlaması o kadar uzun sürer
@@ -2160,10 +2164,11 @@ STR_CONFIG_SETTING_LOCALISATION_UNITS_FORCE_SI                  :SI (Uluslararas
 
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT                    :Yükseklik ölçü birimi: {STRING}
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_HELPTEXT           :Kullanıcı arayüzünde yükseklikler görüntülendiğinde, bunları seçili ölçü biriminde göster
-###length 3
+###length 4
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_IMPERIAL           :Imperial (Ingiliz ölçü birimleri) (ft)
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_METRIC             :Metrik (m)
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_SI                 :SI (Uluslararası Ölçüm Sistemi) (m)
+STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_GAMEUNITS          :Oyun birimleri (seviyeler)
 
 STR_CONFIG_SETTING_LOCALISATION                                 :Yerelleştirme
 STR_CONFIG_SETTING_GRAPHICS                                     :Grafikler
@@ -2863,14 +2868,15 @@ STR_PICKER_HOUSE_CLASS_TOOLTIP                                  :Görüntülemek
 STR_PICKER_HOUSE_TYPE_TOOLTIP                                   :Bir konut türü seçin. Kaydedilmiş öğelere eklemek veya kaldırmak için Ctrl+Tıklayın
 
 STR_HOUSE_PICKER_CAPTION                                        :Ev Seçimi
-STR_HOUSE_PICKER_NAME                                           :{BLACK}İsim: {ORANGE}{STRING}
-STR_HOUSE_PICKER_POPULATION                                     :{BLACK}Nüfus: {ORANGE}{NUM}
-STR_HOUSE_PICKER_YEARS                                          :{BLACK}Yıl: {ORANGE}{NUM}-{NUM} arası
-STR_HOUSE_PICKER_YEARS_ANY                                      :{BLACK}Yıl: {ORANGE}Her zaman
-STR_HOUSE_PICKER_YEARS_FROM                                     :{BLACK}Yıl: {ORANGE}{NUM} tarihinden beri
-STR_HOUSE_PICKER_YEARS_UNTIL                                    :{BLACK}Yıl: {ORANGE}{NUM} tarihine kadar
-STR_HOUSE_PICKER_SIZE                                           :{BLACK}Boyut: {ORANGE}{NUM}x{NUM} kare
-STR_HOUSE_PICKER_CARGO_ACCEPTED                                 :{BLACK}Kabul edilen kargo: {ORANGE}
+STR_HOUSE_PICKER_NAME                                           :{BLACK}İsim: {GOLD}{STRING}
+STR_HOUSE_PICKER_POPULATION                                     :{BLACK}Nüfus: {GOLD}{NUM}
+STR_HOUSE_PICKER_YEARS                                          :{BLACK}Yıl: {GOLD}{NUM}-{NUM}
+STR_HOUSE_PICKER_YEARS_ANY                                      :{BLACK}Yıl: {GOLD}Herhangi biri
+STR_HOUSE_PICKER_YEARS_FROM                                     :{BLACK}Yıl: {GOLD}{NUM} yılından itibaren
+STR_HOUSE_PICKER_YEARS_UNTIL                                    :{BLACK}Yıl: {GOLD}{NUM} yılına kadar
+STR_HOUSE_PICKER_SIZE                                           :{BLACK}Boyut: {GOLD}{NUM}x{NUM} kare
+STR_HOUSE_PICKER_CARGO_ACCEPTED                                 :{BLACK}Kabul edilen kargo: {GOLD}{STRING}
+STR_HOUSE_PICKER_CARGO_PRODUCED                                 :{BLACK}Üretilen kargo: {GOLD}{CARGO_LIST}
 
 STR_HOUSE_PICKER_CLASS_ZONE1                                    :Kenar
 STR_HOUSE_PICKER_CLASS_ZONE2                                    :Banliyöler
@@ -3158,7 +3164,7 @@ STR_LAND_AREA_INFORMATION_AIRPORT_CLASS                         :{BLACK}Havalima
 STR_LAND_AREA_INFORMATION_AIRPORT_NAME                          :{BLACK}Havalimanı adı: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_AIRPORTTILE_NAME                      :{BLACK}Havalimanı karesi adı: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_NEWGRF_NAME                           :{BLACK}NewGRF: {LTBLUE}{STRING}
-STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED                        :{BLACK}İstenen: {LTBLUE}
+STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED                        :{BLACK}İstenen: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_CARGO_EIGHTS                          :({COMMA}/8 {STRING})
 STR_LANG_AREA_INFORMATION_RAIL_TYPE                             :{BLACK}Ray türü: {LTBLUE}{STRING}
 STR_LANG_AREA_INFORMATION_ROAD_TYPE                             :{BLACK}Yol türü: {LTBLUE}{STRING}
@@ -3353,6 +3359,8 @@ STR_SAVELOAD_DETAIL_GRFSTATUS                                   :{SILVER}NewGRF:
 STR_SAVELOAD_FILTER_TITLE                                       :{BLACK}Filtre:
 STR_SAVELOAD_OVERWRITE_TITLE                                    :{WHITE}Dosya Üzerine Yaz
 STR_SAVELOAD_OVERWRITE_WARNING                                  :{YELLOW}Mevcut dosyanın üzerine yazmak istediğinizden emin misiniz?
+STR_SAVELOAD_DELETE_TITLE                                       :{WHITE}Dosyayı Sil
+STR_SAVELOAD_DELETE_WARNING                                     :{YELLOW}Dosyayı silmek istediğinizden emin misiniz?
 STR_SAVELOAD_DIRECTORY                                          :{STRING} (Dizin)
 STR_SAVELOAD_PARENT_DIRECTORY                                   :{STRING} (Ana dizin)
 
@@ -3428,11 +3436,18 @@ STR_MAPGEN_NORTHWEST                                            :{BLACK}Kuzeybat
 STR_MAPGEN_NORTHEAST                                            :{BLACK}Kuzeydoğu
 STR_MAPGEN_SOUTHEAST                                            :{BLACK}Güneydoğu
 STR_MAPGEN_SOUTHWEST                                            :{BLACK}Güneybatı
+STR_MAPGEN_NORTHWEST_TOOLTIP                                    :Haritanın kuzeybatı köşesinde su veya serbest biçimi aç
+STR_MAPGEN_NORTHEAST_TOOLTIP                                    :Haritanın kuzeydoğu köşesinde su veya serbest biçimi aç
+STR_MAPGEN_SOUTHEAST_TOOLTIP                                    :Haritanın güneydoğu köşesinde su veya serbest biçimi aç
+STR_MAPGEN_SOUTHWEST_TOOLTIP                                    :Haritanın güneybatı köşesinde su veya serbest biçimi aç
 STR_MAPGEN_BORDER_FREEFORM                                      :{BLACK}Serbest
 STR_MAPGEN_BORDER_WATER                                         :{BLACK}Su
 STR_MAPGEN_BORDER_RANDOM                                        :{BLACK}Rastgele
-STR_MAPGEN_BORDER_RANDOMIZE                                     :{BLACK}Rastgele
-STR_MAPGEN_BORDER_MANUAL                                        :{BLACK}El ile
+
+###length 3
+STR_MAPGEN_BORDER_RANDOMIZE                                     :Rastgele
+STR_MAPGEN_BORDER_MANUAL                                        :El ile
+STR_MAPGEN_BORDER_INFINITE_WATER                                :Sınırsız Su
 
 STR_MAPGEN_HEIGHTMAP_ROTATION                                   :{BLACK}Yükseklik haritası döndür:
 STR_MAPGEN_HEIGHTMAP_NAME                                       :{BLACK}Yükseklik haritası adı:
@@ -3471,7 +3486,8 @@ STR_GENERATION_LANDSCAPE_GENERATION                             :{BLACK}Peyzaj o
 STR_GENERATION_RIVER_GENERATION                                 :{BLACK}Nehir oluşturma
 STR_GENERATION_CLEARING_TILES                                   :{BLACK}Engebeli ve kayalık alan oluştur
 STR_GENERATION_TOWN_GENERATION                                  :{BLACK}Kasaba Oluşumu
-STR_GENERATION_INDUSTRY_GENERATION                              :{BLACK}Endüstri Oluşumu
+STR_GENERATION_LAND_INDUSTRY_GENERATION                         :{BLACK}Kara endüstrisi oluşturma
+STR_GENERATION_WATER_INDUSTRY_GENERATION                        :{BLACK}Su endüstrisi oluşturma
 STR_GENERATION_OBJECT_GENERATION                                :{BLACK}Nesne oluşturma
 STR_GENERATION_TREE_GENERATION                                  :{BLACK}Ağaç üretimi
 STR_GENERATION_SETTINGUP_GAME                                   :{BLACK}Oyun ayarlanıyor
@@ -3680,7 +3696,7 @@ STR_SIGN_LIST_MATCH_CASE                                        :{BLACK}Büyük/
 STR_SIGN_LIST_MATCH_CASE_TOOLTIP                                :{BLACK}Tabela adlarını süzgeç metniyle karşılaştırırken büyük/küçük harf eşleştirmeyi aç/kapa
 
 # Sign window
-STR_EDIT_SIGN_CAPTION                                           :{WHITE}Tabelayı değiştir
+STR_EDIT_SIGN_CAPTION                                           :{WHITE}Tabelayı düzenle
 STR_EDIT_SIGN_LOCATION_TOOLTIP                                  :{BLACK}Ana görünümü tabelanın konumuna ortalar. Ctrl + Sol Tıklama tabelanın olduğu yere ait bir görünüm penceresi açar.
 STR_EDIT_SIGN_NEXT_SIGN_TOOLTIP                                 :{BLACK}Sonraki tabelaya git
 STR_EDIT_SIGN_PREVIOUS_SIGN_TOOLTIP                             :{BLACK}Önceki tabelaya git
@@ -3898,14 +3914,14 @@ STR_CARGO_RATING_EXCELLENT                                      :Harika
 STR_CARGO_RATING_OUTSTANDING                                    :Mükemmel
 
 STR_STATION_VIEW_CENTER_TOOLTIP                                 :{BLACK}Durağın oldugu yeri ortala. Ctrl + Sol Tıklama durağın olduğu yere ait bir görünüm penceresi açar.
-STR_STATION_VIEW_RENAME_TOOLTIP                                 :{BLACK}İstasyonun ismini değiştir
+STR_STATION_VIEW_EDIT_TOOLTIP                                   :{BLACK}İstasyon ismini değiştir veya tabelayı taşı
 
 STR_STATION_VIEW_SCHEDULED_TRAINS_TOOLTIP                       :{BLACK}Talimat listesinde bu durak olan trenleri listele
 STR_STATION_VIEW_SCHEDULED_ROAD_VEHICLES_TOOLTIP                :{BLACK}Talimat listesinde bu durak olan tüm karayolu taşıtlarını listele
 STR_STATION_VIEW_SCHEDULED_AIRCRAFT_TOOLTIP                     :{BLACK}Talimat listesinde bu durak olan uçakları listele
 STR_STATION_VIEW_SCHEDULED_SHIPS_TOOLTIP                        :{BLACK}Talimat listesinde bu durak olan gemileri listele
 
-STR_STATION_VIEW_RENAME_STATION_CAPTION                         :İstasyonu yeniden adlandır
+STR_STATION_VIEW_EDIT_STATION_SIGN                              :{WHITE}İstasyon tabelasını değiştir
 
 STR_STATION_VIEW_CLOSE_AIRPORT                                  :{BLACK}Havalimanını kapat
 STR_STATION_VIEW_CLOSE_AIRPORT_TOOLTIP                          :{BLACK}Uçağın bu havalimanına iniş yapmasını engelle
@@ -3913,11 +3929,11 @@ STR_STATION_VIEW_CLOSE_AIRPORT_TOOLTIP                          :{BLACK}Uçağı
 # Waypoint/buoy view window
 STR_WAYPOINT_VIEW_CAPTION                                       :{WHITE}{WAYPOINT}
 STR_WAYPOINT_VIEW_CENTER_TOOLTIP                                :{BLACK}Ana görünümü güzergaha ortala. Ctrl+Sol tık ile güzegahın konumunu gösteren yeni bir pencere açabilirsiniz
-STR_WAYPOINT_VIEW_CHANGE_WAYPOINT_NAME                          :{BLACK}Ara nokta adını değiştir
+STR_WAYPOINT_VIEW_EDIT_TOOLTIP                                  :{BLACK}Yerimi ismini değiştir veya tabelayı taşı
 STR_BUOY_VIEW_CENTER_TOOLTIP                                    :{BLACK}Ana görünümü şamandıra(duba) konumuna ortala. Ctrl + Sol Tıklama şamandıranın olduğu yere ait bir görünüm penceresi açar.
 STR_BUOY_VIEW_RENAME_TOOLTIP                                    :{BLACK}Şamandıra adını değiştir
 
-STR_EDIT_WAYPOINT_NAME                                          :{WHITE}Yerimi adını değiştir
+STR_WAYPOINT_VIEW_EDIT_WAYPOINT_SIGN                            :{WHITE}Yerimi tabelasını düzenle
 
 # Finances window
 STR_FINANCES_CAPTION                                            :{WHITE}{COMPANY} Hesaplar {BLACK}{COMPANY_NUM}
@@ -4032,7 +4048,7 @@ STR_COMPANY_INFRASTRUCTURE_VIEW_TOTAL_PERIOD                    :{WHITE}{CURRENC
 # Industry directory
 STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}Fabrikalar ({COMMA} / {COMMA})
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- Hiçbiri -
-STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% taşındı){BLACK}
+STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% taşındı)
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
 STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
@@ -4055,9 +4071,9 @@ STR_INDUSTRY_VIEW_CARGO_GRAPH_TOOLTIP                           :{BLACK}Geçmiş
 STR_INDUSTRY_VIEW_PRODUCTION_LEVEL                              :{BLACK}Üretim seviyesi: %{YELLOW}{COMMA}
 STR_INDUSTRY_VIEW_INDUSTRY_ANNOUNCED_CLOSURE                    :{YELLOW}Fabrika çok yakında kapanacağını duyurdu!
 
-STR_INDUSTRY_VIEW_REQUIRES_N_CARGO                              :{BLACK}Gereken: {YELLOW}{STRING}{STRING}
-STR_INDUSTRY_VIEW_PRODUCES_N_CARGO                              :{BLACK}Üretilen: {YELLOW}{STRING}{STRING}
-STR_INDUSTRY_VIEW_CARGO_LIST_EXTENSION                          :, {STRING}{STRING}
+STR_INDUSTRY_VIEW_REQUIRES_N_CARGO                              :{BLACK}Gereken: {YELLOW}{STRING}
+STR_INDUSTRY_VIEW_PRODUCES_N_CARGO                              :{BLACK}Üretilen: {YELLOW}{STRING}
+STR_INDUSTRY_VIEW_CARGO_LIST_EXTENSION                          :{STRING}{STRING}
 
 STR_INDUSTRY_VIEW_REQUIRES                                      :{BLACK}Gereken:
 STR_INDUSTRY_VIEW_ACCEPT_CARGO_SUFFIX                           :{YELLOW}{0:STRING}{BLACK}{3:STRING}
@@ -4352,6 +4368,7 @@ STR_DEPOT_SELL_CONFIRMATION_TEXT                                :{YELLOW}Garajda
 STR_ENGINE_PREVIEW_CAPTION                                      :{WHITE}Araç üreticisinden mesaj
 STR_ENGINE_PREVIEW_MESSAGE                                      :{GOLD}Yeni bir {STRING} tasarladık - bizim için bunu bir yıl denemeyi kabul ediyor musunuz?
 
+
 STR_ENGINE_PREVIEW_RAILROAD_LOCOMOTIVE                          :lokomotif
 STR_ENGINE_PREVIEW_ELRAIL_LOCOMOTIVE                            :Elektrikli demiryolu lokomotifi
 STR_ENGINE_PREVIEW_MONORAIL_LOCOMOTIVE                          :monoray lokomotifi
@@ -4583,7 +4600,7 @@ STR_VEHICLE_DETAILS_TRAIN_CAPACITIES_TOOLTIP                    :{BLACK}Her arac
 STR_VEHICLE_DETAIL_TAB_TOTAL_CARGO                              :{BLACK}Toplam Kargo
 STR_VEHICLE_DETAILS_TRAIN_TOTAL_CARGO_TOOLTIP                   :{BLACK}Trenin kargo türlerine ayrılmış toplam kapasitesini göster
 
-STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}Kapasite: {LTBLUE}
+STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}Kapasite: {LTBLUE}{STRING}
 
 # Vehicle refit
 STR_REFIT_CAPTION                                               :{WHITE}{VEHICLE} (Modifiye)
@@ -5131,6 +5148,7 @@ STR_ERROR_TOO_MANY_TRUCK_STOPS                                  :{WHITE}Çok faz
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_DOCK                             :{WHITE}Başka bir limana çok yakın
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_AIRPORT                          :{WHITE}Başka bir havalimanına çok yakın
 STR_ERROR_CAN_T_RENAME_STATION                                  :{WHITE}İsim değiştirilemiyor...
+STR_ERROR_CAN_T_MOVE_STATION_NAME                               :{WHITE}İstasyon tabelası taşınamıyor...
 STR_ERROR_DRIVE_THROUGH_ON_TOWN_ROAD                            :{WHITE}... yol kasabaya ait
 STR_ERROR_DRIVE_THROUGH_DIRECTION                               :{WHITE}... yol yanlış yönde
 STR_ERROR_DRIVE_THROUGH_CORNER                                  :{WHITE}... yol üstü duraklar köşe üzerine inşa edilemez
@@ -5162,6 +5180,7 @@ STR_ERROR_CAN_T_BUILD_RAIL_WAYPOINT                             :{WHITE}Buraya t
 STR_ERROR_CAN_T_BUILD_ROAD_WAYPOINT                             :{WHITE}Yol yerimi buraya yapılamaz...
 STR_ERROR_CAN_T_POSITION_BUOY_HERE                              :{WHITE}Buraya şamandıra yerleştirilemez...
 STR_ERROR_CAN_T_CHANGE_WAYPOINT_NAME                            :{WHITE}Yerimi adı değiştirilemedi...
+STR_ERROR_CAN_T_MOVE_WAYPOINT_NAME                              :{WHITE}Yerimi tabelası taşınamıyor...
 
 STR_ERROR_CAN_T_REMOVE_RAIL_WAYPOINT                            :{WHITE}Tren yerimi kaldırılamaz...
 STR_ERROR_CAN_T_REMOVE_ROAD_WAYPOINT                            :{WHITE}yol yerimi kaldırılamaz....

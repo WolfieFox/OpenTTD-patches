@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file fios_gui.cpp GUIs for loading/saving games, scenarios, heightmaps, ... */
@@ -33,6 +33,7 @@
 #include "misc_cmd.h"
 #include "vehicle_base.h"
 #include "order_serialisation.h"
+#include "core/backup_type.hpp"
 
 #include "widgets/fios_widget.h"
 
@@ -74,7 +75,7 @@ void LoadCheckData::Clear()
 }
 
 /** Load game/scenario with optional content download */
-static constexpr NWidgetPart _nested_load_dialog_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_load_dialog_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
 		NWidget(WWT_CAPTION, COLOUR_GREY, WID_SL_CAPTION),
@@ -137,7 +138,7 @@ static constexpr NWidgetPart _nested_load_dialog_widgets[] = {
 };
 
 /** Load heightmap with content download */
-static constexpr NWidgetPart _nested_load_heightmap_dialog_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_load_heightmap_dialog_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
 		NWidget(WWT_CAPTION, COLOUR_GREY, WID_SL_CAPTION),
@@ -184,7 +185,7 @@ static constexpr NWidgetPart _nested_load_heightmap_dialog_widgets[] = {
 };
 
 /** Load town data */
-static constexpr NWidgetPart _nested_load_town_data_dialog_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_load_town_data_dialog_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
 		NWidget(WWT_CAPTION, COLOUR_GREY, WID_SL_CAPTION),
@@ -226,7 +227,7 @@ static constexpr NWidgetPart _nested_load_town_data_dialog_widgets[] = {
 };
 
 /** Save game/scenario */
-static constexpr NWidgetPart _nested_save_dialog_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_save_dialog_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
 		NWidget(WWT_CAPTION, COLOUR_GREY, WID_SL_CAPTION),
@@ -767,6 +768,7 @@ public:
 				for (auto &pair : _load_check_data.companies) {
 					const CompanyProperties &c = *pair.second;
 					if (c.name.empty()) {
+						AutoRestoreBackup landscape_backup(_settings_game.game_creation.landscape, _load_check_data.settings.game_creation.landscape);
 						DrawString(tr, GetString(STR_SAVELOAD_DETAIL_COMPANY_INDEX, pair.first + 1, c.name_1, c.name_2));
 					} else {
 						DrawString(tr, GetString(STR_SAVELOAD_DETAIL_COMPANY_INDEX, pair.first + 1, STR_JUST_RAW_STRING, c.name));

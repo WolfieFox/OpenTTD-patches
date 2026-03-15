@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file league_cmd.h Command definitions related to league tables. */
@@ -17,10 +17,10 @@ struct LeagueTableElementCmdData final : public AutoFmtTupleCmdData<LeagueTableE
 	static inline constexpr const char fmt_str[] = "t: {}, r: {}, c: {}, type: {}, targ: {}";
 };
 
-DEF_CMD_TUPLE_NT(CMD_CREATE_LEAGUE_TABLE,               CmdCreateLeagueTable,             CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT, CmdDataT<EncodedString, EncodedString, EncodedString>)
-DEF_CMD_TUPLE_NT(CMD_CREATE_LEAGUE_TABLE_ELEMENT,       CmdCreateLeagueTableElement,      CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT, LeagueTableElementCmdData)
-DEF_CMD_TUPLE_NT(CMD_UPDATE_LEAGUE_TABLE_ELEMENT_DATA,  CmdUpdateLeagueTableElementData,  CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT, CmdDataT<LeagueTableElementID, CompanyID, EncodedString, LinkType, LinkTargetID>)
-DEF_CMD_TUPLE_NT(CMD_UPDATE_LEAGUE_TABLE_ELEMENT_SCORE, CmdUpdateLeagueTableElementScore, CMD_STR_CTRL | CMD_DEITY, CMDT_OTHER_MANAGEMENT, CmdDataT<LeagueTableElementID, int64_t, EncodedString>)
-DEF_CMD_TUPLE_NT(CMD_REMOVE_LEAGUE_TABLE_ELEMENT,       CmdRemoveLeagueTableElement,                     CMD_DEITY, CMDT_OTHER_MANAGEMENT, CmdDataT<LeagueTableElementID>)
+DEF_CMD_TUPLE_NT(CMD_CREATE_LEAGUE_TABLE,               CmdCreateLeagueTable,             CMD_STR_CTRL | CMD_DEITY, CommandType::OtherManagement, CmdDataT<EncodedString, EncodedString, EncodedString>)
+DEF_CMD_TUPLE_NT(CMD_CREATE_LEAGUE_TABLE_ELEMENT,       CmdCreateLeagueTableElement,      CMD_STR_CTRL | CMD_DEITY, CommandType::OtherManagement, LeagueTableElementCmdData)
+DEF_CMD_TUPLE_NT(CMD_UPDATE_LEAGUE_TABLE_ELEMENT_DATA,  CmdUpdateLeagueTableElementData,  CMD_STR_CTRL | CMD_DEITY, CommandType::OtherManagement, CmdDataT<LeagueTableElementID, CompanyID, EncodedString, LinkType, LinkTargetID>)
+DEF_CMD_TUPLE_NT(CMD_UPDATE_LEAGUE_TABLE_ELEMENT_SCORE, CmdUpdateLeagueTableElementScore, CMD_STR_CTRL | CMD_DEITY, CommandType::OtherManagement, CmdDataT<LeagueTableElementID, int64_t, EncodedString>)
+DEF_CMD_TUPLE_NT(CMD_REMOVE_LEAGUE_TABLE_ELEMENT,       CmdRemoveLeagueTableElement,                     CMD_DEITY, CommandType::OtherManagement, CmdDataT<LeagueTableElementID>)
 
 #endif /* LEAGUE_CMD_H */

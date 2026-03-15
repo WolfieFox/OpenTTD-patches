@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file engine.cpp Base for all engine handling. */
@@ -69,9 +69,13 @@ static_assert(lengthof(_orig_rail_vehicle_info) + lengthof(_orig_road_vehicle_in
 
 const uint EngineOverrideManager::NUM_DEFAULT_ENGINES = _engine_counts[VEH_TRAIN] + _engine_counts[VEH_ROAD] + _engine_counts[VEH_SHIP] + _engine_counts[VEH_AIRCRAFT];
 
-Engine::Engine(VehicleType type, uint16_t local_id)
+Engine::Engine(EngineID index, VehicleType type, uint16_t local_id) : Engine::PoolItemBase(index)
 {
 	this->type = type;
+
+	/* Called in the context of loading a savegame. The rest comes from the loader. */
+	if (type == VEH_INVALID) return;
+
 	this->grf_prop.local_id = local_id;
 	this->list_position = local_id;
 	this->preview_company = CompanyID::Invalid();
@@ -654,13 +658,12 @@ void SetupEngines()
 	_engine_pool.CleanPool();
 
 	assert(_engine_mngr.mappings.size() >= EngineOverrideManager::NUM_DEFAULT_ENGINES);
-	[[maybe_unused]] EngineID index = EngineID::Begin();
+	EngineID index = EngineID::Begin();
 	for (const EngineIDMapping &eid : _engine_mngr.mappings) {
 		/* Assert is safe; there won't be more than 256 original vehicles
 		 * in any case, and we just cleaned the pool. */
 		assert(Engine::CanAllocateItem());
-		[[maybe_unused]] const Engine *e = new Engine(eid.type, eid.internal_id);
-		assert(e->index == index);
+		Engine::CreateAtIndex(index, eid.type, eid.internal_id);
 		++index;
 	}
 }
@@ -965,12 +968,12 @@ static void AcceptEnginePreview(EngineID eid, CompanyID company, int recursion_d
 
 	EnableEngineForCompany(eid, company);
 
-	/* Notify preview window, that it might want to close.
+	/* Notify preview window to remove this engine.
 	 * Note: We cannot directly close the window.
 	 *       In singleplayer this function is called from the preview window, so
 	 *       we have to use the GUI-scope scheduling of InvalidateWindowData.
 	 */
-	InvalidateWindowData(WC_ENGINE_PREVIEW, eid);
+	InvalidateWindowClassesData(WC_ENGINE_PREVIEW);
 
 	/* Don't search for variants to include if we are 10 levels deep already. */
 	if (recursion_depth >= 10) return;
@@ -1049,7 +1052,7 @@ void EnginesDailyLoop()
 		if (e->flags.Test(EngineFlag::ExclusivePreview)) {
 			if (e->preview_company != CompanyID::Invalid()) {
 				if (!--e->preview_wait) {
-					CloseWindowById(WC_ENGINE_PREVIEW, i);
+					InvalidateWindowClassesData(WC_ENGINE_PREVIEW);
 					e->preview_company = CompanyID::Invalid();
 				}
 			} else if (CountBits(e->preview_asked.base()) < MAX_COMPANIES) {
@@ -1210,8 +1213,8 @@ static void NewVehicleAvailable(Engine *e)
 	if (e->type == VEH_SHIP) InvalidateWindowData(WC_BUILD_TOOLBAR, TRANSPORT_WATER);
 	if (e->type == VEH_AIRCRAFT) InvalidateWindowData(WC_BUILD_TOOLBAR, TRANSPORT_AIR);
 
-	/* Close pending preview windows */
-	CloseWindowById(WC_ENGINE_PREVIEW, index);
+	/* Remove from preview windows */
+	InvalidateWindowClassesData(WC_ENGINE_PREVIEW);
 }
 
 /** Monthly update of the availability, reliability, and preview offers of the engines. */

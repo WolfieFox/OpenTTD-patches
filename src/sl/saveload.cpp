@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /**
@@ -76,6 +76,18 @@
 #include "../thread.h"
 #include <mutex>
 #include <condition_variable>
+
+#ifdef WITH_LZO
+#include <lzo/lzo1x.h>
+#endif
+
+#if defined(WITH_ZLIB)
+#include <zlib.h>
+#endif /* WITH_ZLIB */
+
+#if defined(WITH_LIBLZMA)
+#include <lzma.h>
+#endif /* WITH_LIBLZMA */
 
 #include "../safeguards.h"
 
@@ -1233,6 +1245,7 @@ void SlString(void *ptr, size_t length, VarType conv)
 			}
 
 			size_t len = SlReadArrayLength();
+			char *str = nullptr;
 
 			switch (GetVarMemType(conv)) {
 				default: NOT_REACHED();
@@ -1246,14 +1259,14 @@ void SlString(void *ptr, size_t length, VarType conv)
 						*(char **)ptr = nullptr;
 						return;
 					} else {
-						*(char **)ptr = MallocT<char>(len + 1); // terminating '\0'
-						ptr = *(char **)ptr;
-						SlCopyBytesRead(ptr, len);
+						str = MallocT<char>(len + 1); // terminating '\0'
+						*(char **)ptr = str;
+						SlCopyBytesRead(str, len);
+						str[len] = '\0'; // properly terminate the string
 					}
 					break;
 			}
 
-			((char *)ptr)[len] = '\0'; // properly terminate the string
 			StringValidationSettings settings = StringValidationSetting::ReplaceWithQuestionMark;
 			if ((conv & SLF_ALLOW_CONTROL) != 0) {
 				settings.Set(StringValidationSetting::AllowControlCode);
@@ -1261,7 +1274,7 @@ void SlString(void *ptr, size_t length, VarType conv)
 			if ((conv & SLF_ALLOW_NEWLINE) != 0) {
 				settings.Set(StringValidationSetting::AllowNewline);
 			}
-			StrMakeValidInPlace((char *)ptr, (char *)ptr + len, settings);
+			StrMakeValidInPlace(str, str + len, settings);
 			break;
 		}
 		case SLA_PTRS: break;
@@ -3241,7 +3254,6 @@ private:
  *******************************************/
 
 #ifdef WITH_LZO
-#include <lzo/lzo1x.h>
 
 /** Buffer size for the LZO compressor */
 static const uint LZO_BUFFER_SIZE = 8192;
@@ -3372,7 +3384,6 @@ struct NoCompSaveFilter : SaveFilter {
  ********************************************/
 
 #if defined(WITH_ZLIB)
-#include <zlib.h>
 
 /** Filter using Zlib compression. */
 struct ZlibLoadFilter : LoadFilter {
@@ -3493,7 +3504,6 @@ struct ZlibSaveFilter : SaveFilter {
  ********************************************/
 
 #if defined(WITH_LIBLZMA)
-#include <lzma.h>
 
 /**
  * Have a copy of an initialised LZMA stream. We need this as it's
@@ -3808,7 +3818,7 @@ static const SaveLoadFormat *GetSavegameFormat(std::string_view full_name, uint8
 		std::string_view name = has_comp_level ? full_name.substr(0, separator) : full_name;
 
 		for (const SaveLoadFormat *slf = &_saveload_formats[0]; slf != endof(_saveload_formats); slf++) {
-			if (slf->init_write != nullptr && name.compare(slf->name) == 0) {
+			if (slf->init_write != nullptr && name == slf->name) {
 				*compression_level = slf->default_compression;
 				if (has_comp_level) {
 					auto complevel = full_name.substr(separator + 1);

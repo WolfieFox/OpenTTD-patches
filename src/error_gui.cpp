@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file error_gui.cpp GUI related to errors. */
@@ -32,7 +32,7 @@
 
 #include "safeguards.h"
 
-static constexpr NWidgetPart _nested_errmsg_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_errmsg_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_RED),
 		NWidget(WWT_CAPTION, COLOUR_RED, WID_EM_CAPTION), SetStringTip(STR_ERROR_MESSAGE_CAPTION),
@@ -49,7 +49,7 @@ static WindowDesc _errmsg_desc(__FILE__, __LINE__,
 	_nested_errmsg_widgets
 );
 
-static constexpr NWidgetPart _nested_errmsg_face_widgets[] = {
+static constexpr std::initializer_list<NWidgetPart> _nested_errmsg_face_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_RED),
 		NWidget(WWT_CAPTION, COLOUR_RED, WID_EM_CAPTION),
@@ -103,7 +103,7 @@ private:
 	uint height_extra = 0;          ///< Height of the #extra_msg string in pixels in the #WID_EM_MESSAGE widget.
 
 public:
-	ErrmsgWindow(const ErrorMessageData &data) : Window(data.HasFace() ? _errmsg_face_desc : _errmsg_desc), ErrorMessageData(data)
+	ErrmsgWindow(ErrorMessageData &&data) : Window(data.HasFace() ? _errmsg_face_desc : _errmsg_desc), ErrorMessageData(std::move(data))
 	{
 		this->invalidation_policy = WindowInvalidationPolicy::NoQueue;
 		this->InitNested();
@@ -177,8 +177,8 @@ public:
 	{
 		switch (widget) {
 			case WID_EM_FACE: {
-				const Company *c = Company::Get(this->company);
-				DrawCompanyManagerFace(c->face, c->colour, r);
+				const Company *c = Company::GetIfValid(this->company);
+				if (c != nullptr) DrawCompanyManagerFace(c->face, c->colour, r);
 				break;
 			}
 
@@ -256,7 +256,7 @@ void ShowFirstError()
 {
 	_window_system_initialized = true;
 	if (!_error_list.empty()) {
-		new ErrmsgWindow(_error_list.front());
+		new ErrmsgWindow(std::move(_error_list.front()));
 		_error_list.pop_front();
 	}
 }
@@ -326,6 +326,8 @@ void ShowErrorMessage(EncodedString &&summary_msg, EncodedString &&detailed_msg,
 	if (_game_mode == GM_BOOTSTRAP) return;
 	if (_settings_client.gui.errmsg_duration == 0 && !no_timeout) return;
 
+	if (company != CompanyID::Invalid() && !Company::IsValidID(company)) company = CompanyID::Invalid();
+
 	ErrorMessageData data(std::move(summary_msg), std::move(detailed_msg), no_timeout ? 0 : _settings_client.gui.errmsg_duration, x, y, std::move(extra_msg), company);
 
 	ErrmsgWindow *w = dynamic_cast<ErrmsgWindow *>(FindWindowById(WC_ERRMSG, 0));
@@ -342,7 +344,7 @@ void ShowErrorMessage(EncodedString &&summary_msg, EncodedString &&detailed_msg,
 		/* A non-critical error was shown. */
 		w->Close();
 	}
-	new ErrmsgWindow(data);
+	new ErrmsgWindow(std::move(data));
 }
 
 

@@ -2,10 +2,10 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
-/** @file industry_map.h Accessors for industries */
+/** @file industry_map.h Accessors to map for industries. */
 
 #ifndef INDUSTRY_MAP_H
 #define INDUSTRY_MAP_H
@@ -282,10 +282,12 @@ inline void MakeIndustry(TileIndex t, IndustryID index, IndustryGfx gfx, uint8_t
 	_m[t].m2 = index.base();
 	SetIndustryRandomBits(t, random); // m3
 	_m[t].m4 = 0;
+	_me[t].m6 = 0;
 	SetIndustryGfx(t, gfx); // m5, part of m6
 	SetIndustryRandomTriggers(t, {}); // rest of m6
 	SetWaterClass(t, wc);
 	_me[t].m7 = 0;
+	_me[t].m8 = 0;
 }
 
 #endif /* INDUSTRY_MAP_H */

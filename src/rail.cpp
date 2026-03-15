@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file rail.cpp Implementation of rail specific functions. */
@@ -14,6 +14,8 @@
 #include "company_func.h"
 #include "company_base.h"
 #include "engine_base.h"
+#include "economy_func.h"
+#include "maintenance_func.h"
 
 #include "table/track_data.h"
 
@@ -287,22 +289,42 @@ RailTypes GetRailTypes(bool introduces)
  */
 RailType GetRailTypeByLabel(RailTypeLabel label, bool allow_alternate_labels)
 {
+	extern RailTypeInfo _railtypes[RAILTYPE_END];
 	if (label == 0) return INVALID_RAILTYPE;
 
-	/* Loop through each rail type until the label is found */
-	for (RailType r = RAILTYPE_BEGIN; r != RAILTYPE_END; r++) {
-		const RailTypeInfo *rti = GetRailTypeInfo(r);
-		if (rti->label == label) return r;
+	auto it = std::ranges::find(_railtypes, label, &RailTypeInfo::label);
+	if (it == std::end(_railtypes) && allow_alternate_labels) {
+		/* Test if any rail type defines the label as an alternate. */
+		it = std::ranges::find_if(_railtypes, [label](const RailTypeInfo &rti) { return rti.alternate_labels.contains(label); });
 	}
 
-	if (allow_alternate_labels) {
-		/* Test if any rail type defines the label as an alternate. */
-		for (RailType r = RAILTYPE_BEGIN; r != RAILTYPE_END; r++) {
-			const RailTypeInfo *rti = GetRailTypeInfo(r);
-			if (std::ranges::find(rti->alternate_labels, label) != rti->alternate_labels.end()) return r;
-		}
-	}
+	if (it != std::end(_railtypes)) return it->Index();
 
 	/* No matching label was found, so it is invalid */
 	return INVALID_RAILTYPE;
+}
+
+/**
+ * Calculates the maintenance cost of a number of track bits.
+ * @param railtype The railtype to get the cost of.
+ * @param num Number of track bits of this railtype.
+ * @param total_num Total number of track bits of all railtypes.
+ * @return Total cost.
+ */
+Money RailMaintenanceCost(RailType railtype, uint32_t num, uint32_t total_num)
+{
+	dbg_assert(railtype < RAILTYPE_END);
+	/* 4 bits fraction for the multiplier and 7 bits scaling. 72 is roughly equivalent to the polynomial maintenance cost at 5000 pieces. */
+	return (_price[PR_INFRASTRUCTURE_RAIL] * GetRailTypeInfo(railtype)->maintenance_multiplier * num * GetMaintenanceCostScale(total_num, 72)) >> 11;
+}
+
+/**
+ * Calculates the maintenance cost of a number of signals.
+ * @param num Number of signals.
+ * @return Total cost.
+ */
+Money SignalMaintenanceCost(uint32_t num)
+{
+	/* 1 bit fraction for the multiplier and 7 bits scaling. 33 is roughly equivalent to the polynomial maintenance cost at 1000 pieces. */
+	return (_price[PR_INFRASTRUCTURE_RAIL] * 15 * num * GetMaintenanceCostScale(num, 33)) >> 8;
 }

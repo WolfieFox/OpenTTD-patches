@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file console_cmds.cpp Implementation of the console hooks. */
@@ -80,6 +80,10 @@
 #include "3rdparty/cpp-btree/btree_set.h"
 
 #include <sstream>
+
+#if defined(WITH_ZLIB)
+#include "network/network_content.h"
+#endif /* WITH_ZLIB */
 
 #include "table/strings.h"
 
@@ -2507,7 +2511,6 @@ static bool ConCompanyPasswordHashes(std::span<std::string_view> argv)
 
 /* Content downloading only is available with ZLIB */
 #if defined(WITH_ZLIB)
-#include "network/network_content.h"
 
 /** Resolve a string to a content type. */
 static ContentType StringToContentType(std::string_view str)
@@ -4280,7 +4283,7 @@ static bool ConFindNonRealisticBrakingSignal(std::span<std::string_view> argv)
 	}
 
 	for (TileIndex t(0); t < Map::Size(); t++) {
-		if (IsTileType(t, MP_RAILWAY) && GetRailTileType(t) == RAIL_TILE_SIGNALS) {
+		if (IsTileType(t, MP_RAILWAY) && GetRailTileType(t) == RailTileType::Signals) {
 			uint signals = GetPresentSignals(t);
 			if ((signals & 0x3) & ((signals & 0x3) - 1) || (signals & 0xC) & ((signals & 0xC) - 1)) {
 				/* Signals in both directions */

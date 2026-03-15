@@ -13,7 +13,7 @@
 # This file is part of OpenTTD.
 # OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
 # OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+# See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
 
 
 ##id 0x0000
@@ -1830,7 +1830,7 @@ STR_CONFIG_SETTING_LOCALISATION_UNITS_FORCE_SI                  :มาตรฐ
 
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT                    :หน่วยวัดความสูง: {STRING}
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_HELPTEXT           :การแสดงหน่วยวัดความสูงเมื่อกดดูรายละเอียดของวัตถุต่างๆ
-###length 3
+###length 4
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_IMPERIAL           :อิมพีเรียล (ฟุต)
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_METRIC             :เมตริก (เมตร)
 STR_CONFIG_SETTING_LOCALISATION_UNITS_HEIGHT_SI                 :มาตรฐานสากล (เมตร)
@@ -2647,7 +2647,7 @@ STR_LAND_AREA_INFORMATION_AIRPORT_CLASS                         :{BLACK}ระ�
 STR_LAND_AREA_INFORMATION_AIRPORT_NAME                          :{BLACK}ชื่อท่าอากาศยาน: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_AIRPORTTILE_NAME                      :{BLACK}ชื่อท่าอากาศยาน: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_NEWGRF_NAME                           :{BLACK}NewGRF: {LTBLUE}{STRING}
-STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED                        :{BLACK}สินค้าที่รับ: {LTBLUE}
+STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED                        :{BLACK}สินค้าที่รับ: {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_CARGO_EIGHTS                          :({COMMA}/8 {STRING})
 STR_LANG_AREA_INFORMATION_ROAD_TYPE                             :{BLACK}ประเภทของถนน: {LTBLUE}{STRING}
 STR_LANG_AREA_INFORMATION_TRAM_TYPE                             :{BLACK}ประเภทรถราง: {LTBLUE}{STRING}
@@ -2867,6 +2867,8 @@ STR_MAPGEN_SOUTHWEST                                            :{BLACK}ตะ�
 STR_MAPGEN_BORDER_FREEFORM                                      :{BLACK}ไม่ยึดติดรูปแบบ
 STR_MAPGEN_BORDER_WATER                                         :{BLACK}น้ำ
 STR_MAPGEN_BORDER_RANDOM                                        :{BLACK}สุ่ม
+
+###length 3
 STR_MAPGEN_BORDER_RANDOMIZE                                     :{BLACK}สุ่ม
 STR_MAPGEN_BORDER_MANUAL                                        :{BLACK}ปรับแต่งเอง
 
@@ -3262,14 +3264,12 @@ STR_CARGO_RATING_EXCELLENT                                      :ยอดเย
 STR_CARGO_RATING_OUTSTANDING                                    :เกินความคาดหมาย
 
 STR_STATION_VIEW_CENTER_TOOLTIP                                 :{BLACK}จุดศูนย์กลางมุมมองสถานี
-STR_STATION_VIEW_RENAME_TOOLTIP                                 :{BLACK}เปลี่ยนชื่อสถานี
 
 STR_STATION_VIEW_SCHEDULED_TRAINS_TOOLTIP                       :{BLACK}แสดงขบวนรถไฟที่มีรายการเข้าจอดที่สถานีนี้
 STR_STATION_VIEW_SCHEDULED_ROAD_VEHICLES_TOOLTIP                :{BLACK}แสดงยานพาหนะทางบกที่มีรายการเข้าจอดที่สถานีนี้
 STR_STATION_VIEW_SCHEDULED_AIRCRAFT_TOOLTIP                     :{BLACK}แสดงอากาศยานที่มีรายการลงจอดจอดที่สถานีนี้
 STR_STATION_VIEW_SCHEDULED_SHIPS_TOOLTIP                        :{BLACK}แสดงเรือที่มีรายการเข้าเทียบท่าที่ท่านี้
 
-STR_STATION_VIEW_RENAME_STATION_CAPTION                         :เปลี่ยนชื่อสถานี/พื้นที่รับส่งสินค้า
 
 STR_STATION_VIEW_CLOSE_AIRPORT                                  :{BLACK}ปิดท่าอากาศยาน
 STR_STATION_VIEW_CLOSE_AIRPORT_TOOLTIP                          :{BLACK}ไม่ให้เที่ยวบินมาลงจอดที่ท่าอากาศยานนี้
@@ -3277,11 +3277,9 @@ STR_STATION_VIEW_CLOSE_AIRPORT_TOOLTIP                          :{BLACK}ไม�
 # Waypoint/buoy view window
 STR_WAYPOINT_VIEW_CAPTION                                       :{WHITE}{WAYPOINT}
 STR_WAYPOINT_VIEW_CENTER_TOOLTIP                                :{BLACK}จุดศูนย์กลางมุมมองสถานี
-STR_WAYPOINT_VIEW_CHANGE_WAYPOINT_NAME                          :{BLACK}เปลี่ยนชื่อ Waypoint
 STR_BUOY_VIEW_CENTER_TOOLTIP                                    :{BLACK}จุดศูนย์กลางมุมมองสถานี
 STR_BUOY_VIEW_RENAME_TOOLTIP                                    :{BLACK}เปลี่ยนชื่อทุ่มลอยน้ำ
 
-STR_EDIT_WAYPOINT_NAME                                          :{WHITE}เปลี่ยนชื่อ Waypoint
 
 # Finances window
 STR_FINANCES_CAPTION                                            :{WHITE} สภาวะการเงินของ {COMPANY}{BLACK}{COMPANY_NUM}
@@ -3386,7 +3384,7 @@ STR_INDUSTRY_VIEW_LOCATION_TOOLTIP                              :{BLACK}กด�
 STR_INDUSTRY_VIEW_PRODUCTION_LEVEL                              :{BLACK}ระดับการผลิต: {YELLOW}{COMMA}%
 STR_INDUSTRY_VIEW_INDUSTRY_ANNOUNCED_CLOSURE                    :{YELLOW}อุตสาหกรรมนี้ได้มีการประกาศปิดตัวลงอย่างเป็นทางการ!
 
-STR_INDUSTRY_VIEW_REQUIRES_N_CARGO                              :{BLACK}ต้องการ: {YELLOW}{STRING}{STRING}
+STR_INDUSTRY_VIEW_REQUIRES_N_CARGO                              :{BLACK}ต้องการ: {YELLOW}{STRING}
 
 
 STR_CONFIG_GAME_PRODUCTION                                      :{WHITE}ปรับเปลี่ยนปริมาณผลผลิต (ระหว่าง 8 ถึง 2040)
@@ -3647,6 +3645,7 @@ STR_DEPOT_SELL_CONFIRMATION_TEXT                                :{YELLOW}คุ�
 STR_ENGINE_PREVIEW_CAPTION                                      :{WHITE}ข้อความจากผู้ผลิตยานพาหนะ
 STR_ENGINE_PREVIEW_MESSAGE                                      :{GOLD}เราได้ออกแบบ {STRING} ใหม่ - หากคุณต้องการที่จะนำไปทดลองใช้ เราจะให้คุณนำไปใช้งานก่อนที่จะนำออกไปจำหน่ายในตลาดปกติ{}คุณต้องการนำไปทดลองใช้หรือไม่ ?
 
+
 STR_ENGINE_PREVIEW_RAILROAD_LOCOMOTIVE                          :หัวรถจักร
 STR_ENGINE_PREVIEW_ELRAIL_LOCOMOTIVE                            :หัวรถจักรของรถไฟฟ้า
 STR_ENGINE_PREVIEW_MONORAIL_LOCOMOTIVE                          :รถไฟรางเดี่ยว
@@ -3836,7 +3835,7 @@ STR_VEHICLE_DETAILS_TRAIN_CAPACITIES_TOOLTIP                    :{BLACK}แส�
 STR_VEHICLE_DETAIL_TAB_TOTAL_CARGO                              :{BLACK}แสดงความจุรวมทั้งหมดของขบวนรถ
 STR_VEHICLE_DETAILS_TRAIN_TOTAL_CARGO_TOOLTIP                   :{BLACK}แสดงความจุรวมทั้งหมดของขบวนรถ แยกตามประเภทสินค้า
 
-STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}ความจุ: {LTBLUE}
+STR_VEHICLE_DETAILS_TRAIN_ARTICULATED_RV_CAPACITY               :{BLACK}ความจุ: {LTBLUE}{STRING}
 
 # Vehicle refit
 STR_REFIT_CAPTION                                               :{WHITE}{VEHICLE} (ดัดแปลง)

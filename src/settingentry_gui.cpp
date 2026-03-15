@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file settingentry_gui.cpp Definitions of classes for handling display of individual configuration settings. */
@@ -938,6 +938,7 @@ SettingsContainer &GetSettingsTree()
 			interface->Add(new SettingEntry("gui.toolbar_pos"));
 			interface->Add(new SettingEntry("gui.statusbar_pos"));
 			interface->Add(new SettingEntry("gui.prefer_teamchat"));
+			interface->Add(new SettingEntry("gui.show_rail_road_cost_dropdown"));
 			interface->Add(new SettingEntry("gui.sort_track_types_by_speed"));
 			interface->Add(new SettingEntry("gui.show_town_growth_status"));
 			interface->Add(new SettingEntry("gui.allow_hiding_waypoint_labels"));
@@ -988,10 +989,6 @@ SettingsContainer &GetSettingsTree()
 			company->Add(new SettingEntry("auto_timetable_separation_rate"));
 			company->Add(new SettingEntry("timetable_autofill_rounding"));
 			company->Add(new SettingEntry("order_occupancy_smoothness"));
-			company->Add(new SettingEntry("company.infra_others_buy_in_depot[0]"));
-			company->Add(new SettingEntry("company.infra_others_buy_in_depot[1]"));
-			company->Add(new SettingEntry("company.infra_others_buy_in_depot[2]"));
-			company->Add(new SettingEntry("company.infra_others_buy_in_depot[3]"));
 			company->Add(new SettingEntry("company.advance_order_on_clone"));
 			company->Add(new SettingEntry("company.copy_clone_add_to_group"));
 			company->Add(new SettingEntry("company.remain_if_next_order_same_station"));
@@ -1009,6 +1006,7 @@ SettingsContainer &GetSettingsTree()
 			accounting->Add(new SettingEntry("difficulty.subsidy_duration"));
 			accounting->Add(new SettingEntry("economy.feeder_payment_share"));
 			accounting->Add(new SettingEntry("economy.infrastructure_maintenance"));
+			accounting->Add(new ConditionallyHiddenSettingEntry("economy.linear_maintenance", []() -> bool { return !GetGameSettings().economy.infrastructure_maintenance; }));
 			accounting->Add(new SettingEntry("difficulty.vehicle_costs"));
 			accounting->Add(new SettingEntry("difficulty.vehicle_costs_in_depot"));
 			accounting->Add(new SettingEntry("difficulty.vehicle_costs_when_stopped"));
@@ -1112,6 +1110,7 @@ SettingsContainer &GetSettingsTree()
 			disasters->Add(new SettingEntry("difficulty.economy"));
 			disasters->Add(new SettingEntry("vehicle.plane_crashes"));
 			disasters->Add(new SettingEntry("vehicle.no_train_crash_other_company"));
+			disasters->Add(new SettingEntry("vehicle.train_self_collision"));
 			disasters->Add(new SettingEntry("difficulty.vehicle_breakdowns"));
 			disasters->Add(new SettingEntry("difficulty.max_reliability_floor"));
 			disasters->Add(new SettingEntry("difficulty.reliability_decay_speed"));

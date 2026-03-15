@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file train_cmd.h Command definitions related to trains. */
@@ -21,9 +21,9 @@ enum class MoveRailVehicleFlags : uint8_t {
 };
 DECLARE_ENUM_AS_BIT_SET(MoveRailVehicleFlags)
 
-DEF_CMD_TUPLE_LT (CMD_MOVE_RAIL_VEHICLE,           CmdMoveRailVehicle,           {}, CMDT_VEHICLE_CONSTRUCTION, CmdDataT<VehicleID, VehicleID, MoveRailVehicleFlags>)
-DEF_CMD_TUPLE_LT (CMD_FORCE_TRAIN_PROCEED,         CmdForceTrainProceed,         {}, CMDT_VEHICLE_MANAGEMENT,   CmdDataT<VehicleID>)
-DEF_CMD_TUPLE_LT (CMD_REVERSE_TRAIN_DIRECTION,     CmdReverseTrainDirection,     {}, CMDT_VEHICLE_MANAGEMENT,   CmdDataT<VehicleID, bool>)
-DEF_CMD_TUPLE_LT (CMD_SET_TRAIN_SPEED_RESTRICTION, CmdSetTrainSpeedRestriction,  {}, CMDT_VEHICLE_MANAGEMENT,   CmdDataT<VehicleID, uint16_t>)
+DEF_CMD_TUPLE_LT (CMD_MOVE_RAIL_VEHICLE,           CmdMoveRailVehicle,           {}, CommandType::VehicleConstruction, CmdDataT<VehicleID, VehicleID, MoveRailVehicleFlags>)
+DEF_CMD_TUPLE_LT (CMD_FORCE_TRAIN_PROCEED,         CmdForceTrainProceed,         {}, CommandType::VehicleManagement,   CmdDataT<VehicleID>)
+DEF_CMD_TUPLE_LT (CMD_REVERSE_TRAIN_DIRECTION,     CmdReverseTrainDirection,     {}, CommandType::VehicleManagement,   CmdDataT<VehicleID, bool>)
+DEF_CMD_TUPLE_LT (CMD_SET_TRAIN_SPEED_RESTRICTION, CmdSetTrainSpeedRestriction,  {}, CommandType::VehicleManagement,   CmdDataT<VehicleID, uint16_t>)
 
 #endif /* TRAIN_CMD_H */

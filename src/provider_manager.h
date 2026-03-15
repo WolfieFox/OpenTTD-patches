@@ -2,10 +2,10 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
-/** @file provider_manager.h Definition of the ProviderManager */
+/** @file provider_manager.h Definition of the ProviderManager. */
 
 #ifndef PROVIDER_MANAGER_H
 #define PROVIDER_MANAGER_H
@@ -28,7 +28,7 @@ public:
 
 	ProviderManager &operator=(ProviderManager const &) = delete;
 
-	static void Register(TProviderType &instance)
+	static void Register(const TProviderType &instance)
 	{
 		/* Insert according to comparator. */
 		auto &providers = GetProviders();
@@ -36,7 +36,7 @@ public:
 		providers.insert(it, &instance);
 	}
 
-	static void Unregister(TProviderType &instance)
+	static void Unregister(const TProviderType &instance)
 	{
 		auto &providers = GetProviders();
 		providers.erase(std::find(std::begin(providers), std::end(providers), &instance));
@@ -46,9 +46,9 @@ public:
 	 * Get the currently known providers.
 	 * @return The known providers.
 	 */
-	static std::vector<TProviderType *> &GetProviders()
+	static std::vector<const TProviderType *> &GetProviders()
 	{
-		static std::vector<TProviderType *> providers{};
+		static std::vector<const TProviderType *> providers{};
 		return providers;
 	}
 };
@@ -57,7 +57,7 @@ template <typename T>
 class BaseProvider {
 public:
 	constexpr BaseProvider(std::string_view name, std::string_view description) : name(name), description(description) {}
-	virtual ~BaseProvider() {}
+	virtual ~BaseProvider() = default;
 
 	inline std::string_view GetName() const { return this->name; }
 	inline std::string_view GetDescription() const { return this->description; }
@@ -85,7 +85,6 @@ template <typename T>
 class PriorityBaseProvider : public BaseProvider<T> {
 public:
 	constexpr PriorityBaseProvider(std::string_view name, std::string_view description, int priority) : BaseProvider<T>(name, description), priority(priority) {}
-	virtual ~PriorityBaseProvider() {}
 
 	inline int GetPriority() const { return this->priority; }
 

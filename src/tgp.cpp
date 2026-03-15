@@ -2,23 +2,11 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
-/** @file tgp.cpp OTTD Perlin Noise Landscape Generator, aka TerraGenesis Perlin */
-
-#include "stdafx.h"
-#include <math.h>
-#include "clear_map.h"
-#include "void_map.h"
-#include "genworld.h"
-#include "core/alloc_func.hpp"
-#include "core/random_func.hpp"
-#include "landscape_type.h"
-
-#include "safeguards.h"
-
-/*
+/**
+ * @file tgp.cpp OTTD Perlin Noise Landscape Generator, aka TerraGenesis Perlin.
  *
  * Quickie guide to Perlin Noise
  * Perlin noise is a predictable pseudo random number sequence. By generating
@@ -150,6 +138,17 @@
  * function instead.
  *
  */
+
+#include "stdafx.h"
+#include "clear_map.h"
+#include "void_map.h"
+#include "genworld.h"
+#include "core/alloc_func.hpp"
+#include "core/random_func.hpp"
+#include "landscape_type.h"
+#include <math.h>
+
+#include "safeguards.h"
 
 /** Fixed point type for heights */
 using Height = int16_t;

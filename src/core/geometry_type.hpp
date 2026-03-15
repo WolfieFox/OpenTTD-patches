@@ -2,7 +2,7 @@
  * This file is part of OpenTTD.
  * OpenTTD is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 2.
  * OpenTTD is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <http://www.gnu.org/licenses/>.
+ * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
 /** @file geometry_type.hpp All geometry types in OpenTTD. */
@@ -66,14 +66,14 @@ struct Dimension {
 
 	bool operator< (const Dimension &other) const
 	{
-		int x = (*this).width - other.width;
+		int x = this->width - other.width;
 		if (x != 0) return x < 0;
-		return (*this).height < other.height;
+		return this->height < other.height;
 	}
 
 	bool operator== (const Dimension &other) const
 	{
-		return (*this).width == other.width && (*this).height == other.height;
+		return this->width == other.width && this->height == other.height;
 	}
 };
 
@@ -257,16 +257,14 @@ struct Rect {
 	}
 
 	/**
-	 * Centre a dimension within this Rect.
-	 * @param width The horizontal dimension.
+	 * Centre a vertical dimension within this Rect.
 	 * @param height The vertical dimension.
 	 * @return the new resized Rect.
 	 */
-	[[nodiscard]] inline Rect CentreTo(int width, int height) const
+	[[nodiscard]] inline Rect CentreToHeight(int height) const
 	{
-		int new_left = CentreBounds(this->left, this->right, width);
 		int new_top = CentreBounds(this->top, this->bottom, height);
-		return {new_left, new_top, new_left + width - 1, new_top + height - 1};
+		return {this->left, new_top, this->right, new_top + height - 1};
 	}
 
 	/**
