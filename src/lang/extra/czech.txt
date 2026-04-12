@@ -280,9 +280,6 @@ STR_CONFIG_SETTING_RIVER_MIN_LENGTH_HELPTEXT                    :Minimální dé
 STR_CONFIG_SETTING_RIVER_ROUTE_RANDOM                           :Náhodnost říčního toku: {STRING}
 STR_CONFIG_SETTING_RIVER_ROUTE_RANDOM_HELPTEXT                  :Vyber, jak moc budou trasy říčních koryt náhodné
 
-STR_CONFIG_SETTING_RIVERS_TOP_OF_HILL                           :Prameny řek na vrcholech kopců: {STRING}
-STR_CONFIG_SETTING_RIVERS_TOP_OF_HILL_HELPTEXT                  :Je-li zapnuto, řeky si budou vynucovat, aby jejich prameny ležely vysoko v kopcích či horách
-
 STR_CONFIG_SETTING_RIVER_TROPICS_WIDTH                          :Šířka zeleně podél řek: {STRING}
 STR_CONFIG_SETTING_RIVER_TROPICS_WIDTH_HELPTEXT                 :Vymezuje šířku úrodné oblasti, která obklopuje řeky v subtropické krajině.{}To je celková šířka oblasti na každé straně řeky.
 
@@ -646,6 +643,7 @@ STR_LINKGRAPH_STATS_TOOLTIP_CAPACITY                            :{}Kapacita: {CA
 
 STR_RAIL_TOOLBAR_TOOLTIP_BUILD_POLYRAIL                         :{BLACK}Stavět železniční tratě v Mnohočarném režimu. Ctrl přepíná stavění a demolování železničních staveb. Shift přepíná výstavbu a zobrazování odhadu její ceny.
 
+STR_BUILD_SIGNAL_TOGGLE_ADVANCED_SIGNAL_TOOLTIP                 :{BLACK}Zobrazit dokonalejší návěstidla
 STR_BUILD_SIGNAL_SEMAPHORE_PROG_TOOLTIP                         :{BLACK}Programovatelné před-návěstidlo (mechanické){}Programovatelné před-návěstidlo je kombinované návěstidlo, které může být naprogramováno, aby se chovalo různě složitými způsoby.
 STR_BUILD_SIGNAL_SEMAPHORE_NO_ENTRY_TOOLTIP                     :{BLACK}Návěstidlo zakazující jízdu (mechanické){}Cestově orientované návěstidlo umožňuje vjet několika vlakům najednou do stejného úseku trati, pokud jsou schopny rezervovat si cestu až do bezpečného místa na zastavení. Okolo návěstidla zakazující jízdu nelze projet proti čelní straně.
 STR_BUILD_SIGNAL_ELECTRIC_PROG_TOOLTIP                          :{BLACK}Programovatelné před-návěstidlo (světelné){}Programovatelné před-návěstidlo je kombinované návěstidlo, které může být naprogramováno, aby se chovalo různě složitými způsoby.

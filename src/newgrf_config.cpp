@@ -66,6 +66,8 @@ void GRFConfig::SetParams(std::span<const uint32_t> pars)
 
 /**
  * Return whether this NewGRF can replace an older version of the same NewGRF.
+ * @param old_version The older version of the NewGRF (savegame loading).
+ * @return Whether the NewGRF says that this version can be loaded for games with the old version.
  */
 bool GRFConfig::IsCompatible(uint32_t old_version) const
 {
@@ -490,7 +492,10 @@ void AppendToGRFConfigList(GRFConfigList &dst, std::unique_ptr<GRFConfig> &&el)
 }
 
 
-/** Reset the current GRF Config to either blank or newgame settings. */
+/**
+ * Reset the current GRF Config to either blank or newgame settings.
+ * @param defaults Whether configure to fully load the copied NewGRFs.
+ */
 void ResetGRFConfig(bool defaults)
 {
 	CopyGRFConfigList(_grfconfig, _grfconfig_newgame, !defaults);
@@ -594,7 +599,10 @@ public:
 
 	bool AddFile(const std::string &filename, size_t basepath_length, const std::string &tar_filename) override;
 
-	/** Do the scan for GRFs. */
+	/**
+	 * Do the scan for GRFs.
+	 * @return The number of GRFs that have been found.
+	 */
 	static uint DoScan()
 	{
 		if (_skip_all_newgrf_scanning > 0) {
@@ -643,14 +651,10 @@ bool GRFFileScanner::AddFile(const std::string &filename, size_t basepath_length
 }
 
 /**
- * Simple sorter for GRFS
- * @param c1 the first GRFConfig *
- * @param c2 the second GRFConfig *
- * @return true if the name of first NewGRF is before the name of the second.
- */
-static bool GRFSorter(std::unique_ptr<GRFConfig> const &c1, std::unique_ptr<GRFConfig> const &c2)
+ * Simple sorter for GRFS. @copydoc GUIList::Sorter */
+static bool GRFSorter(std::unique_ptr<GRFConfig> const &a, std::unique_ptr<GRFConfig> const &b)
 {
-	return StrNaturalCompare(c1->GetName(), c2->GetName()) < 0;
+	return StrNaturalCompare(a->GetName(), b->GetName()) < 0;
 }
 
 /**
@@ -736,7 +740,11 @@ GRFConfig *GetGRFConfig(uint32_t grfid, uint32_t mask)
 }
 
 
-/** Build a string containing space separated parameter values, and terminate */
+/**
+ * Build a string containing space separated parameter values.
+ * @param c The GRFConfig to create the parameter list for.
+ * @return The parameter list.
+ */
 std::string GRFBuildParamList(const GRFConfig &c)
 {
 	format_buffer result;

@@ -325,7 +325,7 @@ CommandCost DoCommandImplementation(Commands cmd, TileIndex tile, const CommandP
 
 	/* if toplevel, subtract the money. */
 	if (--_docommand_recursive == 0 && !flags.Test(DoCommandFlag::Bankrupt)) {
-		SubtractMoneyFromCompany(res);
+		SubtractMoneyFromCompany(_current_company, res);
 	}
 
 	return res;
@@ -682,7 +682,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 	CommandCost res2 = command.exec({ tile, flags | DoCommandFlag::Execute, payload });
 	BasePersistentStorageArray::SwitchMode(PSM_LEAVE_COMMAND);
 
-	if (cmd == CMD_COMPANY_CTRL) {
+	if (cmd == Commands::CompanyControl) {
 		cur_company.Trash();
 		/* We are a new company                  -> Switch to new local company.
 		 * We were closed down                   -> Switch to spectator
@@ -722,7 +722,7 @@ CommandCost DoCommandPInternal(Commands cmd, TileIndex tile, const CommandPayloa
 		if (c != nullptr) c->last_build_coordinate = tile;
 	}
 
-	SubtractMoneyFromCompany(res2);
+	SubtractMoneyFromCompany(_current_company, res2);
 	if (_networking) UpdateStateChecksum(res2.GetCost());
 
 	/* update signals if needed */
@@ -907,7 +907,7 @@ void SerialisePayload(BufferSerialisationRef buffer, const T &payload)
 
 void SerialisedBaseCommandContainer::Serialise(BufferSerialisationRef buffer) const
 {
-	buffer.Send_uint16(this->cmd);
+	buffer.Send_uint16(to_underlying(this->cmd));
 	buffer.Send_uint16(this->error_msg);
 	buffer.Send_uint32(this->tile.base());
 	SerialisePayload(buffer, this->payload);
@@ -915,7 +915,7 @@ void SerialisedBaseCommandContainer::Serialise(BufferSerialisationRef buffer) co
 
 void DynBaseCommandContainer::Serialise(BufferSerialisationRef buffer) const
 {
-	buffer.Send_uint16(this->cmd);
+	buffer.Send_uint16(to_underlying(this->cmd));
 	buffer.Send_uint16(this->error_msg);
 	buffer.Send_uint32(this->tile.base());
 	SerialisePayload(buffer, *this->payload);

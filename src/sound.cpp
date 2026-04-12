@@ -169,6 +169,7 @@ void ChangeSoundSet(int index)
 	if (BaseSounds::GetIndexOfUsedSet() == index) return;
 
 	auto set = BaseSounds::GetSet(index);
+	if (set->name != "NoSound") InitSoundDriver();
 	BaseSounds::ini_set = set->name;
 	BaseSounds::SetSet(set);
 
@@ -270,6 +271,7 @@ void SndConfirmBeep()
 /** Names corresponding to the sound set's files */
 static const std::string_view _sound_file_names[] = { "samples" };
 
+/** @copydoc BaseSet::GetFilenames */
 template <>
 /* static */ std::span<const std::string_view> BaseSet<SoundsSet>::GetFilenames()
 {

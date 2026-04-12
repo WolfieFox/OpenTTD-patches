@@ -133,6 +133,7 @@ struct VehicleSpriteSeq {
 
 	/**
 	 * Check whether the sequence contains any sprites.
+	 * @return \c true iff this has any sprites.
 	 */
 	bool IsValid() const
 	{
@@ -149,6 +150,7 @@ struct VehicleSpriteSeq {
 
 	/**
 	 * Assign a single sprite to the sequence.
+	 * @param sprite The new first sprite.
 	 */
 	void Set(SpriteID sprite)
 	{
@@ -159,6 +161,7 @@ struct VehicleSpriteSeq {
 
 	/**
 	 * Copy data from another sprite sequence, while dropping all recolouring information.
+	 * @param src The source to copy the sprites from.
 	 */
 	void CopyWithoutPalette(const VehicleSpriteSeq &src)
 	{
@@ -221,9 +224,6 @@ extern VehiclePool _vehicle_pool;
 struct GroundVehicleCache;
 extern NamedSaveLoadTable GetVehicleDescription(VehicleType vt);
 struct LoadgameState;
-extern bool LoadOldVehicle(LoadgameState &ls, int num);
-extern void FixOldVehicles(LoadgameState &ls);
-
 struct GRFFile;
 
 namespace upstream_sl {
@@ -488,6 +488,7 @@ public:
 	/**
 	 * Sets the expense type associated to this vehicle type
 	 * @param income whether this is income or (running) expenses of the vehicle
+	 * @return The expense type.
 	 */
 	virtual ExpensesType GetExpenseType([[maybe_unused]] bool income) const { return EXPENSES_OTHER; }
 
@@ -499,6 +500,7 @@ public:
 
 	/**
 	 * Whether this is the primary vehicle in the chain.
+	 * @return \c true iff this considered the primary vehicle.
 	 */
 	virtual bool IsPrimaryVehicle() const { return false; }
 
@@ -507,6 +509,7 @@ public:
 	/**
 	 * Gets the sprite to show for the given direction
 	 * @param direction the direction the vehicle is facing
+	 * @param image_type Context where the image is being drawn.
 	 * @param[out] result Vehicle sprite sequence.
 	 */
 	virtual void GetImage([[maybe_unused]] Direction direction, [[maybe_unused]] EngineImageType image_type, [[maybe_unused]] VehicleSpriteSeq *result) const { result->Clear(); }
@@ -823,7 +826,7 @@ public:
 
 	/**
 	 * Get the next station the vehicle will stop at.
-	 * @return ID of the next station the vehicle will stop at or StationID::Invalid().
+	 * @param next_station The next stations that we have already seen, and might be adding to.
 	 */
 	inline CargoStationIDVectorSet GetNextStoppingStation() const
 	{
@@ -903,6 +906,10 @@ public:
 	 */
 	virtual TileIndex GetOrderStationLocation([[maybe_unused]] StationID station) { return INVALID_TILE; }
 
+	/**
+	 * Tile to use for economic calculations when moving cargo into or out of this vehicle.
+	 * @return The cargo (un)load tile.
+	 */
 	virtual TileIndex GetCargoTile() const { return this->tile; }
 
 	/**
@@ -912,6 +919,10 @@ public:
 	 */
 	virtual ClosestDepot FindClosestDepot() { return {}; }
 
+	/**
+	 * Set the destination of this vehicle.
+	 * @param tile The tile to go to.
+	 */
 	virtual void SetDestTile(TileIndex tile) { this->dest_tile = tile; }
 
 	CommandCost SendToDepot(DoCommandFlags flags, DepotCommandFlags command, TileIndex specific_depot = {});
@@ -1438,6 +1449,7 @@ struct SpecializedVehicle : public Vehicle {
 
 	/**
 	 * Gets vehicle with given index
+	 * @param index The pool index to look for.
 	 * @return pointer to vehicle with given index cast to T *
 	 */
 	static inline T *Get(auto index)
@@ -1447,6 +1459,7 @@ struct SpecializedVehicle : public Vehicle {
 
 	/**
 	 * Returns vehicle if the index is a valid index for this vehicle type
+	 * @param index The pool index to look for.
 	 * @return pointer to vehicle with given index if it's a vehicle of this type
 	 */
 	static inline T *GetIfValid(auto index)
@@ -1456,7 +1469,7 @@ struct SpecializedVehicle : public Vehicle {
 
 	/**
 	 * Creates a new T-object in the vehicle pool.
-	 * @param args... The arguments to the constructor.
+	 * @param args The arguments to the constructor.
 	 * @return The created object.
 	 */
 	template <typename... Targs>
@@ -1473,7 +1486,7 @@ struct SpecializedVehicle : public Vehicle {
 	/**
 	 * Creates a new T-object in the vehicle pool.
 	 * @param index The index allocate the object at.
-	 * @param args... The arguments to the constructor.
+	 * @param args The arguments to the constructor.
 	 * @return The created object.
 	 */
 	template <typename... Targs>
@@ -1509,7 +1522,6 @@ struct SpecializedVehicle : public Vehicle {
 		return (const T *)v;
 	}
 
-private:
 	inline uint16_t GetVehicleCurvature() const
 	{
 		uint16_t curvature = 0;
@@ -1524,6 +1536,7 @@ private:
 		return curvature;
 	}
 
+private:
 	inline bool CheckVehicleCurvature() const {
 		if (!(EXPECTED_TYPE == VEH_TRAIN || EXPECTED_TYPE == VEH_ROAD)) return false;
 		if (likely(!HasBit(this->vcache.cached_veh_flags, VCF_IMAGE_CURVATURE))) return false;
@@ -1557,7 +1570,7 @@ public:
 	}
 
 private:
-	inline void UpdateViewportNormalViewportMode(bool force_update, Point pt)
+	inline void UpdateViewportNormalViewportMode(bool force_update)
 	{
 		const Direction current_direction = ((T *)this)->GetMapImageDirection();
 		if (this->cur_image_valid_dir != current_direction || this->CheckVehicleCurvature()) {
@@ -1596,9 +1609,9 @@ public:
 		extern std::vector<Rect> _viewport_vehicle_normal_redraw_rects;
 		extern std::vector<Rect> _viewport_vehicle_map_redraw_rects;
 
-		Point pt = RemapCoords(this->x_pos + this->bounds.origin.x, this->y_pos + this->bounds.origin.y, this->z_pos);
+		Point pt = RemapCoords(this->x_pos + this->bounds.origin.x + this->bounds.offset.x, this->y_pos + this->bounds.origin.y + this->bounds.offset.y, this->z_pos);
 		if (EXPECTED_TYPE >= VEH_COMPANY_END || IsPointInViewportVehicleRedrawArea(_viewport_vehicle_normal_redraw_rects, pt)) {
-			UpdateViewportNormalViewportMode(force_update, pt);
+			UpdateViewportNormalViewportMode(force_update);
 			return;
 		}
 

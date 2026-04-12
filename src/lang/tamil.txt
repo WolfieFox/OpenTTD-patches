@@ -1478,6 +1478,8 @@ STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_SMOOTH                  :மென்ம
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_ROUGH                   :கரடுமுரடான
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_ROUGH              :மிகவும் கரடுமுரடான
 
+###length 4
+
 STR_CONFIG_SETTING_VARIETY                                      :பலவகை பரவல்: {STRING}
 
 STR_CONFIG_SETTING_RIVER_AMOUNT                                 :ஆறுகளின் எண்ணிக்கை: {STRING}
@@ -1699,6 +1701,7 @@ STR_CONFIG_SETTING_NOSERVICE_HELPTEXT                           :இயக்க
 STR_CONFIG_SETTING_STATION_LENGTH_LOADING_PENALTY               :நிலையத்தை விட நீளமான ரயில்களில் சரக்குகளை ஏற்றினால் ஏற்றும் வேக அபராதம்: {STRING}
 
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS                             :பெட்டி வேக கட்டுப்பாட்டினை செயல்படுத்தவும்: {STRING}
+
 
 STR_CONFIG_SETTING_DISABLE_ELRAILS                              :மின்சார இரயில்களை அனுமதிக்காதே: {STRING}
 STR_CONFIG_SETTING_DISABLE_ELRAILS_HELPTEXT                     :இந்த அமைப்பை இயக்குவதால், மின்சார இயந்திரங்கள் இயங்குவதற்கான தடங்களை மின்மயமாக்குவதற்கான தேவையை முடக்குகிறது
@@ -2555,7 +2558,6 @@ STR_STATION_CLASS_WAYP_WAYPOINT                                 :இயல்ப
 
 # Signal window
 STR_BUILD_SIGNAL_CAPTION                                        :{WHITE}சிக்னல் தேர்ந்தெடுத்தல்
-STR_BUILD_SIGNAL_TOGGLE_ADVANCED_SIGNAL_TOOLTIP                 :{BLACK}மேம்பட்ட சிக்னல் வகைகளைக் காட்டவும்/மறைக்கவும்
 STR_BUILD_SIGNAL_DRAG_SIGNALS_DENSITY_TOOLTIP                   :{BLACK}சிக்னல்களை இழுக்கும் தொலைவு
 STR_BUILD_SIGNAL_DRAG_SIGNALS_DENSITY_DECREASE_TOOLTIP          :{BLACK}சிக்னல்களை இழுக்கும் தூரத்தைக் குறைக்கவும்
 
@@ -3558,10 +3560,10 @@ STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}தொ�
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- ஒன்றுமில்லை -
 STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% கொண்டு செல்லப்பட்டது)
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING} மற்றும் {NUM} மேலும்...
+STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING} மற்றும் {NUM} மேலும்...
 STR_INDUSTRY_DIRECTORY_LIST_TOOLTIP                             :{BLACK}தொழிற்சாலைகளின் பெயர்கள் - தொழிற்சாலயை முக்கிய காட்சியில் நடுவில் காட்ட பெயரில் கிளிக் செய்யவும். தொழிற்சாலையின் இடத்தில் புதிய காட்சியை திறக்க Ctrl+கிளிக் செய்யவும்.
 STR_INDUSTRY_DIRECTORY_ACCEPTED_CARGO_FILTER                    :{BLACK}ஏற்றுக்கொள்ளப்படும் சரக்குகள்: {SILVER}{STRING}
 STR_INDUSTRY_DIRECTORY_PRODUCED_CARGO_FILTER                    :{BLACK}உற்பத்தி செய்யப்பட்ட சரக்குகள்: {SILVER}{STRING}
@@ -3704,6 +3706,8 @@ STR_PURCHASE_INFO_ALL_BUT                                       :அனைத்
 STR_PURCHASE_INFO_MAX_TE                                        :{BLACK}அதி. இழு திறன்: {GOLD}{FORCE}
 STR_PURCHASE_INFO_AIRCRAFT_RANGE                                :{BLACK}தூரம்: {GOLD}{COMMA} கட்டங்கள்
 STR_PURCHASE_INFO_AIRCRAFT_TYPE                                 :{BLACK}விமான வகை: {GOLD}{STRING}
+
+# Vehicle sort details
 
 ###length 3
 STR_CARGO_TYPE_FILTER_ALL                                       :அனைத்து சரக்கு வகைகள்
@@ -4518,7 +4522,6 @@ STR_ERROR_CAN_T_GENERATE_TOWN                                   :{WHITE}எந�
 STR_ERROR_CAN_T_RENAME_TOWN                                     :{WHITE}நகரத்தின் பெயரினை மாற்ற இயலாது...
 STR_ERROR_CAN_T_FOUND_TOWN_HERE                                 :{WHITE}நகரத்தினை இங்கே நிறுவ இயலாது...
 STR_ERROR_CAN_T_EXPAND_TOWN                                     :{WHITE}நகரத்தினை விரிவாக்க இயலாது...
-STR_ERROR_TOO_CLOSE_TO_EDGE_OF_MAP_SUB                          :{WHITE}... படத்தின் எல்லைக்கு மிக அருகாமையில் உள்ளது
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_TOWN                             :{WHITE}... மற்றொரு நகரத்திற்கு மிகவும் அருகாமையில் உள்ளது
 STR_ERROR_TOO_MANY_TOWNS                                        :{WHITE}... மிகவும் அதிகமான நகரங்கள்
 STR_ERROR_NO_SPACE_FOR_TOWN                                     :{WHITE}... படத்தில் வேறு வெற்றுஇடம் இல்லை

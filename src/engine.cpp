@@ -42,6 +42,7 @@ EnginePool _engine_pool("Engine");
 INSTANTIATE_POOL_METHODS(Engine)
 
 EngineOverrideManager _engine_mngr;
+uint32_t _engine_seed = 0;
 
 /**
  * Year that engine aging stops. Engines will not reduce in reliability
@@ -351,23 +352,23 @@ Money Engine::GetRunningCost() const
 	switch (this->type) {
 		case VEH_ROAD:
 			base_price = this->VehInfo<RoadVehicleInfo>().running_cost_class;
-			if (base_price == INVALID_PRICE) return 0;
+			if (base_price == Price::Invalid) return 0;
 			cost_factor = GetEngineProperty(this->index, PROP_ROADVEH_RUNNING_COST_FACTOR, this->VehInfo<RoadVehicleInfo>().running_cost);
 			break;
 
 		case VEH_TRAIN:
 			base_price = this->VehInfo<RailVehicleInfo>().running_cost_class;
-			if (base_price == INVALID_PRICE) return 0;
+			if (base_price == Price::Invalid) return 0;
 			cost_factor = GetEngineProperty(this->index, PROP_TRAIN_RUNNING_COST_FACTOR, this->VehInfo<RailVehicleInfo>().running_cost);
 			break;
 
 		case VEH_SHIP:
-			base_price = PR_RUNNING_SHIP;
+			base_price = Price::RunningShip;
 			cost_factor = GetEngineProperty(this->index, PROP_SHIP_RUNNING_COST_FACTOR, this->VehInfo<ShipVehicleInfo>().running_cost);
 			break;
 
 		case VEH_AIRCRAFT:
-			base_price = PR_RUNNING_AIRCRAFT;
+			base_price = Price::RunningAircraft;
 			cost_factor = GetEngineProperty(this->index, PROP_AIRCRAFT_RUNNING_COST_FACTOR, this->VehInfo<AircraftVehicleInfo>().running_cost);
 			break;
 
@@ -387,27 +388,27 @@ Money Engine::GetCost() const
 	uint cost_factor;
 	switch (this->type) {
 		case VEH_ROAD:
-			base_price = PR_BUILD_VEHICLE_ROAD;
+			base_price = Price::BuildVehicleRoad;
 			cost_factor = GetEngineProperty(this->index, PROP_ROADVEH_COST_FACTOR, this->VehInfo<RoadVehicleInfo>().cost_factor);
 			break;
 
 		case VEH_TRAIN:
 			if (this->VehInfo<RailVehicleInfo>().railveh_type == RAILVEH_WAGON) {
-				base_price = PR_BUILD_VEHICLE_WAGON;
+				base_price = Price::BuildVehicleWagon;
 				cost_factor = GetEngineProperty(this->index, PROP_TRAIN_COST_FACTOR, this->VehInfo<RailVehicleInfo>().cost_factor);
 			} else {
-				base_price = PR_BUILD_VEHICLE_TRAIN;
+				base_price = Price::BuildVehicleTrain;
 				cost_factor = GetEngineProperty(this->index, PROP_TRAIN_COST_FACTOR, this->VehInfo<RailVehicleInfo>().cost_factor);
 			}
 			break;
 
 		case VEH_SHIP:
-			base_price = PR_BUILD_VEHICLE_SHIP;
+			base_price = Price::BuildVehicleShip;
 			cost_factor = GetEngineProperty(this->index, PROP_SHIP_COST_FACTOR, this->VehInfo<ShipVehicleInfo>().cost_factor);
 			break;
 
 		case VEH_AIRCRAFT:
-			base_price = PR_BUILD_VEHICLE_AIRCRAFT;
+			base_price = Price::BuildVehicleAircraft;
 			cost_factor = GetEngineProperty(this->index, PROP_AIRCRAFT_COST_FACTOR, this->VehInfo<AircraftVehicleInfo>().cost_factor);
 			break;
 
@@ -518,6 +519,7 @@ CalTime::DateDelta Engine::GetLifeLengthInDays() const
  */
 uint16_t Engine::GetRange() const
 {
+	if (!_settings_game.vehicle.aircraft_range) return 0;
 	switch (this->type) {
 		case VEH_AIRCRAFT:
 			return GetEngineProperty(this->index, PROP_AIRCRAFT_RANGE, this->VehInfo<AircraftVehicleInfo>().max_range);
@@ -708,6 +710,7 @@ static void RetireEngineIfPossible(Engine *e, int age_threshold)
 /**
  * Update #Engine::reliability and (if needed) update the engine GUIs.
  * @param e %Engine to update.
+ * @param new_month Whether this is called from a 'new month' context or not, i.e. whether engines should be aged.
  */
 void CalcEngineReliability(Engine *e, bool new_month)
 {
@@ -748,11 +751,6 @@ void CalcEngineReliability(Engine *e, bool new_month)
 		/* Kick this engine out of the lists */
 		RetireEngineIfPossible(e, e->duration_phase_1 + e->duration_phase_2 + e->duration_phase_3);
 	}
-
-	SetWindowClassesDirty(WC_BUILD_VEHICLE); // Update to show the new reliability
-	SetWindowClassesDirty(WC_BUILD_VIRTUAL_TRAIN);
-
-	SetWindowClassesDirty(WC_REPLACE_VEHICLE);
 }
 
 /** Compute the value for #_year_engine_aging_stops. */
@@ -778,7 +776,7 @@ void SetYearEngineAgingStops()
 /**
  * Start/initialise one engine.
  * @param e The engine to initialise.
- * @param aging_date The date used for age calculations.
+ * @param aging_ymd The date used for age calculations.
  * @param seed Random seed.
  */
 void StartupOneEngine(Engine *e, const CalTime::YearMonthDay &aging_ymd, const CalTime::YearMonthDay &expire_stop_ymd, uint32_t seed, CalTime::Date no_introduce_after_date)
@@ -803,7 +801,12 @@ void StartupOneEngine(Engine *e, const CalTime::YearMonthDay &aging_ymd, const C
 	/* Don't randomise the start-date in the first two years after gamestart to ensure availability
 	 * of engines in early starting games.
 	 * Note: TTDP uses fixed 1922 */
-	e->intro_date = ei->base_intro <= CalTime::ConvertYMDToDate(_settings_game.game_creation.starting_year + 2, 0, 1) ? ei->base_intro : CalTime::DateDelta{(int)GB(r, 0, 9)} + ei->base_intro;
+	CalTime::Date begin_random_date = CalTime::ConvertYMDToDate(_settings_game.game_creation.starting_year + 2, 0, 1);
+	if (_settings_game.vehicle.vehicle_intro_randomisation && ei->base_intro > begin_random_date) {
+		e->intro_date = ei->base_intro + CalTime::DateDelta{(int)GB(r, 0, 9)};
+	} else {
+		e->intro_date = ei->base_intro;
+	}
 
 	/* Get parent variant index for syncing reliability via random seed. */
 	const Engine *re = e;
@@ -879,10 +882,13 @@ void StartupEngines()
 		no_introduce_after_date = CalTime::ConvertYMDToDate(_settings_game.vehicle.no_introduce_vehicles_after, 0, 1) - 1;
 	}
 
-	uint32_t seed = Random();
+	/* If the engine seed is not already set, set it now. */
+	while (_engine_seed == 0) {
+		_engine_seed = Random();
+	}
 
 	for (Engine *e : Engine::Iterate()) {
-		StartupOneEngine(e, aging_ymd, expire_stop_ymd, seed, no_introduce_after_date);
+		StartupOneEngine(e, aging_ymd, expire_stop_ymd, _engine_seed, no_introduce_after_date);
 	}
 	for (Engine *e : Engine::Iterate()) {
 		CalcEngineReliability(e, false);

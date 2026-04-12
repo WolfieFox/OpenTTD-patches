@@ -8,12 +8,14 @@
 /** @file settings_table.cpp The tables of all the settings as well as the implementation of most of their callbacks. */
 
 #include "stdafx.h"
+#include "aircraft.h"
 #include "base_media_base.h"
 #include "base_media_music.h"
 #include "base_media_sounds.h"
 #include "currency.h"
 #include "date_func.h"
 #include "elrail_func.h"
+#include "engine_func.h"
 #include "engine_override.h"
 #include "station_base.h"
 #include "station_func.h"
@@ -23,6 +25,7 @@
 #include "graph_gui.h"
 #include "gui.h"
 #include "infrastructure_func.h"
+#include "news_func.h"
 #include "order_func.h"
 #include "plans_func.h"
 #include "rail.h"
@@ -134,13 +137,13 @@ extern const std::initializer_list<SettingTable> _secrets_setting_tables{
 
 /* Begin - Callback Functions for the various settings. */
 
-/** Switch setting title depending on wallclock setting */
+/** Switch setting title depending on wallclock setting. @copydoc IntSettingDesc::GetTitleCallback */
 static StringID SettingTitleWallclock(const IntSettingDesc &sd)
 {
 	return EconTime::UsingWallclockUnits(_game_mode == GM_MENU) ? sd.str + 1 : sd.str;
 }
 
-/** Switch setting help depending on wallclock setting */
+/** Switch setting help depending on wallclock setting. @copydoc IntSettingDesc::GetHelpCallback */
 static StringID SettingHelpWallclock(const IntSettingDesc &sd)
 {
 	return EconTime::UsingWallclockUnits(_game_mode == GM_MENU) ? sd.str_help + 1 : sd.str_help;
@@ -152,8 +155,8 @@ static StringID SettingHelpWallclockTriple(const IntSettingDesc &sd)
 	return EconTime::UsingWallclockUnits(_game_mode == GM_MENU) ? sd.str_help + ((GetGameSettings().economy.day_length_factor > 1) ? 2 : 1) : sd.str_help;
 }
 
-/** Setting values for velocity unit localisation */
-static std::pair<StringParameter, StringParameter> SettingsValueVelocityUnit(const IntSettingDesc &, int32_t value)
+/** Setting values for velocity unit localisation. @copydoc IntSettingDesc::GetValueParamsCallback */
+static std::pair<StringParameter, StringParameter> SettingsValueVelocityUnit([[maybe_unused]] const IntSettingDesc &sd, int32_t value)
 {
 	StringID val;
 	switch (value) {
@@ -167,13 +170,13 @@ static std::pair<StringParameter, StringParameter> SettingsValueVelocityUnit(con
 	return {val, {}};
 }
 
-/** A negative value has another string (the one after "strval"). */
+/** A negative value has another string (the one after "strval"). @copydoc IntSettingDesc::GetValueParamsCallback */
 static std::pair<StringParameter, StringParameter> SettingsValueAbsolute(const IntSettingDesc &sd, int32_t value)
 {
 	return {sd.str_val + ((value >= 0) ? 1 : 0), abs(value)};
 }
 
-/** Service Interval Settings Default Value displays the correct units or as a percentage */
+/** Service Interval Settings Default Value displays the correct units or as a percentage. @copydoc IntSettingDesc::GetValueParamsCallback */
 static std::pair<StringParameter, StringParameter> ServiceIntervalSettingsValueText(const IntSettingDesc &sd, int32_t value)
 {
 	VehicleDefaultSettings *vds;
@@ -331,7 +334,9 @@ static void UpdateServiceInterval(VehicleType type, int32_t new_value)
 
 /**
  * Checks if the service intervals in the settings are specified as percentages and corrects the default value accordingly.
- * @param new_value Contains the service interval's default value in days, or 50 (default in percentage).
+ * @param sd The current setting.
+ * @param type The vehicle's type.
+ * @return The appropriate service interval.
  */
 static int32_t GetDefaultServiceInterval(const IntSettingDesc &sd, VehicleType type)
 {
@@ -447,9 +452,9 @@ static void ChangeMinutesPerYear(int32_t new_value)
 	 * This can only happen in the menu, since the pre_cb ensures this setting can only be changed there, or if we're already using wallclock units.
 	 */
 	if (_game_mode == GM_MENU && (_settings_newgame.economy.minutes_per_calendar_year != CalTime::DEF_MINUTES_PER_YEAR)) {
-		if (_settings_newgame.economy.timekeeping_units != TKU_WALLCLOCK) {
-			_settings_newgame.economy.timekeeping_units = TKU_WALLCLOCK;
-			ChangeTimekeepingUnits(TKU_WALLCLOCK);
+		if (_settings_newgame.economy.timekeeping_units != TimekeepingUnits::Wallclock) {
+			_settings_newgame.economy.timekeeping_units = TimekeepingUnits::Wallclock;
+			ChangeTimekeepingUnits(0);
 		}
 	}
 }
@@ -498,7 +503,7 @@ static bool CheckTrainBrakingModelChange(int32_t &new_value)
 {
 	if (new_value == TBM_REALISTIC && (_game_mode == GM_NORMAL || _game_mode == GM_EDITOR)) {
 		for (TileIndex t(0); t < Map::Size(); t++) {
-			if (IsTileType(t, MP_RAILWAY) && GetRailTileType(t) == RailTileType::Signals) {
+			if (IsTileType(t, TileType::Railway) && GetRailTileType(t) == RailTileType::Signals) {
 				uint signals = GetPresentSignals(t);
 				if ((signals & 0x3) & ((signals & 0x3) - 1) || (signals & 0xC) & ((signals & 0xC) - 1)) {
 					/* Signals in both directions */
@@ -534,7 +539,7 @@ static void TrainBrakingModelChanged(int32_t new_value)
 	}
 	if (new_value == TBM_REALISTIC && (_game_mode == GM_NORMAL || _game_mode == GM_EDITOR)) {
 		for (TileIndex t(0); t < Map::Size(); t++) {
-			if (IsTileType(t, MP_RAILWAY) && GetRailTileType(t) == RailTileType::Signals) {
+			if (IsTileType(t, TileType::Railway) && GetRailTileType(t) == RailTileType::Signals) {
 				TrackBits bits = GetTrackBits(t);
 				do {
 					Track track = RemoveFirstTrack(&bits);
@@ -642,6 +647,25 @@ static void RoadVehSlopeSteepnessChanged(int32_t new_value)
 static void ProgrammableSignalsShownChanged(int32_t new_value)
 {
 	InvalidateWindowData(WC_BUILD_SIGNAL, 0);
+}
+
+
+/**
+ * This function updates the aircraft cache when the aircraft range setting is changed.
+ */
+static void AircraftRangeChanged(int32_t)
+{
+	for (Aircraft *v : Aircraft::Iterate()) {
+		v->acache.cached_max_range = Engine::Get(v->engine_type)->GetRange();
+		v->acache.cached_max_range_sqr = v->acache.cached_max_range * v->acache.cached_max_range;
+
+		/* Reset destination is too far state */
+		if (v->flags.Test(VehicleAirFlag::DestinationTooFar)) {
+			v->flags.Reset(VehicleAirFlag::DestinationTooFar);
+			SetWindowWidgetDirty(WC_VEHICLE_VIEW, v->index, WID_VV_START_STOP);
+			DeleteVehicleNews(v->index, AdviceType::AircraftDestinationTooFar);
+		}
+	}
 }
 
 static void TownFoundingChanged(int32_t new_value)
@@ -886,6 +910,11 @@ static void TrainSpeedAdaptationChanged(int32_t new_value)
 	SetWindowClassesDirty(WC_VEHICLE_DETAILS);
 }
 
+static void EngineLifetimeSettingsChanged(int32_t new_value)
+{
+	StartupEngines();
+}
+
 static void AutosaveModeChanged(int32_t new_value)
 {
 	extern void ChangeAutosaveFrequency(bool reset);
@@ -992,7 +1021,7 @@ static bool CheckFreeformEdges(int32_t &new_value)
 			}
 		}
 		for (uint i = 1; i < Map::MaxX(); i++) {
-			if (!IsTileType(TileXY(i, Map::MaxY() - 1), MP_WATER) || TileHeight(TileXY(1, Map::MaxY())) != 0) {
+			if (!IsTileType(TileXY(i, Map::MaxY() - 1), TileType::Water) || TileHeight(TileXY(1, Map::MaxY())) != 0) {
 				ShowErrorMessage(GetEncodedString(STR_CONFIG_SETTING_EDGES_NOT_WATER), {}, WL_ERROR);
 				return false;
 			}
@@ -1004,7 +1033,7 @@ static bool CheckFreeformEdges(int32_t &new_value)
 			}
 		}
 		for (uint i = 1; i < Map::MaxY(); i++) {
-			if (!IsTileType(TileXY(Map::MaxX() - 1, i), MP_WATER) || TileHeight(TileXY(Map::MaxX(), i)) != 0) {
+			if (!IsTileType(TileXY(Map::MaxX() - 1, i), TileType::Water) || TileHeight(TileXY(Map::MaxX(), i)) != 0) {
 				ShowErrorMessage(GetEncodedString(STR_CONFIG_SETTING_EDGES_NOT_WATER), {}, WL_ERROR);
 				return false;
 			}
@@ -1044,7 +1073,7 @@ bool CheckMapEdgesAreWater(bool allow_non_flat_void)
 		Slope slope;
 		std::tie(slope, h) = GetTilePixelSlopeOutsideMap(x, y);
 		if (slope == SLOPE_FLAT && h == 0) return true;
-		if (allow_non_flat_void && h == 0 && (slope & inner_edge) == 0 && IsTileType(TileXY(x, y), MP_VOID)) return true;
+		if (allow_non_flat_void && h == 0 && (slope & inner_edge) == 0 && IsTileType(TileXY(x, y), TileType::Void)) return true;
 		return false;
 	};
 	check_tile(        0,         0, SLOPE_S);
@@ -1096,6 +1125,7 @@ static void MapEdgeModeChanged(int32_t new_value)
 /**
  * Changing the setting "allow multiple NewGRF sets" is not allowed
  * if there are vehicles.
+ * @copydoc IntSettingDesc::PreChangeCheck
  */
 static bool CheckDynamicEngines(int32_t &new_value)
 {

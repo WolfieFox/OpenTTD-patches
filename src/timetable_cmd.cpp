@@ -361,7 +361,7 @@ CommandCost CmdBulkChangeTimetable(DoCommandFlags flags, VehicleID veh, ModifyTi
 			/* Exclude waypoints from set all wait times command */
 			if (mtf == MTF_WAIT_TIME && !HasFlag(ctrl_flags, MTCF_CLEAR_FIELD) && order->IsType(OT_GOTO_WAYPOINT)) continue;
 
-			Command<CMD_CHANGE_TIMETABLE>::Do(flags, v->index, order_number, mtf, data, ctrl_flags);
+			Command<Commands::ChangeTimetable>::Do(flags, v->index, order_number, mtf, data, ctrl_flags);
 		}
 	}
 
@@ -425,10 +425,7 @@ CommandCost CmdSetVehicleOnTime(DoCommandFlags flags, VehicleID veh, bool apply_
 /**
  * Order vehicles based on their timetable. The vehicles will be sorted in order
  * they would reach the first station.
- *
- * @param a First Vehicle pointer.
- * @param b Second Vehicle pointer.
- * @return Comparison value.
+ * @copydoc GUIList::Sorter
  */
 static bool VehicleTimetableSorter(Vehicle * const &a, Vehicle * const &b)
 {

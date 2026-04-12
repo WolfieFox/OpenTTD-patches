@@ -23,23 +23,25 @@
 
 /**
  * Return the rail type of tile, or INVALID_RAILTYPE if this is no rail tile.
+ * @param tile An arbitrary tile.
+ * @return The rail type, or \c INVALID_RAILTYPE.
  */
 RailType GetTileRailType(TileIndex tile)
 {
 	switch (GetTileType(tile)) {
-		case MP_RAILWAY:
+		case TileType::Railway:
 			return GetRailType(tile);
 
-		case MP_ROAD:
+		case TileType::Road:
 			/* rail/road crossing */
 			if (IsLevelCrossing(tile)) return GetRailType(tile);
 			break;
 
-		case MP_STATION:
+		case TileType::Station:
 			if (HasStationRail(tile)) return GetRailType(tile);
 			break;
 
-		case MP_TUNNELBRIDGE:
+		case TileType::TunnelBridge:
 			if (GetTunnelBridgeTransportType(tile) == TRANSPORT_RAIL) return GetRailType(tile);
 			break;
 
@@ -315,7 +317,7 @@ Money RailMaintenanceCost(RailType railtype, uint32_t num, uint32_t total_num)
 {
 	dbg_assert(railtype < RAILTYPE_END);
 	/* 4 bits fraction for the multiplier and 7 bits scaling. 72 is roughly equivalent to the polynomial maintenance cost at 5000 pieces. */
-	return (_price[PR_INFRASTRUCTURE_RAIL] * GetRailTypeInfo(railtype)->maintenance_multiplier * num * GetMaintenanceCostScale(total_num, 72)) >> 11;
+	return (_price[Price::InfrastructureRail] * GetRailTypeInfo(railtype)->maintenance_multiplier * num * GetMaintenanceCostScale(total_num, 72)) >> 11;
 }
 
 /**
@@ -326,5 +328,5 @@ Money RailMaintenanceCost(RailType railtype, uint32_t num, uint32_t total_num)
 Money SignalMaintenanceCost(uint32_t num)
 {
 	/* 1 bit fraction for the multiplier and 7 bits scaling. 33 is roughly equivalent to the polynomial maintenance cost at 1000 pieces. */
-	return (_price[PR_INFRASTRUCTURE_RAIL] * 15 * num * GetMaintenanceCostScale(num, 33)) >> 8;
+	return (_price[Price::InfrastructureRail] * 15 * num * GetMaintenanceCostScale(num, 33)) >> 8;
 }

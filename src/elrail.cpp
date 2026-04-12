@@ -94,7 +94,7 @@ static DualTrackBits GetRailTrackBitsUniversal(TileIndex t, DiagDirections *over
 	out.primary = TRACK_BIT_NONE;
 	out.secondary = TRACK_BIT_NONE;
 	switch (GetTileType(t)) {
-		case MP_RAILWAY: {
+		case TileType::Railway: {
 			switch (GetRailTileType(t)) {
 				case RailTileType::Normal: case RailTileType::Signals: {
 					RailType secondary = GetTileSecondaryRailTypeIfValid(t);
@@ -116,7 +116,7 @@ static DualTrackBits GetRailTrackBitsUniversal(TileIndex t, DiagDirections *over
 			break;
 		}
 
-		case MP_TUNNELBRIDGE: {
+		case TileType::TunnelBridge: {
 			if (GetTunnelBridgeTransportType(t) != TRANSPORT_RAIL) break;
 			TrackBits primary_bits = GetPrimaryTunnelBridgeTrackBits(t);
 			TrackBits secondary_bits = GetSecondaryTunnelBridgeTrackBits(t);
@@ -132,13 +132,13 @@ static DualTrackBits GetRailTrackBitsUniversal(TileIndex t, DiagDirections *over
 			break;
 		}
 
-		case MP_ROAD:
+		case TileType::Road:
 			if (!IsLevelCrossing(t)) break;
 			if (!HasRailCatenary(GetRailType(t))) break;
 			out.primary = GetCrossingRailBits(t);
 			break;
 
-		case MP_STATION:
+		case TileType::Station:
 			if (!HasStationRail(t)) break;
 			if (!HasRailCatenary(GetRailType(t))) break;
 			out.primary = TrackToTrackBits(GetRailStationTrack(t));
@@ -152,6 +152,9 @@ static DualTrackBits GetRailTrackBitsUniversal(TileIndex t, DiagDirections *over
 
 /**
  * Masks out track bits when neighbouring tiles are unelectrified.
+ * @param t The tile to consider.
+ * @param tracks The track bits to consider.
+ * @return The track bits that should have catenary.
  */
 static TrackBits MaskWireBits(TileIndex t, TrackBits tracks)
 {
@@ -204,6 +207,9 @@ static TrackBits MaskWireBits(TileIndex t, TrackBits tracks)
 
 /**
  * Get the base wire sprite to use.
+ * @param tile The tile to get the wire sprite for.
+ * @param context The context to get the sprite for.
+ * @return The wire sprite.
  */
 static inline SpriteID GetWireBase(TileIndex tile, RailType rt, TileContext context = TCX_NORMAL)
 {
@@ -214,6 +220,9 @@ static inline SpriteID GetWireBase(TileIndex tile, RailType rt, TileContext cont
 
 /**
  * Get the base pylon sprite to use.
+ * @param tile The tile to get the pylon sprite for.
+ * @param context The context to get the sprite for.
+ * @return The pylon sprite.
  */
 static inline SpriteID GetPylonBase(TileIndex tile, RailType rt, TileContext context = TCX_NORMAL)
 {
@@ -229,7 +238,7 @@ static inline SpriteID GetPylonBase(TileIndex tile, RailType rt, TileContext con
  */
 static void AdjustTileh(TileIndex tile, Slope *tileh)
 {
-	if (IsTileType(tile, MP_TUNNELBRIDGE)) {
+	if (IsTileType(tile, TileType::TunnelBridge)) {
 		if (IsTunnel(tile)) {
 			*tileh = SLOPE_STEEP; // XXX - Hack to make tunnel entrances to always have a pylon
 		} else if (IsRailCustomBridgeHeadTile(tile)) {
@@ -435,10 +444,10 @@ static void DrawRailCatenaryRailway(const TileInfo *ti)
 		Foundation foundation = FOUNDATION_NONE;
 
 		/* Station and road crossings are always "flat", so adjust the tileh accordingly */
-		if (IsTileType(neighbour, MP_STATION) || IsTileType(neighbour, MP_ROAD)) tileh[TS_NEIGHBOUR] = SLOPE_FLAT;
+		if (IsTileType(neighbour, TileType::Station) || IsTileType(neighbour, TileType::Road)) tileh[TS_NEIGHBOUR] = SLOPE_FLAT;
 
 		/* Read the foundations if they are present, and adjust the tileh */
-		if (track_config[TS_NEIGHBOUR] != TRACK_BIT_NONE && IsTileType(neighbour, MP_RAILWAY) && HasRailCatenary(GetTileRailTypeByEntryDir(neighbour, i))) foundation = GetRailFoundation(tileh[TS_NEIGHBOUR], track_config[TS_NEIGHBOUR]);
+		if (track_config[TS_NEIGHBOUR] != TRACK_BIT_NONE && IsTileType(neighbour, TileType::Railway) && HasRailCatenary(GetTileRailTypeByEntryDir(neighbour, i))) foundation = GetRailFoundation(tileh[TS_NEIGHBOUR], track_config[TS_NEIGHBOUR]);
 		if (IsBridgeTile(neighbour)) {
 			foundation = GetBridgeFoundation(tileh[TS_NEIGHBOUR], DiagDirToAxis(GetTunnelBridgeDirection(neighbour)));
 		}
@@ -656,7 +665,7 @@ void DrawRailCatenaryOnBridge(const TileInfo *ti)
 void DrawRailCatenary(const TileInfo *ti)
 {
 	switch (GetTileType(ti->tile)) {
-		case MP_RAILWAY:
+		case TileType::Railway:
 			if (IsRailDepot(ti->tile)) {
 				const SortableSpriteStruct &sss = _rail_catenary_sprite_data_depot[GetRailDepotDirection(ti->tile)];
 
@@ -668,9 +677,9 @@ void DrawRailCatenary(const TileInfo *ti)
 			}
 			break;
 
-		case MP_TUNNELBRIDGE:
-		case MP_ROAD:
-		case MP_STATION:
+		case TileType::TunnelBridge:
+		case TileType::Road:
+		case TileType::Station:
 			break;
 
 		default: return;
@@ -678,6 +687,7 @@ void DrawRailCatenary(const TileInfo *ti)
 	DrawRailCatenaryRailway(ti);
 }
 
+/** Callback for changes to the electrified rails setting. @copydoc IntSettingDesc::PostChangeCallback */
 void SettingsDisableElrail(int32_t new_value)
 {
 	bool disable = (new_value != 0);

@@ -291,7 +291,7 @@ static nlohmann::ordered_json OrderToJSON(const Order &o, VehicleType vt)
 
 		json[OFName::CONDITION_VARIABLE] = o.GetConditionVariable();
 
-		if (o.GetConditionVariable() != OCV_UNCONDITIONALLY) {
+		if (o.GetConditionVariable() != OrderConditionVariable::Unconditionally) {
 			json[OFName::CONDITION_COMPARATOR] = o.GetConditionComparator();
 		}
 
@@ -302,10 +302,10 @@ static nlohmann::ordered_json OrderToJSON(const Order &o, VehicleType vt)
 		}
 
 		switch (o.GetConditionVariable()) {
-			case OCV_UNCONDITIONALLY:
+			case OrderConditionVariable::Unconditionally:
 				break;
 
-			case OCV_DISPATCH_SLOT: {
+			case OrderConditionVariable::DispatchSlot: {
 				json[OFName::CONDITION_DISPATCH_SCHEDULE] = o.GetConditionDispatchScheduleID();
 
 				const uint16_t value = o.GetConditionValue();
@@ -329,18 +329,18 @@ static nlohmann::ordered_json OrderToJSON(const Order &o, VehicleType vt)
 				break;
 			}
 
-			case OCV_SLOT_OCCUPANCY:
-			case OCV_CARGO_LOAD_PERCENTAGE:
-			case OCV_TIME_DATE:
-			case OCV_TIMETABLE:
-			case OCV_VEH_IN_SLOT_GROUP:
-			case OCV_VEH_IN_SLOT:
+			case OrderConditionVariable::SlotOccupancy:
+			case OrderConditionVariable::CargoLoadPercentage:
+			case OrderConditionVariable::TimeDate:
+			case OrderConditionVariable::Timetable:
+			case OrderConditionVariable::VehicleInSlotGroup:
+			case OrderConditionVariable::VehicleInSlot:
 				json[OFName::CONDITION_VALUE1] = o.GetXData();
 				break;
 
-			case OCV_COUNTER_VALUE:
-			case OCV_CARGO_WAITING_AMOUNT:
-			case OCV_CARGO_WAITING_AMOUNT_PERCENTAGE:
+			case OrderConditionVariable::CounterValue:
+			case OrderConditionVariable::CargoWaitingAmount:
+			case OrderConditionVariable::CargoWaitingAmountPercentage:
 				json[OFName::CONDITION_VALUE1] = o.GetXDataLow();
 				break;
 
@@ -350,15 +350,15 @@ static nlohmann::ordered_json OrderToJSON(const Order &o, VehicleType vt)
 		}
 
 		switch (o.GetConditionVariable()) {
-			case OCV_COUNTER_VALUE:
+			case OrderConditionVariable::CounterValue:
 				json[OFName::CONDITION_VALUE2] = o.GetXDataHigh();
 				break;
 
-			case OCV_CARGO_LOAD_PERCENTAGE:
-			case OCV_CARGO_WAITING_AMOUNT:
-			case OCV_CARGO_WAITING_AMOUNT_PERCENTAGE:
-			case OCV_TIME_DATE:
-			case OCV_TIMETABLE:
+			case OrderConditionVariable::CargoLoadPercentage:
+			case OrderConditionVariable::CargoWaitingAmount:
+			case OrderConditionVariable::CargoWaitingAmountPercentage:
+			case OrderConditionVariable::TimeDate:
+			case OrderConditionVariable::Timetable:
 				json[OFName::CONDITION_VALUE2] = o.GetConditionValue();
 				break;
 
@@ -370,7 +370,7 @@ static nlohmann::ordered_json OrderToJSON(const Order &o, VehicleType vt)
 			json[OFName::CONDITION_VALUE3] = o.GetConditionViaStationID().base();
 		}
 
-		if (o.GetConditionVariable() == OCV_CARGO_WAITING_AMOUNT_PERCENTAGE) {
+		if (o.GetConditionVariable() == OrderConditionVariable::CargoWaitingAmountPercentage) {
 			json[OFName::CONDITION_VALUE4] = GB(o.GetXData2(), 16, 1);
 		}
 	}
@@ -595,7 +595,7 @@ private:
 	void SendCmd()
 	{
 		if (!this->cmd_data.cmds.empty()) {
-			EnqueueDoCommandP<CMD_BULK_ORDER>(this->tile, this->cmd_data, (StringID)0);
+			EnqueueDoCommandP<Commands::BulkOrder>(this->tile, this->cmd_data, (StringID)0);
 			this->cmd_data.cmds.clear();
 		}
 	}
@@ -685,7 +685,7 @@ private:
 	template <typename T, typename F>
 	bool ParserFuncWrapper(std::string_view field, std::optional<T> default_val, JsonOrderImportErrorType error_type, F exec)
 	{
-		static_assert(std::is_same_v<T, std::string> || std::is_convertible_v<T, int> || std::is_base_of_v<PoolIDBase, T>, "data is either a string or it's convertible to int");
+		static_assert(std::is_same_v<T, std::string> || std::is_convertible_v<T, int> || std::is_base_of_v<PoolIDBase, T> || is_scoped_enum_v<T>, "data is either a string or it's convertible to int");
 
 		T val;
 		bool default_used = false;
@@ -835,6 +835,8 @@ public:
 					this->ModifyOrder(mof, 0, cargo, val, oid);
 				} else if constexpr (std::is_base_of_v<PoolIDBase, T>) {
 					this->ModifyOrder(mof, val.base(), cargo, {}, oid);
+				} else if constexpr (is_scoped_enum_v<T>) {
+					this->ModifyOrder(mof, to_underlying(val), cargo, {}, oid);
 				} else {
 					this->ModifyOrder(mof, val, cargo, {}, oid);
 				}
@@ -1025,7 +1027,7 @@ static void ImportJsonOrder(JSONToVehicleCommandParser<JSONToVehicleMode::Order>
 		}
 
 		const OrderConditionVariable condvar = *cvresult;
-		json_importer.ModifyOrder(MOF_COND_VARIABLE, condvar);
+		json_importer.ModifyOrder(MOF_COND_VARIABLE, to_underlying(condvar));
 		json_importer.cmd_buffer.op_serialiser.ReplaceOnFail();
 
 		json_importer.TryApplyModifyOrder<OrderConditionComparator>(OFName::CONDITION_COMPARATOR, MOF_COND_COMPARATOR, JOIET_MAJOR);
@@ -1036,7 +1038,7 @@ static void ImportJsonOrder(JSONToVehicleCommandParser<JSONToVehicleMode::Order>
 		json_importer.TryApplyModifyOrder<uint16_t>(OFName::CONDITION_VALUE4, MOF_COND_VALUE_4, JOIET_MAJOR);
 
 		/* Non trivial cases for conditionals. */
-		if (condvar == OCV_DISPATCH_SLOT) {
+		if (condvar == OrderConditionVariable::DispatchSlot) {
 			uint16_t val = 0;
 
 			auto odscs = json_importer.TryGetField<OrderDispatchConditionSources>(OFName::CONDITION_SLOT_SOURCE, JOIET_MAJOR);
@@ -1417,7 +1419,7 @@ OrderImportErrors ImportJsonOrderList(const Vehicle *veh, std::string_view json_
 			}
 
 			if (have_schedule && veh->vehicle_flags.Test(VehicleFlag::TimetableSeparation)) {
-				Command<CMD_TIMETABLE_SEPARATION>::Post(veh->index, false);
+				Command<Commands::TimetableSeparation>::Post(veh->index, false);
 			}
 
 			uint schedule_index = schedule_insert_offset;

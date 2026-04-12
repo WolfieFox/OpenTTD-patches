@@ -16,6 +16,7 @@
 #include "station_map.h"
 #include "core/geometry_type.hpp"
 #include "core/tinystring_type.hpp"
+#include "3rdparty/cpp-btree/btree_map.h"
 #include <memory>
 #include <vector>
 
@@ -78,6 +79,7 @@ struct BaseStation : StationPool::PoolItem<&_station_pool> {
 	std::vector<StationSpecList> speclist{};           ///< List of rail station specs of this station.
 	std::vector<RoadStopSpecList> roadstop_speclist{}; ///< List of road stop specs of this station
 
+	btree::btree_map<TileIndex, StationRandomTriggers> tile_waiting_random_triggers;
 	uint16_t random_bits = 0;                               ///< Random bits assigned to this station
 	StationRandomTriggers waiting_random_triggers;          ///< Waiting triggers (NewGRF), shared by all station parts/tiles, road stops, ... essentially useless and broken by design.
 	uint8_t delete_ctr = 0;                                 ///< Delete counter. If greater than 0 then it is decremented until it reaches 0; the waypoint is then is deleted.
@@ -129,6 +131,10 @@ struct BaseStation : StationPool::PoolItem<&_station_pool> {
 		return this->cached_name;
 	}
 
+	/**
+	 * Move this station's main coordinate somewhere else.
+	 * @param new_xy New tile location of the sign.
+	 */
 	virtual void MoveSign(TileIndex new_xy)
 	{
 		this->xy = new_xy;
@@ -251,6 +257,7 @@ struct SpecializedStation : public BaseStation {
 
 	/**
 	 * Gets station with given index
+	 * @param index The pool index to look for.
 	 * @return pointer to station with given index cast to T *
 	 */
 	static inline T *Get(auto index)
@@ -260,6 +267,7 @@ struct SpecializedStation : public BaseStation {
 
 	/**
 	 * Returns station if the index is a valid index for this station type
+	 * @param index The pool index to look for.
 	 * @return pointer to station with given index if it's a station of this type
 	 */
 	static inline T *GetIfValid(auto index)
@@ -279,7 +287,7 @@ struct SpecializedStation : public BaseStation {
 
 	/**
 	 * Creates a new T-object in the station pool.
-	 * @param args... The arguments to the constructor.
+	 * @param args The arguments to the constructor.
 	 * @return The created object.
 	 */
 	template <typename... Targs>
@@ -291,7 +299,7 @@ struct SpecializedStation : public BaseStation {
 	/**
 	 * Creates a new T-object in the station pool.
 	 * @param index The index allocate the object at.
-	 * @param args... The arguments to the constructor.
+	 * @param args The arguments to the constructor.
 	 * @return The created object.
 	 */
 	template <typename... Targs>

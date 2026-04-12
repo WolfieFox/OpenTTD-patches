@@ -597,6 +597,8 @@ STR_CONFIG_SETTING_WARN_LOST_VEHICLE                            :Avza jekk jinti
 
 ###length 4
 
+###length 4
+
 
 
 ###length 3
@@ -681,6 +683,7 @@ STR_CONFIG_SETTING_ADVANCED_VEHICLE_LISTS_HELPTEXT              :Ippermetti l-uz
 ###length 3
 
 ###setting-zero-is-special
+
 
 
 
@@ -1150,6 +1153,8 @@ STR_FINANCES_POSITIVE_INCOME                                    :{BLACK}+{CURREN
 # Vehicle availability
 ###length VEHICLE_TYPES
 
+
+# Vehicle sort details
 
 ###length 3
 

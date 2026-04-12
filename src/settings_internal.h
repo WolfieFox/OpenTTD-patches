@@ -18,6 +18,7 @@
 
 enum SaveToConfigFlags : uint32_t;
 
+/** Flags describing the behaviour of a setting. */
 enum class SettingFlag : uint8_t {
 	GuiZeroIsSpecial,        ///< A value of zero is possible and has a custom string (the one after "strval").
 	GuiDropdown,             ///< The value represents a limited number of string-options (internally integer) presented as dropdown.
@@ -106,6 +107,11 @@ typedef int64_t OnXrefValueConvert(int64_t val); ///< callback prototype for xre
 struct SettingDescEnumEntry {
 	int32_t val;
 	StringID str;
+
+	SettingDescEnumEntry(int32_t val, StringID str) : val(val), str(str) {}
+
+	template <typename T> requires is_scoped_enum_v<T>
+	SettingDescEnumEntry(T val, StringID str) : val(to_underlying(val)), str(str) {}
 };
 
 /** Properties of config file settings. */
@@ -175,16 +181,47 @@ struct SettingDesc {
 
 	/**
 	 * Reset the setting to its default value.
+	 * @param object The object to set the value of.
 	 */
 	virtual void ResetToDefault(void *object) const = 0;
 };
 
 /** Base integer type, including boolean, settings. Only these are shown in the settings UI. */
 struct IntSettingDesc : SettingDesc {
+	/**
+	 * Callback to get the title for the settings panel of this setting.
+	 * @param sd The setting to consider.
+	 * @return The StringID of the title.
+	 */
 	using GetTitleCallback = StringID(const IntSettingDesc &sd);
+
+	/**
+	 * Callback to get the help description for the settings panel of this setting.
+	 * @param sd The setting to consider.
+	 * @return The StringID of the help.
+	 */
 	using GetHelpCallback = StringID(const IntSettingDesc &sd);
+
+	/**
+	 * Callback to parameters for string formatting for this setting.
+	 * @param sd The setting to consider.
+	 * @param value The value of the setting.
+	 * @return The string parameters.
+	 */
 	using GetValueParamsCallback = std::pair<StringParameter, StringParameter>(const IntSettingDesc &sd, int32_t value);
+
+	/**
+	 * Callback to get default value for this setting.
+	 * @param sd The setting to consider.
+	 * @return The default value.
+	 */
 	using GetDefaultValueCallback = int32_t(const IntSettingDesc &sd);
+
+	/**
+	 * Callback to get range of valid values for this setting.
+	 * @param sd The setting to consider.
+	 * @return The range, start and end are included..
+	 */
 	using GetRangeCallback = std::pair<int32_t, uint32_t>(const IntSettingDesc &sd);
 
 	/**
@@ -198,9 +235,9 @@ struct IntSettingDesc : SettingDesc {
 	using PreChangeCheck = bool(int32_t &value);
 	/**
 	 * A callback to denote that a setting has been changed.
-	 * @param The new value for the setting.
+	 * @param new_value The new value for the setting.
 	 */
-	using PostChangeCallback = void(int32_t value);
+	using PostChangeCallback = void(int32_t new_value);
 
 	constexpr IntSettingDesc(const SaveLoad &save, const char *name, SettingFlags flags, OnGuiCtrl *guiproc, bool startup, const char *patx_name, int32_t def,
 			int32_t min, uint32_t max, int32_t interval, StringID str, StringID str_help, StringID str_val,

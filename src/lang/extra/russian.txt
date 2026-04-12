@@ -330,9 +330,6 @@ STR_CONFIG_SETTING_RIVER_MIN_LENGTH_HELPTEXT                    :Минимал�
 STR_CONFIG_SETTING_RIVER_ROUTE_RANDOM                           :Случайность речных маршрутов: {STRING}
 STR_CONFIG_SETTING_RIVER_ROUTE_RANDOM_HELPTEXT                  :Установите, насколько случайным может быть путь реки.
 
-STR_CONFIG_SETTING_RIVERS_TOP_OF_HILL                           :Реки должны начинаться на вершинах холмов: {STRING}
-STR_CONFIG_SETTING_RIVERS_TOP_OF_HILL_HELPTEXT                  :Укажите, должны ли истоки рек обязательно генерироваться на вершинах холмов.
-
 STR_CONFIG_SETTING_RIVER_TROPICS_WIDTH                          :Ширина тропиков вокруг рек: {STRING}
 STR_CONFIG_SETTING_RIVER_TROPICS_WIDTH_HELPTEXT                 :Определяет ширину тропической зоны, которая окружает реки в субтропическом климате.{}Это суммарная ширина зоны обеих сторон реки.
 
@@ -753,6 +750,7 @@ STR_LINKGRAPH_STATS_TOOLTIP_PRODUCTION_INTERVAL                 :{BLACK}{CARGO_L
 
 STR_RAIL_TOOLBAR_TOOLTIP_BUILD_POLYRAIL                         :{BLACK}Построить железнодорожный путь с помощью режима полилинии. Ctrl переключает строительство/удаление железной дороги. Shift переключает строительство/показ сметы расходов
 
+STR_BUILD_SIGNAL_TOGGLE_ADVANCED_SIGNAL_TOOLTIP                 :{BLACK}Переключить отображение расширенного списка сигналов
 STR_BUILD_SIGNAL_SEMAPHORE_PROG_TOOLTIP                         :{BLACK}Программируемый предварительный сигнал (семафор){}Программируемый предварительный сигнал - это комбинированный сигнал, который может быть запрограммирован на сложное поведение.
 STR_BUILD_SIGNAL_SEMAPHORE_NO_ENTRY_TOOLTIP                     :{BLACK}Сигнал запрета входа (семафор){}Сигнал пути позволяет нескольким поездам одновременно входить в сигнальный блок, если поезд может зарезервировать путь к безопасной точке остановки. Сигналы о запрете въезда не могут быть переданы с лицевой стороны
 STR_BUILD_SIGNAL_ELECTRIC_PROG_TOOLTIP                          :{BLACK}Программируемый предварительный сигнал (электрический){}Программируемый предварительный сигнал - это комбинированный сигнал, который может быть запрограммирован на сложное поведение.

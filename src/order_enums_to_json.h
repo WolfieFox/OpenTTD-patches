@@ -131,41 +131,41 @@ NLOHMANN_JSON_SERIALIZE_ENUM(VehicleType, {
 })
 
 NLOHMANN_JSON_SERIALIZE_ENUM(OrderConditionVariable, {
-	{OCV_END, nullptr},
-	{OCV_LOAD_PERCENTAGE, "load-percentage"},
-	{OCV_RELIABILITY, "reliability"},
-	{OCV_MAX_SPEED, "max-speed"},
-	{OCV_AGE, "age"},
-	{OCV_REQUIRES_SERVICE, "requires-service"},
-	{OCV_UNCONDITIONALLY, "always"},
-	{OCV_REMAINING_LIFETIME, "remaining-lifetime"},
-	{OCV_MAX_RELIABILITY, "max-reliability" },
-	{OCV_CARGO_WAITING, "cargo-waiting" },
-	{OCV_CARGO_ACCEPTANCE, "cargo-acceptance" },
-	{OCV_FREE_PLATFORMS, "free-platforms" },
-	{OCV_PERCENT, "percent-of-times" },
-	{OCV_SLOT_OCCUPANCY, "slot-occupancy" },
-	{OCV_VEH_IN_SLOT, "vehicle-in-slot" },
-	{OCV_CARGO_LOAD_PERCENTAGE, "cargo-load-percentage" },
-	{OCV_CARGO_WAITING_AMOUNT, "cargo-waiting-amount" },
-	{OCV_COUNTER_VALUE, "counter-value" },
-	{OCV_TIME_DATE, "time-date" },
-	{OCV_TIMETABLE, "timetable" },
-	{OCV_DISPATCH_SLOT, "dispatch-slot" },
-	{OCV_CARGO_WAITING_AMOUNT_PERCENTAGE, "cargo-waiting-amount-percentage" },
-	{OCV_VEH_IN_SLOT_GROUP, "vehicle-in-slot-group" }
+	{OrderConditionVariable::End, nullptr},
+	{OrderConditionVariable::LoadPercentage, "load-percentage"},
+	{OrderConditionVariable::Reliability, "reliability"},
+	{OrderConditionVariable::MaxSpeed, "max-speed"},
+	{OrderConditionVariable::Age, "age"},
+	{OrderConditionVariable::RequiresService, "requires-service"},
+	{OrderConditionVariable::Unconditionally, "always"},
+	{OrderConditionVariable::RemainingLifetime, "remaining-lifetime"},
+	{OrderConditionVariable::MaxReliability, "max-reliability" },
+	{OrderConditionVariable::CargoWaiting, "cargo-waiting" },
+	{OrderConditionVariable::CargoAcceptance, "cargo-acceptance" },
+	{OrderConditionVariable::FreePlatforms, "free-platforms" },
+	{OrderConditionVariable::Percent, "percent-of-times" },
+	{OrderConditionVariable::SlotOccupancy, "slot-occupancy" },
+	{OrderConditionVariable::VehicleInSlot, "vehicle-in-slot" },
+	{OrderConditionVariable::CargoLoadPercentage, "cargo-load-percentage" },
+	{OrderConditionVariable::CargoWaitingAmount, "cargo-waiting-amount" },
+	{OrderConditionVariable::CounterValue, "counter-value" },
+	{OrderConditionVariable::TimeDate, "time-date" },
+	{OrderConditionVariable::Timetable, "timetable" },
+	{OrderConditionVariable::DispatchSlot, "dispatch-slot" },
+	{OrderConditionVariable::CargoWaitingAmountPercentage, "cargo-waiting-amount-percentage" },
+	{OrderConditionVariable::VehicleInSlotGroup, "vehicle-in-slot-group" }
 })
 
 NLOHMANN_JSON_SERIALIZE_ENUM(OrderConditionComparator, {
-	{OCC_END, nullptr},
-	{OCC_EQUALS, "=="},
-	{OCC_NOT_EQUALS, "!="},
-	{OCC_LESS_THAN, "<"},
-	{OCC_LESS_EQUALS, "<="},
-	{OCC_MORE_THAN, ">"},
-	{OCC_MORE_EQUALS, ">="},
-	{OCC_IS_TRUE, "true"},
-	{OCC_IS_FALSE, "false"}
+	{OrderConditionComparator::End, nullptr},
+	{OrderConditionComparator::Equal, "=="},
+	{OrderConditionComparator::NotEqual, "!="},
+	{OrderConditionComparator::LessThan, "<"},
+	{OrderConditionComparator::LessThanOrEqual, "<="},
+	{OrderConditionComparator::MoreThan, ">"},
+	{OrderConditionComparator::MoreThanOrEqual, ">="},
+	{OrderConditionComparator::IsTrue, "true"},
+	{OrderConditionComparator::IsFalse, "false"}
 })
 
 NLOHMANN_JSON_SERIALIZE_ENUM(OrderSlotSubType, {

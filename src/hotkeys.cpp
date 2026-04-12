@@ -225,24 +225,20 @@ Hotkey::Hotkey(uint16_t default_keycode, const char *name, int num) :
 	name(name),
 	num(num)
 {
-	if (default_keycode != 0) this->AddKeycode(default_keycode);
+	if (default_keycode != 0) this->keycodes.push_back(default_keycode);
 }
 
 /**
  * Create a new Hotkey object with multiple default keycodes.
- * @param default_keycodes An array of default keycodes terminated with 0.
+ * @param default_keycodes An array of default keycodes.
  * @param name The name of this hotkey.
  * @param num Number of this hotkey, should be unique within the hotkey list.
  */
-Hotkey::Hotkey(const uint16_t *default_keycodes, const char *name, int num) :
+Hotkey::Hotkey(std::initializer_list<uint16_t> default_keycodes, const char *name, int num) :
 	name(name),
 	num(num)
 {
-	const uint16_t *keycode = default_keycodes;
-	while (*keycode != 0) {
-		this->AddKeycode(*keycode);
-		keycode++;
-	}
+	this->keycodes = default_keycodes;
 }
 
 /**
@@ -252,7 +248,10 @@ Hotkey::Hotkey(const uint16_t *default_keycodes, const char *name, int num) :
  */
 void Hotkey::AddKeycode(uint16_t keycode)
 {
-	this->keycodes.insert(keycode);
+	for (uint16_t k : this->keycodes) {
+		if (k == keycode) return; // already present
+	}
+	this->keycodes.push_back(keycode);
 }
 
 HotkeyList::HotkeyList(const char *ini_group, std::vector<Hotkey> items, GlobalHotkeyHandlerFunc global_hotkey_handler) :

@@ -40,7 +40,7 @@ void RebuildTownCaches(bool cargo_update_required)
 	}
 
 	for (TileIndex t(0); t < Map::Size(); t++) {
-		if (!IsTileType(t, MP_HOUSE)) continue;
+		if (!IsTileType(t, TileType::House)) continue;
 
 		HouseID house_id = GetTranslatedHouseID(GetCleanHouseType(t));
 		Town *town = Town::GetByTile(t);
@@ -69,7 +69,7 @@ static void CheckMultiTileHouseTypes(bool &cargo_update_required, bool translate
 
 	/* Check for cases when a NewGRF has set a wrong house substitute type. */
 	for (TileIndex t(0); t < Map::Size(); t++) {
-		if (!IsTileType(t, MP_HOUSE)) continue;
+		if (!IsTileType(t, TileType::House)) continue;
 
 		HouseID house_type = get_clean_house_type(t);
 		TileIndex north_tile = t + GetHouseNorthPart(house_type); // modifies 'house_type'!
@@ -78,17 +78,17 @@ static void CheckMultiTileHouseTypes(bool &cargo_update_required, bool translate
 			bool valid_house = true;
 			if (hs->building_flags.Test(BuildingFlag::Size2x1)) {
 				TileIndex tile = t + TileDiffXY(1, 0);
-				if (!IsTileType(tile, MP_HOUSE) || get_clean_house_type(tile) != house_type + 1) valid_house = false;
+				if (!IsTileType(tile, TileType::House) || get_clean_house_type(tile) != house_type + 1) valid_house = false;
 			} else if (hs->building_flags.Test(BuildingFlag::Size1x2)) {
 				TileIndex tile = t + TileDiffXY(0, 1);
-				if (!IsTileType(tile, MP_HOUSE) || get_clean_house_type(tile) != house_type + 1) valid_house = false;
+				if (!IsTileType(tile, TileType::House) || get_clean_house_type(tile) != house_type + 1) valid_house = false;
 			} else if (hs->building_flags.Test(BuildingFlag::Size2x2)) {
 				TileIndex tile = t + TileDiffXY(0, 1);
-				if (!IsTileType(tile, MP_HOUSE) || get_clean_house_type(tile) != house_type + 1) valid_house = false;
+				if (!IsTileType(tile, TileType::House) || get_clean_house_type(tile) != house_type + 1) valid_house = false;
 				tile = t + TileDiffXY(1, 0);
-				if (!IsTileType(tile, MP_HOUSE) || get_clean_house_type(tile) != house_type + 2) valid_house = false;
+				if (!IsTileType(tile, TileType::House) || get_clean_house_type(tile) != house_type + 2) valid_house = false;
 				tile = t + TileDiffXY(1, 1);
-				if (!IsTileType(tile, MP_HOUSE) || get_clean_house_type(tile) != house_type + 3) valid_house = false;
+				if (!IsTileType(tile, TileType::House) || get_clean_house_type(tile) != house_type + 3) valid_house = false;
 			}
 			/* If not all tiles of this house are present remove the house.
 			 * The other tiles will get removed later in this loop because
@@ -97,7 +97,7 @@ static void CheckMultiTileHouseTypes(bool &cargo_update_required, bool translate
 				DoClearSquare(t);
 				cargo_update_required = true;
 			}
-		} else if (!IsTileType(north_tile, MP_HOUSE) || get_clean_house_type(north_tile) != house_type) {
+		} else if (!IsTileType(north_tile, TileType::House) || get_clean_house_type(north_tile) != house_type) {
 			/* This tile should be part of a multi-tile building but the
 			 * north tile of this house isn't on the map. */
 			DoClearSquare(t);
@@ -117,7 +117,7 @@ static void CheckMultiTileHouseTypes(bool &cargo_update_required, bool translate
 void UpdateHousesAndTowns(bool cargo_update_required)
 {
 	for (TileIndex t(0); t < Map::Size(); t++) {
-		if (!IsTileType(t, MP_HOUSE)) continue;
+		if (!IsTileType(t, TileType::House)) continue;
 
 		HouseID house_id = GetCleanHouseType(t);
 		if (!HouseSpec::Get(house_id)->enabled && house_id >= NEW_HOUSE_OFFSET) {
@@ -238,6 +238,62 @@ struct TownSuppliedStructHandler final : public TypedSaveLoadStructHandler<TownS
 	{
 		t->supplied.resize(SlGetStructListLength(NUM_CARGO));
 		for (Town::SuppliedCargo &p : t->supplied) {
+			SlObjectLoadFiltered(&p, this->GetLoadDescription());
+		}
+	}
+};
+
+struct TownAcceptedHistoryStructHandler final : public TypedSaveLoadStructHandler<TownAcceptedHistoryStructHandler, Town::AcceptedCargo> {
+	NamedSaveLoadTable GetDescription() const override
+	{
+		static const NamedSaveLoad _supplied_history_desc[] = {
+			NSL("accepted", SLE_VAR(Town::AcceptedHistory, accepted, SLE_UINT32)),
+		};
+		return _supplied_history_desc;
+	}
+
+	void Save(Town::AcceptedCargo *p) const override
+	{
+		SlSetStructListLength(p->history.size());
+
+		for (auto &h : p->history) {
+			SlObject(&h, this->GetLoadDescription());
+		}
+	}
+
+	void Load(Town::AcceptedCargo *p) const override
+	{
+		size_t len = SlGetStructListLength(p->history.size());
+
+		for (auto &h : p->history) {
+			if (--len > p->history.size()) break; // unsigned so wraps after hitting zero.
+			SlObject(&h, this->GetLoadDescription());
+		}
+	}
+};
+
+struct TownAcceptedStructHandler final : public TypedSaveLoadStructHandler<TownAcceptedStructHandler, Town> {
+	NamedSaveLoadTable GetDescription() const override
+	{
+		static const NamedSaveLoad _supplied_desc[] = {
+			NSL("cargo", SLE_VAR(Town::AcceptedCargo, cargo, SLE_UINT8)),
+			NSLT_STRUCTLIST<TownAcceptedHistoryStructHandler>("history"),
+		};
+		return _supplied_desc;
+	}
+
+	void Save(Town *t) const override
+	{
+		SlSetStructListLength(t->accepted.size());
+		for (Town::AcceptedCargo &p : t->accepted) {
+			SlObjectSaveFiltered(&p, this->GetLoadDescription());
+		}
+	}
+
+	void Load(Town *t) const override
+	{
+		t->accepted.resize(SlGetStructListLength(NUM_CARGO));
+		for (Town::AcceptedCargo &p : t->accepted) {
 			SlObjectLoadFiltered(&p, this->GetLoadDescription());
 		}
 	}
@@ -401,6 +457,7 @@ static const NamedSaveLoad _town_desc[] = {
 
 	NSLT_STRUCTLIST<TownOldSuppliedStructHandler>("supplied", SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_TOWN_SUPPLY_HISTORY, 0, 0)),
 	NSLT_STRUCTLIST<TownSuppliedStructHandler>("supplied", SL_MIN_VERSION, SL_MAX_VERSION, SlXvFeatureTest(XSLFTO_AND, XSLFI_TOWN_SUPPLY_HISTORY, 1)),
+	NSLT_STRUCTLIST<TownAcceptedStructHandler>("accepted"),
 	NSLT_STRUCTLIST<TownReceivedStructHandler>("received"),
 	NSLT_STRUCT<TownSettingsOverrideStructHandler>("setting_overrides"),
 };

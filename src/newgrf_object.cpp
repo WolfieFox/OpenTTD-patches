@@ -89,7 +89,7 @@ bool ObjectSpec::IsEverAvailable() const
  */
 bool ObjectSpec::WasEverAvailable() const
 {
-	return this->IsEverAvailable() && ((CalTime::CurDate() > this->introduction_date) || (_settings_game.construction.ignore_object_intro_dates && !_generating_world));
+	return this->IsEverAvailable() && ((CalTime::CurDate() >= this->introduction_date) || (_settings_game.construction.ignore_object_intro_dates && !_generating_world));
 }
 
 /**
@@ -118,7 +118,7 @@ uint ObjectSpec::Index() const
 /* static */ void ObjectSpec::BindToClasses()
 {
 	for (auto &spec : _object_specs) {
-		if (spec.IsEnabled() && spec.class_index != INVALID_OBJECT_CLASS) {
+		if (spec.IsEnabled() && spec.class_index != ObjectClassID::Invalid()) {
 			ObjectClass::Assign(&spec);
 		}
 	}
@@ -157,11 +157,11 @@ bool ObjectClass::IsUIAvailable(uint index) const
 }
 
 /* Instantiate ObjectClass. */
-template class NewGRFClass<ObjectSpec, ObjectClassID, OBJECT_CLASS_MAX>;
+template class NewGRFClass<ObjectSpec, ObjectClassID>;
 
 /* virtual */ uint32_t ObjectScopeResolver::GetRandomBits() const
 {
-	return IsValidTile(this->tile) && IsTileType(this->tile, MP_OBJECT) ? GetObjectRandomBits(this->tile) : 0;
+	return IsValidTile(this->tile) && IsTileType(this->tile, TileType::Object) ? GetObjectRandomBits(this->tile) : 0;
 }
 
 /**
@@ -172,7 +172,7 @@ template class NewGRFClass<ObjectSpec, ObjectClassID, OBJECT_CLASS_MAX>;
  */
 static uint32_t GetObjectIDAtOffset(TileIndex tile, uint32_t cur_grfid)
 {
-	if (!IsTileType(tile, MP_OBJECT)) {
+	if (!IsTileType(tile, TileType::Object)) {
 		return 0xFFFF;
 	}
 
@@ -202,7 +202,7 @@ static uint32_t GetObjectIDAtOffset(TileIndex tile, uint32_t cur_grfid)
 static uint32_t GetNearbyObjectTileInformation(uint8_t parameter, TileIndex tile, ObjectID index, bool grf_version8, uint32_t mask)
 {
 	if (parameter != 0) tile = GetNearbyTile(parameter, tile); // only perform if it is required
-	bool is_same_object = (IsTileType(tile, MP_OBJECT) && GetObjectIndex(tile) == index);
+	bool is_same_object = (IsTileType(tile, TileType::Object) && GetObjectIndex(tile) == index);
 
 	uint32_t result = (is_same_object ? 1 : 0) << 8;
 	if (mask & ~0x100) result |= GetNearbyTileInformation(tile, grf_version8, mask);
@@ -357,7 +357,7 @@ static uint32_t GetCountAndDistanceOfClosestInstance(uint32_t local_id, uint32_t
 		/* Get random tile bits at offset param */
 		case 0x61: {
 			TileIndex tile = GetNearbyTile(parameter, this->tile);
-			return (IsTileType(tile, MP_OBJECT) && Object::GetByTile(tile) == this->obj) ? GetObjectRandomBits(tile) : 0;
+			return (IsTileType(tile, TileType::Object) && Object::GetByTile(tile) == this->obj) ? GetObjectRandomBits(tile) : 0;
 		}
 
 		/* Land info of nearby tiles */
@@ -366,7 +366,7 @@ static uint32_t GetCountAndDistanceOfClosestInstance(uint32_t local_id, uint32_t
 		/* Animation counter of nearby tile */
 		case 0x63: {
 			TileIndex tile = GetNearbyTile(parameter, this->tile);
-			return (IsTileType(tile, MP_OBJECT) && Object::GetByTile(tile) == this->obj) ? GetAnimationFrame(tile) : 0;
+			return (IsTileType(tile, TileType::Object) && Object::GetByTile(tile) == this->obj) ? GetAnimationFrame(tile) : 0;
 		}
 
 		/* Count of object, distance of closest instance */
@@ -400,6 +400,7 @@ unhandled:
 /**
  * Constructor of the object resolver.
  * @param obj Object being resolved.
+ * @param spec Specifiction of the object's type.
  * @param tile %Tile of the object.
  * @param view View of the object.
  * @param callback Callback ID.
@@ -632,6 +633,7 @@ uint8_t GetNewObjectTileAnimationSpeed(TileIndex tile)
  * @param tile    The location of the triggered tile.
  * @param trigger The trigger that is triggered.
  * @param spec    The spec associated with the object.
+ * @return \c true iff the object has an animation trigger set.
  */
 bool TriggerObjectTileAnimation(Object *o, TileIndex tile, ObjectAnimationTrigger trigger, const ObjectSpec *spec)
 {
@@ -643,6 +645,7 @@ bool TriggerObjectTileAnimation(Object *o, TileIndex tile, ObjectAnimationTrigge
  * @param o       The object that got triggered.
  * @param trigger The trigger that is triggered.
  * @param spec    The spec associated with the object.
+ * @return \c true iff all tiles of the object had an animation trigger set.
  */
 bool TriggerObjectAnimation(Object *o, ObjectAnimationTrigger trigger, const ObjectSpec *spec)
 {

@@ -139,6 +139,7 @@ extern void ShowOSErrorBox(std::string_view buf, bool system);
 [[noreturn]] extern void DoOSAbort();
 extern std::string _config_file;
 extern uint64_t _station_tile_cache_hash;
+extern uint32_t _engine_seed;
 
 bool _save_config = false;
 bool _request_newgrf_scan = false;
@@ -150,10 +151,14 @@ std::mutex _music_driver_mutex;
 static std::string _music_driver_params;
 static std::atomic<bool> _music_inited;
 
+std::mutex _sound_driver_mutex;
+static std::string _sound_driver_params;
+static std::atomic<bool> _sound_inited;
+
 /**
  * Error handling for fatal user errors.
  * @param str the string to print.
- * @note Does NEVER return.
+ * @attention Function does not return.
  */
 void UserErrorI(const std::string &str)
 {
@@ -174,7 +179,7 @@ void UserErrorI(const std::string &str)
 /**
  * Error handling for fatal non-user errors.
  * @param str the string to print.
- * @note Does NEVER return.
+ * @attention Function does not return.
  */
 void FatalErrorI(const std::string &str)
 {
@@ -461,6 +466,7 @@ static void ShutdownGame()
 	_extra_aspects = 0;
 	_aspect_cfg_hash = 0;
 	_station_tile_cache_hash = 0;
+	_engine_seed = 0;
 	InitGRFGlobalVars();
 	_loadgame_DBGL_data.clear();
 	_loadgame_DBGC_data.clear();
@@ -955,7 +961,7 @@ int openttd_main(std::span<char * const> arguments)
 	}
 
 	if (videodriver.empty() && !_ini_videodriver.empty()) videodriver = _ini_videodriver;
-	DriverFactoryBase::SelectDriver(videodriver, Driver::DT_VIDEO);
+	DriverFactoryBase::SelectDriver(videodriver, Driver::Type::Video);
 
 	InitializeSpriteSorter();
 
@@ -1003,13 +1009,20 @@ int openttd_main(std::span<char * const> arguments)
 	}
 
 	if (sounddriver.empty() && !_ini_sounddriver.empty()) sounddriver = _ini_sounddriver;
-	DriverFactoryBase::SelectDriver(sounddriver, Driver::DT_SOUND);
-
+	_sound_driver_params = std::move(sounddriver);
 	if (musicdriver.empty() && !_ini_musicdriver.empty()) musicdriver = _ini_musicdriver;
 	_music_driver_params = std::move(musicdriver);
+
+	if (_sound_driver_params.empty() && BaseSounds::GetUsedSet()->name == "NoSound" && _music_driver_params.empty() && BaseMusic::GetUsedSet()->name == "NoMusic") {
+		Debug(driver, 1, "Deferring loading of sound driver until a sound or music set is loaded");
+		DriverFactoryBase::SelectDriver("null", Driver::Type::Sound);
+	} else {
+		InitSoundDriver();
+	}
+
 	if (_music_driver_params.empty() && BaseMusic::GetUsedSet()->name == "NoMusic") {
 		Debug(driver, 1, "Deferring loading of music driver until a music set is loaded");
-		DriverFactoryBase::SelectDriver("null", Driver::DT_MUSIC);
+		DriverFactoryBase::SelectDriver("null", Driver::Type::Music);
 	} else {
 		InitMusicDriver(false);
 	}
@@ -1040,10 +1053,24 @@ void InitMusicDriver(bool init_volume)
 		static std::unique_ptr<MusicDriver> old_driver;
 		old_driver = MusicDriver::ExtractDriver();
 
-		DriverFactoryBase::SelectDriver(_music_driver_params, Driver::DT_MUSIC);
+		DriverFactoryBase::SelectDriver(_music_driver_params, Driver::Type::Music);
 	}
 
 	if (init_volume) MusicDriver::GetInstance()->SetVolume(_settings_client.music.music_vol);
+}
+
+void InitSoundDriver()
+{
+	if (_sound_inited.exchange(true)) return;
+
+	{
+		std::unique_lock<std::mutex> lock(_sound_driver_mutex);
+
+		static std::unique_ptr<SoundDriver> old_driver;
+		old_driver = SoundDriver::ExtractDriver();
+
+		DriverFactoryBase::SelectDriver(_sound_driver_params, Driver::Type::Sound);
+	}
 }
 
 void HandleExitGameRequest()
@@ -1052,7 +1079,7 @@ void HandleExitGameRequest()
 		_exit_game = true;
 	} else if (_settings_client.gui.autosave_on_exit) {
 		DoExitSave();
-		_survey.Transmit(NetworkSurveyHandler::Reason::EXIT, true);
+		_survey.Transmit(NetworkSurveyHandler::Reason::Exit, true);
 		_exit_game = true;
 	} else {
 		AskExitGame();
@@ -1087,7 +1114,7 @@ static void OnStartGame(bool dedicated_server)
 		SetLocalCompany(dedicated_server ? COMPANY_SPECTATOR : GetDefaultLocalCompany());
 	}
 	if (_ctrl_pressed && !dedicated_server) {
-		Command<CMD_PAUSE>::Post(PauseMode::Normal, true);
+		Command<Commands::Pause>::Post(PauseMode::Normal, true);
 	}
 
 	NetworkOnGameStart();
@@ -1106,7 +1133,7 @@ static void MakeNewGameDone()
 	/* In a dedicated server, the server does not play */
 	if (!VideoDriver::GetInstance()->HasGUI()) {
 		OnStartGame(true);
-		if (_settings_client.gui.pause_on_newgame) Command<CMD_PAUSE>::Post(PauseMode::Normal, true);
+		if (_settings_client.gui.pause_on_newgame) Command<Commands::Pause>::Post(PauseMode::Normal, true);
 		return;
 	}
 
@@ -1120,11 +1147,11 @@ static void MakeNewGameDone()
 	 * COLOUR_END corresponds to Random colour */
 
 	if (_settings_client.gui.starting_colour != COLOUR_END) {
-		Command<CMD_SET_COMPANY_COLOUR>::Post(LS_DEFAULT, true, _settings_client.gui.starting_colour);
+		Command<Commands::SetCompanyColour>::Post(LS_DEFAULT, true, _settings_client.gui.starting_colour);
 	}
 
 	if (_settings_client.gui.starting_colour_secondary != COLOUR_END && HasBit(_loaded_newgrf_features.used_liveries, LS_DEFAULT)) {
-		Command<CMD_SET_COMPANY_COLOUR>::Post(LS_DEFAULT, false, _settings_client.gui.starting_colour_secondary);
+		Command<Commands::SetCompanyColour>::Post(LS_DEFAULT, false, _settings_client.gui.starting_colour_secondary);
 	}
 
 	OnStartGame(false);
@@ -1138,7 +1165,7 @@ static void MakeNewGameDone()
 		NetworkChangeCompanyPassword(_local_company, _settings_client.network.default_company_pass);
 	}
 
-	if (_settings_client.gui.pause_on_newgame) Command<CMD_PAUSE>::Post(PauseMode::Normal, true);
+	if (_settings_client.gui.pause_on_newgame) Command<Commands::Pause>::Post(PauseMode::Normal, true);
 
 	CheckEngines();
 	CheckIndustries();
@@ -1205,10 +1232,12 @@ static void MakeNewEditorWorld()
  * a previous correct state. In the menu for example load the intro game again.
  * @param filename file to be loaded
  * @param fop mode of loading, always SLO_LOAD
+ * @param dft Type of file that is going to be loaded.
  * @param newgm switch to this mode of loading fails due to some unknown error
  * @param subdir default directory to look for filename, set to 0 if not needed
  * @param lf Load filter to use, if nullptr: use filename + subdir.
  * @param error_detail Optional string to fill with detaied error information.
+ * @return \c true iff the save was loaded without problems.
  */
 bool SafeLoad(const std::string &filename, SaveLoadOperation fop, DetailedFileType dft, GameMode newgm, Subdirectory subdir,
 		std::shared_ptr<struct LoadFilter> lf = nullptr, std::string *error_detail = nullptr)
@@ -1328,7 +1357,7 @@ void SwitchToMode(SwitchMode new_mode)
 	if (new_mode != SM_SAVE_GAME) ChangeAutosaveFrequency(true);
 
 	/* Transmit the survey if we were in normal-mode and not saving. It always means we leaving the current game. */
-	if (_game_mode == GM_NORMAL && new_mode != SM_SAVE_GAME) _survey.Transmit(NetworkSurveyHandler::Reason::LEAVE);
+	if (_game_mode == GM_NORMAL && new_mode != SM_SAVE_GAME) _survey.Transmit(NetworkSurveyHandler::Reason::Leave);
 
 	/* Keep track when we last switch mode. Used for survey, to know how long someone was in a game. */
 	if (new_mode != SM_SAVE_GAME) {
@@ -1383,7 +1412,7 @@ void SwitchToMode(SwitchMode new_mode)
 				}
 				OnStartGame(_network_dedicated);
 				/* Decrease pause counter (was increased from opening load dialog) */
-				Command<CMD_PAUSE>::Post(PauseMode::SaveLoad, false);
+				Command<Commands::Pause>::Post(PauseMode::SaveLoad, false);
 			}
 
 			UpdateSocialIntegration(GM_NORMAL);
@@ -1417,7 +1446,7 @@ void SwitchToMode(SwitchMode new_mode)
 				GenerateSavegameId();
 				_settings_newgame.game_creation.starting_year = CalTime::CurYear();
 				/* Cancel the saveload pausing */
-				Command<CMD_PAUSE>::Post(PauseMode::SaveLoad, false);
+				Command<Commands::Pause>::Post(PauseMode::SaveLoad, false);
 			} else {
 				ShowErrorMessage(GetSaveLoadErrorType(), GetSaveLoadErrorMessage(), WL_CRITICAL);
 			}
@@ -1439,7 +1468,7 @@ void SwitchToMode(SwitchMode new_mode)
 				ShowErrorMessage(GetEncodedString(STR_WARNING_FALLBACK_SOUNDSET), {}, WL_CRITICAL);
 				BaseSounds::ini_set = BaseSounds::GetUsedSet()->name;
 			}
-			if (_settings_client.network.participate_survey == PS_ASK) {
+			if (_settings_client.network.participate_survey == ParticipateSurvey::Ask) {
 				/* No matter how often you go back to the main menu, only ask the first time. */
 				static bool asked_once = false;
 				if (!asked_once) {
@@ -1577,7 +1606,7 @@ void StateGameLoop()
 
 		RunAuxiliaryTileLoop();
 		if (DateDetail::_tick_skip_counter < DayLengthFactor()) {
-			if (_settings_game.economy.timekeeping_units == TKU_WALLCLOCK && !(_game_mode == GM_MENU || _game_mode == GM_BOOTSTRAP)) {
+			if (_settings_game.economy.timekeeping_units == TimekeepingUnits::Wallclock && !(_game_mode == GM_MENU || _game_mode == GM_BOOTSTRAP)) {
 				IncreaseCalendarDate();
 			}
 			AnimateAnimatedTiles();
@@ -1682,7 +1711,7 @@ static void DoAutosave()
 }
 
 /** Interval for regular autosaves. Initialized at zero to disable till settings are loaded. */
-static IntervalTimer<TimerGameRealtime> _autosave_interval({std::chrono::milliseconds::zero(), TimerGameRealtime::AUTOSAVE}, [](auto)
+static IntervalTimer<TimerGameRealtime> _autosave_interval({std::chrono::milliseconds::zero(), TimerGameRealtime::Trigger::Autosave}, [](auto)
 {
 	/* We reset the command-during-pause mode here, so we don't continue
 	 * to make auto-saves when nothing more is changing. */
@@ -1706,7 +1735,7 @@ static IntervalTimer<TimerGameRealtime> _autosave_interval({std::chrono::millise
 void ChangeAutosaveFrequency(bool reset)
 {
 	std::chrono::minutes interval = _settings_client.gui.autosave_realtime ? std::chrono::minutes(_settings_client.gui.autosave_interval) : std::chrono::minutes::zero();
-	_autosave_interval.SetInterval({interval, TimerGameRealtime::AUTOSAVE}, reset);
+	_autosave_interval.SetInterval({interval, TimerGameRealtime::Trigger::Autosave}, reset);
 }
 
 /**

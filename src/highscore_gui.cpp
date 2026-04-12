@@ -39,7 +39,7 @@ struct EndGameHighScoreBaseWindow : Window {
 		ResizeWindow(this, _screen.width - this->width, _screen.height - this->height);
 	}
 
-	/* Always draw a maximized window and within it the centered background */
+	/** Always draw a maximized window and within it the centered background. */
 	void SetupHighScoreEndWindow()
 	{
 		/* Resize window to "full-screen". */
@@ -65,11 +65,15 @@ struct EndGameHighScoreBaseWindow : Window {
 		}
 	}
 
-	/** Return the coordinate of the screen such that a window of 640x480 is centered at the screen. */
-	Point GetTopLeft(int x, int y)
+	/**
+	 * Return the coordinate of the screen such that a window of a given size is centered at the screen.
+	 * @param width The width of the image.
+	 * @param height The height of the image.
+	 * @return The top left coordinate.
+	 */
+	Point GetTopLeft(int width, int height)
 	{
-		Point pt = {std::max(0, (_screen.width / 2) - (x / 2)), std::max(0, (_screen.height / 2) - (y / 2))};
-		return pt;
+		return {std::max(0, (_screen.width / 2) - (width / 2)), std::max(0, (_screen.height / 2) - (height / 2))};
 	}
 
 	void OnClick([[maybe_unused]] Point pt, [[maybe_unused]] WidgetID widget, [[maybe_unused]] int click_count) override
@@ -106,7 +110,7 @@ struct EndGameWindow : EndGameHighScoreBaseWindow {
 	EndGameWindow(WindowDesc &desc) : EndGameHighScoreBaseWindow(desc)
 	{
 		/* Pause in single-player to have a look at the highscore at your own leisure */
-		if (!_networking) Command<CMD_PAUSE>::Post(PauseMode::Normal, true);
+		if (!_networking) Command<Commands::Pause>::Post(PauseMode::Normal, true);
 
 		this->background_img = SPR_TYCOON_IMG1_BEGIN;
 
@@ -134,7 +138,7 @@ struct EndGameWindow : EndGameHighScoreBaseWindow {
 
 	void Close([[maybe_unused]] int data = 0) override
 	{
-		if (!_networking) Command<CMD_PAUSE>::Post(PauseMode::Normal, false); // unpause
+		if (!_networking) Command<Commands::Pause>::Post(PauseMode::Normal, false); // unpause
 		if (_game_mode != GM_MENU && !_exit_game) ShowHighscoreTable(this->window_number, this->rank);
 		this->EndGameHighScoreBaseWindow::Close();
 	}
@@ -168,7 +172,7 @@ struct HighScoreWindow : EndGameHighScoreBaseWindow {
 	{
 		/* pause game to show the chart */
 		this->game_paused_by_player = _pause_mode == PauseMode::Normal;
-		if (!_networking && !this->game_paused_by_player) Command<CMD_PAUSE>::Post(PauseMode::Normal, true);
+		if (!_networking && !this->game_paused_by_player) Command<Commands::Pause>::Post(PauseMode::Normal, true);
 
 		/* Close all always on-top windows to get a clean screen */
 		if (_game_mode != GM_MENU) HideVitalWindows();
@@ -183,7 +187,7 @@ struct HighScoreWindow : EndGameHighScoreBaseWindow {
 	{
 		if (_game_mode != GM_MENU && !_exit_game) ShowVitalWindows();
 
-		if (!_networking && !this->game_paused_by_player) Command<CMD_PAUSE>::Post(PauseMode::Normal, false); // unpause
+		if (!_networking && !this->game_paused_by_player) Command<Commands::Pause>::Post(PauseMode::Normal, false); // unpause
 
 		this->EndGameHighScoreBaseWindow::Close();
 	}
@@ -237,6 +241,8 @@ static WindowDesc _endgame_desc(__FILE__, __LINE__,
  * Show the highscore table for a given difficulty. When called from
  * endgame ranking is set to the top5 element that was newly added
  * and is thus highlighted
+ * @param difficulty The difficulty level to show the high score for.
+ * @param ranking The ranking to show the local company at.
  */
 void ShowHighscoreTable(int difficulty, int8_t ranking)
 {

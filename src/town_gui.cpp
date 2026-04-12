@@ -298,7 +298,7 @@ public:
 					str = STR_LOCAL_AUTHORITY_ACTION_TOOLTIP_BRIBE;
 					break;
 			}
-			text = GetString(str, _price[PR_TOWN_ACTION] * GetTownActionCost(static_cast<TownAction>(action_index)) >> 8);
+			text = GetString(str, _price[Price::TownAction] * GetTownActionCost(static_cast<TownAction>(action_index)) >> 8);
 		}
 
 		return { text, colour };
@@ -458,7 +458,7 @@ public:
 			}
 
 			case WID_TA_EXECUTE:
-				Command<CMD_DO_TOWN_ACTION>::Post(STR_ERROR_CAN_T_DO_THIS, this->town->xy, static_cast<TownID>(this->window_number), static_cast<TownAction>(this->sel_index));
+				Command<Commands::TownAction>::Post(STR_ERROR_CAN_T_DO_THIS, this->town->xy, static_cast<TownID>(this->window_number), static_cast<TownAction>(this->sel_index));
 				break;
 
 			case WID_TA_SETTING: {
@@ -518,11 +518,11 @@ public:
 		switch (widget) {
 			case WID_TA_SETTING: {
 				if (index < 0) break;
-				auto payload = CmdPayload<CMD_TOWN_SETTING_OVERRIDE>::Make(this->window_number, static_cast<TownSettingOverrideFlags>(this->sel_index - 0x100), index > 0, (index > 0) ? index - 1 : 0);
+				auto payload = CmdPayload<Commands::TownSettingOverride>::Make(this->window_number, static_cast<TownSettingOverrideFlags>(this->sel_index - 0x100), index > 0, (index > 0) ? index - 1 : 0);
 				if (IsNonAdminNetworkClient()) {
-					DoCommandP<CMD_TOWN_SETTING_OVERRIDE_NON_ADMIN>(payload, STR_ERROR_CAN_T_DO_THIS);
+					DoCommandP<Commands::TownSettingOverrideNonAdmin>(payload, STR_ERROR_CAN_T_DO_THIS);
 				} else {
-					DoCommandP<CMD_TOWN_SETTING_OVERRIDE>(payload, STR_ERROR_CAN_T_DO_THIS);
+					DoCommandP<Commands::TownSettingOverride>(payload, STR_ERROR_CAN_T_DO_THIS);
 				}
 				break;
 			}
@@ -552,7 +552,7 @@ static void ShowTownAuthorityWindow(uint town)
 }
 
 
-/* Town view window. */
+/** Town view window. */
 struct TownViewWindow : Window {
 private:
 	Town *town = nullptr; ///< Town displayed by the window.
@@ -715,19 +715,19 @@ public:
 				break;
 
 			case WID_TV_EXPAND: // expand town - only available on Scenario editor
-				Command<CMD_EXPAND_TOWN>::Post(STR_ERROR_CAN_T_EXPAND_TOWN, static_cast<TownID>(this->window_number), 0, {TownExpandMode::Buildings, TownExpandMode::Roads});
+				Command<Commands::ExpandTown>::Post(STR_ERROR_CAN_T_EXPAND_TOWN, static_cast<TownID>(this->window_number), 0, {TownExpandMode::Buildings, TownExpandMode::Roads});
 				break;
 
 			case WID_TV_EXPAND_BUILDINGS: // expand buildings of town - only available on Scenario editor
-				Command<CMD_EXPAND_TOWN>::Post(STR_ERROR_CAN_T_EXPAND_TOWN, static_cast<TownID>(this->window_number), 0, {TownExpandMode::Buildings});
+				Command<Commands::ExpandTown>::Post(STR_ERROR_CAN_T_EXPAND_TOWN, static_cast<TownID>(this->window_number), 0, {TownExpandMode::Buildings});
 				break;
 
 			case WID_TV_EXPAND_ROADS: // expand roads of town - only available on Scenario editor
-				Command<CMD_EXPAND_TOWN>::Post(STR_ERROR_CAN_T_EXPAND_TOWN, static_cast<TownID>(this->window_number), 0, {TownExpandMode::Roads});
+				Command<Commands::ExpandTown>::Post(STR_ERROR_CAN_T_EXPAND_TOWN, static_cast<TownID>(this->window_number), 0, {TownExpandMode::Roads});
 				break;
 
 			case WID_TV_DELETE: // delete town - only available on Scenario editor
-				Command<CMD_DELETE_TOWN>::Post(STR_ERROR_TOWN_CAN_T_DELETE, static_cast<TownID>(this->window_number));
+				Command<Commands::DeleteTown>::Post(STR_ERROR_TOWN_CAN_T_DELETE, static_cast<TownID>(this->window_number));
 				break;
 
 			case WID_TV_GRAPH: {
@@ -748,6 +748,7 @@ public:
 
 	/**
 	 * Gets the desired height for the information panel.
+	 * @param width The width of the panel in pixels.
 	 * @return the desired height in pixels.
 	 */
 	uint GetDesiredInfoHeight(int width) const
@@ -799,7 +800,7 @@ public:
 	void OnMouseWheel(int wheel, WidgetID widget) override
 	{
 		if (widget != WID_TV_VIEWPORT) return;
-		if (_settings_client.gui.scrollwheel_scrolling != SWS_OFF) {
+		if (_settings_client.gui.scrollwheel_scrolling != ScrollWheelScrolling::Off) {
 			DoZoomInOutWindow(wheel < 0 ? ZOOM_IN : ZOOM_OUT, this);
 		}
 	}
@@ -822,9 +823,9 @@ public:
 		if (!str.has_value()) return;
 
 		if (IsNonAdminNetworkClient()) {
-			Command<CMD_RENAME_TOWN_NON_ADMIN>::Post(STR_ERROR_CAN_T_RENAME_TOWN, static_cast<TownID>(this->window_number), *str);
+			Command<Commands::RenameTownNonAdmin>::Post(STR_ERROR_CAN_T_RENAME_TOWN, static_cast<TownID>(this->window_number), *str);
 		} else {
-			Command<CMD_RENAME_TOWN>::Post(STR_ERROR_CAN_T_RENAME_TOWN, static_cast<TownID>(this->window_number), *str);
+			Command<Commands::RenameTown>::Post(STR_ERROR_CAN_T_RENAME_TOWN, static_cast<TownID>(this->window_number), *str);
 		}
 	}
 
@@ -947,17 +948,17 @@ static constexpr std::initializer_list<NWidgetPart> _nested_town_directory_widge
 /** Town directory window class. */
 struct TownDirectoryWindow : public Window {
 private:
-	/* Runtime saved values */
+	/** Retains sorting setting when closing the window. */
 	static Listing last_sorting;
 
-	/* Constants for sorting towns */
+	/** Strings describing how towns are sorted. */
 	static inline const StringID sorter_names[] = {
 		STR_SORT_BY_NAME,
 		STR_SORT_BY_POPULATION,
 		STR_SORT_BY_RATING,
 		STR_SORT_BY_GROWTH_SPEED,
 	};
-	static const std::initializer_list<GUITownList::SortFunction * const> sorter_funcs;
+	static const std::initializer_list<GUITownList::SortFunction * const> sorter_funcs; ///< Functions to sort towns.
 
 	enum class SorterTypes {
 		Name,
@@ -997,32 +998,32 @@ private:
 		this->SetWidgetDirty(WID_TD_LIST); // Force repaint of the displayed towns.
 	}
 
-	/** Sort by town name */
-	static bool TownNameSorter(const Town * const &a, const Town * const &b, const bool &)
+	/** Sort by town name. @copydoc GUIList::SorterWithFilter */
+	static bool TownNameSorter(const Town * const &a, const Town * const &b, [[maybe_unused]] const bool &filter)
 	{
 		return StrNaturalCompare(a->GetCachedName(), b->GetCachedName()) < 0; // Sort by name (natural sorting).
 	}
 
-	/** Sort by population (default descending, as big towns are of the most interest). */
-	static bool TownPopulationSorter(const Town * const &a, const Town * const &b, const bool &order)
+	/** Sort by population (default descending, as big towns are of the most interest). @copydoc GUIList::SorterWithFilter */
+	static bool TownPopulationSorter(const Town * const &a, const Town * const &b, const bool &filter)
 	{
 		uint32_t a_population = a->cache.population;
 		uint32_t b_population = b->cache.population;
-		if (a_population == b_population) return TownDirectoryWindow::TownNameSorter(a, b, order);
+		if (a_population == b_population) return TownDirectoryWindow::TownNameSorter(a, b, filter);
 		return a_population < b_population;
 	}
 
-	/** Sort by town rating */
-	static bool TownRatingSorter(const Town * const &a, const Town * const &b, const bool &order)
+	/** Sort by town rating. @copydoc GUIList::SorterWithFilter */
+	static bool TownRatingSorter(const Town * const &a, const Town * const &b, const bool &filter)
 	{
-		bool before = !order; // Value to get 'a' before 'b'.
+		bool before = !filter; // Value to get 'a' before 'b'.
 
 		/* Towns without rating are always after towns with rating. */
 		if (a->have_ratings.Test(_local_company)) {
 			if (b->have_ratings.Test(_local_company)) {
 				int16_t a_rating = a->ratings[_local_company];
 				int16_t b_rating = b->ratings[_local_company];
-				if (a_rating == b_rating) return TownDirectoryWindow::TownNameSorter(a, b, order);
+				if (a_rating == b_rating) return TownDirectoryWindow::TownNameSorter(a, b, filter);
 				return a_rating < b_rating;
 			}
 			return before;
@@ -1030,8 +1031,8 @@ private:
 		if (b->have_ratings.Test(_local_company)) return !before;
 
 		/* Sort unrated towns always on ascending town name. */
-		if (before) return TownDirectoryWindow::TownNameSorter(a, b, order);
-		return TownDirectoryWindow::TownNameSorter(b, a, order);
+		if (before) return TownDirectoryWindow::TownNameSorter(a, b, filter);
+		return TownDirectoryWindow::TownNameSorter(b, a, filter);
 	}
 
 	/** Sort by town growth speed/status */
@@ -1108,6 +1109,7 @@ public:
 	/**
 	 * Get the string to draw the town name.
 	 * @param t Town to draw.
+	 * @param population The population of the town.
 	 * @return The string to use.
 	 */
 	static std::string GetTownString(const Town *t, uint64_t population)
@@ -1327,13 +1329,10 @@ public:
 		}
 	}
 
-	static HotkeyList hotkeys;
+	static inline HotkeyList hotkeys {"towndirectory", {
+		Hotkey('F', "focus_filter_box", WID_TD_FILTER),
+	}};
 };
-
-static Hotkey towndirectory_hotkeys[] = {
-	Hotkey('F', "focus_filter_box", WID_TD_FILTER),
-};
-HotkeyList TownDirectoryWindow::hotkeys("towndirectory", towndirectory_hotkeys);
 
 Listing TownDirectoryWindow::last_sorting = {false, 0};
 
@@ -1536,7 +1535,7 @@ public:
 			if (original_name != this->townname_editbox.text.GetText()) name = this->townname_editbox.text.GetText();
 		}
 
-		bool success = Command<CMD_FOUND_TOWN>::Post(errstr, cc,
+		bool success = Command<Commands::FoundTown>::Post(errstr, cc,
 				tile, this->town_size, this->city, this->town_layout, random, townnameparts, std::move(name));
 
 		/* Rerandomise name, if success and no cost-estimation. */
@@ -1570,7 +1569,7 @@ public:
 
 			case WID_TF_EXPAND_ALL_TOWNS:
 				for (Town *t : Town::Iterate()) {
-					Command<CMD_EXPAND_TOWN>::Do(DoCommandFlag::Execute, t->index, 0, FoundTownWindow::expand_modes);
+					Command<Commands::ExpandTown>::Do(DoCommandFlag::Execute, t->index, 0, FoundTownWindow::expand_modes);
 				}
 				break;
 
@@ -1666,10 +1665,10 @@ void ShowFoundTownWindow()
  */
 struct SelectTownWindow : Window {
 	TownList towns{};                        ///< list of towns
-	CommandContainer<CMD_PLACE_HOUSE> cmd{}; ///< command to build the house
+	CommandContainer<Commands::PlaceHouse> cmd{}; ///< command to build the house
 	Scrollbar *vscroll = nullptr;            ///< scrollbar for the town list
 
-	SelectTownWindow(WindowDesc &desc, const CommandContainer<CMD_PLACE_HOUSE> &cmd) : Window(desc), cmd(cmd)
+	SelectTownWindow(WindowDesc &desc, const CommandContainer<Commands::PlaceHouse> &cmd) : Window(desc), cmd(cmd)
 	{
 		std::vector<std::pair<uint, TownID>> town_set;
 		constexpr uint MAX_TOWN_COUNT = 16;
@@ -1775,7 +1774,7 @@ static WindowDesc _select_town_desc(__FILE__, __LINE__,
 	_nested_select_town_widgets
 );
 
-static void ShowSelectTownWindow(const CommandContainer<CMD_PLACE_HOUSE> &cmd)
+static void ShowSelectTownWindow(const CommandContainer<Commands::PlaceHouse> &cmd)
 {
 	CloseWindowByClass(WC_SELECT_TOWN);
 	new SelectTownWindow(_select_town_desc, cmd);
@@ -1903,8 +1902,7 @@ public:
 	static inline int sel_view; ///< Currently selected 'view'. This is not controllable as its based on random data.
 	static inline std::vector<int> sel_collection; ///< Currently selected collection.
 
-	/* Houses do not have classes like NewGRFClass. We'll make up fake classes based on town zone
-	 * availability instead. */
+	/** Houses do not have classes like NewGRFClass. We'll make up fake classes based on town zone availability instead. */
 	static inline const std::array<StringID, NUM_HOUSE_ZONES> zone_names = {
 		STR_HOUSE_PICKER_CLASS_ZONE1,
 		STR_HOUSE_PICKER_CLASS_ZONE2,
@@ -2272,8 +2270,8 @@ struct BuildHouseWindow : public PickerWindow {
 
 	void PlaceSingleHouse(const HouseSpec *spec, TileIndex tile)
 	{
-		CommandContainer<CMD_PLACE_HOUSE> cmd_container(STR_ERROR_CAN_T_BUILD_HOUSE, tile,
-				CmdPayload<CMD_PLACE_HOUSE>::Make(spec->Index(), BuildHouseWindow::house_protected, TownID::Invalid(), BuildHouseWindow::replace), CommandCallback::PlaySound_CONSTRUCTION_OTHER);
+		CommandContainer<Commands::PlaceHouse> cmd_container(STR_ERROR_CAN_T_BUILD_HOUSE, tile,
+				CmdPayload<Commands::PlaceHouse>::Make(spec->Index(), BuildHouseWindow::house_protected, TownID::Invalid(), BuildHouseWindow::replace), CommandCallback::PlaySound_CONSTRUCTION_OTHER);
 		if (_ctrl_pressed) {
 			ShowSelectTownWindow(cmd_container);
 		} else {
@@ -2312,7 +2310,7 @@ struct BuildHouseWindow : public PickerWindow {
 			}
 			this->PlaceSingleHouse(HouseSpec::Get(house_type), start_tile);
 		} else {
-			Command<CMD_PLACE_HOUSE_AREA>::Post(STR_ERROR_CAN_T_BUILD_HOUSE, CommandCallback::PlaySound_CONSTRUCTION_OTHER,
+			Command<Commands::PlaceHouseArea>::Post(STR_ERROR_CAN_T_BUILD_HOUSE, CommandCallback::PlaySound_CONSTRUCTION_OTHER,
 					end_tile, start_tile, house_types, BuildHouseWindow::house_protected, TownID::Invalid(), BuildHouseWindow::replace, _ctrl_pressed);
 		}
 	}
@@ -2369,7 +2367,7 @@ void ShowBuildHousePicker(Window *parent)
 
 void ShowBuildHousePickerAndSelect(TileIndex tile)
 {
-	assert_tile(IsTileType(tile, MP_HOUSE), tile);
+	assert_tile(IsTileType(tile, TileType::House), tile);
 
 	HouseID house = GetHouseType(tile);
 	GetHouseNorthPart(house);

@@ -396,9 +396,11 @@ inline bool LinkGraphOverlay::IsLinkVisible(Point pta, Point ptb, const DrawPixe
  * Add information from a given pair of link stat and flow stat to the given
  * link properties. The shown usage or plan is always the maximum of all link
  * stats involved.
+ * @param new_cargo Cargo type of the new link.
  * @param new_cap Capacity of the new link.
  * @param new_usg Usage of the new link.
  * @param new_plan Planned flow for the new link.
+ * @param time Travel time of the new link.
  * @param new_shared If the new link is shared.
  * @param cargo LinkProperties to write the information to.
  */
@@ -517,6 +519,7 @@ void LinkGraphOverlay::DrawContent(Blitter *blitter, const DrawPixelInfo *dpi, P
 /**
  * Draw dots for stations into the smallmap. The dots' sizes are determined by the amount of
  * cargo produced there, their colours by the type of cargo produced.
+ * @param dpi The context to draw the overlay in.
  */
 void LinkGraphOverlay::DrawStationDots(Blitter *blitter, const DrawPixelInfo *dpi) const
 {
@@ -688,7 +691,7 @@ void LinkGraphOverlay::SetCompanyMask(CompanyMask company_mask)
 	this->window->GetWidget<NWidgetBase>(this->widget_id)->SetDirty(this->window);
 }
 
-/** Make a number of rows with buttons for each company for the linkgraph legend window. */
+/** Make a number of rows with buttons for each company for the linkgraph legend window. @copydoc NWidgetFunctionType */
 std::unique_ptr<NWidgetBase> MakeCompanyButtonRowsLinkGraphGUI()
 {
 	return MakeCompanyButtonRows(WID_LGL_COMPANY_FIRST, WID_LGL_COMPANY_LAST, COLOUR_GREY, 3, STR_NULL);

@@ -1368,6 +1368,8 @@ STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_SMOOTH                  :ราบเร
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_ROUGH                   :หยาบ
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_ROUGH              :หยาบมาก
 
+###length 4
+
 
 STR_CONFIG_SETTING_RIVER_AMOUNT                                 :จำนวนแม่น้ำ: {STRING}
 
@@ -1596,6 +1598,7 @@ STR_CONFIG_SETTING_NOSERVICE_HELPTEXT                           :เมื่อ
 
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS                             :จำกัดความเร็วของรถจักร/รถพ่วง: {STRING}
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS_HELPTEXT                    :เมื่อเปิดใช้งาน จะทำให้มีจำกัดความเร็วสูงสุดของยานพาหนะและรถพ่วงต่างๆ
+
 
 STR_CONFIG_SETTING_DISABLE_ELRAILS                              :ปิดระบบสายส่งไฟฟ้า(Electricfield): {STRING}
 STR_CONFIG_SETTING_DISABLE_ELRAILS_HELPTEXT                     :เมื่อเปิดการใช้งาน จะทำการปิดความต้องการการใช้งานระบบ Electrifield ของรถจักรหรือรถไฟฟ้า
@@ -2409,7 +2412,6 @@ STR_STATION_CLASS_WAYP                                          :จุดตร
 
 # Signal window
 STR_BUILD_SIGNAL_CAPTION                                        :{WHITE}เลือกชนิดของเสาอาณัติสัญญาณ
-STR_BUILD_SIGNAL_TOGGLE_ADVANCED_SIGNAL_TOOLTIP                 :{BLACK}แสดงประเภทเสาสัญญาณแบบขั้นสูง
 STR_BUILD_SIGNAL_SEMAPHORE_NORM_TOOLTIP                         :{BLACK}เสาอาณัติสัญญาณปกติ (แบบหางปลา){}เสาอาณัติสัญญาณแบบนี้เป็นประเภทพื้นฐานที่สุด, อนุญาตให้มีรถไฟเพียงขบวนเดียวเท่านั้นที่อยู่ในบล็อกสัญญาณนี้
 STR_BUILD_SIGNAL_SEMAPHORE_ENTRY_TOOLTIP                        :{BLACK}เสาอาณัติสัญญาณขาเข้า (แบบหางปลา){}ให้สัญญาณผ่านตลอดหากเสาขาออกต้นข้างหน้ายังปล่อยผ่านตลอดอยู่ นอกเหนือจากนั้นจะเป็นสัญญาญห้ามผ่าน
 STR_BUILD_SIGNAL_SEMAPHORE_EXIT_TOOLTIP                         :{BLACK}เสาอาณัติสัญญาณขาออก (แบบหางปลา){}มีผลแบบเดียวกับเสาอาณัติสัญญาณปกติแต่จำเป็นที่จะต้องเปิดสีที่ถูกต้องตรงขาเข้าและสัญญาณต่อเนื่องที่อยู่ก่อนหน้านั้น
@@ -3371,7 +3373,7 @@ STR_COMPANY_INFRASTRUCTURE_VIEW_AIRPORTS                        :{WHITE}ท่�
 # Industry directory
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- ไม่มี -
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING}
 STR_INDUSTRY_DIRECTORY_LIST_TOOLTIP                             :{BLACK}ชื่อของอุตสาหกรรม - คลิ๊กที่ชื่อเพื่อไปยังจุดศูนย์กลาง
 STR_INDUSTRY_DIRECTORY_PRODUCED_CARGO_FILTER                    :{BLACK}ผลผลิตที่ได้: {SILVER}{STRING}
 STR_INDUSTRY_DIRECTORY_FILTER_NONE                              :ไม่มี
@@ -3494,6 +3496,8 @@ STR_PURCHASE_INFO_ALL_BUT                                       :ทั้งห
 STR_PURCHASE_INFO_MAX_TE                                        :{BLACK}กำลังลากจูงสูงสุด: {GOLD}{FORCE}
 STR_PURCHASE_INFO_AIRCRAFT_RANGE                                :{BLACK}พิสัยทำการ: {GOLD}{COMMA} ช่อง
 STR_PURCHASE_INFO_AIRCRAFT_TYPE                                 :{BLACK}ชนิดของเครื่องบิน: {GOLD}{STRING}
+
+# Vehicle sort details
 
 ###length 3
 
@@ -4279,7 +4283,6 @@ STR_ERROR_CAN_T_GENERATE_TOWN                                   :{WHITE}ไม�
 STR_ERROR_CAN_T_RENAME_TOWN                                     :{WHITE}ไม่สามารถเปลี่ยนชื่อเมืองได้...
 STR_ERROR_CAN_T_FOUND_TOWN_HERE                                 :{WHITE}ไม่สามารถสร้างเมืองที่นี่ได้...
 STR_ERROR_CAN_T_EXPAND_TOWN                                     :{WHITE}ไม่สามารถขยายเมืองได้
-STR_ERROR_TOO_CLOSE_TO_EDGE_OF_MAP_SUB                          :{WHITE}... ติดกับขอบแผนที่มากเกินไป
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_TOWN                             :{WHITE}... ใกล้กับเมืองอื่นมากเกินไป
 STR_ERROR_TOO_MANY_TOWNS                                        :{WHITE}... มีเมืองมากเกินไป
 STR_ERROR_NO_SPACE_FOR_TOWN                                     :{WHITE}... มีพื้นที่บนแผนที่ไม่มากพอ

@@ -644,6 +644,7 @@ struct ScriptTextfileWindow : public TextfileWindow {
 
 /**
  * Open the Script version of the textfile window.
+ * @param parent The window we become a child of, and for which other textfile windows are closed.
  * @param file_type The type of textfile to display.
  * @param slot The slot the Script is using.
  */
@@ -764,6 +765,7 @@ struct ScriptDebugWindow : public Window {
 	 * Constructor for the window.
 	 * @param desc The description of the window.
 	 * @param number The window number (actually unused).
+	 * @param show_company The initial company to focus on.
 	 */
 	ScriptDebugWindow(WindowDesc &desc, WindowNumber number, Owner show_company) : Window(desc), break_editbox(MAX_BREAK_STR_STRING_LENGTH)
 	{
@@ -989,7 +991,7 @@ struct ScriptDebugWindow : public Window {
 
 	/**
 	 * Change all settings to select another Script.
-	 * @param show_ai The new AI to show.
+	 * @param show_script The new script to show.
 	 * @param new_window Open the script in a new window.
 	 */
 	void ChangeToScript(CompanyID show_script, bool new_window = false)
@@ -1040,8 +1042,8 @@ struct ScriptDebugWindow : public Window {
 					break;
 				}
 				/* First kill the company of the AI, then start a new one. This should start the current AI again */
-				Command<CMD_COMPANY_CTRL>::Post(CCA_DELETE, this->filter.script_debug_company, CRR_MANUAL, INVALID_CLIENT_ID, {});
-				Command<CMD_COMPANY_CTRL>::Post(CCA_NEW_AI, this->filter.script_debug_company, CRR_NONE, INVALID_CLIENT_ID, {});
+				Command<Commands::CompanyControl>::Post(CompanyCtrlAction::Delete, this->filter.script_debug_company, CompanyRemoveReason::Manual, INVALID_CLIENT_ID, {});
+				Command<Commands::CompanyControl>::Post(CompanyCtrlAction::NewAI, this->filter.script_debug_company, CompanyRemoveReason::None, INVALID_CLIENT_ID, {});
 				break;
 
 			case WID_SCRD_SETTINGS:
@@ -1080,7 +1082,7 @@ struct ScriptDebugWindow : public Window {
 						}
 						if (all_unpaused) {
 							/* All scripts have been unpaused => unpause the game. */
-							Command<CMD_PAUSE>::Post(PauseMode::Normal, false);
+							Command<Commands::Pause>::Post(PauseMode::Normal, false);
 						}
 					}
 				}
@@ -1133,7 +1135,7 @@ struct ScriptDebugWindow : public Window {
 
 					/* Pause the game. */
 					if (!_pause_mode.Test(PauseMode::Normal)) {
-						Command<CMD_PAUSE>::Post(PauseMode::Normal, true);
+						Command<Commands::Pause>::Post(PauseMode::Normal, true);
 					}
 
 					/* Highlight row that matched */
@@ -1180,53 +1182,50 @@ struct ScriptDebugWindow : public Window {
 		this->hscroll->SetCapacityFromWidget(this, WID_SCRD_LOG_PANEL, WidgetDimensions::scaled.framerect.Horizontal());
 	}
 
-	static HotkeyList hotkeys;
+	/**
+	 * Handler for global hotkeys of the ScriptDebugWindow.
+	 * @param hotkey Hotkey
+	 * @return ES_HANDLED if hotkey was accepted.
+	 */
+	static EventState ScriptDebugGlobalHotkeys(int hotkey)
+	{
+		if (_game_mode != GM_NORMAL) return ES_NOT_HANDLED;
+		Window *w = ShowScriptDebugWindow(CompanyID::Invalid());
+		if (w == nullptr) return ES_NOT_HANDLED;
+		return w->OnHotkey(hotkey);
+	}
+
+	static inline HotkeyList hotkeys{"aidebug", {
+		Hotkey('1', "company_1", WID_SCRD_COMPANY_BUTTON_START),
+		Hotkey('2', "company_2", WID_SCRD_COMPANY_BUTTON_START + 1),
+		Hotkey('3', "company_3", WID_SCRD_COMPANY_BUTTON_START + 2),
+		Hotkey('4', "company_4", WID_SCRD_COMPANY_BUTTON_START + 3),
+		Hotkey('5', "company_5", WID_SCRD_COMPANY_BUTTON_START + 4),
+		Hotkey('6', "company_6", WID_SCRD_COMPANY_BUTTON_START + 5),
+		Hotkey('7', "company_7", WID_SCRD_COMPANY_BUTTON_START + 6),
+		Hotkey('8', "company_8", WID_SCRD_COMPANY_BUTTON_START + 7),
+		Hotkey('9', "company_9", WID_SCRD_COMPANY_BUTTON_START + 8),
+		Hotkey(0, "company_10", WID_SCRD_COMPANY_BUTTON_START + 9),
+		Hotkey(0, "company_11", WID_SCRD_COMPANY_BUTTON_START + 10),
+		Hotkey(0, "company_12", WID_SCRD_COMPANY_BUTTON_START + 11),
+		Hotkey(0, "company_13", WID_SCRD_COMPANY_BUTTON_START + 12),
+		Hotkey(0, "company_14", WID_SCRD_COMPANY_BUTTON_START + 13),
+		Hotkey(0, "company_15", WID_SCRD_COMPANY_BUTTON_START + 14),
+		Hotkey('S', "settings", WID_SCRD_SETTINGS),
+		Hotkey('0', "game_script", WID_SCRD_SCRIPT_GAME),
+		Hotkey(0, "reload", WID_SCRD_RELOAD_TOGGLE),
+		Hotkey('B', "break_toggle", WID_SCRD_BREAK_STR_ON_OFF_BTN),
+		Hotkey('F', "break_string", WID_SCRD_BREAK_STR_EDIT_BOX),
+		Hotkey('C', "match_case", WID_SCRD_MATCH_CASE_BTN),
+		Hotkey(WKC_RETURN, "continue", WID_SCRD_CONTINUE_BTN),
+	}, ScriptDebugGlobalHotkeys};
 };
 
-/** Make a number of rows with buttons for each company for the Script debug window. */
+/** Make a number of rows with buttons for each company for the Script debug window. @copydoc NWidgetFunctionType */
 std::unique_ptr<NWidgetBase> MakeCompanyButtonRowsScriptDebug()
 {
 	return MakeCompanyButtonRows(WID_SCRD_COMPANY_BUTTON_START, WID_SCRD_COMPANY_BUTTON_END, COLOUR_GREY, 5, STR_AI_DEBUG_SELECT_AI_TOOLTIP, false);
 }
-
-/**
- * Handler for global hotkeys of the ScriptDebugWindow.
- * @param hotkey Hotkey
- * @return ES_HANDLED if hotkey was accepted.
- */
-static EventState ScriptDebugGlobalHotkeys(int hotkey)
-{
-	if (_game_mode != GM_NORMAL) return ES_NOT_HANDLED;
-	Window *w = ShowScriptDebugWindow(CompanyID::Invalid());
-	if (w == nullptr) return ES_NOT_HANDLED;
-	return w->OnHotkey(hotkey);
-}
-
-static Hotkey scriptdebug_hotkeys[] = {
-	Hotkey('1', "company_1", WID_SCRD_COMPANY_BUTTON_START),
-	Hotkey('2', "company_2", WID_SCRD_COMPANY_BUTTON_START + 1),
-	Hotkey('3', "company_3", WID_SCRD_COMPANY_BUTTON_START + 2),
-	Hotkey('4', "company_4", WID_SCRD_COMPANY_BUTTON_START + 3),
-	Hotkey('5', "company_5", WID_SCRD_COMPANY_BUTTON_START + 4),
-	Hotkey('6', "company_6", WID_SCRD_COMPANY_BUTTON_START + 5),
-	Hotkey('7', "company_7", WID_SCRD_COMPANY_BUTTON_START + 6),
-	Hotkey('8', "company_8", WID_SCRD_COMPANY_BUTTON_START + 7),
-	Hotkey('9', "company_9", WID_SCRD_COMPANY_BUTTON_START + 8),
-	Hotkey((uint16_t)0, "company_10", WID_SCRD_COMPANY_BUTTON_START + 9),
-	Hotkey((uint16_t)0, "company_11", WID_SCRD_COMPANY_BUTTON_START + 10),
-	Hotkey((uint16_t)0, "company_12", WID_SCRD_COMPANY_BUTTON_START + 11),
-	Hotkey((uint16_t)0, "company_13", WID_SCRD_COMPANY_BUTTON_START + 12),
-	Hotkey((uint16_t)0, "company_14", WID_SCRD_COMPANY_BUTTON_START + 13),
-	Hotkey((uint16_t)0, "company_15", WID_SCRD_COMPANY_BUTTON_START + 14),
-	Hotkey('S', "settings", WID_SCRD_SETTINGS),
-	Hotkey('0', "game_script", WID_SCRD_SCRIPT_GAME),
-	Hotkey((uint16_t)0, "reload", WID_SCRD_RELOAD_TOGGLE),
-	Hotkey('B', "break_toggle", WID_SCRD_BREAK_STR_ON_OFF_BTN),
-	Hotkey('F', "break_string", WID_SCRD_BREAK_STR_EDIT_BOX),
-	Hotkey('C', "match_case", WID_SCRD_MATCH_CASE_BTN),
-	Hotkey(WKC_RETURN, "continue", WID_SCRD_CONTINUE_BTN),
-};
-HotkeyList ScriptDebugWindow::hotkeys("aidebug", scriptdebug_hotkeys, ScriptDebugGlobalHotkeys);
 
 /** Widgets for the Script debug window. */
 static constexpr std::initializer_list<NWidgetPart> _nested_script_debug_widgets = {
@@ -1289,6 +1288,7 @@ static WindowDesc _script_debug_desc(__FILE__, __LINE__,
  * Open the Script debug window and select the given company.
  * @param show_company Display debug information about this AI company.
  * @param new_window Show in new window instead of existing window.
+ * @return The existing or allocated window, or \c nullptr when there is no debug window to show.
  */
 Window *ShowScriptDebugWindow(CompanyID show_company, bool new_window)
 {

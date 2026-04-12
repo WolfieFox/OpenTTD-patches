@@ -388,15 +388,15 @@ bool ClientNetworkCoordinatorSocketHandler::Receive_GC_TURN_CONNECT(Packet &p)
 		}
 
 		switch (_settings_client.network.use_relay_service) {
-			case URS_NEVER:
+			case UseRelayService::Never:
 				this->ConnectFailure(token, 0);
 				break;
 
-			case URS_ASK:
+			case UseRelayService::Ask:
 				ShowNetworkAskRelay(connecter_it->second.first, std::move(connection_string), std::move(token));
 				break;
 
-			case URS_ALLOW:
+			case UseRelayService::Allow:
 				this->StartTurnConnection(token);
 				break;
 		}
@@ -562,6 +562,7 @@ void ClientNetworkCoordinatorSocketHandler::ConnectFailure(std::string_view toke
  * to the game server is established.
  * @param token Token of the connecter that succeeded.
  * @param sock The socket that the connecter can now use.
+ * @param address Address of the client that connected.
  */
 void ClientNetworkCoordinatorSocketHandler::ConnectSuccess(std::string_view token, SOCKET sock, NetworkAddress &address)
 {
@@ -602,6 +603,9 @@ void ClientNetworkCoordinatorSocketHandler::ConnectSuccess(std::string_view toke
  *
  * This helps the Game Coordinator not to wait for a timeout on its end, but
  * rather react as soon as the client/server knows the result.
+ * @param token The token of the STUN connection attempt.
+ * @param family The used network family.
+ * @param result Whether the STUN was successful.
  */
 void ClientNetworkCoordinatorSocketHandler::StunResult(std::string_view token, uint8_t family, bool result)
 {

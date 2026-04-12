@@ -70,9 +70,9 @@ static void PlaceAirport(TileIndex tile)
 
 	auto proc = [=](bool test, StationID to_join) -> bool {
 		if (test) {
-			return Command<CMD_BUILD_AIRPORT>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_AIRPORT>()), tile, airport_type, layout, StationID::Invalid(), adjacent).Succeeded();
+			return Command<Commands::BuildAirport>::Do(CommandFlagsToDCFlags(GetCommandFlags<Commands::BuildAirport>()), tile, airport_type, layout, StationID::Invalid(), adjacent).Succeeded();
 		} else {
-			return Command<CMD_BUILD_AIRPORT>::Post(STR_ERROR_CAN_T_BUILD_AIRPORT_HERE, CommandCallback::BuildAirport, tile, airport_type, layout, to_join, adjacent);
+			return Command<Commands::BuildAirport>::Post(STR_ERROR_CAN_T_BUILD_AIRPORT_HERE, CommandCallback::BuildAirport, tile, airport_type, layout, to_join, adjacent);
 		}
 	};
 
@@ -81,7 +81,7 @@ static void PlaceAirport(TileIndex tile)
 
 /** Airport build toolbar window handler. */
 struct BuildAirToolbarWindow : Window {
-	WidgetID last_user_action = INVALID_WIDGET; // Last started user action.
+	WidgetID last_user_action = INVALID_WIDGET; ///< Last started user action.
 
 	BuildAirToolbarWindow(WindowDesc &desc, WindowNumber window_number) : Window(desc)
 	{
@@ -181,27 +181,24 @@ struct BuildAirToolbarWindow : Window {
 		CloseWindowById(WC_SELECT_STATION, 0);
 	}
 
-	static HotkeyList hotkeys;
-};
+	/**
+	 * Handler for global hotkeys of the BuildAirToolbarWindow.
+	 * @param hotkey Hotkey
+	 * @return ES_HANDLED if hotkey was accepted.
+	 */
+	static EventState AirportToolbarGlobalHotkeys(int hotkey)
+	{
+		if (_game_mode != GM_NORMAL) return ES_NOT_HANDLED;
+		Window *w = ShowBuildAirToolbar();
+		if (w == nullptr) return ES_NOT_HANDLED;
+		return w->OnHotkey(hotkey);
+	}
 
-/**
- * Handler for global hotkeys of the BuildAirToolbarWindow.
- * @param hotkey Hotkey
- * @return ES_HANDLED if hotkey was accepted.
- */
-static EventState AirportToolbarGlobalHotkeys(int hotkey)
-{
-	if (_game_mode != GM_NORMAL) return ES_NOT_HANDLED;
-	Window *w = ShowBuildAirToolbar();
-	if (w == nullptr) return ES_NOT_HANDLED;
-	return w->OnHotkey(hotkey);
-}
-
-static Hotkey airtoolbar_hotkeys[] = {
-	Hotkey('1', "airport", WID_AT_AIRPORT),
-	Hotkey('2', "demolish", WID_AT_DEMOLISH),
+	static inline HotkeyList hotkeys{"airtoolbar", {
+		Hotkey('1', "airport", WID_AT_AIRPORT),
+		Hotkey('2', "demolish", WID_AT_DEMOLISH),
+	}, AirportToolbarGlobalHotkeys};
 };
-HotkeyList BuildAirToolbarWindow::hotkeys("airtoolbar", airtoolbar_hotkeys, AirportToolbarGlobalHotkeys);
 
 static constexpr std::initializer_list<NWidgetPart> _nested_air_toolbar_widgets = {
 	NWidget(NWID_HORIZONTAL),
@@ -244,13 +241,16 @@ class BuildAirportWindow : public PickerWindowBase {
 	int line_height = 0;
 	Scrollbar *vscroll = nullptr;
 
-	/** Build a dropdown list of available airport classes */
+	/**
+	 * Build a dropdown list of available airport classes.
+	 * @return The constructed dropdown list.
+	 */
 	static DropDownList BuildAirportClassDropDown()
 	{
 		DropDownList list;
 
 		for (const auto &cls : AirportClass::Classes()) {
-			list.push_back(MakeDropDownListStringItem(cls.name, cls.Index()));
+			list.push_back(MakeDropDownListStringItem(cls.name, cls.Index().base()));
 		}
 
 		return list;
@@ -272,7 +272,7 @@ public:
 		this->OnInvalidateData();
 
 		/* Ensure airport class is valid (changing NewGRFs). */
-		_selected_airport_class = Clamp(_selected_airport_class, APC_BEGIN, (AirportClassID)(AirportClass::GetClassCount() - 1));
+		_selected_airport_class = Clamp(_selected_airport_class, AirportClassID::Begin(), static_cast<AirportClassID>(AirportClass::GetClassCount() - 1));
 		const AirportClass *ac = AirportClass::Get(_selected_airport_class);
 		this->vscroll->SetCount(ac->GetSpecCount());
 
@@ -443,7 +443,7 @@ public:
 			}
 
 			if (_settings_game.economy.infrastructure_maintenance) {
-				Money monthly = _price[PR_INFRASTRUCTURE_AIRPORT] * as->maintenance_cost >> 3;
+				Money monthly = _price[Price::InfrastructureAirport] * as->maintenance_cost >> 3;
 				DrawString(r, GetString(EconTime::UsingWallclockUnits() ? STR_STATION_BUILD_INFRASTRUCTURE_COST_PERIOD : STR_STATION_BUILD_INFRASTRUCTURE_COST_YEAR, monthly * 12));
 				r.top += GetCharacterHeight(FS_NORMAL) + WidgetDimensions::scaled.vsep_normal;
 			}
@@ -499,7 +499,7 @@ public:
 	{
 		switch (widget) {
 			case WID_AP_CLASS_DROPDOWN:
-				ShowDropDownList(this, BuildAirportClassDropDown(), _selected_airport_class, WID_AP_CLASS_DROPDOWN);
+				ShowDropDownList(this, BuildAirportClassDropDown(), _selected_airport_class.base(), WID_AP_CLASS_DROPDOWN);
 				break;
 
 			case WID_AP_AIRPORT_LIST: {
@@ -634,6 +634,6 @@ static void ShowBuildAirportPicker(Window *parent)
 
 void InitializeAirportGui()
 {
-	_selected_airport_class = APC_BEGIN;
+	_selected_airport_class = AirportClassID::Begin();
 	_selected_airport_index = -1;
 }

@@ -58,8 +58,8 @@ template <typename Tpf> void DumpState(Tpf &pf1, Tpf &pf2)
 #endif
 	assert(f1.has_value());
 	assert(f2.has_value());
-	fwrite(dmp1.m_out.data(), 1, dmp1.m_out.size(), *f1);
-	fwrite(dmp2.m_out.data(), 1, dmp2.m_out.size(), *f2);
+	fwrite(dmp1.output_buffer.data(), 1, dmp1.output_buffer.size(), *f1);
+	fwrite(dmp2.output_buffer.data(), 1, dmp2.output_buffer.size(), *f2);
 }
 
 template <class Node>
@@ -232,7 +232,7 @@ public:
 			const size_t intermediary_restricted_signals_current_size = intermediary_restricted_signals.size();
 			node->template IterateTiles<CYapfReserveTrack>(Yapf().GetVehicle(), Yapf(), [&](TileIndex tile, Trackdir td) -> bool {
 				/* Cheapest tests first */
-				if (IsTileType(tile, MP_RAILWAY) && HasSignals(tile) && IsRestrictedSignal(tile) && HasSignalOnTrack(tile, TrackdirToTrack(td))) {
+				if (IsTileType(tile, TileType::Railway) && HasSignals(tile) && IsRestrictedSignal(tile) && HasSignalOnTrack(tile, TrackdirToTrack(td))) {
 					const bool front_side = HasSignalOnTrackdir(tile, td);
 
 					TraceRestrictProgramActionsUsedFlags au_flags = TRPAUF_SLOT_ACQUIRE;

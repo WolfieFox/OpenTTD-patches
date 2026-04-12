@@ -264,8 +264,6 @@ void CargoPacket::PayDeferredPayments()
 {
 	if (this->flags & CPF_HAS_DEFERRED_PAYMENT) {
 		IterateCargoPacketDeferredPayments(this->index, true, [&](Money &payment, CompanyID cid, VehicleType type) {
-			Backup<CompanyID> cur_company(_current_company, cid, FILE_LINE);
-
 			ExpensesType exp;
 			switch (type) {
 				case VEH_TRAIN: exp = EXPENSES_TRAIN_REVENUE; break;
@@ -274,9 +272,7 @@ void CargoPacket::PayDeferredPayments()
 				case VEH_AIRCRAFT: exp = EXPENSES_AIRCRAFT_REVENUE; break;
 				default: NOT_REACHED();
 			}
-			SubtractMoneyFromCompany(CommandCost(exp, -payment));
-
-			cur_company.Restore();
+			SubtractMoneyFromCompany(cid, CommandCost(exp, -payment));
 		});
 		this->flags &= ~CPF_HAS_DEFERRED_PAYMENT;
 	}
@@ -284,7 +280,6 @@ void CargoPacket::PayDeferredPayments()
 
 /**
  * Invalidates (sets source_id to INVALID_SOURCE) all cargo packets from given source.
- * @param src_type Type of source.
  * @param src Index of source.
  */
 /* static */ void CargoPacket::InvalidateAllFrom(Source src)
@@ -644,7 +639,7 @@ void VehicleCargoList::AgeCargo()
  * @param cargo The cargo type of the cargo.
  * @param payment Payment object for registering transfers.
  * @param current_tile Current tile the cargo handling is happening on.
- * return If any cargo will be unloaded.
+ * @return \c true iff any cargo will be unloaded.
  */
 bool VehicleCargoList::Stage(bool accepted, StationID current_station, std::span<const StationID> next_station, uint8_t order_flags, const GoodsEntry *ge, CargoType cargo, CargoPayment *payment, TileIndex current_tile)
 {
@@ -661,7 +656,7 @@ bool VehicleCargoList::Stage(bool accepted, StationID current_station, std::span
 	bool force_keep = (order_flags & OUFB_NO_UNLOAD) != 0;
 	bool force_unload = (order_flags & OUFB_UNLOAD) != 0;
 	bool force_transfer = (order_flags & (OUFB_TRANSFER | OUFB_UNLOAD)) != 0;
-	bool transfer_cargodist_mode = force_transfer && _settings_game.linkgraph.GetDistributionType(cargo) != DT_MANUAL;
+	bool transfer_cargodist_mode = force_transfer && _settings_game.linkgraph.GetDistributionType(cargo) != DistributionType::Manual;
 	dbg_assert(this->count > 0 || it == this->packets.end());
 	while (sum < this->count) {
 		CargoPacket *cp = *it;
@@ -889,6 +884,7 @@ uint VehicleCargoList::Truncate(uint max_move)
  * @param avoid Station to exclude from routing and current next hop of packets to reroute.
  * @param avoid2 Additional station to exclude from routing.
  * @param ge GoodsEntry to get the routing info from.
+ * @return The number of elements that got rerouted.
  */
 uint VehicleCargoList::Reroute(uint max_move, VehicleCargoList *dest, StationID avoid, StationID avoid2, const GoodsEntry *ge)
 {
@@ -1165,6 +1161,7 @@ uint StationCargoList::Load(uint max_move, VehicleCargoList *dest, std::span<con
  * @param avoid Station to exclude from routing and current next hop of packets to reroute.
  * @param avoid2 Additional station to exclude from routing.
  * @param ge GoodsEntry to get the routing info from.
+ * @return The number of elements that got rerouted.
  */
 uint StationCargoList::Reroute(uint max_move, StationCargoList *dest, StationID avoid, StationID avoid2, const GoodsEntry *ge)
 {

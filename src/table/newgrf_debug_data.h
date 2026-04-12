@@ -196,7 +196,7 @@ class NIHVehicle : public NIHelper {
 		}
 		output.buffer.format("  Position: {:X}, {:X}, {:X}, Direction: {}", v->x_pos, v->y_pos, v->z_pos, v->direction);
 		if (v->type == VEH_TRAIN) output.buffer.format(", tile margin: {}", GetTileMarginInFrontOfTrain(Train::From(v)));
-		if (v->type == VEH_SHIP) output.buffer.format(", rotation: {}", Ship::From(v)->rotation);
+		if (v->type == VEH_SHIP) output.buffer.format(", rotation: {}, state: 0x{:X}", Ship::From(v)->rotation, Ship::From(v)->state);
 		output.FinishPrint();
 
 		if (v->IsPrimaryVehicle()) {
@@ -419,8 +419,7 @@ class NIHVehicle : public NIHelper {
 		}
 		if (v->type == VEH_SHIP) {
 			const Ship *s = Ship::From(v);
-			output.Print("  Lost counter: {}",
-					s->lost_count);
+			output.Print("  Lost counter: {}", s->lost_count);
 
 			output.buffer.format("  Path cache: ");
 			if (!s->cached_path.empty()) {
@@ -454,11 +453,18 @@ class NIHVehicle : public NIHelper {
 			}
 		}
 
-		output.Print("  Cached sprite bounds: ({}, {}) to ({}, {}), offs: ({}, {})",
-				v->sprite_seq_bounds.left, v->sprite_seq_bounds.top, v->sprite_seq_bounds.right, v->sprite_seq_bounds.bottom, v->bounds.origin.x, v->bounds.origin.y);
+		output.Print("  Cached sprite bounds: ({}, {}) to ({}, {}), origin: ({}, {}, {}), extent: ({}, {}, {}), offset: ({}, {}, {})",
+				v->sprite_seq_bounds.left, v->sprite_seq_bounds.top, v->sprite_seq_bounds.right, v->sprite_seq_bounds.bottom,
+				v->bounds.origin.x, v->bounds.origin.y, v->bounds.origin.z,
+				v->bounds.extent.x, v->bounds.extent.y, v->bounds.extent.z,
+				v->bounds.offset.x, v->bounds.offset.y, v->bounds.offset.z);
 
 		output.Print("  Current image cacheable: {} ({:X}), spritenum: {:X}",
 				v->cur_image_valid_dir != INVALID_DIR ? "yes" : "no", v->cur_image_valid_dir, v->spritenum);
+
+		if (v->type == VEH_TRAIN && HasBit(v->vcache.cached_veh_flags, VCF_IMAGE_CURVATURE)) {
+			output.Print("  Curvature: cached: {:X}, current: {:X}", v->vcache.cached_image_curvature, Train::From(v)->GetVehicleCurvature());
+		}
 
 		if (v->vehicle_flags.Test(VehicleFlag::SeparationActive)) {
 			std::vector<TimetableProgress> progress_array = PopulateSeparationState(v);
@@ -1259,6 +1265,34 @@ class NIHIndustry : public NIHelper {
 			if (indsp->grf_prop.grffile != nullptr) {
 				output.Print("  GRF local ID: {}", indsp->grf_prop.local_id);
 			}
+			{
+				output.Print("  Behaviour flags:");
+				auto check = [&](IndustryBehaviour flag, const char *name) {
+					if (indsp->behaviour.Test(flag)) output.Print("    {}", name);
+				};
+				check(IndustryBehaviour::PlantFields,          "PlantFields");
+				check(IndustryBehaviour::CutTrees,             "CutTrees");
+				check(IndustryBehaviour::BuiltOnWater,         "BuiltOnWater");
+				check(IndustryBehaviour::Town1200More,         "Town1200More");
+				check(IndustryBehaviour::OnlyInTown,           "OnlyInTown");
+				check(IndustryBehaviour::OnlyNearTown,         "OnlyNearTown");
+				check(IndustryBehaviour::PlantOnBuild,         "PlantOnBuild");
+				check(IndustryBehaviour::DontIncrProd,         "DontIncrProd");
+				check(IndustryBehaviour::Before1950,           "Before1950");
+				check(IndustryBehaviour::After1960,            "After1960");
+				check(IndustryBehaviour::AIAirShipRoutes,      "AIAirShipRoutes");
+				check(IndustryBehaviour::AirplaneAttacks,      "AirplaneAttacks");
+				check(IndustryBehaviour::ChopperAttacks,       "ChopperAttacks");
+				check(IndustryBehaviour::CanSubsidence,        "CanSubsidence");
+				check(IndustryBehaviour::ProdMultiHandling,    "ProdMultiHandling");
+				check(IndustryBehaviour::ProdCallbackRandom,   "ProdCallbackRandom");
+				check(IndustryBehaviour::NoBuildMapCreation,   "NoBuildMapCreation");
+				check(IndustryBehaviour::CanCloseLastInstance, "CanCloseLastInstance");
+				check(IndustryBehaviour::CargoTypesUnlimited,  "CargoTypesUnlimited");
+				check(IndustryBehaviour::NoPaxProdClamp,       "NoPaxProdClamp");
+
+				check(IndustryBehaviour::ExpensiveLocationCallback, "ExpensiveLocationCallback (internal)");
+			}
 		}
 	}
 
@@ -1440,7 +1474,7 @@ class NIHSignals : public NIHelper {
 			if (IsTunnel(tile)) ctx.ctx_flags |= CSSCF_TUNNEL;
 			style = GetTunnelBridgeSignalStyle(tile);
 			z = GetTunnelBridgeSignalZ(tile, !IsTunnelBridgeSignalSimulationEntrance(tile));
-		} else if (IsTileType(tile, MP_RAILWAY) && HasSignals(tile)) {
+		} else if (IsTileType(tile, TileType::Railway) && HasSignals(tile)) {
 			TrackBits bits = GetTrackBits(tile);
 			do {
 				Track track = RemoveFirstTrack(&bits);
@@ -1463,7 +1497,7 @@ class NIHSignals : public NIHelper {
 	{
 		TileIndex tile{index};
 		output.Print("Debug Info:");
-		if (IsTileType(tile, MP_RAILWAY) && HasSignals(tile)) {
+		if (IsTileType(tile, TileType::Railway) && HasSignals(tile)) {
 			output.Print("Signals:");
 			DumpTileSignalsInfo(TileIndex{tile}, output);
 		}
@@ -1500,7 +1534,7 @@ class NIHSignals : public NIHelper {
 
 	/* virtual */ void FillOptionsDropDown(uint index, DropDownList &list) const override
 	{
-		list.push_back(MakeDropDownListStringItem(STR_NEWGRF_INSPECT_CAPTION_OBJECT_AT_RAIL_TYPE, 0, !IsTileType(TileIndex{index}, MP_RAILWAY)));
+		list.push_back(MakeDropDownListStringItem(STR_NEWGRF_INSPECT_CAPTION_OBJECT_AT_RAIL_TYPE, 0, !IsTileType(TileIndex{index}, TileType::Railway)));
 	}
 
 	/* virtual */ void OnOptionsDropdownSelect(uint index, int selected) const override
@@ -1582,7 +1616,7 @@ class NIHObject : public NIHelper {
 			if (spec->grf_prop.grffile != nullptr) {
 				output.buffer.format("  (local ID: {})", spec->grf_prop.local_id);
 			}
-			if (spec->class_index != INVALID_OBJECT_CLASS) {
+			if (spec->class_index != ObjectClassID::Invalid()) {
 				uint class_id = ObjectClass::Get(spec->class_index)->global_id;
 				output.buffer.format(", class ID: {}", label_dumper().Label(class_id));
 			}
@@ -1751,11 +1785,11 @@ class NIHRailType : public NIHelper {
 			writeRailType(secondary);
 		}
 
-		if (IsTileType(tile, MP_RAILWAY) && HasSignals(tile)) {
+		if (IsTileType(tile, TileType::Railway) && HasSignals(tile)) {
 			output.Print("Signals:");
 			DumpTileSignalsInfo(tile, output);
 		}
-		if (IsTileType(tile, MP_RAILWAY) && IsRailDepot(tile)) {
+		if (IsTileType(tile, TileType::Railway) && IsRailDepot(tile)) {
 			output.Print("Depot: reserved: {}", HasDepotReservation(tile));
 		}
 	}
@@ -1775,7 +1809,7 @@ class NIHRailType : public NIHelper {
 	{
 		TileIndex tile{index};
 		list.push_back(MakeDropDownListStringItem(STR_NEWGRF_INSPECT_CAPTION_OBJECT_AT_ROAD_TYPE, 0, !IsLevelCrossingTile(tile)));
-		list.push_back(MakeDropDownListStringItem(STR_NEWGRF_INSPECT_CAPTION_OBJECT_AT_SIGNALS, 1, !(IsTileType(tile, MP_RAILWAY) && HasSignals(tile))));
+		list.push_back(MakeDropDownListStringItem(STR_NEWGRF_INSPECT_CAPTION_OBJECT_AT_SIGNALS, 1, !(IsTileType(tile, TileType::Railway) && HasSignals(tile))));
 	}
 
 	/* virtual */ void OnOptionsDropdownSelect(uint index, int selected) const override
@@ -2150,6 +2184,12 @@ class NIHStationStruct : public NIHelper {
 			output.Print("  road_waypoint_area: tile: {}, width: {}, height: {}",
 					wp->road_waypoint_area.tile, wp->road_waypoint_area.w, wp->road_waypoint_area.h);
 		}
+		if (!bst->tile_waiting_random_triggers.empty()) {
+			output.Print("  Tile waiting random triggers: ");
+			for (const auto &it : bst->tile_waiting_random_triggers) {
+				output.Print("    {}: 0x{:X}", it.first, it.second);
+			}
+		}
 	}
 };
 
@@ -2502,7 +2542,7 @@ class NIHNewLandscape : public NIHelper {
 	uint Resolve(uint index, uint var, uint param, GetVariableExtra &extra) const override
 	{
 		TileIndex tile{index};
-		if (!IsTileType(tile, MP_CLEAR)) return 0;
+		if (!IsTileType(tile, TileType::Clear)) return 0;
 
 		TileInfo ti;
 		ti.x = TileX(tile);

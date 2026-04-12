@@ -479,7 +479,7 @@ static const Order *TraceRestrictGetNextGotoOrder(const Train *v)
 			if (order_idx == v->cur_real_order_index) return nullptr;
 			if (order->IsGotoOrder()) return order;
 		}
-		if (order->IsType(OT_CONDITIONAL) && order->GetConditionVariable() == OCV_UNCONDITIONALLY) {
+		if (order->IsType(OT_CONDITIONAL) && order->GetConditionVariable() == OrderConditionVariable::Unconditionally) {
 			order_idx = order->GetConditionSkipToOrder();
 		} else {
 			order_idx++;
@@ -580,11 +580,11 @@ void TraceRestrictProgram::Execute(const Train *v, const TraceRestrictProgramInp
 								break;
 
 							case TRDTSV_FRONT:
-								direction_match = (IsTileType(input.tile, MP_RAILWAY) && HasSignalOnTrackdir(input.tile, input.trackdir)) || IsTileType(input.tile, MP_TUNNELBRIDGE);
+								direction_match = (IsTileType(input.tile, TileType::Railway) && HasSignalOnTrackdir(input.tile, input.trackdir)) || IsTileType(input.tile, TileType::TunnelBridge);
 								break;
 
 							case TRDTSV_BACK:
-								direction_match = IsTileType(input.tile, MP_RAILWAY) && !HasSignalOnTrackdir(input.tile, input.trackdir);
+								direction_match = IsTileType(input.tile, TileType::Railway) && !HasSignalOnTrackdir(input.tile, input.trackdir);
 								break;
 
 							case TRDTSV_TUNBRIDGE_ENTER:
@@ -2082,11 +2082,11 @@ void TraceRestrictSetIsSignalRestrictedBit(TileIndex t)
 
 	/* If iterators are the same, there are no mappings for this tile */
 	switch (GetTileType(t)) {
-		case MP_RAILWAY:
+		case TileType::Railway:
 			SetRestrictedSignal(t, found);
 			break;
 
-		case MP_TUNNELBRIDGE:
+		case TileType::TunnelBridge:
 			SetTunnelBridgeRestrictedSignal(t, found);
 			break;
 
@@ -2150,7 +2150,7 @@ bool TraceRestrictRemoveProgramMapping(TraceRestrictRefId ref)
 			TraceRestrictRemoveProgramMapping(prog->GetReferences()[0]);
 		}
 
-		if (update_reserve_through && IsTileType(tile, MP_RAILWAY)) {
+		if (update_reserve_through && IsTileType(tile, TileType::Railway)) {
 			UpdateSignalReserveThroughBit(tile, track, true);
 		}
 		if (update_special_propagation) {
@@ -2168,7 +2168,7 @@ void TraceRestrictCheckRefreshSignals(const TraceRestrictProgram *prog, size_t o
 		for (TraceRestrictRefId ref : prog->GetReferences()) {
 			TileIndex tile = GetTraceRestrictRefIdTileIndex(ref);
 			Track track = GetTraceRestrictRefIdTrack(ref);
-			if (IsTileType(tile, MP_RAILWAY)) UpdateSignalReserveThroughBit(tile, track, true);
+			if (IsTileType(tile, TileType::Railway)) UpdateSignalReserveThroughBit(tile, track, true);
 		}
 	}
 
@@ -2196,7 +2196,7 @@ void TraceRestrictCheckRefreshSingleSignal(const TraceRestrictProgram *prog, Tra
 	if (((old_actions_used_flags ^ prog->actions_used_flags) & TRPAUF_RESERVE_THROUGH_ALWAYS)) {
 		TileIndex tile = GetTraceRestrictRefIdTileIndex(ref);
 		Track track = GetTraceRestrictRefIdTrack(ref);
-		if (IsTileType(tile, MP_RAILWAY)) UpdateSignalReserveThroughBit(tile, track, true);
+		if (IsTileType(tile, TileType::Railway)) UpdateSignalReserveThroughBit(tile, track, true);
 	}
 
 	if (((old_actions_used_flags ^ prog->actions_used_flags) & TRPAUF_SPECIAL_ASPECT_PROPAGATION_FLAG_MASK)) {
@@ -2260,9 +2260,9 @@ void TraceRestrictNotifySignalRemoval(TileIndex tile, Track track)
 	if (removed) InvalidateWindowClassesData(WC_TRACE_RESTRICT);
 }
 
-BaseCommandContainer<CMD_PROGRAM_TRACERESTRICT_SIGNAL> GetTraceRestrictCommandContainer(TileIndex tile, Track track, TraceRestrictDoCommandType type, uint32_t offset, uint32_t value)
+BaseCommandContainer<Commands::ProgramTracerestrictSignal> GetTraceRestrictCommandContainer(TileIndex tile, Track track, TraceRestrictDoCommandType type, uint32_t offset, uint32_t value)
 {
-	return BaseCommandContainer<CMD_PROGRAM_TRACERESTRICT_SIGNAL>((StringID)0, tile, TraceRestrictProgramSignalData::Make(track, type, offset, value, {}));
+	return BaseCommandContainer<Commands::ProgramTracerestrictSignal>((StringID)0, tile, TraceRestrictProgramSignalData::Make(track, type, offset, value, {}));
 }
 
 /**
@@ -2272,7 +2272,7 @@ static CommandCost TraceRestrictCheckTileIsUsable(TileIndex tile, Track track, b
 {
 	/* Check that there actually is a signal here */
 	switch (GetTileType(tile)) {
-		case MP_RAILWAY:
+		case TileType::Railway:
 			if (!IsPlainRailTile(tile) || !HasTrack(tile, track)) {
 				return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
 			}
@@ -2281,7 +2281,7 @@ static CommandCost TraceRestrictCheckTileIsUsable(TileIndex tile, Track track, b
 			}
 			break;
 
-		case MP_TUNNELBRIDGE:
+		case TileType::TunnelBridge:
 			if (!IsRailTunnelBridgeTile(tile) || !HasBit(GetTunnelBridgeTrackBits(tile), track)) {
 				return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
 			}
@@ -3602,7 +3602,7 @@ bool ClearOrderTraceRestrictSlotIf(Order *o, F cond)
 {
 	bool changed_order = false;
 	if (o->IsType(OT_CONDITIONAL) &&
-			(o->GetConditionVariable() == OCV_SLOT_OCCUPANCY || o->GetConditionVariable() == OCV_VEH_IN_SLOT) &&
+			(o->GetConditionVariable() == OrderConditionVariable::SlotOccupancy || o->GetConditionVariable() == OrderConditionVariable::VehicleInSlot) &&
 			cond(static_cast<TraceRestrictSlotID>(o->GetXData()))) {
 		o->GetXDataRef() = INVALID_TRACE_RESTRICT_SLOT_ID.base();
 		changed_order = true;
@@ -3857,7 +3857,7 @@ bool ClearOrderTraceRestrictSlotGroupIf(Order *o, F cond)
 {
 	bool changed_order = false;
 	if (o->IsType(OT_CONDITIONAL) &&
-			o->GetConditionVariable() == OCV_VEH_IN_SLOT_GROUP &&
+			o->GetConditionVariable() == OrderConditionVariable::VehicleInSlotGroup &&
 			cond(static_cast<TraceRestrictSlotGroupID>(o->GetXData()))) {
 		o->GetXDataRef() = INVALID_TRACE_RESTRICT_SLOT_GROUP.base();
 		changed_order = true;
@@ -4005,7 +4005,7 @@ CommandCost CmdDeleteTraceRestrictSlotGroup(DoCommandFlags flags, TraceRestrictS
 	/* Delete sub-groups */
 	for (const TraceRestrictSlotGroup *gp : TraceRestrictSlotGroup::Iterate()) {
 		if (gp->parent == slot_group->index) {
-			Command<CMD_DELETE_TRACERESTRICT_SLOT_GROUP>::Do(flags, gp->index);
+			Command<Commands::DeleteTracerestrictSlotGroup>::Do(flags, gp->index);
 		}
 	}
 
@@ -4086,7 +4086,7 @@ bool ClearOrderTraceRestrictCounterIf(Order *o, F cond)
 {
 	bool changed_order = false;
 	if (o->IsType(OT_CONDITIONAL) &&
-			(o->GetConditionVariable() == OCV_COUNTER_VALUE) &&
+			(o->GetConditionVariable() == OrderConditionVariable::CounterValue) &&
 			cond(static_cast<TraceRestrictCounterID>(o->GetXDataHigh()))) {
 		o->SetXDataHigh(INVALID_TRACE_RESTRICT_COUNTER_ID.base());
 		changed_order = true;
@@ -4268,34 +4268,34 @@ CommandCost TraceRestrictFollowUpCmdData::ExecuteWithValue(uint16_t value, DoCom
 	if (this->cmd.payload == nullptr) return CMD_ERROR;
 
 	switch (cmd.cmd) {
-		case CMD_PROGRAM_TRACERESTRICT_SIGNAL: {
-			using Payload = CmdPayload<CMD_PROGRAM_TRACERESTRICT_SIGNAL>;
+		case Commands::ProgramTracerestrictSignal: {
+			using Payload = CmdPayload<Commands::ProgramTracerestrictSignal>;
 			if (const Payload *src = this->cmd.payload->AsType<Payload>(); src != nullptr) {
 				Payload payload = *src;
 				TraceRestrictInstructionItemRef(payload.data).SetValue(value);
-				return DoCommand<CMD_PROGRAM_TRACERESTRICT_SIGNAL>(this->cmd.tile, payload, flags);
+				return DoCommand<Commands::ProgramTracerestrictSignal>(this->cmd.tile, payload, flags);
 			}
 			break;
 		}
 
-		case CMD_PROGPRESIG_MODIFY_INSTRUCTION: {
-			using Payload = CmdPayload<CMD_PROGPRESIG_MODIFY_INSTRUCTION>;
+		case Commands::ProgpresigModifyInstruction: {
+			using Payload = CmdPayload<Commands::ProgpresigModifyInstruction>;
 			if (const Payload *src = this->cmd.payload->AsType<Payload>(); src != nullptr) {
 				Payload payload = *src;
 				uint32_t &cmd_value = payload.GetValue<3>(); // Make sure that it is the expected type
 				cmd_value = value;
-				return DoCommand<CMD_PROGPRESIG_MODIFY_INSTRUCTION>(this->cmd.tile, payload, flags);
+				return DoCommand<Commands::ProgpresigModifyInstruction>(this->cmd.tile, payload, flags);
 			}
 			break;
 		}
 
-		case CMD_MODIFY_ORDER: {
-			using Payload = CmdPayload<CMD_MODIFY_ORDER>;
+		case Commands::ModifyOrder: {
+			using Payload = CmdPayload<Commands::ModifyOrder>;
 			if (const Payload *src = this->cmd.payload->AsType<Payload>(); src != nullptr) {
 				Payload payload = *src;
 				uint16_t &cmd_value = payload.GetValue<3>(); // Make sure that it is the expected type
 				cmd_value = value;
-				return DoCommand<CMD_MODIFY_ORDER>(this->cmd.tile, payload, flags);
+				return DoCommand<Commands::ModifyOrder>(this->cmd.tile, payload, flags);
 			}
 			break;
 		}

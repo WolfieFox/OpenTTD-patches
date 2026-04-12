@@ -9,6 +9,7 @@
 
 #include "stdafx.h"
 #include "core/alloc_type.hpp"
+#include "core/enum_type.hpp"
 #include "core/string_consumer.hpp"
 #include "fileio_func.h"
 #include "spriteloader/spriteloader.hpp"
@@ -16,7 +17,7 @@
 #include "fios.h"
 #include "string_func.h"
 #include "tar_type.h"
-#include "3rdparty/cpp-btree/btree_set.h"
+#include "3rdparty/robin_hood/robin_hood.h"
 #ifdef _WIN32
 #include <windows.h>
 #elif defined(__HAIKU__)
@@ -90,8 +91,13 @@ static void FillValidSearchPaths(bool only_local_path)
 	_valid_searchpaths.clear();
 	_valid_searchpaths_excluding_cwd.clear();
 
-	btree::btree_set<std::string_view> seen{};
-	btree::btree_set<std::string_view> seen_excluding_cwd{};
+	enum class SeenFlag : uint8_t {
+		Seen,
+		SeenExcludingCwd,
+	};
+	using SeenFlags = EnumBitSet<SeenFlag, uint8_t>;
+	robin_hood::unordered_map<std::string_view, SeenFlags> seen{};
+
 	for (Searchpath sp = SP_FIRST_DIR; sp < NUM_SEARCHPATHS; sp++) {
 		if (only_local_path) {
 			switch (sp) {
@@ -106,12 +112,13 @@ static void FillValidSearchPaths(bool only_local_path)
 		}
 
 		if (IsValidSearchPath(sp)) {
-			if (seen.count(_searchpaths[sp]) == 0) {
-				seen.insert(_searchpaths[sp]);
+			SeenFlags &seen_flags = seen[_searchpaths[sp]];
+			if (!seen_flags.Test(SeenFlag::Seen)) {
+				seen_flags.Set(SeenFlag::Seen);
 				_valid_searchpaths.emplace_back(sp);
 			}
-			if (sp != SP_WORKING_DIR && seen_excluding_cwd.count(_searchpaths[sp]) == 0) {
-				seen_excluding_cwd.insert(_searchpaths[sp]);
+			if (sp != SP_WORKING_DIR && !seen_flags.Test(SeenFlag::SeenExcludingCwd)) {
+				seen_flags.Set(SeenFlag::SeenExcludingCwd);
 				_valid_searchpaths_excluding_cwd.emplace_back(sp);
 			}
 		}
@@ -248,7 +255,9 @@ static std::optional<FileHandle> FioFOpenFileTar(const TarFileListEntry &entry, 
 /**
  * Opens a OpenTTD file somewhere in a personal or global directory.
  * @param filename Name of the file to open.
+ * @param mode The fopen-mode to open the file.
  * @param subdir Subdirectory to open.
+ * @param[out] filesize Optional output for the size of the file.
  * @return File handle of the opened file, or \c nullptr if the file is not available.
  */
 std::optional<FileHandle> FioFOpenFile(std::string_view filename, const char *mode, Subdirectory subdir, size_t *filesize, std::string *output_filename)
@@ -382,8 +391,7 @@ bool FioRenameFile(const std::string &oldname, const std::string &newname)
 /**
  * Appends, if necessary, the path separator character to the end of the string.
  * It does not add the path separator to zero-sized strings.
- * @param buf  string to append the separator to
- * @return true iff the operation succeeded
+ * @param buf String to append the separator to.
  */
 void AppendPathSeparator(std::string &buf)
 {
@@ -423,6 +431,11 @@ uint TarScanner::DoScan(Subdirectory sd)
 	return num;
 }
 
+/**
+ * Perform the scanning of content in the given modes.
+ * @param modes The modes to scan for.
+ * @return The number of found tar files.
+ */
 /* static */ uint TarScanner::DoScan(TarScanner::Modes modes)
 {
 	Debug(misc, 2, "Scanning for tars");
@@ -707,6 +720,7 @@ extern void DetermineBasePaths(const char *exe);
  * so when we crop the path to there, when can remove the name of the bundle
  * in the same way we remove the name from the executable name.
  * @param exe the path to the executable
+ * @return \c true iff the path to the executable was found.
  */
 static bool ChangeWorkingDirectoryToExecutable(const char *exe)
 {
@@ -1111,6 +1125,7 @@ static bool MatchesExtension(std::string_view extension, const std::string &file
  * @param path            full path we're currently at
  * @param basepath_length from where in the path are we 'based' on the search path
  * @param recursive       whether to recursively search the sub directories
+ * @return The number of files that have been found.
  */
 static uint ScanPath(FileScanner *fs, std::string_view extension, const char *path, size_t basepath_length, bool recursive)
 {
@@ -1154,6 +1169,7 @@ static uint ScanPath(FileScanner *fs, std::string_view extension, const char *pa
  * @param fs        the file scanner to scan for
  * @param extension the extension of files to search for.
  * @param tar       the tar to search in.
+ * @return The number of files that have been found.
  */
 static uint ScanTar(FileScanner *fs, std::string_view extension, const TarFileList::value_type &tar)
 {

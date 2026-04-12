@@ -53,6 +53,7 @@ extern void ClearAllSignalSpeedRestrictions();
 extern void MakeNewgameSettingsLive();
 
 extern uint64_t _station_tile_cache_hash;
+extern uint32_t _engine_seed;
 
 void InitializeSound();
 void InitializeMusic();
@@ -77,6 +78,8 @@ void InitializeOldNames();
  * It isn't as much of an unique ID but more a hashed digest of a random
  * string and a time. It is very likely to be unique, but it does not follow
  * any UUID standard.
+ * @param subject What to create the ID for.
+ * @return The generated ID.
  */
 std::string GenerateUid(std::string_view subject)
 {
@@ -148,6 +151,7 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 	_extra_aspects = 0;
 	_aspect_cfg_hash = 0;
 	_station_tile_cache_hash = 0;
+	_engine_seed = 0;
 	InitGRFGlobalVars();
 	_loadgame_DBGL_data.clear();
 	if (reset_settings) {

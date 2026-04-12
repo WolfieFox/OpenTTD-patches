@@ -46,8 +46,7 @@ public:
 
 	/**
 	 * Add text to the output buffer.
-	 * @param text   Text to store.
-	 * @param length Length of the text in bytes.
+	 * @param text Text to store.
 	 * @return Number of bytes actually stored.
 	 */
 	size_t Add(const char *text, size_t length)
@@ -388,8 +387,8 @@ static void AppendFile(const char *fname, FILE *out_fp)
 
 /**
  * Compare two files for identity.
- * @param n1 First file.
- * @param n2 Second file.
+ * @param path1 First file.
+ * @param path2 Second file.
  * @return True if both files are identical.
  */
 static bool CompareFiles(const char *n1, const char *n2)
@@ -444,7 +443,7 @@ static const OptionData _opts[] = {
  *
  * Last but not least, the [post-amble] group is copied verbatim.
  *
- * @param fname  Ini file to process. @return Exit status of the processing.
+ * @param fname Ini file to process.
  */
 static void ProcessIniFile(const char *fname)
 {
@@ -469,6 +468,7 @@ static void ProcessIniFile(const char *fname)
  * And the main program (what else?)
  * @param argc Number of command-line arguments including the program name itself.
  * @param argv Vector of the command-line arguments.
+ * @return The exit code of the application.
  */
 int CDECL main(int argc, char *argv[])
 {

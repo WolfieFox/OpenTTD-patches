@@ -1600,6 +1600,8 @@ STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_SMOOTH                  :Полегат
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_ROUGH                   :Стръмен
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_ROUGH              :Много стръмен
 
+###length 4
+
 STR_CONFIG_SETTING_VARIETY                                      :Разпределение на разнообразието: {STRING}
 STR_CONFIG_SETTING_VARIETY_HELPTEXT                             :Изберете дали картата да съдържа както планини, така и равнинни зони. Колкото по-голямо е разнообразието, толкова по-големи са разликите във височината между планинските и равнинните зони
 
@@ -1867,6 +1869,7 @@ STR_CONFIG_SETTING_STATION_LENGTH_LOADING_PENALTY_HELPTEXT      :Когато е
 
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS                             :Вагоните имат ограничение на скоростта: {STRING}
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS_HELPTEXT                    :Ако тази настройка бъде активирана, максималната скорост на вагоните ще се взима предвид при изчисляването на максималната скорост на влака
+
 
 STR_CONFIG_SETTING_DISABLE_ELRAILS                              :Без електрифициране на релси: {STRING}
 STR_CONFIG_SETTING_DISABLE_ELRAILS_HELPTEXT                     :Активирането на тази настройка премахва нуждата от електрифициране на двурелсовите линии, за да могат електрическите локомотиви да се движат по тях
@@ -2836,7 +2839,6 @@ STR_STATION_CLASS_WAYP_WAYPOINT                                 :Влаков м
 
 # Signal window
 STR_BUILD_SIGNAL_CAPTION                                        :{WHITE}Селекция на сигнал
-STR_BUILD_SIGNAL_TOGGLE_ADVANCED_SIGNAL_TOOLTIP                 :{BLACK}Превключване на показването на разширени типове сигнали
 STR_BUILD_SIGNAL_SEMAPHORE_NORM_TOOLTIP                         :{BLACK}Нормален сигнал (семафор){}Това е най-базовият тип сигнал, позволяващ само един влак да бъде в дадена секция от влаковата линия в даден момент
 STR_BUILD_SIGNAL_SEMAPHORE_ENTRY_TOOLTIP                        :{BLACK}Входен сигнал (семафор){}Свети зелено, докато има поне един зелен изходен сигнал от следващия сегмент от пътя. В противен случай свети червено
 STR_BUILD_SIGNAL_SEMAPHORE_EXIT_TOOLTIP                         :{BLACK}Изходен сигнал (семафор){}Действа като нормален сигнал, но е необходим, за да работят входните и комбинираните пред-сигнали
@@ -3957,10 +3959,10 @@ STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}Инду
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- Отсъства -
 STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% транспортирани)
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING} и още {NUM}...
+STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING} и още {NUM}...
 STR_INDUSTRY_DIRECTORY_LIST_TOOLTIP                             :{BLACK}Имена на индустриите - натиснете, за да центрирате камерата върху индустрията. Ctrl+Click отваря прозорец с нов изглед към индустрията
 STR_INDUSTRY_DIRECTORY_ACCEPTED_CARGO_FILTER                    :{BLACK}Приеман товар {SILVER}{STRING}
 STR_INDUSTRY_DIRECTORY_PRODUCED_CARGO_FILTER                    :{BLACK}Произведен товар: {SILVER}{STRING}
@@ -4106,6 +4108,8 @@ STR_PURCHASE_INFO_ALL_BUT                                       :Всичко о
 STR_PURCHASE_INFO_MAX_TE                                        :{BLACK}Макс. теглеща сила: {GOLD}{FORCE}
 STR_PURCHASE_INFO_AIRCRAFT_RANGE                                :{BLACK}Обхват: {GOLD}{COMMA} полета
 STR_PURCHASE_INFO_AIRCRAFT_TYPE                                 :{BLACK}Тип летателно средство: {GOLD}{STRING}
+
+# Vehicle sort details
 
 ###length 3
 STR_CARGO_TYPE_FILTER_ALL                                       :Всички типове товари
@@ -4985,7 +4989,6 @@ STR_ERROR_CAN_T_GENERATE_TOWN                                   :{WHITE}Не м�
 STR_ERROR_CAN_T_RENAME_TOWN                                     :{WHITE}Градът не може да бъде преименуван
 STR_ERROR_CAN_T_FOUND_TOWN_HERE                                 :{WHITE}Не може да се основе град тук...
 STR_ERROR_CAN_T_EXPAND_TOWN                                     :{WHITE}Градът не може да се разрасне
-STR_ERROR_TOO_CLOSE_TO_EDGE_OF_MAP_SUB                          :{WHITE}... прекалено близо до края на картата
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_TOWN                             :{WHITE}... прекалено близо до друг град
 STR_ERROR_TOO_MANY_TOWNS                                        :{WHITE}... прекалено много градове
 STR_ERROR_NO_SPACE_FOR_TOWN                                     :{WHITE}... няма повече място на картата

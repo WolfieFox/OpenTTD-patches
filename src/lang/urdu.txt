@@ -1205,6 +1205,8 @@ STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_SMOOTH                  :ہموار
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_ROUGH                   :رف
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_ROUGH              :بہت رف
 
+###length 4
+
 
 
 STR_CONFIG_SETTING_TREE_PLACER                                  :درخت لگانے کا طریقہ: {STRING}
@@ -1357,6 +1359,7 @@ STR_CONFIG_SETTING_NOSERVICE                                    :گاڑیوں ک
 
 
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS                             :مال گاڑی کی حد رفتار فعال کریں: {STRING}
+
 
 STR_CONFIG_SETTING_DISABLE_ELRAILS                              :الیلٹرک ریل گاڑیاں غیر فعال کریں: {STRING}
 
@@ -2460,6 +2463,8 @@ STR_PURCHASE_INFO_ALL_TYPES                                     :تمام اقس
 STR_PURCHASE_INFO_ALL_BUT                                       :{CARGO_LIST} کے علاوہ سبھی
 STR_PURCHASE_INFO_AIRCRAFT_RANGE                                :{BLACK}پہنچ: {GOLD}{COMMA} ٹائلیں
 STR_PURCHASE_INFO_AIRCRAFT_TYPE                                 :{BLACK}ہوائی جہاز کی قسم: {GOLD}{STRING}
+
+# Vehicle sort details
 
 ###length 3
 

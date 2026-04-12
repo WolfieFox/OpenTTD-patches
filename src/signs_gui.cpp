@@ -74,7 +74,7 @@ struct SignList {
 		this->signs.RebuildDone();
 	}
 
-	/** Sort signs by their name */
+	/** Sort signs by their name. @copydoc GUIList::Sorter */
 	static bool SignNameSorter(const Sign * const &a, const Sign * const &b)
 	{
 		/* Signs are very very rarely using the default text, but there can also be
@@ -94,30 +94,30 @@ struct SignList {
 		if (!this->signs.Sort(&SignNameSorter)) return;
 	}
 
-	/** Filter sign list by sign name */
-	static bool SignNameFilter(const Sign * const *a, StringFilter &filter)
+	/** Filter sign list by sign name. @copydoc GUIList::FilterFunction */
+	static bool SignNameFilter(const Sign * const *item, StringFilter &filter)
 	{
 		/* Same performance benefit as above for sorting. */
-		const std::string &a_name = (*a)->name.empty() ? SignList::default_name : (*a)->name;
+		const std::string_view name = (*item)->name.empty() ? SignList::default_name : (*item)->name;
 
 		filter.ResetState();
-		filter.AddLine(a_name);
+		filter.AddLine(name);
 		return filter.GetState();
 	}
 
-	/** Filter sign list excluding OWNER_DEITY */
-	static bool OwnerDeityFilter(const Sign * const *a, StringFilter &)
+	/** Filter sign list excluding OWNER_DEITY. @copydoc GUIList::FilterFunction */
+	static bool OwnerDeityFilter(const Sign * const *item, [[maybe_unused]] StringFilter &filter)
 	{
 		/* You should never be able to edit signs of owner DEITY */
-		return (*a)->owner != OWNER_DEITY;
+		return (*item)->owner != OWNER_DEITY;
 	}
 
-	/** Filter sign list by owner */
-	static bool OwnerVisibilityFilter(const Sign * const *a, StringFilter &)
+	/** Filter sign list by owner. @copydoc GUIList::FilterFunction */
+	static bool OwnerVisibilityFilter(const Sign * const *item, [[maybe_unused]] StringFilter &filter)
 	{
 		assert(!HasBit(_display_opt, DO_SHOW_COMPETITOR_SIGNS));
 		/* Hide sign if non-own signs are hidden in the viewport */
-		return (*a)->owner == _local_company || (*a)->owner == OWNER_DEITY;
+		return (*item)->owner == _local_company || (*item)->owner == OWNER_DEITY;
 	}
 
 	/** Filter out signs from the sign list that does not match the name filter */
@@ -174,6 +174,7 @@ struct SignListWindow : Window, SignList {
 	 * the edit widget is not updated by this function. Depending on if the
 	 * new string is zero-length or not the clear button is made
 	 * disabled/enabled. The sign list is updated according to the new filter.
+	 * @param new_filter_string The new terms for filtering.
 	 */
 	void SetFilterString(std::string_view new_filter_string)
 	{
@@ -318,26 +319,23 @@ struct SignListWindow : Window, SignList {
 		}
 	}
 
-	static HotkeyList hotkeys;
-};
+	/**
+	 * Handler for global hotkeys of the SignListWindow.
+	 * @param hotkey Hotkey
+	 * @return ES_HANDLED if hotkey was accepted.
+	 */
+	static EventState SignListGlobalHotkeys(int hotkey)
+	{
+		if (_game_mode == GM_MENU) return ES_NOT_HANDLED;
+		Window *w = ShowSignList();
+		if (w == nullptr) return ES_NOT_HANDLED;
+		return w->OnHotkey(hotkey);
+	}
 
-/**
- * Handler for global hotkeys of the SignListWindow.
- * @param hotkey Hotkey
- * @return ES_HANDLED if hotkey was accepted.
- */
-static EventState SignListGlobalHotkeys(int hotkey)
-{
-	if (_game_mode == GM_MENU) return ES_NOT_HANDLED;
-	Window *w = ShowSignList();
-	if (w == nullptr) return ES_NOT_HANDLED;
-	return w->OnHotkey(hotkey);
-}
-
-static Hotkey signlist_hotkeys[] = {
-	Hotkey('F', "focus_filter_box", WID_SIL_FILTER_TEXT),
+	static inline HotkeyList hotkeys{"signlist", {
+		Hotkey('F', "focus_filter_box", WID_SIL_FILTER_TEXT),
+	}, SignListGlobalHotkeys};
 };
-HotkeyList SignListWindow::hotkeys("signlist", signlist_hotkeys, SignListGlobalHotkeys);
 
 static constexpr std::initializer_list<NWidgetPart> _nested_sign_list_widgets = {
 	NWidget(NWID_HORIZONTAL),
@@ -394,7 +392,7 @@ Window *ShowSignList()
 static bool RenameSign(SignID index, std::string text, Colours text_colour)
 {
 	bool remove = text.empty();
-	Command<CMD_RENAME_SIGN>::Post(remove ? STR_ERROR_CAN_T_DELETE_SIGN : STR_ERROR_CAN_T_CHANGE_SIGN_NAME, index, std::move(text), text_colour);
+	Command<Commands::RenameSign>::Post(remove ? STR_ERROR_CAN_T_DELETE_SIGN : STR_ERROR_CAN_T_CHANGE_SIGN_NAME, index, std::move(text), text_colour);
 	return remove;
 }
 
@@ -405,7 +403,7 @@ static bool RenameSign(SignID index, std::string text, Colours text_colour)
  */
 void MoveSign(SignID index, TileIndex tile)
 {
-	Command<CMD_MOVE_SIGN>::Post(STR_ERROR_CAN_T_PLACE_SIGN_HERE, index, tile);
+	Command<Commands::MoveSign>::Post(STR_ERROR_CAN_T_PLACE_SIGN_HERE, index, tile);
 }
 
 struct SignWindow : Window, SignList {

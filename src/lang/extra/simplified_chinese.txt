@@ -358,9 +358,6 @@ STR_CONFIG_SETTING_RIVER_MIN_LENGTH_HELPTEXT                    :河流的最短
 STR_CONFIG_SETTING_RIVER_ROUTE_RANDOM                           :河流路径随机性：{STRING}
 STR_CONFIG_SETTING_RIVER_ROUTE_RANDOM_HELPTEXT                  :更改河流路径的随机性
 
-STR_CONFIG_SETTING_RIVERS_TOP_OF_HILL                           :从丘陵顶部水源处开始生成河流：{STRING}
-STR_CONFIG_SETTING_RIVERS_TOP_OF_HILL_HELPTEXT                  :选择河流是否从山顶开始生成
-
 STR_CONFIG_SETTING_RIVER_TROPICS_WIDTH                          :河岸湿润区域宽度：{STRING}
 STR_CONFIG_SETTING_RIVER_TROPICS_WIDTH_HELPTEXT                 :控制在亚热带景观中围绕河流两岸生成的湿润区域的宽度{}本设置调整河流两岸的总宽度
 
@@ -789,6 +786,7 @@ STR_LINKGRAPH_STATS_TOOLTIP_PRODUCTION_INTERVAL                 :{BLACK}每个�
 
 STR_RAIL_TOOLBAR_TOOLTIP_BUILD_POLYRAIL                         :{BLACK}使用折线模式建设铁路。按住 <Ctrl> 键操作以移除铁路，按住 <Shift> 键操作以显示预计成本
 
+STR_BUILD_SIGNAL_TOGGLE_ADVANCED_SIGNAL_TOOLTIP                 :{BLACK}是否显示高级信号灯类型
 STR_BUILD_SIGNAL_SEMAPHORE_PROG_TOOLTIP                         :{BLACK}可编程逻辑信号（臂板）{}可编程逻辑信号是一种复合信号，允许制定复杂的通行规则
 STR_BUILD_SIGNAL_SEMAPHORE_NO_ENTRY_TOOLTIP                     :{BLACK}禁入信号（臂板）{}路径信号灯为列车预留一条到安全停车位的路径，而其它路径仍然可以使用，从而允许一列以上的列车同时进入一个信号区间。禁入信号不允许列车逆行
 STR_BUILD_SIGNAL_ELECTRIC_PROG_TOOLTIP                          :{BLACK}可编程逻辑信号（电子）{}可编程逻辑信号是一种复合信号，允许制定复杂的通行规则

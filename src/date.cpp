@@ -304,7 +304,7 @@ EconTime::Date EconTime::ConvertYMDToDate(EconTime::Year year, EconTime::Month m
 bool CalTime::IsCalendarFrozen(bool newgame)
 {
 	GameSettings &settings = (newgame) ? _settings_newgame : _settings_game;
-	return settings.economy.timekeeping_units == TKU_WALLCLOCK && settings.economy.minutes_per_calendar_year == CalTime::FROZEN_MINUTES_PER_YEAR;
+	return settings.economy.timekeeping_units == TimekeepingUnits::Wallclock && settings.economy.minutes_per_calendar_year == CalTime::FROZEN_MINUTES_PER_YEAR;
 }
 
 CalTime::Day CalTime::NumberOfDaysInMonth(Year year, Month month)
@@ -328,9 +328,9 @@ CalTime::Day CalTime::NumberOfDaysInMonth(Year year, Month month)
 
 bool EconTime::UsingWallclockUnits(bool newgame)
 {
-	if (newgame) return (_settings_newgame.economy.timekeeping_units == TKU_WALLCLOCK);
+	if (newgame) return (_settings_newgame.economy.timekeeping_units == TimekeepingUnits::Wallclock);
 
-	return (_settings_game.economy.timekeeping_units == TKU_WALLCLOCK);
+	return (_settings_game.economy.timekeeping_units == TimekeepingUnits::Wallclock);
 }
 
 /** Functions used by the IncreaseDate function */
@@ -474,7 +474,7 @@ void IncreaseCalendarDate()
 	if (CalTime::IsCalendarFrozen()) return;
 
 	/* If we are using a non-default calendar progression speed, we need to check the sub_date_fract before updating date_fract. */
-	if (_settings_game.economy.timekeeping_units == TKU_WALLCLOCK && _settings_game.economy.minutes_per_calendar_year != CalTime::DEF_MINUTES_PER_YEAR) {
+	if (_settings_game.economy.timekeeping_units == TimekeepingUnits::Wallclock && _settings_game.economy.minutes_per_calendar_year != CalTime::DEF_MINUTES_PER_YEAR) {
 		CalTime::Detail::now.sub_date_fract += DAY_TICKS;
 
 		/* Check if we are ready to increment date_fract */
@@ -514,14 +514,14 @@ void IncreaseCalendarDate()
 	/* yes, call various yearly loops */
 	if (new_year) OnNewCalendarYear();
 
-	uint calendar_triggers = 0;
-	SetBit(calendar_triggers, TimerGameCalendar::DAY);
-	if ((CalTime::CurDate().base() % 7) == 3) SetBit(calendar_triggers, TimerGameCalendar::WEEK);
+	TimerGameCalendar::TElapsed calendar_triggers{};
+	calendar_triggers.Set(TimerGameCalendar::Trigger::Day);
+	if ((CalTime::CurDate().base() % 7) == 3) calendar_triggers.Set(TimerGameCalendar::Trigger::Week);
 	if (new_month) {
-		SetBit(calendar_triggers, TimerGameCalendar::MONTH);
-		if ((CalTime::CurMonth() % 3) == 0) SetBit(calendar_triggers, TimerGameCalendar::QUARTER);
+		calendar_triggers.Set(TimerGameCalendar::Trigger::Month);
+		if ((CalTime::CurMonth() % 3) == 0) calendar_triggers.Set(TimerGameCalendar::Trigger::Quarter);
 	}
-	if (new_year) SetBit(calendar_triggers, TimerGameCalendar::YEAR);
+	if (new_year) calendar_triggers.Set(TimerGameCalendar::Trigger::Year);
 	TimerManager<TimerGameCalendar>::Elapsed(calendar_triggers);
 
 	RecordSyncEvent(NSRE_CALDATE_INC);

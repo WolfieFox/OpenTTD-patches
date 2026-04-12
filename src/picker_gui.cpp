@@ -143,13 +143,13 @@ void PickerSaveConfig(IniFile &ini)
 	for (const auto *cb : GetPickerCallbacks()) PickerSaveConfig(ini, *cb);
 }
 
-/** Sort classes by id. */
+/** Sort classes by id. @copydoc GUIList::Sorter */
 static bool ClassIDSorter(int const &a, int const &b)
 {
 	return a < b;
 }
 
-/** Filter classes by class name. */
+/** Filter classes by class name. @copydoc GUIList::FilterFunction */
 static bool ClassTagNameFilter(int const *item, PickerFilterData &filter)
 {
 	filter.ResetState();
@@ -157,7 +157,7 @@ static bool ClassTagNameFilter(int const *item, PickerFilterData &filter)
 	return filter.GetState();
 }
 
-/** Sort types by id. */
+/** Sort types by id. @copydoc GUIList::Sorter */
 static bool TypeIDSorter(PickerItem const &a, PickerItem const &b)
 {
 	int r = a.class_index - b.class_index;
@@ -165,7 +165,7 @@ static bool TypeIDSorter(PickerItem const &a, PickerItem const &b)
 	return r < 0;
 }
 
-/** Filter types by class name. */
+/** Filter types by class name. @copydoc GUIList::FilterFunction */
 static bool TypeTagNameFilter(PickerItem const *item, PickerFilterData &filter)
 {
 	auto badges = filter.callbacks->GetTypeBadges(item->class_index, item->index);
@@ -180,12 +180,7 @@ static bool TypeTagNameFilter(PickerItem const *item, PickerFilterData &filter)
 /** Allow the collection sorter to test if the collection has inactive items */
 PickerWindow *picker_window;
 
-/**
- * Sort collections by id.
- * @param a First string for sorting.
- * @param b Second string for sorting.
- * @return Sort order.
- */
+/** Sort collections by id. @copydoc GUIList::Sorter */
 static bool CollectionIDSorter(std::string const &a, std::string const &b)
 {
 	if (b.empty()) return false;
@@ -1043,7 +1038,7 @@ void PickerWindow::BuildPickerCollectionList()
 	if (!this->has_class_picker) return;
 }
 
-/** Create nested widgets for the class picker widgets. */
+/** Create nested widgets for the class picker widgets. @copydoc NWidgetFunctionType */
 std::unique_ptr<NWidgetBase> MakePickerClassWidgets()
 {
 	static constexpr std::initializer_list<NWidgetPart> picker_class_widgets = {
@@ -1078,7 +1073,7 @@ std::unique_ptr<NWidgetBase> MakePickerClassWidgets()
 	return MakeNWidgets(picker_class_widgets, nullptr);
 }
 
-/** Create nested widgets for the type picker widgets. */
+/** Create nested widgets for the type picker widgets. @copydoc NWidgetFunctionType */
 std::unique_ptr<NWidgetBase> MakePickerTypeWidgets()
 {
 	static constexpr std::initializer_list<NWidgetPart> picker_type_widgets = {

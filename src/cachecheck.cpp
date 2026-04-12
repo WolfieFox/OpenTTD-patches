@@ -52,14 +52,14 @@ static bool SignalInfraTotalMatches()
 	TypedIndexContainer<std::array<uint, MAX_COMPANIES>, CompanyID> new_signal_totals = {};
 	for (TileIndex tile(0); tile < Map::Size(); ++tile) {
 		switch (GetTileType(tile)) {
-			case MP_RAILWAY:
+			case TileType::Railway:
 				if (HasSignals(tile)) {
 					const Company *c = Company::GetIfValid(GetTileOwner(tile));
 					if (c != nullptr) new_signal_totals[c->index] += CountBits(GetPresentSignals(tile));
 				}
 				break;
 
-			case MP_TUNNELBRIDGE: {
+			case TileType::TunnelBridge: {
 				/* Only count the tunnel/bridge if we're on the northern end tile. */
 				DiagDirection dir = GetTunnelBridgeDirection(tile);
 				if (dir == DIAGDIR_NE || dir == DIAGDIR_NW) break;
@@ -276,7 +276,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 				}
 			} else {
 				ForAllStationsAroundTiles(ind->location, [ind, &stlist](Station *st, TileIndex tile) {
-					if (!IsTileType(tile, MP_INDUSTRY) || GetIndustryIndex(tile) != ind->index) return false;
+					if (!IsTileType(tile, TileType::Industry) || GetIndustryIndex(tile) != ind->index) return false;
 					stlist.insert(st);
 					return true;
 				});
@@ -327,7 +327,7 @@ void CheckCaches(bool force_check, std::function<void(std::string_view)> log, Ch
 					cclog("  {}", line);
 				});
 				if (old_infrastructure[i].signal != c->infrastructure.signal && _network_server && !HasChickenBit(DCBF_DESYNC_CHECK_PERIODIC_SIGNALS)) {
-					Command<CMD_CHANGE_SETTING>::Post("debug.chicken_bits", _settings_game.debug.chicken_bits | (1 << DCBF_DESYNC_CHECK_PERIODIC_SIGNALS));
+					Command<Commands::ChangeSetting>::Post("debug.chicken_bits", _settings_game.debug.chicken_bits | (1 << DCBF_DESYNC_CHECK_PERIODIC_SIGNALS));
 				}
 			}
 			i++;

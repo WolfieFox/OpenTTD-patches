@@ -28,7 +28,7 @@
 
 #include "safeguards.h"
 
-/* Extra Viewport Window Stuff */
+/** Extra viewport window widgets. */
 static constexpr std::initializer_list<NWidgetPart> _nested_extra_viewport_widgets = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_GREY),
@@ -56,6 +56,7 @@ static constexpr std::initializer_list<NWidgetPart> _nested_extra_viewport_widge
 	EndContainer(),
 };
 
+/** Extra viewport window. */
 class ExtraViewportWindow : public Window {
 public:
 	ExtraViewportWindow(WindowDesc &desc, int window_number, TileIndex tile) : Window(desc)
@@ -156,7 +157,7 @@ public:
 			/* Cycle through the drawing modes */
 			ChangeRenderMode(this->viewport, wheel < 0);
 			this->SetDirty();
-		} else if (_settings_client.gui.scrollwheel_scrolling != SWS_OFF) {
+		} else if (_settings_client.gui.scrollwheel_scrolling != ScrollWheelScrolling::Off) {
 			ZoomInOrOutToCursorWindow(wheel < 0, this);
 		}
 	}
@@ -322,31 +323,31 @@ void ShowTooltipForTile(Window *w, const TileIndex tile)
 	extern void ShowIndustryTooltip(Window *w, const TileIndex tile);
 
 	switch (GetTileType(tile)) {
-		case MP_ROAD:
+		case TileType::Road:
 			if (IsRoadDepot(tile)) {
 				ShowDepotTooltip(w, tile);
 				return;
 			}
 			/* FALL THROUGH */
-		case MP_HOUSE: {
+		case TileType::House: {
 			ShowTownNameTooltip(w, tile);
 			break;
 		}
-		case MP_INDUSTRY: {
+		case TileType::Industry: {
 			ShowIndustryTooltip(w, tile);
 			break;
 		}
-		case MP_RAILWAY: {
+		case TileType::Railway: {
 			if (!IsRailDepot(tile)) return;
 			ShowDepotTooltip(w, tile);
 			break;
 		}
-		case MP_WATER: {
+		case TileType::Water: {
 			if (!IsShipDepot(tile)) return;
 			ShowDepotTooltip(w, tile);
 			break;
 		}
-		case MP_STATION: {
+		case TileType::Station: {
 			if (IsHangar(tile)) {
 				ShowDepotTooltip(w, tile);
 			} else if (IsBuoy(tile) || IsRailWaypoint(tile) || IsRoadWaypoint(tile)) {

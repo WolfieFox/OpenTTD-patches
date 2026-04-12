@@ -87,7 +87,7 @@ protected:
 		this->story_pages.Sort();
 	}
 
-	/** Sort story pages by order value. */
+	/** Sort story pages by order value. @copydoc GUIList::Sorter */
 	static bool PageOrderSorter(const StoryPage * const &a, const StoryPage * const &b)
 	{
 		return a->sort_value < b->sort_value;
@@ -115,16 +115,16 @@ protected:
 		this->InvalidateStoryPageElementLayout();
 	}
 
-	/** Sort story page elements by order value. */
+	/** Sort story page elements by order value. @copydoc GUIList::Sorter */
 	static bool PageElementOrderSorter(const StoryPageElement * const &a, const StoryPageElement * const &b)
 	{
 		return a->sort_value < b->sort_value;
 	}
 
-	/*
+	/**
 	 * Checks if a given page should be visible in the story book.
 	 * @param page The page to check.
-	 * @return True if the page should be visible, otherwise false.
+	 * @return \c true iff the page should be visible.
 	 */
 	bool IsPageAvailable(const StoryPage *page) const
 	{
@@ -159,6 +159,7 @@ protected:
 
 	/**
 	 * Check if the selected page is also the first available page.
+	 * @return \c true iff the selected page is the first one.
 	 */
 	bool IsFirstPageSelected()
 	{
@@ -170,6 +171,7 @@ protected:
 
 	/**
 	 * Check if the selected page is also the last available page.
+	 * @return \c true iff the selected page is the last one.
 	 */
 	bool IsLastPageSelected()
 	{
@@ -246,6 +248,7 @@ protected:
 
 	/**
 	 * Builds the page selector drop down list.
+	 * @return The created drop down list.
 	 */
 	DropDownList BuildDropDownList() const
 	{
@@ -267,6 +270,7 @@ protected:
 
 	/**
 	 * Get the width available for displaying content on the page panel.
+	 * @return The width in pixels.
 	 */
 	uint GetAvailablePageContentWidth() const
 	{
@@ -511,8 +515,7 @@ protected:
 	 * @param width Width of the region available for drawing.
 	 * @param line_height Height of one line of text.
 	 * @param action_sprite The sprite to draw.
-	 * @param string_id The string id to draw.
-	 * @return the number of lines.
+	 * @param text The text to draw.
 	 */
 	void DrawActionElement(int &y_offset, int width, int line_height, SpriteID action_sprite, const std::string &text) const
 	{
@@ -557,7 +560,7 @@ protected:
 				this->SetTimeout();
 				this->SetWidgetDirty(WID_SB_PAGE_PANEL);
 
-				Command<CMD_STORY_PAGE_BUTTON>::Post(TileIndex{}, pe.index, VehicleID::Invalid());
+				Command<Commands::StoryPageButton>::Post(TileIndex{}, pe.index, VehicleID::Invalid());
 				break;
 
 			case SPET_BUTTON_TILE:
@@ -902,7 +905,7 @@ public:
 			return;
 		}
 
-		Command<CMD_STORY_PAGE_BUTTON>::Post(tile, pe->index, VehicleID::Invalid());
+		Command<Commands::StoryPageButton>::Post(tile, pe->index, VehicleID::Invalid());
 		ResetObjectToPlace();
 	}
 
@@ -921,7 +924,7 @@ public:
 		VehicleType wanted_vehtype = data.GetVehicleType();
 		if (wanted_vehtype != VEH_INVALID && wanted_vehtype != v->type) return false;
 
-		Command<CMD_STORY_PAGE_BUTTON>::Post(TileIndex{}, pe->index, v->index);
+		Command<Commands::StoryPageButton>::Post(TileIndex{}, pe->index, v->index);
 		ResetObjectToPlace();
 		return true;
 	}

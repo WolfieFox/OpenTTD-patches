@@ -10,6 +10,7 @@
 #include "stdafx.h"
 #include "debug.h"
 #include "industry.h"
+#include "newgrf_analysis.h"
 #include "newgrf_badge.h"
 #include "newgrf_industries.h"
 #include "newgrf_town.h"
@@ -609,6 +610,7 @@ CommandCost CheckIfCallBackAllowsCreation(TileIndex tile, IndustryType type, siz
  * Check with callback #CBID_INDUSTRY_PROBABILITY whether the industry can be built.
  * @param type Industry type to check.
  * @param creation_type Reason to construct a new industry.
+ * @param default_prob The default probability if the NewGRF doesn't override it.
  * @return If the industry has no callback or allows building, \c true is returned. Otherwise, \c false is returned.
  */
 uint32_t GetIndustryProbabilityCallback(IndustryType type, IndustryAvailabilityCallType creation_type, uint32_t default_prob)
@@ -745,4 +747,16 @@ void DumpIndustrySpriteGroup(const IndustrySpec *spec, SpriteGroupDumper &dumper
 void DumpIndustryTileSpriteGroup(const IndustryTileSpec *spec, SpriteGroupDumper &dumper)
 {
 	dumper.DumpStandardGRFFileProps(spec->grf_prop);
+}
+
+void AnalyseIndustrySpriteGroups()
+{
+	for (IndustrySpec &spec : _industry_specs) {
+		const struct SpriteGroup *root_spritegroup = spec.grf_prop.GetSpriteGroup(false);
+		if (root_spritegroup != nullptr) {
+			IndustryLocationAnalyser analyser;
+			analyser.AnalyseGroup(root_spritegroup);
+			spec.behaviour.Set(IndustryBehaviour::ExpensiveLocationCallback, analyser.expensive_location_cb);
+		}
+	}
 }

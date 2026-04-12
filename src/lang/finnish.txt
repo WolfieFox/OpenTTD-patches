@@ -651,8 +651,9 @@ STR_GRAPH_INDUSTRY_RANGE_DELIVERED                              :Toimitettu
 STR_GRAPH_INDUSTRY_RANGE_WAITING                                :Odottava
 
 STR_GRAPH_TOWN_CARGO_CAPTION                                    :{WHITE}{TOWN} – rahtihistoria
-STR_GRAPH_TOWN_RANGE_PRODUCED                                   :Tarjonta
+STR_GRAPH_TOWN_RANGE_PRODUCED                                   :Tuotettu
 STR_GRAPH_TOWN_RANGE_TRANSPORTED                                :Kuljetettu
+STR_GRAPH_TOWN_RANGE_DELIVERED                                  :Toimitettu
 
 STR_GRAPH_PERFORMANCE_DETAIL_TOOLTIP                            :{BLACK}Näytä tarkat suorituskykyarviot
 
@@ -1062,7 +1063,7 @@ STR_GAME_OPTIONS_LANGUAGE_TOOLTIP                               :Valitse käytt�
 STR_GAME_OPTIONS_LANGUAGE_PERCENTAGE                            :{STRING} ({NUM}{NBSP}% valmiina)
 
 STR_GAME_OPTIONS_FULLSCREEN                                     :Koko näyttö
-STR_GAME_OPTIONS_FULLSCREEN_TOOLTIP                             :Valitse tämä pelataksesi OpenTTD:tä koko ruudun tilassa
+STR_GAME_OPTIONS_FULLSCREEN_TOOLTIP                             :Valitse pelataksesi OpenTTD:tä koko ruudun tilassa
 
 STR_GAME_OPTIONS_RESOLUTION                                     :Näytön tarkkuus
 STR_GAME_OPTIONS_RESOLUTION_TOOLTIP                             :Valitse käytettävä näytön tarkkuus
@@ -1074,7 +1075,7 @@ STR_GAME_OPTIONS_VIDEO_ACCELERATION_TOOLTIP                     :Valitse tämä,
 STR_GAME_OPTIONS_VIDEO_ACCELERATION_RESTART                     :{WHITE}Asetus tulee voimaan vasta pelin uudelleenkäynnistyksen jälkeen
 
 STR_GAME_OPTIONS_VIDEO_VSYNC                                    :Pystytahdistus
-STR_GAME_OPTIONS_VIDEO_VSYNC_TOOLTIP                            :Valitse tämä ottaaksesi käyttöön näytön pystytahdistuksen. Muutettu asetus tulee voimaan vasta pelin uudelleenkäynnistyksen jälkeen. Edellyttää, että laitteistokiihdytys on käytössä
+STR_GAME_OPTIONS_VIDEO_VSYNC_TOOLTIP                            :Valitse ottaaksesi käyttöön näytön pystytahdistuksen. Muutettu asetus tulee voimaan vasta pelin uudelleenkäynnistyksen jälkeen. Edellyttää, että laitteistokiihdytys on käytössä
 
 STR_GAME_OPTIONS_VIDEO_DRIVER_INFO                              :Nykyinen ajuri: {STRING}
 
@@ -1083,15 +1084,15 @@ STR_GAME_OPTIONS_INTERFACE                                      :Käyttöliittym
 STR_GAME_OPTIONS_GUI_SCALE_FRAME                                :Käyttöliittymän koko
 STR_GAME_OPTIONS_GUI_SCALE_TOOLTIP                              :Vedä liukusäädintä asettaaksesi käyttöliittymän koon. Pidä Ctrl-näppäintä painettuna säätääksesi portaattomasti
 STR_GAME_OPTIONS_GUI_SCALE_AUTO                                 :Tunnista koko automaattisesti
-STR_GAME_OPTIONS_GUI_SCALE_AUTO_TOOLTIP                         :Valitse tämä ruutu käyttöliittymän koon tunnistamiseksi automaattisesti
+STR_GAME_OPTIONS_GUI_SCALE_AUTO_TOOLTIP                         :Valitse käyttöliittymän koon tunnistamiseksi automaattisesti
 
 STR_GAME_OPTIONS_GUI_SCALE_BEVELS                               :Skaalaa viisteet
-STR_GAME_OPTIONS_GUI_SCALE_BEVELS_TOOLTIP                       :Valitse tämä ruutu viisteiden skaalaamiseksi käyttöliittymän koon mukaan
+STR_GAME_OPTIONS_GUI_SCALE_BEVELS_TOOLTIP                       :Valitse viisteiden skaalaamiseksi käyttöliittymän koon mukaan
 
 STR_GAME_OPTIONS_GUI_FONT_SPRITE                                :Käytä perinteistä sprite-fonttia
-STR_GAME_OPTIONS_GUI_FONT_SPRITE_TOOLTIP                        :Valitse tämä ruutu käyttääksesi perinteistä kiinteäkokoista sprite-kirjasintyyppiä
+STR_GAME_OPTIONS_GUI_FONT_SPRITE_TOOLTIP                        :Valitse käyttääksesi perinteistä kiinteäkokoista sprite-kirjasintyyppiä
 STR_GAME_OPTIONS_GUI_FONT_AA                                    :Pehmennä kirjasinten reunoja
-STR_GAME_OPTIONS_GUI_FONT_AA_TOOLTIP                            :Valitse tämä ruutu pehmentääksesi muuttuvan kokoisten fonttien reunoja
+STR_GAME_OPTIONS_GUI_FONT_AA_TOOLTIP                            :Valitse muuttuvan kokoisten fonttien reunojen pehmentämiseksi
 
 STR_GAME_OPTIONS_GUI_SCALE_MARK                                 :{DECIMAL}×
 
@@ -1115,7 +1116,7 @@ STR_GAME_OPTIONS_BASE_GRF_TOOLTIP                               :Valitse käytet
 STR_GAME_OPTIONS_BASE_GRF_DESCRIPTION_TOOLTIP                   :Lisätietoja perusgrafiikkakokoelmasta
 
 STR_GAME_OPTIONS_BASE_SFX                                       :Perusäänikokoelma
-STR_GAME_OPTIONS_BASE_SFX_TOOLTIP                               :Valitse käytettävä perusäänikokoelma (ei vaihdettavissa pelin aikana, ainoastaan päävalikosta)
+STR_GAME_OPTIONS_BASE_SFX_TOOLTIP                               :Valitse käytettävä perusäänikokoelma
 STR_GAME_OPTIONS_BASE_SFX_DESCRIPTION_TOOLTIP                   :Lisätietoja perusäänikokoelmasta
 
 STR_GAME_OPTIONS_BASE_MUSIC                                     :Musiikkipaketti
@@ -1599,7 +1600,7 @@ STR_CONFIG_SETTING_LAND_GENERATOR_HELPTEXT                      :Alkuperäinen m
 STR_CONFIG_SETTING_LAND_GENERATOR_ORIGINAL                      :Alkuperäinen
 STR_CONFIG_SETTING_LAND_GENERATOR_TERRA_GENESIS                 :TerraGenesis
 
-STR_CONFIG_SETTING_TERRAIN_TYPE                                 :Maaston tyyppi: {STRING}
+STR_CONFIG_SETTING_TERRAIN_TYPE                                 :Enimmäiskorkeuden esiasetus: {STRING}
 STR_CONFIG_SETTING_TERRAIN_TYPE_HELPTEXT                        :Valitse maiseman mäkien ja vuorten korkeus
 
 STR_CONFIG_SETTING_INDUSTRY_DENSITY                             :Teollisuuden määrä: {STRING}
@@ -1626,6 +1627,14 @@ STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_SMOOTH             :Erittäin tasai
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_SMOOTH                  :Tasainen
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_ROUGH                   :Epätasainen
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_ROUGH              :Erittäin epätasainen
+
+STR_CONFIG_SETTING_AVERAGE_HEIGHT                               :Keskimääräinen korkeus: {STRING}
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_HELPTEXT                      :Valitse maaston keskimääräinen korkeus. ”Automaattinen” käyttää valitun maastotyypin oletusta: ”alangot” subtrooppiselle, ”normaali” lauhkealle ja lelumaalle, ”ylängöt” pohjoiselle
+###length 4
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_AUTO                          :Automaattinen
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_LOWLANDS                      :Alangot
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_NORMAL                        :Normaali
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_PLATEAUS                      :Ylängöt
 
 STR_CONFIG_SETTING_VARIETY                                      :Maaston vaihtelu: {STRING}
 STR_CONFIG_SETTING_VARIETY_HELPTEXT                             :Valitse, onko kartalla sekä vuoristoisia että tasaisia alueita. Mitä suurempi on vaihtelu, sitä suurempia ovat korkeuserot vuoristoisten ja tasaisten alueiden välillä
@@ -1897,6 +1906,7 @@ STR_CONFIG_SETTING_STATION_LENGTH_LOADING_PENALTY_HELPTEXT      :Mikäli käytö
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS                             :Ota käyttöön vaunujen nopeusrajoitukset: {STRING}
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS_HELPTEXT                    :Mikäli käytössä, vaunujen nopeusrajoitusta käytetään junan maksiminopeuden määrittämisessä
 
+
 STR_CONFIG_SETTING_DISABLE_ELRAILS                              :Poista sähköradat käytöstä: {STRING}
 STR_CONFIG_SETTING_DISABLE_ELRAILS_HELPTEXT                     :Mikäli käytössä, sähköveturit toimivat ei-sähköistetyillä radoilla
 
@@ -2069,7 +2079,7 @@ STR_CONFIG_SETTING_ZOOM_LVL_OUT_4X                              :4x
 STR_CONFIG_SETTING_ZOOM_LVL_OUT_8X                              :8x
 
 STR_CONFIG_SETTING_SPRITE_ZOOM_MIN                              :Korkein käytettävä sprite-resoluutio: {STRING}
-STR_CONFIG_SETTING_SPRITE_ZOOM_MIN_HELPTEXT                     :Rajoita suurinta spriteille käytettävää resoluutiota. Resoluution rajoittaminen estää korkean tarkkuuden grafiikoiden käyttämisen, vaikka niitä olisi saatavilla. Tämä voi auttaa pitämään pelin ulkoasun yhtenäisenä käytettäessä sekaisin GRF-tiedostoja, joista osassa on ja osassa ei ole korkean tarkkuuden grafiikoita
+STR_CONFIG_SETTING_SPRITE_ZOOM_MIN_HELPTEXT                     :Rajoita suurinta spriteille käytettävää resoluutiota. Resoluution rajoittaminen estää korkean tarkkuuden grafiikoiden käyttämisen, vaikka niitä olisi saatavilla. Tämä voi auttaa pitämään pelin ulkoasun yhtenäisenä käytettäessä sekaisin NewGRF-tiedostoja, joista osassa on ja osassa ei ole korkean tarkkuuden grafiikoita
 ###length 3
 STR_CONFIG_SETTING_SPRITE_ZOOM_LVL_MIN                          :4×
 STR_CONFIG_SETTING_SPRITE_ZOOM_LVL_IN_2X                        :2×
@@ -2540,6 +2550,8 @@ STR_NETWORK_CLIENT_LIST_SERVER_CONNECTION_TYPE_TURN             :{BLACK}Välitys
 STR_NETWORK_CLIENT_LIST_ADMIN_CLIENT_KICK                       :Potki
 STR_NETWORK_CLIENT_LIST_ADMIN_CLIENT_BAN                        :Estä
 STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_RESET                     :Poista
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_ALLOW_ANY                 :Salli kaikki asiakkaat
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_ALLOW_LISTED              :Salli vain luetellut asiakkaat
 
 STR_NETWORK_CLIENT_LIST_ASK_CAPTION                             :{WHITE}Ylläpitäjän toiminta
 STR_NETWORK_CLIENT_LIST_ASK_CLIENT_KICK                         :{YELLOW}Haluatko varmasti potkia pelaajan ”{STRING}” pelistä?
@@ -2915,7 +2927,6 @@ STR_STATION_CLASS_WAYP_WAYPOINT                                 :Oletusreittipis
 
 # Signal window
 STR_BUILD_SIGNAL_CAPTION                                        :{WHITE}Opastimien valinta
-STR_BUILD_SIGNAL_TOGGLE_ADVANCED_SIGNAL_TOOLTIP                 :{BLACK}Edistyneiden opastintyyppien näyttäminen
 STR_BUILD_SIGNAL_SEMAPHORE_NORM_TOOLTIP                         :{BLACK}Suojastusopastin (siipiopastin){}Kaikkein alkeellisin opastin, joka sallii vain yhden junan samalla osuudella kerrallaan
 STR_BUILD_SIGNAL_SEMAPHORE_ENTRY_TOOLTIP                        :{BLACK}Tulo-opastin (siipiopastin){}Näyttää vihreää aina, kun yksi tai useampi seuraavista poistumisopastimista näyttää vihreää. Muutoin se näyttää punaista
 STR_BUILD_SIGNAL_SEMAPHORE_EXIT_TOOLTIP                         :{BLACK}Poistumisopastin (siipiopastin){}Käyttäytyy samalla tavalla kuin suojastusopastin, mutta on välttämätön oikean valon näyttämiseen tulo- ja yhdistelmäopastimissa
@@ -3408,7 +3419,8 @@ STR_MAPGEN_DESERT_COVERAGE                                      :{BLACK}Aavikon 
 STR_MAPGEN_DESERT_COVERAGE_UP_TOOLTIP                           :{BLACK}Kasvata aavikon peittoa 10 prosentilla
 STR_MAPGEN_DESERT_COVERAGE_DOWN_TOOLTIP                         :{BLACK}Vähennä aavikon peittoa 10 prosentilla
 STR_MAPGEN_DESERT_COVERAGE_TEXT                                 :{BLACK}{NUM}{NBSP}%
-STR_MAPGEN_TERRAIN_TYPE                                         :{BLACK}Maaston tyyppi:
+STR_MAPGEN_TERRAIN_TYPE                                         :{BLACK}Enimmäiskorkeus:
+STR_MAPGEN_AVERAGE_HEIGHT                                       :{BLACK}Keskikorkeus:
 STR_MAPGEN_SEA_LEVEL                                            :{BLACK}Merenpinta:
 STR_MAPGEN_SEA_LEVEL_TOOLTIP                                    :{BLACK}Valitse merenpinnan taso
 STR_MAPGEN_QUANTITY_OF_RIVERS                                   :{BLACK}Joet:
@@ -3644,7 +3656,7 @@ STR_NEWGRF_ERROR_INVALID_PARAMETER                              :Virheellinen pa
 STR_NEWGRF_ERROR_LOAD_BEFORE                                    :{1:STRING} on ladattava ennen kuin {2:STRING} voidaan ladata
 STR_NEWGRF_ERROR_LOAD_AFTER                                     :{1:STRING} tulee ladata lisäosan {2:STRING} jälkeen
 STR_NEWGRF_ERROR_OTTD_VERSION_NUMBER                            :{1:STRING} vaatii OpenTTD:n version {2:STRING} tai uudemman
-STR_NEWGRF_ERROR_AFTER_TRANSLATED_FILE                          :GRF-tiedosto, jonka se muuntaa
+STR_NEWGRF_ERROR_AFTER_TRANSLATED_FILE                          :NewGRF-tiedosto, joka sen piti muuntaa
 STR_NEWGRF_ERROR_TOO_MANY_NEWGRFS_LOADED                        :Liian monta NewGRF:ää on ladattu
 STR_NEWGRF_ERROR_STATIC_GRF_CAUSES_DESYNC                       :Lisäosan {1:STRING} lataaminen staattisena NewGRF:nä lisäosan {2:STRING} kanssa voi johtaa tahdistusvirheisiin
 STR_NEWGRF_ERROR_UNEXPECTED_SPRITE                              :Odottamaton sprite (sprite {3:NUM})
@@ -3653,7 +3665,7 @@ STR_NEWGRF_ERROR_INVALID_ID                                     :Yritys käyttä
 STR_NEWGRF_ERROR_CORRUPT_SPRITE                                 :{YELLOW}{STRING} sisältää korruptoituneen spriten. Kaikki korruptoituneet spritet näkyvät punaisina kysymysmerkkeinä (?)
 STR_NEWGRF_ERROR_MULTIPLE_ACTION_8                              :Toimenpide 8 esiintyy moneen kertaan (sprite {3:NUM})
 STR_NEWGRF_ERROR_READ_BOUNDS                                    :Luku pseudo-spriten ohi (sprite {3:NUM})
-STR_NEWGRF_ERROR_GRM_FAILED                                     :Pyydetyt GRF-resurssit eivät ole saatavilla (sprite {3:NUM})
+STR_NEWGRF_ERROR_GRM_FAILED                                     :Pyydetyt NewGRF-resurssit eivät ole saatavilla (sprite {3:NUM})
 STR_NEWGRF_ERROR_FORCEFULLY_DISABLED                            :{2:STRING} poisti käytöstä NewGRF:n {1:STRING}
 STR_NEWGRF_ERROR_INVALID_SPRITE_LAYOUT                          :Virheellinen/tuntematon spriten asettelumuoto (sprite {3:NUM})
 STR_NEWGRF_ERROR_LIST_PROPERTY_TOO_LONG                         :Liian monta elementtiä ominaisuusarvolistassa (sprite {3:NUM}, ominaisuus {4:HEX})
@@ -3664,12 +3676,12 @@ STR_NEWGRF_POPUP_CAUTION_CAPTION                                :{WHITE}Varoitus
 STR_NEWGRF_CONFIRMATION_TEXT                                    :{YELLOW}Olet tekemässä muutoksia käynnissä olevaan peliin. OpenTTD voi kaatua tai nykyinen pelitilanne rikkoutua. Älä tee virheraportteja tästä johtuvista ongelmista.{}Oletko aivan varma?
 
 STR_NEWGRF_DUPLICATE_GRFID                                      :{WHITE}Ei voi lisätä tiedostoa: duplicate GRF ID
-STR_NEWGRF_COMPATIBLE_LOADED                                    :{ORANGE}Sopivaa tiedostoa ei löytynyt (korvaava GRF ladattu)
+STR_NEWGRF_COMPATIBLE_LOADED                                    :{ORANGE}Sopivaa tiedostoa ei löytynyt (yhteensopiva NewGRF ladattu)
 STR_NEWGRF_TOO_MANY_NEWGRFS                                     :{WHITE}Tiedostoa ei voida lisätä: NewGRF-tiedostojen raja saavutettu
 
 STR_NEWGRF_COMPATIBLE_LOAD_WARNING                              :{WHITE}Yhteensopivat GRF:t ladattu puuttuvien tiedostojen korvaamiseksi
 STR_NEWGRF_DISABLED_WARNING                                     :{WHITE}Puuttuvat GRF-tiedostot on poistettu käytöstä
-STR_NEWGRF_UNPAUSE_WARNING_TITLE                                :{YELLOW}Puuttuva(t) GRF-tiedosto(t)
+STR_NEWGRF_UNPAUSE_WARNING_TITLE                                :{YELLOW}Puuttuva(t) NewGRF-tiedosto(t)
 STR_NEWGRF_UNPAUSE_WARNING                                      :{WHITE}Taukotilasta poistuminen saattaa kaataa OpenTTD:n. Älä lähetä virheraportteja tämänjälkeisistä kaatumisista.{}Haluatko todella poistua taukotilasta?
 
 # NewGRF status
@@ -4067,10 +4079,10 @@ STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}Laitokse
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- Ei mitään -
 STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% kuljetettu)
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING} ja {NUM} muuta
+STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING} ja {NUM} muuta
 STR_INDUSTRY_DIRECTORY_LIST_TOOLTIP                             :{BLACK}Teollisuushaarojen nimet – kohdista päänäkymä tuotantolaitokseen napsauttamalla nimeä. Ctrl+napsautus avaa uuden näkymäikkunan laitoksen sijaintiin
 STR_INDUSTRY_DIRECTORY_ACCEPTED_CARGO_FILTER                    :{BLACK}Vastaanotettava rahti: {SILVER}{STRING}
 STR_INDUSTRY_DIRECTORY_PRODUCED_CARGO_FILTER                    :{BLACK}Tuotettu rahti: {SILVER}{STRING}
@@ -4223,6 +4235,19 @@ STR_PURCHASE_INFO_MAX_TE                                        :{BLACK}Maksimiv
 STR_PURCHASE_INFO_AIRCRAFT_RANGE                                :{BLACK}Toimintasäde: {GOLD}{COMMA} ruutua
 STR_PURCHASE_INFO_AIRCRAFT_TYPE                                 :{BLACK}Ilma-alustyyppi: {GOLD}{STRING}
 STR_PURCHASE_INFO_RAILTYPES                                     :{BLACK}Raidetyypit: {GOLD}{STRING}
+
+# Vehicle sort details
+STR_PURCHASE_SORT_DETAILS_COST                                  :{CURRENCY_LONG}
+STR_PURCHASE_SORT_DETAILS_SPEED                                 :{VELOCITY}
+STR_PURCHASE_SORT_DETAILS_POWER                                 :{POWER}
+STR_PURCHASE_SORT_DETAILS_MAX_TE                                :{FORCE}
+STR_PURCHASE_SORT_DETAILS_INTRO_DATE                            :{NUM}
+STR_PURCHASE_SORT_DETAILS_RUNNINGCOST_YEAR                      :{CURRENCY_LONG}/vuosi
+STR_PURCHASE_SORT_DETAILS_RUNNINGCOST_PERIOD                    :{CURRENCY_LONG}/jakso
+STR_PURCHASE_SORT_DETAILS_RELIABILITY                           :{COMMA}{NBSP}%
+STR_PURCHASE_SORT_DETAILS_POWER_VS_RUNNING_COST                 :{DECIMAL}
+STR_PURCHASE_SORT_DETAILS_AIRCRAFT_RANGE                        :{COMMA} ruutua
+STR_PURCHASE_SORT_DETAILS_CAPACITY                              :{COMMA}
 
 ###length 3
 STR_CARGO_TYPE_FILTER_ALL                                       :Kaikki rahtityypit
@@ -5119,7 +5144,6 @@ STR_ERROR_CAN_T_GENERATE_TOWN                                   :{WHITE}Kuntia e
 STR_ERROR_CAN_T_RENAME_TOWN                                     :{WHITE}Kunnan nimeä ei voi vaihtaa...
 STR_ERROR_CAN_T_FOUND_TOWN_HERE                                 :{WHITE}Kuntaa ei voi perustaa tähän...
 STR_ERROR_CAN_T_EXPAND_TOWN                                     :{WHITE}Kuntaa ei voi laajentaa...
-STR_ERROR_TOO_CLOSE_TO_EDGE_OF_MAP_SUB                          :{WHITE}... liian lähellä kartan reunaa.
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_TOWN                             :{WHITE}... liian lähellä toista kuntaa
 STR_ERROR_TOO_MANY_TOWNS                                        :{WHITE}... liian monta kuntaa
 STR_ERROR_NO_SPACE_FOR_TOWN                                     :{WHITE}... kartalla ei ole enää tilaa
@@ -6010,4 +6034,3 @@ STR_BADGE_CONFIG_FILTERS                                        :{WHITE}Tunnussu
 STR_BADGE_CONFIG_PREVIEW                                        :Esikatselu
 STR_BADGE_CONFIG_NAME                                           :Nimi
 STR_BADGE_FILTER_ANY_LABEL                                      :Mikä tahansa {STRING}
-STR_BADGE_FILTER_IS_LABEL                                       :{STRING} on {STRING}

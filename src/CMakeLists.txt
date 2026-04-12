@@ -359,6 +359,7 @@ add_files(
     newgrf_spritegroup.h
     newgrf_station.cpp
     newgrf_station.h
+    newgrf_station_id.h
     newgrf_storage.cpp
     newgrf_storage.h
     newgrf_text.cpp
@@ -494,6 +495,7 @@ add_files(
     smallmap_colours.h
     smallmap_gui.cpp
     smallmap_gui.h
+    smallmap_table.cpp
     social_integration.cpp
     social_integration.h
     sortlist_type.h

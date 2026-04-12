@@ -79,7 +79,11 @@ DECLARE_ENUM_AS_BIT_SET(SpriteGroupFlags)
 struct SpriteGroup : SpriteGroupPool::PoolItem<&_spritegroup_pool> {
 protected:
 	SpriteGroup(SpriteGroupID index, SpriteGroupType type) : PoolItemBase(index), type(type) {}
-	/** Base sprite group resolver */
+	/**
+	 * Resolves a callback or rerandomisation callback to a NewGRF.
+	 * @param object Information needed to resolve the group.
+	 * @return The result of resolving this SpriteGroup.
+	 */
 	virtual const SpriteGroup *Resolve([[maybe_unused]] ResolverObject &object) const { return this; };
 
 public:
@@ -105,7 +109,7 @@ struct SpecializedSpriteGroup : public SpriteGroup {
 
 	/**
 	 * Creates a new T-object in the SpriteGroup pool.
-	 * @param args... The arguments to the constructor.
+	 * @param args The arguments to the constructor.
 	 * @return The created object.
 	 */
 	template <typename... Targs>
@@ -138,7 +142,7 @@ protected:
 	const SpriteGroup *Resolve(ResolverObject &object) const override;
 };
 
-/* Shared by deterministic and random groups. */
+/** Shared by deterministic and random groups. */
 enum VarSpriteGroupScope : uint8_t {
 	VSG_BEGIN,
 
@@ -525,7 +529,7 @@ struct DeterministicSpriteGroup final : SpecializedSpriteGroup<DeterministicSpri
 	/* Dynamically allocated, this is the sole owner */
 	const SpriteGroup *default_group = nullptr;
 
-	const SpriteGroup *error_group = nullptr; // was first range, before sorting ranges
+	const SpriteGroup *error_group = nullptr; ///< Was first range, before sorting ranges.
 
 	bool GroupMayBeBypassed() const;
 	const SpriteGroup *GetBypassGroupForValue(uint32_t value) const;
@@ -572,6 +576,7 @@ struct CallbackResultSpriteGroup final : SpecializedSpriteGroup<CallbackResultSp
 
 	/**
 	 * Creates a spritegroup representing a callback result
+	 * @param index Unique (pool) identifier of the SpriteGroup.
 	 * @param result The result as returned from TransformResultValue
 	 */
 	CallbackResultSpriteGroup(SpriteGroupID index, uint16_t result) :
@@ -615,9 +620,9 @@ struct ResultSpriteGroup final : SpecializedSpriteGroup<ResultSpriteGroup> {
 
 	/**
 	 * Creates a spritegroup representing a sprite number result.
+	 * @param index Unique (pool) identifier of the SpriteGroup.
 	 * @param sprite The sprite number.
 	 * @param num_sprites The number of sprites per set.
-	 * @return A spritegroup representing the sprite number result.
 	 */
 	ResultSpriteGroup(SpriteGroupID index, SpriteID sprite, uint8_t num_sprites) :
 		SpecializedSpriteGroup<ResultSpriteGroup>(index),
@@ -769,6 +774,7 @@ public:
 
 	/**
 	 * Used by RandomizedSpriteGroup: Triggers for rerandomisation
+	 * @return The triggers waiting for randomisation.
 	 */
 	uint32_t GetWaitingRandomTriggers() const
 	{
@@ -777,6 +783,7 @@ public:
 
 	/**
 	 * Used by RandomizedSpriteGroup: Consume triggers.
+	 * @param triggers The triggers t0 set as having used random triggers.
 	 */
 	void AddUsedRandomTriggers(uint32_t triggers)
 	{
@@ -800,12 +807,14 @@ public:
 	/**
 	 * Get the feature number being resolved for.
 	 * This function is mainly intended for the callback profiling feature.
+	 * @return The feature.
 	 */
 	virtual GrfSpecFeature GetFeature() const { return GSF_INVALID; }
 	/**
 	 * Get an identifier for the item being resolved.
 	 * This function is mainly intended for the callback profiling feature,
 	 * and should return an identifier recognisable by the NewGRF developer.
+	 * @return The identifier.
 	 */
 	virtual uint32_t GetDebugID() const { return 0; }
 
@@ -833,6 +842,7 @@ struct SpecializedResolverObject : public ResolverObject {
 	/**
 	 * Set waiting triggers for rerandomisation.
 	 * This is scope independent, even though this is broken-by-design in most cases.
+	 * @param triggers The triggers to set wating.
 	 */
 	void SetWaitingRandomTriggers(RandomTriggers triggers)
 	{
@@ -842,6 +852,7 @@ struct SpecializedResolverObject : public ResolverObject {
 	/**
 	 * Get the triggers, which were "consumed" by some rerandomisation.
 	 * This is scope independent, even though this is broken-by-design in most cases.
+	 * @return The triggers that have used random triggers.
 	 */
 	RandomTriggers GetUsedRandomTriggers() const
 	{

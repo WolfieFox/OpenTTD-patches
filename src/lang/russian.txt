@@ -789,8 +789,9 @@ STR_GRAPH_INDUSTRY_RANGE_DELIVERED                              :Доставл�
 STR_GRAPH_INDUSTRY_RANGE_WAITING                                :В ожидании
 
 STR_GRAPH_TOWN_CARGO_CAPTION                                    :{WHITE}{TOWN} - Пассажиры и грузы
-STR_GRAPH_TOWN_RANGE_PRODUCED                                   :Запрос
+STR_GRAPH_TOWN_RANGE_PRODUCED                                   :Произведено
 STR_GRAPH_TOWN_RANGE_TRANSPORTED                                :Перевезено
+STR_GRAPH_TOWN_RANGE_DELIVERED                                  :Доставлено
 
 STR_GRAPH_PERFORMANCE_DETAIL_TOOLTIP                            :{BLACK}Показать составляющие части рейтинга
 
@@ -1207,7 +1208,7 @@ STR_GAME_OPTIONS_LANGUAGE_TOOLTIP                               :Язык пол
 STR_GAME_OPTIONS_LANGUAGE_PERCENTAGE                            :{STRING} ({NUM}% перевед{P ён ено ено})
 
 STR_GAME_OPTIONS_FULLSCREEN                                     :Полноэкранный режим
-STR_GAME_OPTIONS_FULLSCREEN_TOOLTIP                             :Включить/отключить полноэкранный режим
+STR_GAME_OPTIONS_FULLSCREEN_TOOLTIP                             :Включить полноэкранный режим
 
 STR_GAME_OPTIONS_RESOLUTION                                     :Разрешение экрана
 STR_GAME_OPTIONS_RESOLUTION_TOOLTIP                             :Выбор разрешения экрана
@@ -1215,11 +1216,11 @@ STR_GAME_OPTIONS_RESOLUTION_OTHER                               :Другое
 STR_GAME_OPTIONS_RESOLUTION_ITEM                                :{NUM}x{NUM}
 
 STR_GAME_OPTIONS_VIDEO_ACCELERATION                             :Аппаратное ускорение
-STR_GAME_OPTIONS_VIDEO_ACCELERATION_TOOLTIP                     :Включить/отключить аппаратное ускорение. После изменения настройки игру потребуется перезапустить.
+STR_GAME_OPTIONS_VIDEO_ACCELERATION_TOOLTIP                     :Использовать аппаратное ускорение (после изменения настройки игру потребуется перезапустить)
 STR_GAME_OPTIONS_VIDEO_ACCELERATION_RESTART                     :{WHITE}Эта настройка будет применена только после перезапуска игры
 
 STR_GAME_OPTIONS_VIDEO_VSYNC                                    :Вертикальная синхронизация
-STR_GAME_OPTIONS_VIDEO_VSYNC_TOOLTIP                            :Включить/отключить вертикальную синхронизацию. После изменения настройки игру потребуется перезапустить. Работает только при включённом аппаратном ускорении.
+STR_GAME_OPTIONS_VIDEO_VSYNC_TOOLTIP                            :Включить вертикальную синхронизацию (после изменения настройки игру потребуется перезапустить; работает только при включённом аппаратном ускорении)
 
 STR_GAME_OPTIONS_VIDEO_DRIVER_INFO                              :Видеодрайвер: {STRING}
 
@@ -1228,15 +1229,15 @@ STR_GAME_OPTIONS_INTERFACE                                      :Интерфе�
 STR_GAME_OPTIONS_GUI_SCALE_FRAME                                :Масштаб интерфейса
 STR_GAME_OPTIONS_GUI_SCALE_TOOLTIP                              :Изменяйте масштаб интерфейса с помощью ползунка. Удерживайте Ctrl для плавной настройки.
 STR_GAME_OPTIONS_GUI_SCALE_AUTO                                 :Автоопределение
-STR_GAME_OPTIONS_GUI_SCALE_AUTO_TOOLTIP                         :Нажмите для автоматической установки масштаба интерфейса
+STR_GAME_OPTIONS_GUI_SCALE_AUTO_TOOLTIP                         :Установить масштаб интерфейса автоматически
 
 STR_GAME_OPTIONS_GUI_SCALE_BEVELS                               :Рельефные элементы
 STR_GAME_OPTIONS_GUI_SCALE_BEVELS_TOOLTIP                       :Масштабировать рельефные элементы интерфейса
 
 STR_GAME_OPTIONS_GUI_FONT_SPRITE                                :Использовать растровый шрифт
-STR_GAME_OPTIONS_GUI_FONT_SPRITE_TOOLTIP                        :Включить/отключить использование классического растрового шрифта фиксированного размера
+STR_GAME_OPTIONS_GUI_FONT_SPRITE_TOOLTIP                        :Использовать классический растровый шрифт фиксированного размера
 STR_GAME_OPTIONS_GUI_FONT_AA                                    :Сглаживание шрифтов
-STR_GAME_OPTIONS_GUI_FONT_AA_TOOLTIP                            :Включить/отключить сглаживание масштабируемых шрифтов
+STR_GAME_OPTIONS_GUI_FONT_AA_TOOLTIP                            :Сглаживать масштабируемые шрифты
 
 STR_GAME_OPTIONS_GUI_SCALE_MARK                                 :{DECIMAL}x
 
@@ -1260,7 +1261,7 @@ STR_GAME_OPTIONS_BASE_GRF_TOOLTIP                               :Выбор ос
 STR_GAME_OPTIONS_BASE_GRF_DESCRIPTION_TOOLTIP                   :Дополнительная информация о выбранном графическом пакете
 
 STR_GAME_OPTIONS_BASE_SFX                                       :Основной звуковой пакет
-STR_GAME_OPTIONS_BASE_SFX_TOOLTIP                               :Выбор основного пакета звуковых эффектов (его нельзя сменить в игре; только в главном меню)
+STR_GAME_OPTIONS_BASE_SFX_TOOLTIP                               :Выбор основного пакета звуковых эффектов
 STR_GAME_OPTIONS_BASE_SFX_DESCRIPTION_TOOLTIP                   :Дополнительная информация о выбранном пакете звуковых эффектов
 
 STR_GAME_OPTIONS_BASE_MUSIC                                     :Основной музыкальный пакет
@@ -1750,7 +1751,7 @@ STR_CONFIG_SETTING_LAND_GENERATOR_HELPTEXT                      :Оригина�
 STR_CONFIG_SETTING_LAND_GENERATOR_ORIGINAL                      :Оригинальный
 STR_CONFIG_SETTING_LAND_GENERATOR_TERRA_GENESIS                 :TerraGenesis
 
-STR_CONFIG_SETTING_TERRAIN_TYPE                                 :Тип ландшафта: {STRING}
+STR_CONFIG_SETTING_TERRAIN_TYPE                                 :Предустановленная высота: {STRING}
 STR_CONFIG_SETTING_TERRAIN_TYPE_HELPTEXT                        :Укажите высоту гор и холмов на карте
 
 STR_CONFIG_SETTING_INDUSTRY_DENSITY                             :Количество предприятий: {STRING}
@@ -1777,6 +1778,14 @@ STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_SMOOTH             :Очень гл
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_SMOOTH                  :Гладкий
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_ROUGH                   :Грубый
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_ROUGH              :Очень грубый
+
+STR_CONFIG_SETTING_AVERAGE_HEIGHT                               :Средняя высота: {STRING}
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_HELPTEXT                      :Выберите среднюю высоту ландшафта. «Автоматически» установит высоту в зависимости от выбранного типа карты: «Низины» для субтропического, «Среднюю» для умеренного и игрушечного, «Плато» для субарктического.
+###length 4
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_AUTO                          :Автоматически
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_LOWLANDS                      :Низины
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_NORMAL                        :Средняя
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_PLATEAUS                      :Плато
 
 STR_CONFIG_SETTING_VARIETY                                      :Разнообразие ландшафта: {STRING}
 STR_CONFIG_SETTING_VARIETY_HELPTEXT                             :Определяет наличие на карте как горных, так и равнинных областей. Чем выше разнообразие, тем выше разница в высоте между этими зонами.
@@ -2047,6 +2056,7 @@ STR_CONFIG_SETTING_STATION_LENGTH_LOADING_PENALTY_HELPTEXT      :При вклю
 
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS                             :Учитывать ограничение скорости у вагонов: {STRING}
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS_HELPTEXT                    :При наличии в составе вагонов с ограничением скорости учитывать это ограничение при определении максимальной скорости состава
+
 
 STR_CONFIG_SETTING_DISABLE_ELRAILS                              :Не требовать электрификации железной дороги: {STRING}
 STR_CONFIG_SETTING_DISABLE_ELRAILS_HELPTEXT                     :При включении этой настройки электровозы смогут ездить по неэлектрифицированной железной дороге
@@ -2691,6 +2701,8 @@ STR_NETWORK_CLIENT_LIST_SERVER_CONNECTION_TYPE_TURN             :{BLACK}Чере
 STR_NETWORK_CLIENT_LIST_ADMIN_CLIENT_KICK                       :Отключить
 STR_NETWORK_CLIENT_LIST_ADMIN_CLIENT_BAN                        :Заблокировать
 STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_RESET                     :Удалить
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_ALLOW_ANY                 :Разрешить подключение любых клиентов
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_ALLOW_LISTED              :Разрешить подключение только указанных клиентов
 
 STR_NETWORK_CLIENT_LIST_ASK_CAPTION                             :{WHITE}Подтверждение действия
 STR_NETWORK_CLIENT_LIST_ASK_CLIENT_KICK                         :{YELLOW}Отключить игрока «{STRING}»?
@@ -3086,7 +3098,6 @@ STR_STATION_CLASS_WAYP_WAYPOINT                                 :Стандар�
 
 # Signal window
 STR_BUILD_SIGNAL_CAPTION                                        :{WHITE}Выбор сигналов
-STR_BUILD_SIGNAL_TOGGLE_ADVANCED_SIGNAL_TOOLTIP                 :{BLACK}Переключить отображение расширенного списка сигналов
 STR_BUILD_SIGNAL_SEMAPHORE_NORM_TOOLTIP                         :{BLACK}Стандартный семафор{}Не позволяет нескольким поездам одновременно находиться на одном блок-участке.
 STR_BUILD_SIGNAL_SEMAPHORE_ENTRY_TOOLTIP                        :{BLACK}Входной семафор{}Открыт, если хотя бы один из выходных сигналов на следующей секции путей открыт. В остальных случаях закрыт.
 STR_BUILD_SIGNAL_SEMAPHORE_EXIT_TOOLTIP                         :{BLACK}Выходной семафор{}Работает как обычный семафор, но его состояние учитывается при работе входных и комбинированных сигналов.
@@ -3583,7 +3594,8 @@ STR_MAPGEN_DESERT_COVERAGE                                      :{BLACK}Песч
 STR_MAPGEN_DESERT_COVERAGE_UP_TOOLTIP                           :{BLACK}Увеличить площадь песчаного покрытия на 10%
 STR_MAPGEN_DESERT_COVERAGE_DOWN_TOOLTIP                         :{BLACK}Уменьшить площадь песчаного покрытия на 10%
 STR_MAPGEN_DESERT_COVERAGE_TEXT                                 :{BLACK}{NUM}%
-STR_MAPGEN_TERRAIN_TYPE                                         :{BLACK}Тип ландшафта:
+STR_MAPGEN_TERRAIN_TYPE                                         :{BLACK}Максимальная высота:
+STR_MAPGEN_AVERAGE_HEIGHT                                       :{BLACK}Средняя высота:
 STR_MAPGEN_SEA_LEVEL                                            :{BLACK}Количество водоёмов:
 STR_MAPGEN_SEA_LEVEL_TOOLTIP                                    :{BLACK}Выберите количество морей и озёр на карте
 STR_MAPGEN_QUANTITY_OF_RIVERS                                   :{BLACK}Количество рек:
@@ -3819,7 +3831,7 @@ STR_NEWGRF_ERROR_INVALID_PARAMETER                              :Неверны�
 STR_NEWGRF_ERROR_LOAD_BEFORE                                    :{1:STRING} должен быть загружен перед {2:STRING}.
 STR_NEWGRF_ERROR_LOAD_AFTER                                     :{1:STRING} должен быть загружен после {2:STRING}.
 STR_NEWGRF_ERROR_OTTD_VERSION_NUMBER                            :Для {1:STRING} требуется OpenTTD версии {2:STRING} или выше
-STR_NEWGRF_ERROR_AFTER_TRANSLATED_FILE                          :файл GRF, который им переводится.
+STR_NEWGRF_ERROR_AFTER_TRANSLATED_FILE                          :файл NewGRF, который им переводится
 STR_NEWGRF_ERROR_TOO_MANY_NEWGRFS_LOADED                        :Загружено слишком много модулей NewGRF
 STR_NEWGRF_ERROR_STATIC_GRF_CAUSES_DESYNC                       :Загрузка {1:STRING} в качестве статического NewGRF с {2:STRING} может вызвать рассинхронизацию
 STR_NEWGRF_ERROR_UNEXPECTED_SPRITE                              :Неверный спрайт (спрайт {3:NUM})
@@ -3828,7 +3840,7 @@ STR_NEWGRF_ERROR_INVALID_ID                                     :Попытка 
 STR_NEWGRF_ERROR_CORRUPT_SPRITE                                 :{YELLOW}{STRING} содержит повреждённый спрайт. Все повреждённые спрайты будут показаны красным знаком вопроса (?).
 STR_NEWGRF_ERROR_MULTIPLE_ACTION_8                              :Содержит несколько блоков «Action 8» (спрайт {3:NUM})
 STR_NEWGRF_ERROR_READ_BOUNDS                                    :Чтение за концом псевдо-спрайта (спрайт {3:NUM})
-STR_NEWGRF_ERROR_GRM_FAILED                                     :Запрошенные ресурсы GRF недоступны (спрайт {3:NUM})
+STR_NEWGRF_ERROR_GRM_FAILED                                     :Запрошенные ресурсы NewGRF недоступны (спрайт {3:NUM})
 STR_NEWGRF_ERROR_FORCEFULLY_DISABLED                            :{1:STRING} был отключён из-за {2:STRING}
 STR_NEWGRF_ERROR_INVALID_SPRITE_LAYOUT                          :Недопустимый/неизвестный формат расположения спрайтов (спрайт {3:NUM})
 STR_NEWGRF_ERROR_LIST_PROPERTY_TOO_LONG                         :Слишком много элементов в списке значений (спрайт {3:NUM}, свойство {4:HEX})
@@ -3839,12 +3851,12 @@ STR_NEWGRF_POPUP_CAUTION_CAPTION                                :{WHITE}Осто
 STR_NEWGRF_CONFIRMATION_TEXT                                    :{YELLOW}Вы собираетесь внести изменения в запущенную игру. Это может привести к нестабильной работе или к аварийному завершению OpenTTD. В этом случае не надо присылать отчёты об ошибках.{}Вы действительно хотите это сделать?
 
 STR_NEWGRF_DUPLICATE_GRFID                                      :{WHITE}Невозможно добавить файл: дублируются GRF ID
-STR_NEWGRF_COMPATIBLE_LOADED                                    :{ORANGE}Соответствующий файл не найден (загружен совместимый GRF)
+STR_NEWGRF_COMPATIBLE_LOADED                                    :{ORANGE}Соответствующий файл не найден (загружен совместимый NewGRF)
 STR_NEWGRF_TOO_MANY_NEWGRFS                                     :{WHITE}Не удалось добавить файл: слишком много модулей NewGRF
 
 STR_NEWGRF_COMPATIBLE_LOAD_WARNING                              :{WHITE}Вместо отсутствующих загружены совместимые файлы NewGRF
 STR_NEWGRF_DISABLED_WARNING                                     :{WHITE}Отсутствующие файлы NewGRF были отключены
-STR_NEWGRF_UNPAUSE_WARNING_TITLE                                :{YELLOW}Недостающие GRF файлы
+STR_NEWGRF_UNPAUSE_WARNING_TITLE                                :{YELLOW}Отсутствующие файлы NewGRF
 STR_NEWGRF_UNPAUSE_WARNING                                      :{WHITE}Снятие с паузы может привести к ошибке OpenTTD.{}Вы хотите запустить игру?
 
 # NewGRF status
@@ -4242,10 +4254,10 @@ STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}Пред
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- Нет -
 STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% перевезено)
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING} и ещё {NUM}...
+STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING} и ещё {NUM}...
 STR_INDUSTRY_DIRECTORY_LIST_TOOLTIP                             :{BLACK}Список предприятий. Щелчок по названию показывает предприятие в основном окне. Ctrl+щелчок показывает в дополнительном окне.
 STR_INDUSTRY_DIRECTORY_ACCEPTED_CARGO_FILTER                    :{BLACK}Принимаемый груз: {SILVER}{STRING}
 STR_INDUSTRY_DIRECTORY_PRODUCED_CARGO_FILTER                    :{BLACK}Производимый груз: {SILVER}{STRING}
@@ -4398,6 +4410,19 @@ STR_PURCHASE_INFO_MAX_TE                                        :{BLACK}Макс
 STR_PURCHASE_INFO_AIRCRAFT_RANGE                                :{BLACK}Дальность: {GOLD}{COMMA} клет{P ка ки ок}
 STR_PURCHASE_INFO_AIRCRAFT_TYPE                                 :{BLACK}Тип возд. судна: {GOLD}{STRING}
 STR_PURCHASE_INFO_RAILTYPES                                     :{BLACK}Типы рельсов: {GOLD}{STRING}
+
+# Vehicle sort details
+STR_PURCHASE_SORT_DETAILS_COST                                  :{CURRENCY_LONG}
+STR_PURCHASE_SORT_DETAILS_SPEED                                 :{VELOCITY}
+STR_PURCHASE_SORT_DETAILS_POWER                                 :{POWER}
+STR_PURCHASE_SORT_DETAILS_MAX_TE                                :{FORCE}
+STR_PURCHASE_SORT_DETAILS_INTRO_DATE                            :{NUM}
+STR_PURCHASE_SORT_DETAILS_RUNNINGCOST_YEAR                      :{CURRENCY_LONG}/год
+STR_PURCHASE_SORT_DETAILS_RUNNINGCOST_PERIOD                    :{CURRENCY_LONG}/период
+STR_PURCHASE_SORT_DETAILS_RELIABILITY                           :{COMMA}%
+STR_PURCHASE_SORT_DETAILS_POWER_VS_RUNNING_COST                 :{DECIMAL}
+STR_PURCHASE_SORT_DETAILS_AIRCRAFT_RANGE                        :{COMMA} клет{P ка ки ок}
+STR_PURCHASE_SORT_DETAILS_CAPACITY                              :{COMMA}
 
 ###length 3
 STR_CARGO_TYPE_FILTER_ALL                                       :Все типы грузов
@@ -5306,7 +5331,6 @@ STR_ERROR_CAN_T_GENERATE_TOWN                                   :{WHITE}Нево
 STR_ERROR_CAN_T_RENAME_TOWN                                     :{WHITE}Невозможно переименовать город...
 STR_ERROR_CAN_T_FOUND_TOWN_HERE                                 :{WHITE}Здесь невозможно построить город...
 STR_ERROR_CAN_T_EXPAND_TOWN                                     :{WHITE}Невозможно расширить город...
-STR_ERROR_TOO_CLOSE_TO_EDGE_OF_MAP_SUB                          :{WHITE}... слишком близко к краю карты
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_TOWN                             :{WHITE}... слишком близко к другому городу
 STR_ERROR_TOO_MANY_TOWNS                                        :{WHITE}... слишком много городов
 STR_ERROR_NO_SPACE_FOR_TOWN                                     :{WHITE}... на карте нет места
@@ -6271,4 +6295,3 @@ STR_BADGE_CONFIG_FILTERS                                        :{WHITE}Филь
 STR_BADGE_CONFIG_PREVIEW                                        :Предпросмотр
 STR_BADGE_CONFIG_NAME                                           :Название
 STR_BADGE_FILTER_ANY_LABEL                                      :Любой {STRING}
-STR_BADGE_FILTER_IS_LABEL                                       :{STRING} равен {STRING}

@@ -62,7 +62,7 @@ public:
 		return false;
 	}
 
-	int GetSelectedClass() const override { return _object_gui.sel_class; }
+	int GetSelectedClass() const override { return _object_gui.sel_class.base(); }
 	void SetSelectedClass(int id) const override { _object_gui.sel_class = this->GetClassIndex(id); }
 
 	StringID GetClassName(int id) const override
@@ -113,7 +113,7 @@ public:
 		for (const Object *o : Object::Iterate()) {
 			if (GetTileOwner(o->location.tile) != _current_company) continue;
 			const ObjectSpec *spec = ObjectSpec::Get(o->type);
-			if (spec == nullptr || spec->class_index == INVALID_OBJECT_CLASS || !spec->IsEverAvailable()) continue;
+			if (spec == nullptr || spec->class_index == ObjectClassID::Invalid() || !spec->IsEverAvailable()) continue;
 			items.insert(GetPickerItem(spec));
 		}
 	}
@@ -339,7 +339,7 @@ public:
 		if (_settings_game.construction.build_object_area_permitted && spec->size == OBJECT_SIZE_1X1) {
 			VpStartPlaceSizing(tile, VPM_X_AND_Y, DDSP_BUILD_OBJECT);
 		} else {
-			Command<CMD_BUILD_OBJECT>::Post(STR_ERROR_CAN_T_BUILD_OBJECT, CommandCallback::PlaySound_CONSTRUCTION_OTHER, tile, spec->Index(), _object_gui.sel_view);
+			Command<Commands::BuildObject>::Post(STR_ERROR_CAN_T_BUILD_OBJECT, CommandCallback::PlaySound_CONSTRUCTION_OTHER, tile, spec->Index(), _object_gui.sel_view);
 		}
 	}
 
@@ -354,19 +354,18 @@ public:
 
 		assert(select_proc == DDSP_BUILD_OBJECT);
 
-		if (!_settings_game.construction.freeform_edges) {
-			/* When end_tile is MP_VOID, the error tile will not be visible to the
-			 * user. This happens when terraforming at the southern border. */
-			if (TileX(end_tile) == Map::MaxX()) end_tile += TileDiffXY(-1, 0);
-			if (TileY(end_tile) == Map::MaxY()) end_tile += TileDiffXY(0, -1);
-		}
-		Command<CMD_BUILD_OBJECT_AREA>::Post(STR_ERROR_CAN_T_PURCHASE_THIS_LAND, CommandCallback::PlaySound_CONSTRUCTION_OTHER,
+		Command<Commands::BuildObjectArea>::Post(STR_ERROR_CAN_T_BUILD_OBJECT, CommandCallback::PlaySound_CONSTRUCTION_OTHER,
 				end_tile, start_tile, ObjectClass::Get(_object_gui.sel_class)->GetSpec(_object_gui.sel_type)->Index(), _object_gui.sel_view, _ctrl_pressed);
 	}
 
 	void OnPlaceObjectAbort() override
 	{
 		this->UpdateButtons(nullptr);
+	}
+
+	inline void PickItem(ObjectClassID cls_id, int id)
+	{
+		this->PickerWindow::PickItem(cls_id.base(), id);
 	}
 
 	/**
@@ -428,7 +427,10 @@ bool ShouldShowBuildObjectPicker()
 	return ObjectPickerCallbacks::instance.IsActive();
 }
 
-/** Show our object picker.  */
+/**
+ * Show our object picker.
+ * @return The allocated window or \c nullptr when no window was allocated.
+ */
 Window *ShowBuildObjectPicker()
 {
 	/* Don't show the place object button when there are no objects to place. */
@@ -441,7 +443,7 @@ Window *ShowBuildObjectPicker()
 /** Show our object picker, and select a particular spec.  */
 void ShowBuildObjectPickerAndSelect(const ObjectSpec *spec)
 {
-	if (spec == nullptr || !spec->IsAvailable() || !ObjectPickerCallbacks::instance.IsActive() || spec->class_index == INVALID_OBJECT_CLASS) return;
+	if (spec == nullptr || !spec->IsAvailable() || !ObjectPickerCallbacks::instance.IsActive() || spec->class_index == ObjectClassID::Invalid()) return;
 
 	BuildObjectWindow *w = AllocateWindowDescFront<BuildObjectWindow, true>(_build_object_desc, 0);
 	if (w != nullptr) {
@@ -452,5 +454,5 @@ void ShowBuildObjectPickerAndSelect(const ObjectSpec *spec)
 /** Reset all data of the object GUI. */
 void InitializeObjectGui()
 {
-	_object_gui.sel_class = ObjectClassID::OBJECT_CLASS_BEGIN;
+	_object_gui.sel_class = ObjectClassID::Begin();
 }

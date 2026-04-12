@@ -182,8 +182,9 @@ Station::~Station()
 /**
  * Invalidating of the JoinStation window has to be done
  * after removing item from the pool.
+ * @copydoc Pool::PoolItem::PostDestructor
  */
-void BaseStation::PostDestructor(size_t)
+void BaseStation::PostDestructor([[maybe_unused]] size_t index)
 {
 	InvalidateWindowData(WC_SELECT_STATION, 0, 0);
 }
@@ -242,6 +243,8 @@ RoadStop *Station::GetPrimaryRoadStop(const RoadVehicle *v) const
 /**
  * Called when new facility is built on the station. If it is the first facility
  * it initializes also 'xy' and 'random_bits' members
+ * @param new_facility_bit The new facility.
+ * @param facil_xy The location where this facility is built.
  */
 void Station::AddFacility(StationFacility new_facility_bit, TileIndex facil_xy)
 {
@@ -257,7 +260,7 @@ void Station::AddFacility(StationFacility new_facility_bit, TileIndex facil_xy)
 
 /**
  * Marks the tiles of the station as dirty.
- *
+ * @param cargo_change Whether only cargo amounts changed.
  * @ingroup dirty
  */
 void Station::MarkTilesDirty(bool cargo_change) const
@@ -321,12 +324,12 @@ void Station::MarkTilesDirty(bool cargo_change) const
  * Get the catchment size of an individual station tile.
  * @param tile Station tile to get catchment size of.
  * @param st Associated station of station tile.
- * @pre IsTileType(tile, MP_STATION)
+ * @pre IsTileType(tile, TileType::Station)
  * @return The catchment size of the station tile.
  */
 static uint GetTileCatchmentRadius(TileIndex tile, const Station *st)
 {
-	dbg_assert(IsTileType(tile, MP_STATION));
+	dbg_assert(IsTileType(tile, TileType::Station));
 
 	const int32_t inc = _settings_game.station.catchment_increase;
 
@@ -463,9 +466,9 @@ void Station::RemoveFromAllNearbyLists()
 
 	for (TileIndex tile : this->catchment_tiles) {
 		TileType type = GetTileType(tile);
-		if (type == MP_HOUSE) {
+		if (type == TileType::House) {
 			towns.insert(GetTownIndex(tile));
-		} else if (type == MP_INDUSTRY) {
+		} else if (type == TileType::Industry) {
 			industries.insert(GetIndustryIndex(tile));
 		}
 	}
@@ -485,7 +488,7 @@ bool Station::CatchmentCoversTown(TownID t) const
 {
 	BitmapTileIterator it(this->catchment_tiles);
 	for (TileIndex tile = it; tile != INVALID_TILE; tile = ++it) {
-		if (IsTileType(tile, MP_HOUSE) && GetTownIndex(tile) == t) return true;
+		if (IsTileType(tile, TileType::House) && GetTownIndex(tile) == t) return true;
 	}
 	return false;
 }
@@ -509,7 +512,7 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 		/* Station is associated with an industry, so we only need to deliver to that industry. */
 		this->catchment_tiles.Initialize(this->industry->location);
 		for (TileIndex tile : this->industry->location) {
-			if (IsTileType(tile, MP_INDUSTRY) && GetIndustryIndex(tile) == this->industry->index) {
+			if (IsTileType(tile, TileType::Industry) && GetIndustryIndex(tile) == this->industry->index) {
 				this->catchment_tiles.SetTile(tile);
 			}
 		}
@@ -525,7 +528,7 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 		TileArea ta(TileXY(this->rect.left, this->rect.top), TileXY(this->rect.right, this->rect.bottom));
 		this->station_tiles = 0;
 		for (TileIndex tile : ta) {
-			if (!IsTileType(tile, MP_STATION) || GetStationIndex(tile) != this->index) continue;
+			if (!IsTileType(tile, TileType::Station) || GetStationIndex(tile) != this->index) continue;
 			this->station_tiles++;
 		}
 		return;
@@ -537,7 +540,7 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 	TileArea ta(TileXY(this->rect.left, this->rect.top), TileXY(this->rect.right, this->rect.bottom));
 	this->station_tiles = 0;
 	for (TileIndex tile : ta) {
-		if (!IsTileType(tile, MP_STATION) || GetStationIndex(tile) != this->index) continue;
+		if (!IsTileType(tile, TileType::Station) || GetStationIndex(tile) != this->index) continue;
 
 		this->station_tiles++;
 
@@ -552,11 +555,11 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 	/* Search catchment tiles for towns and industries */
 	BitmapTileIterator it(this->catchment_tiles);
 	for (TileIndex tile = it; tile != INVALID_TILE; tile = ++it) {
-		if (IsTileType(tile, MP_HOUSE)) {
+		if (IsTileType(tile, TileType::House)) {
 			Town *t = Town::GetByTile(tile);
 			t->stations_near.insert(this);
 		}
-		if (IsTileType(tile, MP_INDUSTRY)) {
+		if (IsTileType(tile, TileType::Industry)) {
 			Industry *i = Industry::GetByTile(tile);
 
 			/* Ignore industry if it has a neutral station. It already can't be this station. */
@@ -673,7 +676,7 @@ CommandCost StationRect::BeforeAddRect(TileIndex tile, int w, int h, StationRect
 {
 	TileArea ta(TileXY(left_a, top_a), TileXY(right_a, bottom_a));
 	for (TileIndex tile : ta) {
-		if (IsTileType(tile, MP_STATION) && GetStationIndex(tile) == st_id) return true;
+		if (IsTileType(tile, TileType::Station) && GetStationIndex(tile) == st_id) return true;
 	}
 
 	return false;
@@ -756,7 +759,7 @@ StationRect& StationRect::operator = (const Rect &src)
 Money StationMaintenanceCost(uint32_t num)
 {
 	/* 7 bits scaling. 23 is roughly equivalent to the polynomial maint cost at 500 pieces. */
-	return (_price[PR_INFRASTRUCTURE_STATION] * num * GetMaintenanceCostScale(num, 23)) >> 7;
+	return (_price[Price::InfrastructureStation] * num * GetMaintenanceCostScale(num, 23)) >> 7;
 }
 
 /**
@@ -770,7 +773,7 @@ Money AirportMaintenanceCost(Owner owner)
 
 	for (const Station *st : Station::Iterate()) {
 		if (st->owner == owner && st->facilities.Test(StationFacility::Airport)) {
-			total_cost += _price[PR_INFRASTRUCTURE_AIRPORT] * st->airport.GetSpec()->maintenance_cost;
+			total_cost += _price[Price::InfrastructureAirport] * st->airport.GetSpec()->maintenance_cost;
 		}
 	}
 	/* 3 bits fraction for the maintenance cost factor. */

@@ -666,6 +666,8 @@ STR_CONFIG_SETTING_PLANE_CRASHES_NORMAL                         :normala
 
 ###length 4
 
+###length 4
+
 
 
 ###length 3
@@ -749,6 +751,7 @@ STR_CONFIG_SETTING_SMALLMAP_LAND_COLOUR_VIOLET                  :Violkolora
 ###length 3
 
 ###setting-zero-is-special
+
 
 
 
@@ -1277,6 +1280,8 @@ STR_GROUP_DEFAULT_AIRCRAFTS                                     :Negrupigita aer
 ###length VEHICLE_TYPES
 
 
+# Vehicle sort details
+
 ###length 3
 
 ###length VEHICLE_TYPES
@@ -1545,7 +1550,6 @@ STR_ERROR_ALREADY_LEVELLED                                      :{WHITE}... ja p
 
 # Town related errors
 STR_ERROR_CAN_T_EXPAND_TOWN                                     :{WHITE}Ne povas expansar urbo...
-STR_ERROR_TOO_CLOSE_TO_EDGE_OF_MAP_SUB                          :{WHITE}... tro proxim la bordo del mapo
 
 # Industry related errors
 STR_ERROR_TOO_MANY_INDUSTRIES                                   :{WHITE}... tro multa industrii

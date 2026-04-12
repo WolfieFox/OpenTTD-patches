@@ -21,12 +21,12 @@ static constexpr TunnelID TUNNEL_ID_MAP_LOOKUP{0xFFFF}; ///< Sentinel ID value t
 /**
  * Is this a tunnel (entrance)?
  * @param t the tile that might be a tunnel
- * @pre IsTileType(t, MP_TUNNELBRIDGE)
+ * @pre IsTileType(t, TileType::TunnelBridge)
  * @return true if and only if this tile is a tunnel (entrance)
  */
 inline bool IsTunnel(TileIndex t)
 {
-	dbg_assert_tile(IsTileType(t, MP_TUNNELBRIDGE), t);
+	dbg_assert_tile(IsTileType(t, TileType::TunnelBridge), t);
 	return !HasBit(_m[t].m5, 7);
 }
 
@@ -37,7 +37,7 @@ inline bool IsTunnel(TileIndex t)
  */
 inline bool IsTunnelTile(TileIndex t)
 {
-	return IsTileType(t, MP_TUNNELBRIDGE) && IsTunnel(t);
+	return IsTileType(t, TileType::TunnelBridge) && IsTunnel(t);
 }
 
 /**
@@ -129,11 +129,12 @@ inline uint8_t GetTunnelSignalStyle(TileIndex t)
  * @param o the owner of the entrance
  * @param id the tunnel ID
  * @param d the direction facing out of the tunnel
- * @param r the road type used in the tunnel
+ * @param road_rt The road type used in the tunnel.
+ * @param tram_rt The tram type used in the tunnel.
  */
 inline void MakeRoadTunnel(TileIndex t, Owner o, TunnelID id, DiagDirection d, RoadType road_rt, RoadType tram_rt)
 {
-	SetTileType(t, MP_TUNNELBRIDGE);
+	SetTileType(t, TileType::TunnelBridge);
 	SetTileOwner(t, o);
 	SetTunnelIndex(t, id);
 	_m[t].m3 = 0;
@@ -157,7 +158,7 @@ inline void MakeRoadTunnel(TileIndex t, Owner o, TunnelID id, DiagDirection d, R
  */
 inline void MakeRailTunnel(TileIndex t, Owner o, TunnelID id, DiagDirection d, RailType r)
 {
-	SetTileType(t, MP_TUNNELBRIDGE);
+	SetTileType(t, TileType::TunnelBridge);
 	SetTileOwner(t, o);
 	SetTunnelIndex(t, id);
 	_m[t].m3 = 0;

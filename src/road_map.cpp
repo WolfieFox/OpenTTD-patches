@@ -26,7 +26,7 @@
  * for bridge ramps and tunnel entrances is returned depending
  * on the orientation of the tunnel or bridge.
  * @param tile the tile to get the road bits for
- * @param rt   the road type to get the road bits form
+ * @param rtt the road type to get the road bits form
  * @param straight_tunnel_bridge_entrance whether to return straight road bits for tunnels/bridges.
  * @return the road bits of the given tile
  */
@@ -35,7 +35,7 @@ RoadBits GetAnyRoadBits(TileIndex tile, RoadTramType rtt, bool straight_tunnel_b
 	if (!MayHaveRoad(tile) || !HasTileRoadType(tile, rtt)) return ROAD_NONE;
 
 	switch (GetTileType(tile)) {
-		case MP_ROAD:
+		case TileType::Road:
 			switch (GetRoadTileType(tile)) {
 				default:
 				case RoadTileType::Normal:   return GetRoadBits(tile, rtt);
@@ -43,12 +43,12 @@ RoadBits GetAnyRoadBits(TileIndex tile, RoadTramType rtt, bool straight_tunnel_b
 				case RoadTileType::Depot:    return DiagDirToRoadBits(GetRoadDepotDirection(tile));
 			}
 
-		case MP_STATION:
+		case TileType::Station:
 			dbg_assert(IsAnyRoadStopTile(tile)); // ensured by MayHaveRoad
 			if (IsDriveThroughStopTile(tile)) return AxisToRoadBits(GetDriveThroughStopAxis(tile));
 			return DiagDirToRoadBits(GetBayRoadStopDir(tile));
 
-		case MP_TUNNELBRIDGE:
+		case TileType::TunnelBridge:
 			dbg_assert(GetTunnelBridgeTransportType(tile) == TRANSPORT_ROAD); // ensured by MayHaveRoad
 			if (IsRoadCustomBridgeHeadTile(tile)) return GetCustomBridgeHeadRoadBits(tile, rtt);
 			return straight_tunnel_bridge_entrance ?

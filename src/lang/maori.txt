@@ -923,7 +923,7 @@ STR_NEWS_AIRCRAFT_IS_WAITING                                    :{WHITE}Kei te t
 
 # Order review system / warnings
 STR_NEWS_VEHICLE_HAS_TOO_FEW_ORDERS                             :{WHITE}Ehara i te rawaka ngā mahi i te rārangi mō {VEHICLE}
-STR_NEWS_VEHICLE_HAS_VOID_ORDER                                 :{WHITE}He mahi hemahema tā {VEHICLE}
+STR_NEWS_VEHICLE_HAS_VOID_ORDER                                 :{WHITE}He mahi muhu tā {VEHICLE}
 STR_NEWS_VEHICLE_HAS_DUPLICATE_ENTRY                            :{WHITE}He mahi taurua tā {VEHICLE}
 STR_NEWS_VEHICLE_HAS_INVALID_ENTRY                              :{WHITE}He teihana muhu kei roto i ngā mahi a {VEHICLE}
 STR_NEWS_PLANE_USES_TOO_SHORT_RUNWAY                            :{WHITE}He poto rawa te aratau o tētahi taunga rererangi i roto i ngā mahi a {VEHICLE}
@@ -1062,7 +1062,7 @@ STR_GAME_OPTIONS_LANGUAGE_TOOLTIP                               :Kōwhiria te re
 STR_GAME_OPTIONS_LANGUAGE_PERCENTAGE                            :{STRING} ({NUM}% kua oti)
 
 STR_GAME_OPTIONS_FULLSCREEN                                     :Mata whārahi
-STR_GAME_OPTIONS_FULLSCREEN_TOOLTIP                             :Mākatia tēnei pouaka kia tākaro i OpenTTD i te aratau mata whārahi
+STR_GAME_OPTIONS_FULLSCREEN_TOOLTIP                             :Whakakā kia tākaro i OpenTTD i te aratau mata whārahi
 
 STR_GAME_OPTIONS_RESOLUTION                                     :Ariari mata
 STR_GAME_OPTIONS_RESOLUTION_TOOLTIP                             :Kōwhiria te ariari mata hei whakamahi
@@ -1070,11 +1070,11 @@ STR_GAME_OPTIONS_RESOLUTION_OTHER                               :kē atu
 STR_GAME_OPTIONS_RESOLUTION_ITEM                                :{NUM}x{NUM}
 
 STR_GAME_OPTIONS_VIDEO_ACCELERATION                             :Whakahohoro ā pūmārō
-STR_GAME_OPTIONS_VIDEO_ACCELERATION_TOOLTIP                     :Mākatia tēnei pouaka kia tuku i OpenTTD kia tarai ki te whakamahi i te whakahohoro ā-pūmārō. Ka kitea te tautuhinga hou i muri i tētahi whakaara anō i te kēmu
+STR_GAME_OPTIONS_VIDEO_ACCELERATION_TOOLTIP                     :Whakakā kia tuku i OpenTTD kia tarai ki te whakamahi i te whakahohoro ā pūmārō. Ka kitea te tautuhinga hou i muri i tētahi whakaara anō i te kēmu
 STR_GAME_OPTIONS_VIDEO_ACCELERATION_RESTART                     :{WHITE}Ka kitea te tautuhinga i muri i tētahi whakaara anō i te kēmu
 
 STR_GAME_OPTIONS_VIDEO_VSYNC                                    :Tukutahi poutū
-STR_GAME_OPTIONS_VIDEO_VSYNC_TOOLTIP                            :Mākatia tēnei pouaka kia tukutahi poutū i te mata. Ka kitea te tautuhinga hou i muri i tētahi whakaara anō i te kēmu. Kāore e tutuki mehemea kāore te whakahohoro ā-pūmārō i te kā
+STR_GAME_OPTIONS_VIDEO_VSYNC_TOOLTIP                            :Whakakā kia tukutahi poutū i te mata. Ka kitea te tautuhinga hou i muri i tētahi whakaara anō i te kēmu. Kāore e tutuki mehemea kāore te whakahohoro ā pūmārō i te kā
 
 STR_GAME_OPTIONS_VIDEO_DRIVER_INFO                              :Pūtāhono onāianei: {STRING}
 
@@ -1083,15 +1083,15 @@ STR_GAME_OPTIONS_INTERFACE                                      :Tāhono
 STR_GAME_OPTIONS_GUI_SCALE_FRAME                                :Rahi o te tāhono
 STR_GAME_OPTIONS_GUI_SCALE_TOOLTIP                              :Tōia te tāneke kia tautuhi i te rahi o te tāhono. Pātaki+Tō kia motukore te whakarite
 STR_GAME_OPTIONS_GUI_SCALE_AUTO                                 :Kimi aunoatia te rahi
-STR_GAME_OPTIONS_GUI_SCALE_AUTO_TOOLTIP                         :Mākatia tēnei pouaka kia kite aunoatia te rahi o te tāhono
+STR_GAME_OPTIONS_GUI_SCALE_AUTO_TOOLTIP                         :Whakakā kia kite aunoatia te rahi o te tāhono
 
 STR_GAME_OPTIONS_GUI_SCALE_BEVELS                               :Hurirahitia ngā hema
-STR_GAME_OPTIONS_GUI_SCALE_BEVELS_TOOLTIP                       :Mākatia tēnei pouaka kia hurirahitia ngā hema kia ōrite ki te rahi o te tāhono
+STR_GAME_OPTIONS_GUI_SCALE_BEVELS_TOOLTIP                       :Whakakā kia hurirahitia ngā hema kia ōrite ki te rahi o te tāhono
 
 STR_GAME_OPTIONS_GUI_FONT_SPRITE                                :Whakamahia te momotuhi taketake
-STR_GAME_OPTIONS_GUI_FONT_SPRITE_TOOLTIP                        :Mākatia tēnei pouaka mehemea ka hiahia koe ki te whakamahi i te momotuhi taketake he tūmau te rahi
+STR_GAME_OPTIONS_GUI_FONT_SPRITE_TOOLTIP                        :Whakakā mehemea ka hiahia koe ki te whakamahi i te momotuhi taketake he pūmau ai te rahi
 STR_GAME_OPTIONS_GUI_FONT_AA                                    :Whakamahenitia ngā tongi i te momotuhi
-STR_GAME_OPTIONS_GUI_FONT_AA_TOOLTIP                            :Mākatia tēnei pouaka kia whakamahenitia ngā tongi kei ngā momotuhi hurirahi
+STR_GAME_OPTIONS_GUI_FONT_AA_TOOLTIP                            :Whakakā kia whakamahenitia ngā tongi kei ngā momotuhi hurirahi
 
 STR_GAME_OPTIONS_GUI_SCALE_MARK                                 :{DECIMAL}x
 
@@ -1115,7 +1115,7 @@ STR_GAME_OPTIONS_BASE_GRF_TOOLTIP                               :Kōwhiria te ko
 STR_GAME_OPTIONS_BASE_GRF_DESCRIPTION_TOOLTIP                   :Pārongo tāpiri mō te kohinga whakairoiro mātāmua
 
 STR_GAME_OPTIONS_BASE_SFX                                       :Kohinga oro mātāmua
-STR_GAME_OPTIONS_BASE_SFX_TOOLTIP                               :Kōwhiria te kohinga oro mātāmua hei whakamahi (tē taea te panoni i roto i te kēmu, ka taea i te tahua matua anake)
+STR_GAME_OPTIONS_BASE_SFX_TOOLTIP                               :Kōwhiria te kohinga oro mātāmua hei whakamahi
 STR_GAME_OPTIONS_BASE_SFX_DESCRIPTION_TOOLTIP                   :Pārongo tāpiri mō te kohinga oro mātāmua
 
 STR_GAME_OPTIONS_BASE_MUSIC                                     :Kohinga puoro mātāmua
@@ -1599,7 +1599,7 @@ STR_CONFIG_SETTING_LAND_GENERATOR_HELPTEXT                      :Ka whakamahi te
 STR_CONFIG_SETTING_LAND_GENERATOR_ORIGINAL                      :Taketake
 STR_CONFIG_SETTING_LAND_GENERATOR_TERRA_GENESIS                 :TerraGenesis
 
-STR_CONFIG_SETTING_TERRAIN_TYPE                                 :Momo whenua: {STRING}
+STR_CONFIG_SETTING_TERRAIN_TYPE                                 :Tatūkē teitei mōrahi: {STRING}
 STR_CONFIG_SETTING_TERRAIN_TYPE_HELPTEXT                        :Kōwhiria te teitei o ngā puke me ngā maunga i te whenua
 
 STR_CONFIG_SETTING_INDUSTRY_DENSITY                             :Apiapi ahumahi: {STRING}
@@ -1626,6 +1626,14 @@ STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_SMOOTH             :Maheni rawa
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_SMOOTH                  :Maheni
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_ROUGH                   :Tuarangaranga
 STR_CONFIG_SETTING_ROUGHNESS_OF_TERRAIN_VERY_ROUGH              :Tuarangaranga rawa
+
+STR_CONFIG_SETTING_AVERAGE_HEIGHT                               :Teitei toharite: {STRING}
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_HELPTEXT                      :Kōwhiria te teitei toharite o te whenua. “Aunoa”: ka whakamahia te taunoa mō te taiao kua tīpakona: 'Raorao' mō te taiao wera, “Māori” mō te taiao hātai me te taiao taonga tākaro, “Mānia tairanga” mō te taiao makariri.
+###length 4
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_AUTO                          :Aunoa
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_LOWLANDS                      :Raorao
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_NORMAL                        :Māori
+STR_CONFIG_SETTING_AVERAGE_HEIGHT_PLATEAUS                      :Mānia tairanga
 
 STR_CONFIG_SETTING_VARIETY                                      :Tuari matatini: {STRING}
 STR_CONFIG_SETTING_VARIETY_HELPTEXT                             :Kōwhiri mehemea he maunga, he wāhi papatahi hoki kei te mahere. Ka nui ake te matatini, ka nui ake ngā rerekētanga i te teitei i waenganui o ngā maunga me ngā wāhi papatahi
@@ -1897,6 +1905,7 @@ STR_CONFIG_SETTING_STATION_LENGTH_LOADING_PENALTY_HELPTEXT      :Ina kā, ka pō
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS                             :Whakakāngia ngā tepetere wākena: {STRING}
 STR_CONFIG_SETTING_WAGONSPEEDLIMITS_HELPTEXT                    :Ina kā, whakamahia ngā tepetere o ngā wākena hei whakatau i te tere mōrahi o te tereina
 
+
 STR_CONFIG_SETTING_DISABLE_ELRAILS                              :Āraia ngā rēra hiko: {STRING}
 STR_CONFIG_SETTING_DISABLE_ELRAILS_HELPTEXT                     :Ina kā, kāore te whakahiko ara e pīrangitia kia rere ai ngā tereina hiko
 
@@ -2069,7 +2078,7 @@ STR_CONFIG_SETTING_ZOOM_LVL_OUT_4X                              :4x
 STR_CONFIG_SETTING_ZOOM_LVL_OUT_8X                              :8x
 
 STR_CONFIG_SETTING_SPRITE_ZOOM_MIN                              :Ata tino arinui hei whakamahi: {STRING}
-STR_CONFIG_SETTING_SPRITE_ZOOM_MIN_HELPTEXT                     :Whakatinaia te ariari mōrahi hei whakamahi mō ngā ata. Ka karoa te whakamahi i te whakairoiro arinui ina wātea hoki. Ka āwhina tēnei kia kotahi te āhua o te kēmu ina whakamahia he ranunga o ngā kōnae GRF, he arinui, he ariiti hoki
+STR_CONFIG_SETTING_SPRITE_ZOOM_MIN_HELPTEXT                     :Whakatinaia te ariari mōrahi hei whakamahi mō ngā ata. Ka karoa te whakamahi i te whakairoiro arinui ina wātea hoki. Ka āwhina tēnei kia kotahi te āhua o te kēmu ina whakamahia he ranunga o ngā kōnae newGRF, he arinui, he ariiti hoki
 ###length 3
 STR_CONFIG_SETTING_SPRITE_ZOOM_LVL_MIN                          :4x
 STR_CONFIG_SETTING_SPRITE_ZOOM_LVL_IN_2X                        :2x
@@ -2540,6 +2549,8 @@ STR_NETWORK_CLIENT_LIST_SERVER_CONNECTION_TYPE_TURN             :{BLACK}Mā tēt
 STR_NETWORK_CLIENT_LIST_ADMIN_CLIENT_KICK                       :Whana atu
 STR_NETWORK_CLIENT_LIST_ADMIN_CLIENT_BAN                        :Aukati
 STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_RESET                     :Muku
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_ALLOW_ANY                 :Tukuna ngā kiritaki katoa
+STR_NETWORK_CLIENT_LIST_ADMIN_COMPANY_ALLOW_LISTED              :Tukuna ngā kiritaki anake kei te rārangi
 
 STR_NETWORK_CLIENT_LIST_ASK_CAPTION                             :{WHITE}Mahi whakahaere
 STR_NETWORK_CLIENT_LIST_ASK_CLIENT_KICK                         :{YELLOW}Kei te tino hiahia rānei koe ki te whana i te kaitākaro ko {STRING}?
@@ -3407,7 +3418,8 @@ STR_MAPGEN_DESERT_COVERAGE                                      :{BLACK}Horahang
 STR_MAPGEN_DESERT_COVERAGE_UP_TOOLTIP                           :{BLACK}Whakarahia te horahanga onepū mā te tekau ōrau
 STR_MAPGEN_DESERT_COVERAGE_DOWN_TOOLTIP                         :{BLACK}Whakapakutia te horahanga onepū mā te tekau ōrau
 STR_MAPGEN_DESERT_COVERAGE_TEXT                                 :{BLACK}{NUM}%
-STR_MAPGEN_TERRAIN_TYPE                                         :{BLACK}Momo whenua:
+STR_MAPGEN_TERRAIN_TYPE                                         :{BLACK}Teitei mōrahi:
+STR_MAPGEN_AVERAGE_HEIGHT                                       :{BLACK}Teitei toharite:
 STR_MAPGEN_SEA_LEVEL                                            :{BLACK}Pae moana:
 STR_MAPGEN_SEA_LEVEL_TOOLTIP                                    :{BLACK}Tīpakona te pae moana
 STR_MAPGEN_QUANTITY_OF_RIVERS                                   :{BLACK}Awa:
@@ -3643,7 +3655,7 @@ STR_NEWGRF_ERROR_INVALID_PARAMETER                              :Tawhā muhu mō
 STR_NEWGRF_ERROR_LOAD_BEFORE                                    :Me utaina a {1:STRING} i mua i {2:STRING}
 STR_NEWGRF_ERROR_LOAD_AFTER                                     :Me utaina a {1:STRING} i muri i {2:STRING}
 STR_NEWGRF_ERROR_OTTD_VERSION_NUMBER                            :Ka pīrangi a {1:STRING} ki te whakaputanga {2:STRING}, neke atu rānei, o OpenTTD
-STR_NEWGRF_ERROR_AFTER_TRANSLATED_FILE                          :te kōnae GRF i hoahoaina kia whakamāori
+STR_NEWGRF_ERROR_AFTER_TRANSLATED_FILE                          :te kōnae newGRF i hoahoaina kia whakamāori
 STR_NEWGRF_ERROR_TOO_MANY_NEWGRFS_LOADED                        :He maha rawa ngā newGRFs kua utaina
 STR_NEWGRF_ERROR_STATIC_GRF_CAUSES_DESYNC                       :Ka taea te ngaro te tukutahi i te uta i {1:STRING} hei newGRF tū ki {2:STRING}
 STR_NEWGRF_ERROR_UNEXPECTED_SPRITE                              :Ata ohorere (ata {3:NUM})
@@ -3652,7 +3664,7 @@ STR_NEWGRF_ERROR_INVALID_ID                                     :Tarai ki te wha
 STR_NEWGRF_ERROR_CORRUPT_SPRITE                                 :{YELLOW}He ata hāmate tō {STRING}. Ka whakaaria ngā ata hāmate katoa hei tohu pātai whero (?)
 STR_NEWGRF_ERROR_MULTIPLE_ACTION_8                              :He maha ngā tāurunga Mahi 8 (ata {3:NUM})
 STR_NEWGRF_ERROR_READ_BOUNDS                                    :I pānui ki muri ki te mutunga o tētahi ata tipatipa (ata {3:NUM})
-STR_NEWGRF_ERROR_GRM_FAILED                                     :Kāore i te wātea ngā rauemi GRF kua tonoa (ata {3:NUM})
+STR_NEWGRF_ERROR_GRM_FAILED                                     :Kāore i te wātea ngā rauemi newGRF kua tonoa (ata {3:NUM})
 STR_NEWGRF_ERROR_FORCEFULLY_DISABLED                            :I whakakorea a {1:STRING} e {2:STRING}
 STR_NEWGRF_ERROR_INVALID_SPRITE_LAYOUT                          :Hōputu takotoranga ata muhu/tē mōhiotia (ata {3:NUM})
 STR_NEWGRF_ERROR_LIST_PROPERTY_TOO_LONG                         :He tuhene ngā huānga i roto i te rārangi uara āhuatanga (ata {3:NUM}, āhuatanga {4:HEX})
@@ -3663,12 +3675,12 @@ STR_NEWGRF_POPUP_CAUTION_CAPTION                                :{WHITE}Kia tūp
 STR_NEWGRF_CONFIRMATION_TEXT                                    :{YELLOW}Ka mahia e koe he panonitanga i tētahi kēmu e hāere tonu ana. Ka taea te hinga e OpenTTD, te pakaru rānei te teihana kēmu. Kaua e tuku pūrongo iro mō aua raru.{}Kei te tino hiahia rānei koe ki tēnei?
 
 STR_NEWGRF_DUPLICATE_GRFID                                      :{WHITE}Tē taea te tāpiri te kōnae: He taurua te GRF ID
-STR_NEWGRF_COMPATIBLE_LOADED                                    :{ORANGE}Kāore te kōnae taurite i kitea (kua utaina te GRF hototahi)
+STR_NEWGRF_COMPATIBLE_LOADED                                    :{ORANGE}Kāore te kōnae taurite i kitea (kua utaina te newGRF hototahi)
 STR_NEWGRF_TOO_MANY_NEWGRFS                                     :{WHITE}Tē taea te tāpiri te kōnae: Kua taea te tepe kōnae newGRF
 
 STR_NEWGRF_COMPATIBLE_LOAD_WARNING                              :{WHITE}Kua utainga he GRF hototahi mō ētahi kōnae ngaro
 STR_NEWGRF_DISABLED_WARNING                                     :{WHITE}Kua āraia he kōnae GRF ngaro
-STR_NEWGRF_UNPAUSE_WARNING_TITLE                                :{YELLOW}Kōnae GRF ngaro
+STR_NEWGRF_UNPAUSE_WARNING_TITLE                                :{YELLOW}Kōnae newGRF ngaro
 STR_NEWGRF_UNPAUSE_WARNING                                      :{WHITE}Ka taea te hinga e OpenTTD i te purei. Kaua e tuku pūrongo iro mō ngā hinga ā muri atu.{}Kei te tino hiahia rānei koe kia purei?
 
 # NewGRF status
@@ -4066,10 +4078,10 @@ STR_INDUSTRY_DIRECTORY_CAPTION                                  :{WHITE}Ahumahi 
 STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- Kore -
 STR_INDUSTRY_DIRECTORY_ITEM_INFO                                :{BLACK}{CARGO_LONG}{STRING}{YELLOW} ({COMMA}% kua kawea)
 STR_INDUSTRY_DIRECTORY_ITEM_NOPROD                              :{ORANGE}{INDUSTRY}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING}
-STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {STRING}, {STRING}, {STRING}, me te {NUM} atu...
+STR_INDUSTRY_DIRECTORY_ITEM_PROD1                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD2                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PROD3                               :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING}
+STR_INDUSTRY_DIRECTORY_ITEM_PRODMORE                            :{ORANGE}{INDUSTRY} {BLACK}{STRING}, {STRING}, {STRING}, me te {NUM} atu...
 STR_INDUSTRY_DIRECTORY_LIST_TOOLTIP                             :{BLACK}Ingoa o ngā ahumahi - pāwhiria he ingoa kia neke i te tirohanga matua ki te ahumahi. Pātaki+Pāwhiri kia huaki i tētahi atu tirohanga i te tauwāhi o te ahumahi
 STR_INDUSTRY_DIRECTORY_ACCEPTED_CARGO_FILTER                    :{BLACK}Utanga hei whiwhi: {SILVER}{STRING}
 STR_INDUSTRY_DIRECTORY_PRODUCED_CARGO_FILTER                    :{BLACK}Utanga hei whakaputa: {SILVER}{STRING}
@@ -4222,6 +4234,19 @@ STR_PURCHASE_INFO_MAX_TE                                        :{BLACK}Kaha Kum
 STR_PURCHASE_INFO_AIRCRAFT_RANGE                                :{BLACK}Whānui: {GOLD}{COMMA} Papariki
 STR_PURCHASE_INFO_AIRCRAFT_TYPE                                 :{BLACK}Momo waka rererangi: {GOLD}{STRING}
 STR_PURCHASE_INFO_RAILTYPES                                     :{BLACK}Momo rēra: {GOLD}{STRING}
+
+# Vehicle sort details
+STR_PURCHASE_SORT_DETAILS_COST                                  :{CURRENCY_LONG}
+STR_PURCHASE_SORT_DETAILS_SPEED                                 :{VELOCITY}
+STR_PURCHASE_SORT_DETAILS_POWER                                 :{POWER}
+STR_PURCHASE_SORT_DETAILS_MAX_TE                                :{FORCE}
+STR_PURCHASE_SORT_DETAILS_INTRO_DATE                            :{NUM}
+STR_PURCHASE_SORT_DETAILS_RUNNINGCOST_YEAR                      :{CURRENCY_LONG}/tau
+STR_PURCHASE_SORT_DETAILS_RUNNINGCOST_PERIOD                    :{CURRENCY_LONG}/wā
+STR_PURCHASE_SORT_DETAILS_RELIABILITY                           :{COMMA}%
+STR_PURCHASE_SORT_DETAILS_POWER_VS_RUNNING_COST                 :{DECIMAL}
+STR_PURCHASE_SORT_DETAILS_AIRCRAFT_RANGE                        :{COMMA} papariki
+STR_PURCHASE_SORT_DETAILS_CAPACITY                              :{COMMA}
 
 ###length 3
 STR_CARGO_TYPE_FILTER_ALL                                       :Momo utanga katoa
@@ -5117,7 +5142,6 @@ STR_ERROR_CAN_T_GENERATE_TOWN                                   :{WHITE}Tē taea
 STR_ERROR_CAN_T_RENAME_TOWN                                     :{WHITE}Tē taea te tapa anō te tāone...
 STR_ERROR_CAN_T_FOUND_TOWN_HERE                                 :{WHITE}Tē taea te whakatū tāone i konei...
 STR_ERROR_CAN_T_EXPAND_TOWN                                     :{WHITE}Tē taea te whakamakoha te tāone...
-STR_ERROR_TOO_CLOSE_TO_EDGE_OF_MAP_SUB                          :{WHITE}... tata rawa ki te tapa o te mahere
 STR_ERROR_TOO_CLOSE_TO_ANOTHER_TOWN                             :{WHITE}... tata rawa ki tētahi atu tāone
 STR_ERROR_TOO_MANY_TOWNS                                        :{WHITE}... tuhene ngā tāone
 STR_ERROR_NO_SPACE_FOR_TOWN                                     :{WHITE}... kāore he wāhi atu i te mahere
@@ -6008,4 +6032,3 @@ STR_BADGE_CONFIG_FILTERS                                        :{WHITE}Tātari 
 STR_BADGE_CONFIG_PREVIEW                                        :Tiro takamuatia te ata
 STR_BADGE_CONFIG_NAME                                           :Ingoa
 STR_BADGE_FILTER_ANY_LABEL                                      :{STRING} katoa
-STR_BADGE_FILTER_IS_LABEL                                       :Ko {1:STRING} te {0:STRING}

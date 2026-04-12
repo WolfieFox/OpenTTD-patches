@@ -32,9 +32,11 @@
 
 #include "smallmap_colours.h"
 #include "smallmap_gui.h"
+#include "core/enum_type.hpp"
 
 #include "widgets/smallmap_widget.h"
 
+#include "table/heightmap_colours.h"
 #include "table/strings.h"
 
 #include <bitset>
@@ -49,25 +51,25 @@ static int _smallmap_cargo_count;    ///< Number of cargos in the link stats leg
 static const uint8_t _linkstat_colours_in_legenda[] = {0, 1, 3, 5, 7, 9, 11};
 
 /** Macro for ordinary entry of LegendAndColour */
-#define MK(a, b) {a, b, IT_INVALID, 0, CompanyID::Invalid(), true, false, false}
+#define MK(a, b) {b, a, IT_INVALID, 0, CompanyID::Invalid(), true, false, false}
 
 /** Macro for a height legend entry with configurable colour. */
-#define MC(col_break) {{}, STR_TINY_BLACK_HEIGHT, IT_INVALID, 0, CompanyID::Invalid(), true, false, col_break}
+#define MC(col_break) {STR_TINY_BLACK_HEIGHT, {}, IT_INVALID, 0, CompanyID::Invalid(), true, false, col_break}
 
 /** Macro for non-company owned property entry of LegendAndColour */
-#define MO(a, b) {a, b, IT_INVALID, 0, CompanyID::Invalid(), true, false, false}
+#define MO(a, b) {b, a, IT_INVALID, 0, CompanyID::Invalid(), true, false, false}
 
 /** Macro used for forcing a rebuild of the owner legend the first time it is used. */
-#define MOEND() {{}, STR_NULL, IT_INVALID, 0, OWNER_NONE, true, true, false}
+#define MOEND() {STR_NULL, {}, IT_INVALID, 0, OWNER_NONE, true, true, false}
 
 /** Macro for end of list marker in arrays of LegendAndColour */
-#define MKEND() {{}, STR_NULL, IT_INVALID, 0, CompanyID::Invalid(), true, true, false}
+#define MKEND() {STR_NULL, {}, IT_INVALID, 0, CompanyID::Invalid(), true, true, false}
 
 /**
  * Macro for break marker in arrays of LegendAndColour.
  * It will have valid data, though
  */
-#define MS(a, b) {a, b, IT_INVALID, 0, CompanyID::Invalid(), true, false, true}
+#define MS(a, b) {b, a, IT_INVALID, 0, CompanyID::Invalid(), true, false, true}
 
 /** Legend text giving the colours to look for on the minimap */
 static LegendAndColour _legend_land_contours[] = {
@@ -357,7 +359,7 @@ void BuildOwnerLegend()
 
 static TileType GetSmallMapTileType(TileIndex tile, TileType t)
 {
-	if (t == MP_OBJECT && GetObjectHasViewportMapViewOverride(tile)) {
+	if (t == TileType::Object && GetObjectHasViewportMapViewOverride(tile)) {
 		ObjectViewportMapType vmtype = OVMT_DEFAULT;
 		const ObjectSpec *spec = ObjectSpec::GetByTile(tile);
 		if (spec->ctrl_flags.Test(ObjectCtrlFlag::ViewportMapTypeSet)) vmtype = spec->vport_map_type;
@@ -371,19 +373,19 @@ static TileType GetSmallMapTileType(TileIndex tile, TileType t)
 				break;
 
 			case OVMT_TREES:
-				t = MP_TREES;
+				t = TileType::Trees;
 				break;
 
 			case OVMT_HOUSE:
-				t = MP_HOUSE;
+				t = TileType::House;
 				break;
 
 			case OVMT_WATER:
-				t = MP_WATER;
+				t = TileType::Water;
 				break;
 
 			default:
-				t = MP_CLEAR;
+				t = TileType::Clear;
 				break;
 		}
 	}
@@ -399,7 +401,7 @@ static TileType GetSmallMapTileType(TileIndex tile, TileType t)
 static inline uint32_t GetSmallMapContoursPixels(TileIndex tile, TileType t)
 {
 	const SmallMapColourScheme *cs = &_heightmap_schemes[_settings_client.gui.smallmap_land_colour];
-	return ApplyMask(cs->height_colours[TileHeight(tile)], &_smallmap_contours_andor[GetSmallMapTileType(tile, t)]);
+	return ApplyMask(cs->height_colours[TileHeight(tile)], _smallmap_contours_andor[GetSmallMapTileType(tile, t)]);
 }
 
 /**
@@ -412,7 +414,7 @@ static inline uint32_t GetSmallMapContoursPixels(TileIndex tile, TileType t)
 static inline uint32_t GetSmallMapVehiclesPixels(TileIndex tile, TileType t)
 {
 	const SmallMapColourScheme *cs = &_heightmap_schemes[_settings_client.gui.smallmap_land_colour];
-	return ApplyMask(cs->default_colour, &_smallmap_vehicles_andor[GetSmallMapTileType(tile, t)]);
+	return ApplyMask(cs->default_colour, _smallmap_vehicles_andor[GetSmallMapTileType(tile, t)]);
 }
 
 /**
@@ -425,7 +427,7 @@ static inline uint32_t GetSmallMapVehiclesPixels(TileIndex tile, TileType t)
 static inline uint32_t GetSmallMapIndustriesPixels(TileIndex tile, TileType t)
 {
 	const SmallMapColourScheme *cs = &_heightmap_schemes[_settings_client.gui.smallmap_land_colour];
-	return ApplyMask(_smallmap_show_heightmap ? cs->height_colours[TileHeight(tile)] : cs->default_colour, &_smallmap_vehicles_andor[GetSmallMapTileType(tile, t)]);
+	return ApplyMask(_smallmap_show_heightmap ? cs->height_colours[TileHeight(tile)] : cs->default_colour, _smallmap_vehicles_andor[GetSmallMapTileType(tile, t)]);
 }
 
 /**
@@ -438,7 +440,7 @@ static inline uint32_t GetSmallMapIndustriesPixels(TileIndex tile, TileType t)
 static inline uint32_t GetSmallMapRoutesPixels(TileIndex tile, TileType t)
 {
 	switch (t) {
-		case MP_STATION:
+		case TileType::Station:
 			switch (GetStationType(tile)) {
 				case StationType::Rail:    return MKCOLOUR_XXXX(PC_VERY_DARK_BROWN);
 				case StationType::Airport: return MKCOLOUR_XXXX(PC_RED);
@@ -448,17 +450,17 @@ static inline uint32_t GetSmallMapRoutesPixels(TileIndex tile, TileType t)
 				default:              return MKCOLOUR_FFFF;
 			}
 
-		case MP_RAILWAY: {
+		case TileType::Railway: {
 			AndOr andor = {
 				MKCOLOUR_0XX0(GetRailTypeInfo(GetRailType(tile))->map_colour),
 				_smallmap_contours_andor[t].mand
 			};
 
-			const SmallMapColourScheme *cs = &_heightmap_schemes[_settings_client.gui.smallmap_land_colour];
-			return ApplyMask(cs->default_colour, &andor);
+			const SmallMapColourScheme &cs = _heightmap_schemes[_settings_client.gui.smallmap_land_colour];
+			return ApplyMask(cs.default_colour, andor);
 		}
 
-		case MP_ROAD: {
+		case TileType::Road: {
 			const RoadTypeInfo *rti = nullptr;
 			if (GetRoadTypeRoad(tile) != INVALID_ROADTYPE) {
 				rti = GetRoadTypeInfo(GetRoadTypeRoad(tile));
@@ -471,16 +473,16 @@ static inline uint32_t GetSmallMapRoutesPixels(TileIndex tile, TileType t)
 					_smallmap_contours_andor[t].mand
 				};
 
-				const SmallMapColourScheme *cs = &_heightmap_schemes[_settings_client.gui.smallmap_land_colour];
-				return ApplyMask(cs->default_colour, &andor);
+				const SmallMapColourScheme &cs = _heightmap_schemes[_settings_client.gui.smallmap_land_colour];
+				return ApplyMask(cs.default_colour, andor);
 			}
 			[[fallthrough]];
 		}
 
 		default:
 			/* Ground colour */
-			const SmallMapColourScheme *cs = &_heightmap_schemes[_settings_client.gui.smallmap_land_colour];
-			return ApplyMask(cs->default_colour, &_smallmap_contours_andor[GetSmallMapTileType(tile, t)]);
+			const SmallMapColourScheme &cs = _heightmap_schemes[_settings_client.gui.smallmap_land_colour];
+			return ApplyMask(cs.default_colour, _smallmap_contours_andor[GetSmallMapTileType(tile, t)]);
 	}
 }
 
@@ -496,6 +498,17 @@ static inline uint32_t GetSmallMapLinkStatsPixels(TileIndex tile, TileType t)
 	return _smallmap_show_heightmap ? GetSmallMapContoursPixels(tile, t) : GetSmallMapRoutesPixels(tile, t);
 }
 
+static constexpr EnumClassIndexContainer<std::array<uint32_t, to_underlying(ClearGround::MaxSize)>, ClearGround> _vegetation_clear_bits = {
+	MKCOLOUR_XXXX(PC_GRASS_LAND), ///< full grass
+	MKCOLOUR_XXXX(PC_ROUGH_LAND), ///< rough land
+	MKCOLOUR_XXXX(PC_GREY),       ///< rocks
+	MKCOLOUR_XXXX(PC_FIELDS),     ///< fields
+	MKCOLOUR_XXXX(PC_LIGHT_BLUE), ///< snow
+	MKCOLOUR_XXXX(PC_ORANGE),     ///< desert
+	MKCOLOUR_XXXX(PC_GRASS_LAND), ///< unused
+	MKCOLOUR_XXXX(PC_GRASS_LAND), ///< unused
+};
+
 /**
  * Return the colour a tile would be displayed with in the smallmap in mode "Vegetation".
  *
@@ -506,24 +519,24 @@ static inline uint32_t GetSmallMapLinkStatsPixels(TileIndex tile, TileType t)
 static inline uint32_t GetSmallMapVegetationPixels(TileIndex tile, TileType t)
 {
 	switch (t) {
-		case MP_CLEAR:
-			if (IsClearGround(tile, CLEAR_GRASS)) {
+		case TileType::Clear:
+			if (IsClearGround(tile, ClearGround::Grass)) {
 				if (GetClearDensity(tile) < 3) return MKCOLOUR_XXXX(PC_BARE_LAND);
 				if (GetTropicZone(tile) == TROPICZONE_RAINFOREST) return MKCOLOUR_XXXX(PC_RAINFOREST);
 			}
-			return _vegetation_clear_bits[IsSnowTile(tile) ? CLEAR_SNOW : GetClearGround(tile)];
+			return _vegetation_clear_bits[IsSnowTile(tile) ? ClearGround::Snow : GetClearGround(tile)];
 
-		case MP_INDUSTRY:
+		case TileType::Industry:
 			return IsTileForestIndustry(tile) ? MKCOLOUR_XXXX(PC_GREEN) : MKCOLOUR_XXXX(PC_DARK_RED);
 
-		case MP_TREES:
-			if (GetTreeGround(tile) == TREE_GROUND_SNOW_DESERT || GetTreeGround(tile) == TREE_GROUND_ROUGH_SNOW) {
+		case TileType::Trees:
+			if (GetTreeGround(tile) == TreeGround::SnowOrDesert || GetTreeGround(tile) == TreeGround::RoughSnow) {
 				return (_settings_game.game_creation.landscape == LandscapeType::Arctic) ? MKCOLOUR_XYYX(PC_LIGHT_BLUE, PC_TREES) : MKCOLOUR_XYYX(PC_ORANGE, PC_TREES);
 			}
 			return (GetTropicZone(tile) == TROPICZONE_RAINFOREST) ? MKCOLOUR_XYYX(PC_RAINFOREST, PC_TREES) : MKCOLOUR_XYYX(PC_GRASS_LAND, PC_TREES);
 
-		case MP_OBJECT: {
-			if (!GetObjectHasViewportMapViewOverride(tile)) return ApplyMask(MKCOLOUR_XXXX(PC_GRASS_LAND), &_smallmap_vehicles_andor[t]);
+		case TileType::Object: {
+			if (!GetObjectHasViewportMapViewOverride(tile)) return ApplyMask(MKCOLOUR_XXXX(PC_GRASS_LAND), _smallmap_vehicles_andor[t]);
 			ObjectViewportMapType vmtype = OVMT_DEFAULT;
 			const ObjectSpec *spec = ObjectSpec::GetByTile(tile);
 			if (spec->ctrl_flags.Test(ObjectCtrlFlag::ViewportMapTypeSet)) vmtype = spec->vport_map_type;
@@ -532,19 +545,19 @@ static inline uint32_t GetSmallMapVegetationPixels(TileIndex tile, TileType t)
 				case OVMT_CLEAR:
 					if (spec->ctrl_flags.Test(ObjectCtrlFlag::UseLandGround)) {
 						if (IsTileOnWater(tile) && GetObjectGroundType(tile) != OBJECT_GROUND_SHORE) {
-							t = MP_WATER;
+							t = TileType::Water;
 						} else {
 							switch (GetObjectGroundType(tile)) {
 								case OBJECT_GROUND_GRASS:
 									if (GetObjectGroundDensity(tile) < 3) return MKCOLOUR_XXXX(PC_BARE_LAND);
 									if (GetTropicZone(tile) == TROPICZONE_RAINFOREST) return MKCOLOUR_XXXX(PC_RAINFOREST);
-									return _vegetation_clear_bits[CLEAR_GRASS];
+									return _vegetation_clear_bits[ClearGround::Grass];
 
 								case OBJECT_GROUND_SNOW_DESERT:
-									return _vegetation_clear_bits[_settings_game.game_creation.landscape == LandscapeType::Tropic ? CLEAR_DESERT : CLEAR_SNOW];
+									return _vegetation_clear_bits[_settings_game.game_creation.landscape == LandscapeType::Tropic ? ClearGround::Desert : ClearGround::Snow];
 
 								case OBJECT_GROUND_SHORE:
-									t = MP_WATER;
+									t = TileType::Water;
 									break;
 
 								default:
@@ -558,39 +571,39 @@ static inline uint32_t GetSmallMapVegetationPixels(TileIndex tile, TileType t)
 					break;
 				case OVMT_GRASS:
 					if (GetTropicZone(tile) == TROPICZONE_RAINFOREST) return MKCOLOUR_XXXX(PC_RAINFOREST);
-					return _vegetation_clear_bits[CLEAR_GRASS];
+					return _vegetation_clear_bits[ClearGround::Grass];
 				case OVMT_ROUGH:
-					return _vegetation_clear_bits[CLEAR_ROUGH];
+					return _vegetation_clear_bits[ClearGround::Rough];
 				case OVMT_ROCKS:
-					return _vegetation_clear_bits[CLEAR_ROCKS];
+					return _vegetation_clear_bits[ClearGround::Rocks];
 				case OVMT_FIELDS:
-					return _vegetation_clear_bits[CLEAR_FIELDS];
+					return _vegetation_clear_bits[ClearGround::Fields];
 				case OVMT_SNOW:
-					return _vegetation_clear_bits[CLEAR_SNOW];
+					return _vegetation_clear_bits[ClearGround::Snow];
 				case OVMT_DESERT:
-					return _vegetation_clear_bits[CLEAR_DESERT];
+					return _vegetation_clear_bits[ClearGround::Desert];
 				case OVMT_TREES: {
 					const TreeGround tg = (TreeGround)GB(spec->vport_map_subtype, 0, 4);
-					if (tg == TREE_GROUND_SNOW_DESERT || tg == TREE_GROUND_ROUGH_SNOW) {
+					if (tg == TreeGround::SnowOrDesert || tg == TreeGround::RoughSnow) {
 						return (_settings_game.game_creation.landscape == LandscapeType::Arctic) ? MKCOLOUR_XYYX(PC_LIGHT_BLUE, PC_TREES) : MKCOLOUR_XYYX(PC_ORANGE, PC_TREES);
 					}
 					return (GetTropicZone(tile) == TROPICZONE_RAINFOREST) ? MKCOLOUR_XYYX(PC_RAINFOREST, PC_TREES) : MKCOLOUR_XYYX(PC_GRASS_LAND, PC_TREES);
 				}
 				case OVMT_HOUSE:
-					t = MP_HOUSE;
+					t = TileType::House;
 					break;
 				case OVMT_WATER:
-					t = MP_WATER;
+					t = TileType::Water;
 					break;
 
 				default:
 					break;
 			}
-			return ApplyMask(MKCOLOUR_XXXX(PC_GRASS_LAND), &_smallmap_vehicles_andor[t]);
+			return ApplyMask(MKCOLOUR_XXXX(PC_GRASS_LAND), _smallmap_vehicles_andor[t]);
 		}
 
 		default:
-			return ApplyMask(MKCOLOUR_XXXX(PC_GRASS_LAND), &_smallmap_vehicles_andor[t]);
+			return ApplyMask(MKCOLOUR_XXXX(PC_GRASS_LAND), _smallmap_vehicles_andor[t]);
 	}
 }
 
@@ -606,9 +619,9 @@ static inline uint32_t GetSmallMapOwnerPixels(TileIndex tile, TileType t)
 	Owner o;
 
 	switch (t) {
-		case MP_INDUSTRY: return MKCOLOUR_XXXX(PC_DARK_GREY);
-		case MP_HOUSE:    return MKCOLOUR_XXXX(PC_DARK_RED);
-		case MP_ROAD:
+		case TileType::Industry: return MKCOLOUR_XXXX(PC_DARK_GREY);
+		case TileType::House:    return MKCOLOUR_XXXX(PC_DARK_RED);
+		case TileType::Road:
 			o = GetRoadOwner(tile, HasRoadTypeRoad(tile) ? RTT_ROAD : RTT_TRAM);
 			break;
 
@@ -618,7 +631,7 @@ static inline uint32_t GetSmallMapOwnerPixels(TileIndex tile, TileType t)
 	}
 
 	if ((o < MAX_COMPANIES && !_legend_land_owners[_company_to_list_pos[o]].show_on_map) || o == OWNER_NONE || o == OWNER_WATER) {
-		if (t == MP_WATER) return MKCOLOUR_XXXX(PC_WATER);
+		if (t == TileType::Water) return MKCOLOUR_XXXX(PC_WATER);
 		const SmallMapColourScheme *cs = &_heightmap_schemes[_settings_client.gui.smallmap_land_colour];
 		return _smallmap_show_heightmap ? cs->height_colours[TileHeight(tile)] : cs->default_colour;
 	} else if (o == OWNER_TOWN) {
@@ -725,24 +738,24 @@ inline uint32_t SmallMapWindow::GetTileColours(const TileArea &ta) const
 {
 	int importance = 0;
 	TileIndex tile = INVALID_TILE; // Position of the most important tile.
-	TileType et = MP_VOID;         // Effective tile type at that position.
+	TileType et = TileType::Void;         // Effective tile type at that position.
 
 	for (TileIndex ti : ta) {
 		TileType ttype = GetTileType(ti);
 
 		switch (ttype) {
-			case MP_TUNNELBRIDGE: {
+			case TileType::TunnelBridge: {
 				TransportType tt = GetTunnelBridgeTransportType(ti);
 
 				switch (tt) {
-					case TRANSPORT_RAIL: ttype = MP_RAILWAY; break;
-					case TRANSPORT_ROAD: ttype = MP_ROAD;    break;
-					default:             ttype = MP_WATER;   break;
+					case TRANSPORT_RAIL: ttype = TileType::Railway; break;
+					case TRANSPORT_ROAD: ttype = TileType::Road;    break;
+					default:             ttype = TileType::Water;   break;
 				}
 				break;
 			}
 
-			case MP_INDUSTRY:
+			case TileType::Industry:
 				/* Special handling of industries while in "Industries" smallmap view. */
 				if (this->map_type == SMT_INDUSTRY) {
 					/* If industry is allowed to be seen, use its colour on the map.
@@ -756,7 +769,7 @@ inline uint32_t SmallMapWindow::GetTileColours(const TileArea &ta) const
 						}
 					}
 					/* Otherwise make it disappear */
-					ttype = IsTileOnWater(ti) ? MP_WATER : MP_CLEAR;
+					ttype = IsTileOnWater(ti) ? TileType::Water : TileType::Clear;
 				}
 				break;
 
@@ -835,7 +848,7 @@ void SmallMapWindow::DrawSmallMapColumn(void *dst, uint xc, uint yc, int pitch, 
 		} else {
 			ta = TileArea(TileXY(xc, yc), this->tile_zoom, this->tile_zoom);
 		}
-		ta.ClampToMap(); // Clamp to map boundaries (may contain MP_VOID tiles!).
+		ta.ClampToMap(); // Clamp to map boundaries (may contain TileType::Void tiles!).
 
 		uint32_t tile_colours = this->GetTileColours(ta);
 		auto get_val_colour = [tile_colours](uint8_t idx) -> PixelColour {
@@ -1007,7 +1020,7 @@ void SmallMapWindow::DrawSmallMap(DrawPixelInfo *dpi, bool draw_indicators) cons
 	AutoRestoreBackup dpi_backup(_cur_dpi, dpi);
 
 	/* Clear it */
-	const PixelColour map_clear_color = (_settings_game.construction.map_edge_mode == 2) ? PC_WATER : PC_BLACK;
+	const PixelColour map_clear_color = (_settings_game.construction.map_edge_mode == MapEdgeMode::InfiniteWater) ? PC_WATER : PC_BLACK;
 	GfxFillRect(dpi->left, dpi->top, dpi->left + dpi->width - 1, dpi->top + dpi->height - 1, map_clear_color);
 
 	/* Which tile is displayed at (dpi->left, dpi->top)? */
@@ -1655,7 +1668,7 @@ int SmallMapWindow::GetPositionOnLegend(Point pt)
 /* virtual */ void SmallMapWindow::OnMouseWheel(int wheel, WidgetID widget)
 {
 	if (widget != WID_SM_MAP) return;
-	if (_settings_client.gui.scrollwheel_scrolling != SWS_OFF) {
+	if (_settings_client.gui.scrollwheel_scrolling != ScrollWheelScrolling::Off) {
 		const NWidgetBase *wid = this->GetWidget<NWidgetBase>(WID_SM_MAP);
 		int cursor_x = _cursor.pos.x - this->left - wid->pos_x;
 		int cursor_y = _cursor.pos.y - this->top  - wid->pos_y;
@@ -1721,7 +1734,7 @@ uint SmallMapWindow::PausedAdjustRefreshTimeDelta(uint delta_ms) const
 
 /* virtual */ void SmallMapWindow::OnScroll(Point delta)
 {
-	if (_settings_client.gui.scroll_mode == VSM_VIEWPORT_RMB_FIXED || _settings_client.gui.scroll_mode == VSM_MAP_RMB_FIXED) _cursor.fix_at = true;
+	if (_settings_client.gui.scroll_mode == ViewportScrollMode::ViewportRMBFixed || _settings_client.gui.scroll_mode == ViewportScrollMode::MapRMBFixed) _cursor.fix_at = true;
 
 	this->scroll_x -= delta.x;
 	this->scroll_y -= delta.y;

@@ -679,6 +679,8 @@ STR_CONFIG_SETTING_LAND_GENERATOR_TERRA_GENESIS                 :TerraGenesis
 
 ###length 4
 
+###length 4
+
 
 
 ###length 3
@@ -768,6 +770,7 @@ STR_CONFIG_SETTING_DATE_FORMAT_IN_SAVE_NAMES_ISO                :ISO (2008-12-31
 ###length 3
 
 ###setting-zero-is-special
+
 
 
 
@@ -1402,6 +1405,8 @@ STR_INDUSTRY_DIRECTORY_NONE                                     :{ORANGE}- Ҫу�
 # Vehicle availability
 ###length VEHICLE_TYPES
 
+
+# Vehicle sort details
 
 ###length 3
 

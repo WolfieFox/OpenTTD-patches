@@ -207,7 +207,7 @@ struct BuildDocksToolbarWindow : Window {
 				break;
 
 			case WID_DT_LOCK: // Build lock button
-				Command<CMD_BUILD_LOCK>::Post(STR_ERROR_CAN_T_BUILD_LOCKS, CommandCallback::BuildDocks, tile);
+				Command<Commands::BuildLock>::Post(STR_ERROR_CAN_T_BUILD_LOCKS, CommandCallback::BuildDocks, tile);
 				break;
 
 			case WID_DT_DEMOLISH: // Demolish aka dynamite button
@@ -215,7 +215,7 @@ struct BuildDocksToolbarWindow : Window {
 				break;
 
 			case WID_DT_DEPOT: // Build depot button
-				Command<CMD_BUILD_SHIP_DEPOT>::Post(STR_ERROR_CAN_T_BUILD_SHIP_DEPOT, CommandCallback::BuildDocks, tile, _ship_depot_direction);
+				Command<Commands::BuildShipDepot>::Post(STR_ERROR_CAN_T_BUILD_SHIP_DEPOT, CommandCallback::BuildDocks, tile, _ship_depot_direction);
 				break;
 
 			case WID_DT_STATION: { // Build station button
@@ -226,9 +226,9 @@ struct BuildDocksToolbarWindow : Window {
 				bool adjacent = _ctrl_pressed;
 				auto proc = [=](bool test, StationID to_join) -> bool {
 					if (test) {
-						return Command<CMD_BUILD_DOCK>::Do(CommandFlagsToDCFlags(GetCommandFlags<CMD_BUILD_DOCK>()), tile, StationID::Invalid(), adjacent).Succeeded();
+						return Command<Commands::BuildDock>::Do(CommandFlagsToDCFlags(GetCommandFlags<Commands::BuildDock>()), tile, StationID::Invalid(), adjacent).Succeeded();
 					} else {
-						return Command<CMD_BUILD_DOCK>::Post(STR_ERROR_CAN_T_BUILD_DOCK_HERE, CommandCallback::BuildDocks, tile, to_join, adjacent);
+						return Command<Commands::BuildDock>::Post(STR_ERROR_CAN_T_BUILD_DOCK_HERE, CommandCallback::BuildDocks, tile, to_join, adjacent);
 					}
 				};
 
@@ -237,7 +237,7 @@ struct BuildDocksToolbarWindow : Window {
 			}
 
 			case WID_DT_BUOY: // Build buoy button
-				Command<CMD_BUILD_BUOY>::Post(STR_ERROR_CAN_T_POSITION_BUOY_HERE, CommandCallback::BuildDocks, tile);
+				Command<Commands::BuildBuoy>::Post(STR_ERROR_CAN_T_POSITION_BUOY_HERE, CommandCallback::BuildDocks, tile);
 				break;
 
 			case WID_DT_RIVER: // Build river button (in scenario editor)
@@ -245,7 +245,7 @@ struct BuildDocksToolbarWindow : Window {
 				break;
 
 			case WID_DT_BUILD_AQUEDUCT: // Build aqueduct button
-				Command<CMD_BUILD_BRIDGE>::Post(STR_ERROR_CAN_T_BUILD_AQUEDUCT_HERE, CommandCallback::BuildBridge, tile, GetOtherAqueductEnd(tile), TRANSPORT_WATER, 0, 0, BuildBridgeFlags::None);
+				Command<Commands::BuildBridge>::Post(STR_ERROR_CAN_T_BUILD_AQUEDUCT_HERE, CommandCallback::BuildBridge, tile, GetOtherAqueductEnd(tile), TRANSPORT_WATER, 0, 0, BuildBridgeFlags::None);
 				break;
 
 			default: NOT_REACHED();
@@ -271,13 +271,13 @@ struct BuildDocksToolbarWindow : Window {
 					break;
 				case DDSP_CREATE_WATER:
 					if (_game_mode == GM_EDITOR) {
-						Command<CMD_BUILD_CANAL>::Post(STR_ERROR_CAN_T_BUILD_CANALS, CommandCallback::PlaySound_CONSTRUCTION_WATER, end_tile, start_tile, _ctrl_pressed ? WaterClass::Sea : WaterClass::Canal, false);
+						Command<Commands::BuildCanal>::Post(STR_ERROR_CAN_T_BUILD_CANALS, CommandCallback::PlaySound_CONSTRUCTION_WATER, end_tile, start_tile, _ctrl_pressed ? WaterClass::Sea : WaterClass::Canal, false);
 					} else {
-						Command<CMD_BUILD_CANAL>::Post(STR_ERROR_CAN_T_BUILD_CANALS, CommandCallback::PlaySound_CONSTRUCTION_WATER, end_tile, start_tile, WaterClass::Canal, _ctrl_pressed);
+						Command<Commands::BuildCanal>::Post(STR_ERROR_CAN_T_BUILD_CANALS, CommandCallback::PlaySound_CONSTRUCTION_WATER, end_tile, start_tile, WaterClass::Canal, _ctrl_pressed);
 					}
 					break;
 				case DDSP_CREATE_RIVER:
-					Command<CMD_BUILD_CANAL>::Post(STR_ERROR_CAN_T_PLACE_RIVERS, CommandCallback::PlaySound_CONSTRUCTION_WATER, end_tile, start_tile, WaterClass::River, _ctrl_pressed);
+					Command<Commands::BuildCanal>::Post(STR_ERROR_CAN_T_PLACE_RIVERS, CommandCallback::PlaySound_CONSTRUCTION_WATER, end_tile, start_tile, WaterClass::River, _ctrl_pressed);
 					break;
 
 				default: break;
@@ -316,35 +316,30 @@ struct BuildDocksToolbarWindow : Window {
 		VpSetPresizeRange(tile_from, tile_to);
 	}
 
-	static HotkeyList hotkeys;
+	/**
+	 * Handler for global hotkeys of the BuildDocksToolbarWindow.
+	 * @param hotkey Hotkey
+	 * @return ES_HANDLED if hotkey was accepted.
+	 */
+	static EventState DockToolbarGlobalHotkeys(int hotkey)
+	{
+		if (_game_mode != GM_NORMAL) return ES_NOT_HANDLED;
+		Window *w = ShowBuildDocksToolbar();
+		if (w == nullptr) return ES_NOT_HANDLED;
+		return w->OnHotkey(hotkey);
+	}
+
+	static inline HotkeyList hotkeys{"dockstoolbar", {
+		Hotkey('1', "canal", WID_DT_CANAL),
+		Hotkey('2', "lock", WID_DT_LOCK),
+		Hotkey('3', "demolish", WID_DT_DEMOLISH),
+		Hotkey('4', "depot", WID_DT_DEPOT),
+		Hotkey('5', "dock", WID_DT_STATION),
+		Hotkey('6', "buoy", WID_DT_BUOY),
+		Hotkey('7', "river", WID_DT_RIVER),
+		Hotkey({'B', '8'}, "aqueduct", WID_DT_BUILD_AQUEDUCT),
+	}, DockToolbarGlobalHotkeys};
 };
-
-/**
- * Handler for global hotkeys of the BuildDocksToolbarWindow.
- * @param hotkey Hotkey
- * @return ES_HANDLED if hotkey was accepted.
- */
-static EventState DockToolbarGlobalHotkeys(int hotkey)
-{
-	if (_game_mode != GM_NORMAL) return ES_NOT_HANDLED;
-	Window *w = ShowBuildDocksToolbar();
-	if (w == nullptr) return ES_NOT_HANDLED;
-	return w->OnHotkey(hotkey);
-}
-
-const uint16_t _dockstoolbar_aqueduct_keys[] = {'B', '8', 0};
-
-static Hotkey dockstoolbar_hotkeys[] = {
-	Hotkey('1', "canal", WID_DT_CANAL),
-	Hotkey('2', "lock", WID_DT_LOCK),
-	Hotkey('3', "demolish", WID_DT_DEMOLISH),
-	Hotkey('4', "depot", WID_DT_DEPOT),
-	Hotkey('5', "dock", WID_DT_STATION),
-	Hotkey('6', "buoy", WID_DT_BUOY),
-	Hotkey('7', "river", WID_DT_RIVER),
-	Hotkey(_dockstoolbar_aqueduct_keys, "aqueduct", WID_DT_BUILD_AQUEDUCT),
-};
-HotkeyList BuildDocksToolbarWindow::hotkeys("dockstoolbar", dockstoolbar_hotkeys, DockToolbarGlobalHotkeys);
 
 /**
  * Nested widget parts of docks toolbar, game version.
@@ -449,7 +444,7 @@ void ShowBuildDocksToolbarFromTile(TileIndex tile)
 	}
 	if (w == nullptr) return;
 
-	if (IsTileType(tile, MP_STATION)) {
+	if (IsTileType(tile, TileType::Station)) {
 		StationType station_type = GetStationType(tile);
 		switch (station_type) {
 			case StationType::Dock:
@@ -469,7 +464,7 @@ void ShowBuildDocksToolbarFromTile(TileIndex tile)
 		}
 	}
 
-	/* For MP_WATER tiles (canals, rivers, locks) and MP_TUNNELBRIDGE (aqueducts),
+	/* For TileType::Water tiles (canals, rivers, locks) and TileType::TunnelBridge (aqueducts),
 	 * just open the toolbar without selecting a specific tool. */
 }
 

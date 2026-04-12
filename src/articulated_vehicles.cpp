@@ -334,6 +334,7 @@ CargoType GetOverallCargoOfArticulatedVehicle(const Vehicle *v)
  *   For autoreplace/-renew:
  *    - Default cargo type (without capacity)
  *    - intersection and union of refit masks.
+ * @param v The vehicle to check.
  */
 void CheckConsistencyOfArticulatedVehicle(const Vehicle *v)
 {
@@ -508,7 +509,7 @@ void AddArticulatedParts(Vehicle *first)
 		if (flip_image) v->spritenum++;
 
 		if (v->type == VEH_TRAIN) {
-			auto prob = TestVehicleBuildProbability(v, v->engine_type, BuildProbabilityType::Reversed);
+			auto prob = TestVehicleBuildProbability(v, BuildProbabilityType::Reversed);
 			if (prob.has_value()) Train::From(v)->flags.Set(VehicleRailFlag::Flipped, prob.value());
 		}
 		v->UpdatePosition();
